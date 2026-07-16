@@ -92,11 +92,15 @@ export function normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal } =
   const envio = parsearEnvio(raw.Envio)
   const kw = String(raw.palabraClave || keyword || '').trim().toLowerCase() || null
 
+  const imagen =
+    typeof raw.imgDireccion === 'string' && raw.imgDireccion.startsWith('http') ? raw.imgDireccion : null
+
   const producto = {
     sku,
     keywordOrigen: kw,
     titulo: raw.articuloTitulo || null,
     url,
+    imagen,
     tipoListing: detectarTipoListing(url),
     categoriaML: raw.produtoCategoryID || null,
     domainML: raw.produtoDomainID || null,

@@ -119,6 +119,7 @@ test('normalizarItemBusqueda: item real del actor', () => {
   assert.equal(producto.categoriaML, 'MLC174442')
   assert.equal(producto.domainML, 'MLC-FLOOD_LIGHTS')
   assert.equal(producto.sellerId, null)
+  assert.equal(producto.imagen, 'https://http2.mlstatic.com/D_NQ_NP_899630-MLA99916451389_112025-O.webp')
 
   assert.equal(snapshot.precio, 15990)
   assert.equal(snapshot.precioAnterior, 25990)

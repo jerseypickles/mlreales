@@ -7,9 +7,10 @@ export async function guardarScan({ items, fecha }) {
   if (!items?.length) return { productosNuevos: 0, productosActualizados: 0, snapshotsInsertados: 0 }
 
   const ops = items.map(({ producto }) => {
-    const { sku, keywordOrigen, sellerId, ...resto } = producto
+    const { sku, keywordOrigen, sellerId, imagen, ...resto } = producto
     const set = { ...resto, activo: true, ultimaVezVisto: fecha }
     if (sellerId) set.sellerId = sellerId // nivel 1 lo trae vacío: no pisar lo que llene el nivel 2
+    if (imagen) set.imagen = imagen // no pisar una imagen existente con null
     return {
       updateOne: {
         filter: { sku },
