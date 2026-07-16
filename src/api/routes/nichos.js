@@ -210,6 +210,20 @@ router.post(
   }),
 )
 
+// Pausar o reactivar un nicho a mano (keywords que nadie busca, vecinos redundantes)
+router.patch(
+  '/:id/estado',
+  manejar(async (req, res) => {
+    const { estado } = req.body ?? {}
+    if (!['activo', 'pausado'].includes(estado)) {
+      return res.status(400).json({ error: 'estado debe ser "activo" o "pausado"' })
+    }
+    const nicho = await Nicho.findByIdAndUpdate(req.params.id, { estado }, { new: true })
+    if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
+    res.json({ keyword: nicho.keyword, estado: nicho.estado })
+  }),
+)
+
 // Forzar una pasada del radar autónomo ahora (normalmente corre solo, ver RADAR_CRON)
 router.post(
   '/radar',

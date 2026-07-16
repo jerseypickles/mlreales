@@ -9,6 +9,7 @@ import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
 import { generarReporteNicho } from '../services/metricas.js'
 import { analizarNicho } from '../services/analista.js'
 import { sugerirNichos } from '../services/sugeridor.js'
+import { keywordReal } from '../services/busquedasReales.js'
 import { llmDisponible } from '../services/llm.js'
 import {
   COLA_SCAN_NICHO,
@@ -214,8 +215,25 @@ export async function procesarRadar() {
   const creados = []
   for (const s of sugerencias) {
     if (creados.length >= cupo) break
-    const keyword = String(s.keyword ?? '').trim().toLowerCase()
-    if (keyword.length < 2 || existentes.has(keyword)) continue
+    const ideada = String(s.keyword ?? '').trim().toLowerCase()
+    if (ideada.length < 2) continue
+
+    // la keyword ideada se canoniza a lo que la gente escribe de verdad
+    // (autocompletado de ML); si nadie busca nada parecido, el nicho mediría
+    // un listado que ningún comprador ve
+    let keyword = ideada
+    try {
+      const real = await keywordReal(ideada)
+      if (!real) {
+        console.log(`[radar] "${ideada}" descartada: sin búsqueda real parecida en el autocompletado de ML`)
+        continue
+      }
+      keyword = real.keyword
+      if (keyword !== ideada) console.log(`[radar] "${ideada}" → búsqueda real "${keyword}"`)
+    } catch (err) {
+      console.error(`[radar] autosuggest no disponible para "${ideada}": ${err.message} — se usa tal cual`)
+    }
+    if (existentes.has(keyword)) continue
 
     const nicho = await Nicho.create({
       keyword,
@@ -227,6 +245,7 @@ export async function procesarRadar() {
         estacionalidad: s.estacionalidad,
         ventanaImportacion: s.ventanaImportacion,
         riesgo: s.riesgo,
+        keywordIdeada: keyword !== ideada ? ideada : undefined,
         descubiertoEl: new Date(),
       },
     })

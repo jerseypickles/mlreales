@@ -51,7 +51,7 @@ APRENDE DEL HISTORIAL del importador (te lo paso con resultados):
 - Los nichos con veredicto entrar/entrar_con_condiciones y score alto son ganadores: propone adyacentes que compartan comprador o proveedor en China.
 - Los descartados (no_entrar) enseñan qué evitar: no propongas variaciones triviales de esos.
 
-Entrega 8-12 keywords variadas: prioriza adyacencias al historial, y completa con temporada próxima (comprable ya) y tendencias emergentes. Keywords concretas como las escribiría un comprador chileno.`
+Entrega 8-12 keywords variadas: prioriza adyacencias al historial, y completa con temporada próxima (comprable ya) y tendencias emergentes. Keywords cortas y naturales (2-4 palabras), tal como las tipearía un comprador chileno en el buscador — el sistema las valida contra el autocompletado real de ML y descarta las que nadie escribe, así que no inventes frases descriptivas largas.`
 
 // Historial con resultados para que el sugeridor aprenda qué busca el usuario y qué funcionó.
 async function armarHistorial() {

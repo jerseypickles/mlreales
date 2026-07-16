@@ -14,7 +14,7 @@ export function crearApp() {
   app.use((req, res, next) => {
     res.set('Access-Control-Allow-Origin', process.env.CORS_ORIGEN || '*')
     res.set('Access-Control-Allow-Headers', 'Content-Type, x-api-key, x-debug-key')
-    res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    res.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS')
     if (req.method === 'OPTIONS') return res.sendStatus(204)
     next()
   })
