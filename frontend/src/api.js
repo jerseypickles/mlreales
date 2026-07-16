@@ -21,7 +21,7 @@ export const api = {
   escanear: (id) => pedir(`/api/nichos/${id}/scan`, { method: 'POST' }),
   historia: (sku) => pedir(`/api/productos/${sku}/historia`),
   analizarNicho: (id) => pedir(`/api/nichos/${id}/analisis`, { method: 'POST' }),
-  sugerirNichos: (contexto) => pedir('/api/nichos/sugerencias', json({ contexto })),
+  correrRadar: () => pedir('/api/nichos/radar', { method: 'POST' }),
   simularMargen: (entrada) => pedir('/api/margen', json(entrada)),
   parametrosMargen: () => pedir('/api/margen/parametros'),
 }

@@ -7,12 +7,19 @@ import { normalizarScan } from '../services/normalizador.js'
 import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
 import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
 import { generarReporteNicho } from '../services/metricas.js'
+import { analizarNicho } from '../services/analista.js'
+import { sugerirNichos } from '../services/sugeridor.js'
+import { llmDisponible } from '../services/llm.js'
 import {
   COLA_SCAN_NICHO,
   COLA_SCAN_DETALLE,
   COLA_CALCULAR_METRICAS,
+  COLA_ANALISIS,
+  COLA_RADAR,
+  COLA_PROGRAMADOR,
   crearConexionRedis,
   obtenerColas,
+  encolarScanNicho,
 } from './queues.js'
 
 export async function procesarScanNicho(job) {
@@ -82,6 +89,8 @@ export async function procesarScanDetalle(job) {
   let fallidos = 0
 
   for (let i = 0; i < objetivos.length; i += config.detalleBatch) {
+    // pausa entre batches: menos agresivo con ML = menos páginas vacías por bloqueo
+    if (i > 0) await new Promise((resolver) => setTimeout(resolver, 20_000))
     const batch = objetivos.slice(i, i + config.detalleBatch)
     let crudos
     try {
@@ -143,7 +152,97 @@ export async function procesarCalcularMetricas(job) {
     },
     { upsert: true, new: true },
   )
-  return { reporteId: String(doc._id), score: reporte.metricas.scoreOportunidad }
+
+  // análisis IA automático: primer reporte con score, o score que se movió ≥10 puntos
+  let analisisEncolado = false
+  if (config.analisisAuto && llmDisponible() && reporte.metricas.scoreOportunidad != null && !doc.analisis) {
+    const ultimoAnalizado = await Reporte.findOne({ nichoId: nicho._id, analisis: { $ne: null } })
+      .sort({ fecha: -1 })
+      .lean()
+    const debeAnalizar =
+      !ultimoAnalizado ||
+      Math.abs((ultimoAnalizado.metricas?.scoreOportunidad ?? 0) - reporte.metricas.scoreOportunidad) >= 10
+    if (debeAnalizar) {
+      await obtenerColas().analisis.add('analizar', { nichoId: String(nicho._id) })
+      analisisEncolado = true
+    }
+  }
+
+  return { reporteId: String(doc._id), score: reporte.metricas.scoreOportunidad, analisisEncolado }
+}
+
+export async function procesarAnalisisNicho(job) {
+  if (!llmDisponible()) return { omitido: true, motivo: 'sin ANTHROPIC_API_KEY' }
+  const nicho = await Nicho.findById(job.data.nichoId)
+  if (!nicho) throw new Error(`Nicho ${job.data.nichoId} no existe`)
+
+  const analisis = await analizarNicho(nicho)
+
+  // los descubrimientos del radar que no dan se pausan solos: dejan de gastar scans
+  let pausado = false
+  if (nicho.origen === 'radar' && analisis.veredicto === 'no_entrar' && nicho.estado === 'activo') {
+    nicho.estado = 'pausado'
+    await nicho.save()
+    pausado = true
+  }
+
+  return { veredicto: analisis.veredicto, pausado }
+}
+
+// Radar autónomo: pide sugerencias por temporada/tendencia, crea los nichos
+// nuevos y los manda a escanear. El pipeline hace el resto (scan → detalle →
+// métricas → análisis IA → auto-pausa si no vale la pena).
+export async function procesarRadar() {
+  if (!llmDisponible()) return { omitido: true, motivo: 'sin ANTHROPIC_API_KEY' }
+
+  const { sugerencias } = await sugerirNichos()
+  const existentes = new Set((await Nicho.find().select('keyword').lean()).map((n) => n.keyword))
+
+  const creados = []
+  for (const s of sugerencias) {
+    if (creados.length >= config.radarMaxNichos) break
+    const keyword = String(s.keyword ?? '').trim().toLowerCase()
+    if (keyword.length < 2 || existentes.has(keyword)) continue
+
+    const nicho = await Nicho.create({
+      keyword,
+      origen: 'radar',
+      frecuenciaScan: 'semanal',
+      radarInfo: {
+        razon: s.razon,
+        categoria: s.categoria,
+        estacionalidad: s.estacionalidad,
+        ventanaImportacion: s.ventanaImportacion,
+        riesgo: s.riesgo,
+        descubiertoEl: new Date(),
+      },
+    })
+    await encolarScanNicho(nicho._id, { motivo: 'radar' })
+    creados.push(keyword)
+    existentes.add(keyword)
+  }
+
+  return { sugeridos: sugerencias.length, creados: creados.length, keywords: creados }
+}
+
+// Programador: encola scans de nichos activos cuyo último scan ya venció
+// (diario ≈ 20 h, semanal ≈ 6.5 días). jobId por ventana de 3 h evita duplicados.
+export async function procesarProgramadorScans() {
+  const ahora = Date.now()
+  const umbrales = { diario: 20 * 3600e3, semanal: 6.5 * 86400e3 }
+  const nichos = await Nicho.find({ estado: 'activo' }).lean()
+
+  let encolados = 0
+  for (const nicho of nichos) {
+    const ultimo = nicho.ultimoScanEl ? new Date(nicho.ultimoScanEl).getTime() : 0
+    if (ahora - ultimo < (umbrales[nicho.frecuenciaScan] ?? umbrales.diario)) continue
+    await encolarScanNicho(nicho._id, {
+      motivo: 'programado',
+      jobId: `prog-${nicho._id}-${Math.floor(ahora / (3 * 3600e3))}`,
+    })
+    encolados++
+  }
+  return { activos: nichos.length, encolados }
 }
 
 export function iniciarWorkers() {
@@ -162,8 +261,21 @@ export function iniciarWorkers() {
     connection: crearConexionRedis(),
     concurrency: 1,
   })
+  const workerAnalisis = new Worker(COLA_ANALISIS, procesarAnalisisNicho, {
+    connection: crearConexionRedis(),
+    concurrency: 1,
+    limiter: { max: 4, duration: 60_000 }, // llamadas al LLM
+  })
+  const workerRadar = new Worker(COLA_RADAR, procesarRadar, {
+    connection: crearConexionRedis(),
+    concurrency: 1,
+  })
+  const workerProgramador = new Worker(COLA_PROGRAMADOR, procesarProgramadorScans, {
+    connection: crearConexionRedis(),
+    concurrency: 1,
+  })
 
-  for (const worker of [workerScan, workerDetalle, workerMetricas]) {
+  for (const worker of [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador]) {
     worker.on('failed', (job, err) => {
       console.error(`[${worker.name}] job ${job?.id} (intento ${job?.attemptsMade}) falló: ${err.message}`)
     })
@@ -173,5 +285,5 @@ export function iniciarWorkers() {
     worker.on('error', (err) => console.error(`[${worker.name}] error de worker:`, err.message))
   }
 
-  return [workerScan, workerDetalle, workerMetricas]
+  return [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador]
 }

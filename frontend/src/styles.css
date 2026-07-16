@@ -904,58 +904,63 @@ h4 {
   margin-top: 12px;
 }
 
-/* ---------- sugerencias ---------- */
+/* ---------- radar ---------- */
 
 .boton-ancho {
   width: 100%;
   justify-content: center;
 }
 
-.lista-sugerencias {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 50vh;
-  overflow-y: auto;
-}
-
-.sugerencia {
-  border: 1px solid var(--borde);
+.radar {
+  border: 1px dashed var(--borde);
   border-radius: var(--radio);
-  background: var(--superficie);
-  padding: 9px 11px;
+  padding: 11px 12px;
 }
 
-.sugerencia-fila {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
+.radar-titulo {
+  margin: 0 0 6px;
 }
 
-.boton-mini {
-  padding: 3px 10px;
-  border: 1px solid var(--acento);
-  border-radius: 999px;
-  background: var(--acento);
-  color: #fff;
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.sugerencia-razon {
-  margin: 4px 0 2px;
+.radar-texto {
+  margin: 0 0 10px;
   font-size: 12px;
   color: var(--tinta-2);
 }
 
-.sugerencia-meta {
-  margin: 0;
-  font-size: 11px;
+.radar-estado {
+  margin: 8px 0 0;
+  font-size: 12px;
   color: var(--tinta-3);
+}
+
+.punto-radar {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--acento);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.veredicto {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-right: 6px;
+}
+
+.veredicto-entrar {
+  color: var(--exito-tinta);
+}
+
+.veredicto-entrar_con_condiciones {
+  color: var(--avisa-tinta);
+}
+
+.veredicto-no_entrar {
+  color: var(--peligro);
 }
 
 .vacio {

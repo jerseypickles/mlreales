@@ -256,6 +256,25 @@ export async function obtenerProductosUltimoScan(nicho) {
   const productos = await Producto.find({ sku: { $in: snapshots.map((s) => s.sku) } }).lean()
   const porSku = new Map(productos.map((p) => [p.sku, p]))
 
+  // el nivel 2 puede fallar parcialmente (bloqueos de ML): para reviews/rating usar
+  // el último valor conocido — son acumulativos, el dato anterior sigue siendo válido
+  const sinReviews = snapshots.filter((s) => !Number.isFinite(s.numReviews)).map((s) => s.sku)
+  const previos = sinReviews.length
+    ? await Snapshot.aggregate([
+        { $match: { sku: { $in: sinReviews }, numReviews: { $ne: null } } },
+        { $sort: { fecha: -1 } },
+        { $group: { _id: '$sku', numReviews: { $first: '$numReviews' }, rating: { $first: '$rating' } } },
+      ])
+    : []
+  const reviewsPrevias = new Map(previos.map((p) => [p._id, p]))
+  for (const snap of snapshots) {
+    if (!Number.isFinite(snap.numReviews) && reviewsPrevias.has(snap.sku)) {
+      const previo = reviewsPrevias.get(snap.sku)
+      snap.numReviews = previo.numReviews
+      if (!Number.isFinite(snap.rating)) snap.rating = previo.rating
+    }
+  }
+
   return {
     fechaScan: ultimo.fecha,
     productos: snapshots.map((s) => {

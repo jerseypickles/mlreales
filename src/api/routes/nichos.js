@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { Nicho } from '../../models/Nicho.js'
 import { Reporte } from '../../models/Reporte.js'
-import { encolarScanNicho } from '../../jobs/queues.js'
+import { encolarScanNicho, obtenerColas } from '../../jobs/queues.js'
 import { generarReporteNicho, obtenerProductosUltimoScan } from '../../services/metricas.js'
 import { analizarNicho } from '../../services/analista.js'
 import { sugerirNichos } from '../../services/sugeridor.js'
@@ -57,6 +57,8 @@ router.get(
                 _id: 0,
                 fecha: 1,
                 scoreOportunidad: 1,
+                veredicto: '$analisis.veredicto',
+                ventasEstimadasPorDia: '$metricas.demanda.ventasEstimadasPorDia',
                 precioMediana: '$metricas.precio.mediana',
                 sellersUnicos: '$metricas.competencia.sellersUnicos',
                 pctFull: '$metricas.competencia.pctFull',
@@ -141,6 +143,21 @@ router.post(
       if (err.status) return res.status(err.status).json({ error: err.message })
       throw err
     }
+  }),
+)
+
+// Forzar una pasada del radar autónomo ahora (normalmente corre solo, ver RADAR_CRON)
+router.post(
+  '/radar',
+  manejar(async (_req, res) => {
+    if (!llmDisponible()) {
+      return res.status(503).json({ error: 'radar no configurado: falta ANTHROPIC_API_KEY en el entorno' })
+    }
+    const job = await obtenerColas().radar.add('radar', { motivo: 'manual' })
+    res.status(202).json({
+      radarJobId: job.id,
+      mensaje: 'radar encolado: los nichos descubiertos aparecerán solos en la lista en unos minutos',
+    })
   }),
 )
 

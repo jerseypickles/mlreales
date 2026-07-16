@@ -19,6 +19,12 @@ export const config = {
   nivel2Activo: process.env.NIVEL2_ACTIVO !== 'false',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
   llmModel: process.env.LLM_MODEL || 'claude-opus-4-8',
+  // radar autónomo: descubre nichos por temporada/tendencia y los escanea solo
+  radarActivo: process.env.RADAR_ACTIVO !== 'false',
+  radarCron: process.env.RADAR_CRON || '0 8 * * 1', // lunes 08:00 Chile
+  radarMaxNichos: Number(process.env.RADAR_MAX_NICHOS) || 4,
+  programadorCron: process.env.PROGRAMADOR_CRON || '*/30 * * * *',
+  analisisAuto: process.env.ANALISIS_AUTO !== 'false',
   detalleTopN: Number(process.env.DETALLE_TOP_N) || 50,
   detalleBatch: Number(process.env.DETALLE_BATCH) || 15,
   port: Number(process.env.PORT) || 3000,

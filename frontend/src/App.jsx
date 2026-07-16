@@ -4,7 +4,7 @@ import { Resumen } from './components/Resumen.jsx'
 import { Productos } from './components/Productos.jsx'
 import { Simulador } from './components/Simulador.jsx'
 import { Analisis } from './components/Analisis.jsx'
-import { Sugerencias } from './components/Sugerencias.jsx'
+import { Radar } from './components/Sugerencias.jsx'
 import { Cargando } from './components/ui.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
 
@@ -60,12 +60,21 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
             onClick={() => onSeleccionar(n._id)}
           >
             <span className="nicho-fila">
-              <span className="nicho-keyword">{n.keyword}</span>
+              <span className="nicho-keyword">
+                {n.origen === 'radar' ? <span className="punto-radar" title="descubierto por el radar" /> : null}
+                {n.keyword}
+              </span>
               {n.ultimoReporte?.scoreOportunidad != null ? (
                 <span className="nicho-score">{n.ultimoReporte.scoreOportunidad}</span>
               ) : null}
             </span>
             <span className="nicho-meta">
+              {n.ultimoReporte?.veredicto ? (
+                <span className={`veredicto veredicto-${n.ultimoReporte.veredicto}`}>
+                  {n.ultimoReporte.veredicto.replace(/_/g, ' ')}
+                </span>
+              ) : null}
+              {n.estado === 'pausado' ? 'pausado · ' : ''}
               {n.ultimoReporte
                 ? `${fmtNum(n.ultimoReporte.productosAnalizados)} productos · mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}`
                 : n.ultimoScanEl
@@ -244,12 +253,7 @@ export default function App() {
           />
           {errorLista ? <p className="error-bloque">No se pudo cargar la lista: {errorLista}</p> : null}
           <ListaNichos nichos={nichos} seleccionado={seleccionado} onSeleccionar={setSeleccionado} />
-          <Sugerencias
-            onCrear={(nicho) => {
-              cargarNichos()
-              setSeleccionado(nicho._id)
-            }}
-          />
+          <Radar />
         </aside>
         <main>
           {seleccionado ? (
