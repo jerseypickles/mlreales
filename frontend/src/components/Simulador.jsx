@@ -1,23 +1,55 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
-import { StatTile } from './ui.jsx'
 import { fmtNum, fmtPrecio, fmtPct } from '../lib/formato.js'
-
-const CAMPOS_DESGLOSE = [
-  ['fobClp', 'Costo del producto (FOB)'],
-  ['fleteClp', 'Flete'],
-  ['seguroClp', 'Seguro'],
-  ['arancelClp', 'Arancel'],
-  ['despachoClp', 'Despacho aduana (prorrateado)'],
-  ['landedNetoClp', 'Costo puesto en Chile'],
-  ['comisionMlClp', 'Comisión Mercado Libre'],
-  ['fullClp', 'Tarifa Full'],
-]
 
 // "100-200 unidades" → 100 (borde conservador)
 function parsearUnidades(texto) {
   const m = String(texto ?? '').match(/\d+/)
   return m ? Number(m[0]) : null
+}
+
+// De cada peso de la venta (neta): producto, logística, Mercado Libre, y lo tuyo.
+function FlujoVenta({ porUnidad }) {
+  const producto = porUnidad.fobClp ?? 0
+  const logistica =
+    (porUnidad.fleteClp ?? 0) + (porUnidad.seguroClp ?? 0) + (porUnidad.arancelClp ?? 0) + (porUnidad.despachoClp ?? 0)
+  const ml = (porUnidad.comisionMlClp ?? 0) + (porUnidad.fullClp ?? 0)
+  const margen = porUnidad.margenClp ?? 0
+  const total = producto + logistica + ml + Math.max(margen, 0)
+  if (total <= 0) return null
+
+  const segmentos = [
+    { clave: 'producto', nombre: 'Producto', valor: producto },
+    { clave: 'logistica', nombre: 'Traerlo a Chile', valor: logistica },
+    { clave: 'ml', nombre: 'Mercado Libre', valor: ml },
+    { clave: 'margen', nombre: 'Te queda', valor: Math.max(margen, 0) },
+  ]
+
+  return (
+    <figure className="flujo">
+      <figcaption>De cada venta (neta de IVA), ¿a dónde va la plata?</figcaption>
+      <div className="flujo-barra" role="img" aria-label={segmentos.map((s) => `${s.nombre}: ${fmtPrecio(s.valor)}`).join(', ')}>
+        {segmentos.map((s) =>
+          s.valor > 0 ? (
+            <div
+              key={s.clave}
+              className={`flujo-seg flujo-${s.clave}`}
+              style={{ width: `${(s.valor / total) * 100}%` }}
+              title={`${s.nombre}: ${fmtPrecio(s.valor)}`}
+            />
+          ) : null,
+        )}
+      </div>
+      <div className="flujo-leyenda">
+        {segmentos.map((s) => (
+          <span key={s.clave} className="flujo-item">
+            <span className={`flujo-punto flujo-${s.clave}`} />
+            {s.nombre} <strong>{fmtPrecio(s.valor)}</strong>
+          </span>
+        ))}
+      </div>
+    </figure>
+  )
 }
 
 export function Simulador({ nicho, reporte, precioInicial }) {
@@ -36,170 +68,176 @@ export function Simulador({ nicho, reporte, precioInicial }) {
   const [resultado, setResultado] = useState(null)
   const [error, setError] = useState(null)
   const [calculando, setCalculando] = useState(false)
+  const temporizador = useRef(null)
 
   useEffect(() => {
     if (precioInicial != null) setForm((f) => ({ ...f, precioVentaClp: precioInicial }))
   }, [precioInicial])
+
+  // cálculo automático: al abrir (si hay datos) y con debounce al editar
+  useEffect(() => {
+    const listo =
+      Number(form.precioVentaClp) > 0 &&
+      Number(form.costoFobUsd) > 0 &&
+      Number(form.unidades) >= 1 &&
+      (form.modoFlete === 'maritimo' ? Number(form.volumenM3) > 0 : Number(form.pesoKg) > 0)
+    if (!listo) return
+
+    clearTimeout(temporizador.current)
+    temporizador.current = setTimeout(async () => {
+      setCalculando(true)
+      setError(null)
+      try {
+        const r = await api.simularMargen({
+          precioVentaClp: Number(form.precioVentaClp),
+          costoFobUsd: Number(form.costoFobUsd),
+          unidades: Number(form.unidades),
+          modoFlete: form.modoFlete,
+          volumenM3: Number(form.volumenM3),
+          pesoKg: Number(form.pesoKg),
+          parametros: { mercadoLibre: { comisionPct: Number(form.comisionPct) } },
+        })
+        setResultado(r)
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setCalculando(false)
+      }
+    }, 450)
+    return () => clearTimeout(temporizador.current)
+  }, [form])
 
   const campo = (clave) => ({
     value: form[clave],
     onChange: (e) => setForm((f) => ({ ...f, [clave]: e.target.value })),
   })
 
-  async function calcular(e) {
-    e?.preventDefault()
-    setCalculando(true)
-    setError(null)
-    try {
-      const r = await api.simularMargen({
-        precioVentaClp: Number(form.precioVentaClp),
-        costoFobUsd: Number(form.costoFobUsd),
-        unidades: Number(form.unidades),
-        modoFlete: form.modoFlete,
-        volumenM3: Number(form.volumenM3),
-        pesoKg: Number(form.pesoKg),
-        parametros: { mercadoLibre: { comisionPct: Number(form.comisionPct) } },
-      })
-      setResultado(r)
-    } catch (err) {
-      setError(err.message)
-      setResultado(null)
-    } finally {
-      setCalculando(false)
-    }
-  }
-
+  const margen = resultado?.porUnidad?.margenClp
+  const pierde = Number.isFinite(margen) && margen <= 0
   const mlSeLleva = resultado
     ? (resultado.porUnidad.comisionMlClp ?? 0) + (resultado.porUnidad.fullClp ?? 0)
     : null
 
   return (
     <div className="simulador">
-      <form onSubmit={calcular} className="form-simulador">
-        <h3>¿Cuánto te queda si lo traes?</h3>
-        {rec?.aplica ? (
-          <p className="nota">
-            Precargado con la recomendación del análisis: {rec.titular ?? rec.segmento} — pedido de
-            prueba {rec.primeraCompra ?? '—'}, FOB máximo US$ {rec.fobMaximoUsd}.
-          </p>
-        ) : (
-          <p className="nota">Precio precargado con la mediana de "{nicho.keyword}".</p>
-        )}
-        <div className="grilla-form">
-          <label>
+      <div className="sim-grilla">
+        {/* ---- INPUTS ---- */}
+        <div className="sim-panel">
+          <h3>Tu pedido</h3>
+          {rec?.aplica ? (
+            <p className="nota sim-nota">
+              Precargado con la recomendación: {rec.titular ?? rec.segmento}
+            </p>
+          ) : null}
+          <label className="sim-campo">
             Precio de venta (CLP)
-            <input type="number" required min="1" {...campo('precioVentaClp')} />
+            <input type="number" min="1" {...campo('precioVentaClp')} />
           </label>
-          <label>
+          <label className="sim-campo">
             Costo por unidad en China (USD FOB)
-            <input type="number" required min="0.01" step="0.01" placeholder="ej: 3.50" {...campo('costoFobUsd')} />
+            <input type="number" min="0.01" step="0.01" placeholder="ej: 3.50" {...campo('costoFobUsd')} />
+            {rec?.fobMaximoUsd ? <span className="ayuda-campo">máximo recomendado: US$ {rec.fobMaximoUsd}</span> : null}
           </label>
-          <label>
+          <label className="sim-campo">
             Unidades del pedido
-            <input type="number" required min="1" {...campo('unidades')} />
+            <input type="number" min="1" {...campo('unidades')} />
             {unidadesPrueba ? (
               <span className="ayuda-campo">
-                pedido de prueba sugerido: {rec.primeraCompra}
+                prueba sugerida: {rec.primeraCompra}
                 {Number(form.unidades) !== unidadesPrueba ? (
-                  <button
-                    type="button"
-                    className="enlace-boton"
-                    onClick={() => setForm((f) => ({ ...f, unidades: unidadesPrueba }))}
-                  >
+                  <button type="button" className="enlace-boton" onClick={() => setForm((f) => ({ ...f, unidades: unidadesPrueba }))}>
                     usar
                   </button>
                 ) : null}
               </span>
             ) : null}
           </label>
-          <label>
+          <label className="sim-campo">
             Comisión Mercado Libre (%)
-            <input type="number" required min="0" max="30" step="0.5" {...campo('comisionPct')} />
-            <span className="ayuda-campo">
-              según tu categoría (13-19%); revísala en el tarifario de ML. Bajo $9.990 se suma cargo
-              fijo automáticamente
-            </span>
+            <input type="number" min="0" max="30" step="0.5" {...campo('comisionPct')} />
+            <span className="ayuda-campo">13-19% según categoría; bajo $9.990 se suma cargo fijo solo</span>
           </label>
-          <label>
-            Modo de flete
+          <label className="sim-campo">
+            Flete
             <select {...campo('modoFlete')}>
               <option value="maritimo">Marítimo (por m³)</option>
               <option value="aereo">Aéreo (por kg)</option>
             </select>
           </label>
           {form.modoFlete === 'maritimo' ? (
-            <label>
+            <label className="sim-campo">
               Volumen por unidad (m³)
-              <input type="number" required min="0.0001" step="0.0001" {...campo('volumenM3')} />
+              <input type="number" min="0.0001" step="0.0001" {...campo('volumenM3')} />
             </label>
           ) : (
-            <label>
+            <label className="sim-campo">
               Peso por unidad (kg)
-              <input type="number" required min="0.01" step="0.01" {...campo('pesoKg')} />
+              <input type="number" min="0.01" step="0.01" {...campo('pesoKg')} />
             </label>
           )}
+          {error ? <p className="error-bloque">{error}</p> : null}
         </div>
-        <button type="submit" disabled={calculando} className="boton-primario">
-          {calculando ? 'Calculando…' : 'Calcular cuánto me queda'}
-        </button>
-        {error ? <p className="error-bloque">{error}</p> : null}
-      </form>
 
-      {resultado ? (
-        <div className="resultado-simulacion">
-          <div className="tiles">
-            <StatTile
-              destacado
-              label="Te queda por unidad"
-              value={fmtPrecio(resultado.porUnidad.margenClp)}
-              detalle={`${fmtPct(resultado.resultado.margenPctSobreVenta)} del precio de venta`}
-            />
-            <StatTile
-              label="Te queda del pedido completo"
-              value={fmtPrecio(resultado.resultado.margenTotalClp)}
-              detalle={`${fmtNum(resultado.resultado.unidades)} unidades vendidas`}
-            />
-            <StatTile
-              label="Mercado Libre se lleva"
-              value={fmtPrecio(mlSeLleva)}
-              detalle={`por unidad: comisión ${form.comisionPct}% + tarifa Full`}
-            />
-            <StatTile
-              label="Caja para partir"
-              value={fmtPrecio(resultado.resultado.inversionCajaClp)}
-              detalle="compra + importación + IVA (se recupera como crédito)"
-            />
-            <StatTile label="Retorno sobre lo invertido" value={fmtPct(resultado.resultado.roiPct)} detalle="margen / costo puesto en Chile" />
-          </div>
+        {/* ---- RESULTADO ---- */}
+        <div className={`sim-panel sim-resultado ${calculando ? 'calculando' : ''}`}>
+          {!resultado ? (
+            <p className="vacio">Completa precio y costo FOB: el cálculo corre solo.</p>
+          ) : (
+            <>
+              <div className={`sim-hero ${pierde ? 'sim-pierde' : ''}`}>
+                <span className="sim-hero-label">{pierde ? 'A este costo PIERDES' : 'Te queda por unidad'}</span>
+                <span className="sim-hero-valor">{fmtPrecio(margen)}</span>
+                <span className="sim-hero-detalle">
+                  {fmtPct(resultado.resultado.margenPctSobreVenta)} del precio · ROI {fmtPct(resultado.resultado.roiPct)}
+                </span>
+              </div>
 
-          <h4>De cada venta de {fmtPrecio(resultado.porUnidad.precioVentaClp)}, ¿a dónde va la plata?</h4>
-          <div className="tabla-envoltura">
-            <table>
-              <tbody>
-                {CAMPOS_DESGLOSE.map(([clave, etiqueta]) => (
-                  <tr key={clave}>
-                    <td>{etiqueta}</td>
-                    <td className="num">{fmtPrecio(resultado.porUnidad[clave])}</td>
-                  </tr>
-                ))}
-                <tr>
-                  <td>IVA (crédito fiscal: lo recuperas al vender)</td>
-                  <td className="num">{fmtPrecio(resultado.porUnidad.ivaImportacionClp)}</td>
-                </tr>
-                <tr className="fila-total">
-                  <td>Te queda</td>
-                  <td className="num">{fmtPrecio(resultado.porUnidad.margenClp)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p className="nota">
-            Supuestos: dólar a {fmtNum(resultado.supuestos.tipoCambioUsdClp)} · arancel{' '}
-            {resultado.supuestos.arancelPct}% (TLC China-Chile con certificado de origen) · valores
-            netos de IVA. Ajusta la comisión al tarifario real de tu categoría.
-          </p>
+              <div className="sim-stats">
+                <div>
+                  <span className="dato-label">Del pedido completo ({fmtNum(resultado.resultado.unidades)} u)</span>
+                  <span className="dato-valor">{fmtPrecio(resultado.resultado.margenTotalClp)}</span>
+                </div>
+                <div>
+                  <span className="dato-label">Mercado Libre se lleva /u</span>
+                  <span className="dato-valor">{fmtPrecio(mlSeLleva)}</span>
+                </div>
+                <div>
+                  <span className="dato-label">Caja para partir</span>
+                  <span className="dato-valor">{fmtPrecio(resultado.resultado.inversionCajaClp)}</span>
+                </div>
+              </div>
+
+              {!pierde ? <FlujoVenta porUnidad={resultado.porUnidad} /> : null}
+
+              <details className="pliegue">
+                <summary>Desglose completo por unidad</summary>
+                <div className="tabla-envoltura">
+                  <table>
+                    <tbody>
+                      <tr><td>Precio de venta (bruto)</td><td className="num">{fmtPrecio(resultado.porUnidad.precioVentaClp)}</td></tr>
+                      <tr><td>Ingreso neto (sin IVA)</td><td className="num">{fmtPrecio(resultado.porUnidad.ingresoNetoClp)}</td></tr>
+                      <tr><td>Producto (FOB)</td><td className="num">{fmtPrecio(resultado.porUnidad.fobClp)}</td></tr>
+                      <tr><td>Flete</td><td className="num">{fmtPrecio(resultado.porUnidad.fleteClp)}</td></tr>
+                      <tr><td>Seguro</td><td className="num">{fmtPrecio(resultado.porUnidad.seguroClp)}</td></tr>
+                      <tr><td>Arancel</td><td className="num">{fmtPrecio(resultado.porUnidad.arancelClp)}</td></tr>
+                      <tr><td>Despacho aduana (prorrateado)</td><td className="num">{fmtPrecio(resultado.porUnidad.despachoClp)}</td></tr>
+                      <tr><td>Comisión Mercado Libre</td><td className="num">{fmtPrecio(resultado.porUnidad.comisionMlClp)}</td></tr>
+                      <tr><td>Tarifa Full</td><td className="num">{fmtPrecio(resultado.porUnidad.fullClp)}</td></tr>
+                      <tr><td>IVA importación (lo recuperas como crédito)</td><td className="num">{fmtPrecio(resultado.porUnidad.ivaImportacionClp)}</td></tr>
+                      <tr className="fila-total"><td>Te queda</td><td className="num">{fmtPrecio(margen)}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+
+              <p className="nota">
+                Dólar {fmtNum(resultado.supuestos.tipoCambioUsdClp)} · arancel {resultado.supuestos.arancelPct}%
+                (TLC China-Chile con certificado) · valores netos de IVA.
+              </p>
+            </>
+          )}
         </div>
-      ) : null}
+      </div>
     </div>
   )
 }
