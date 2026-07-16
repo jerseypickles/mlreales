@@ -1,27 +1,44 @@
 import { Router } from 'express'
 import { config } from '../../config/env.js'
-import { ejecutarActorSync } from '../../services/apify.js'
+import { ejecutarActorSync, obtenerLogRun } from '../../services/apify.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 
-// Sonda para validar el output real del actor nivel 2 antes de mapear campos
-// (el brief prohíbe asumir su schema). Gastas créditos de Apify: protegida con DEBUG_KEY.
+function autorizado(req, res, next) {
+  if (!process.env.DEBUG_KEY || req.get('x-debug-key') !== process.env.DEBUG_KEY) {
+    return res.status(401).json({ error: 'no autorizado' })
+  }
+  next()
+}
+
+// Sonda para validar el output real del actor nivel 2 (el brief prohíbe asumir su
+// schema). Acepta `input` arbitrario para iterar la configuración sin redesplegar.
 router.post(
   '/nivel2',
+  autorizado,
   manejar(async (req, res) => {
-    if (!process.env.DEBUG_KEY || req.get('x-debug-key') !== process.env.DEBUG_KEY) {
-      return res.status(401).json({ error: 'no autorizado' })
+    let input = req.body?.input
+    if (!input) {
+      const urls = Array.isArray(req.body?.urls) ? req.body.urls.slice(0, 5) : []
+      if (!urls.length) return res.status(400).json({ error: 'urls o input requeridos' })
+      input = { urls, max_retries_per_url: 2, ignore_url_failures: true, proxy: { useApifyProxy: true } }
     }
-    const urls = Array.isArray(req.body?.urls) ? req.body.urls.slice(0, 5) : []
-    if (!urls.length) return res.status(400).json({ error: 'urls requeridas (máximo 5)' })
+    const { items, runId } = await ejecutarActorSync(config.actorDetails, input, {
+      timeoutMs: 280_000,
+      conMeta: true,
+    })
+    res.json({ cantidad: items.length, runId, items })
+  }),
+)
 
-    const items = await ejecutarActorSync(
-      config.actorDetails,
-      { urls, max_retries_per_url: 2, ignore_url_failures: true, proxy: { useApifyProxy: true } },
-      { timeoutMs: 280_000 },
-    )
-    res.json({ cantidad: items.length, items })
+// Log del run para diagnosticar corridas vacías
+router.get(
+  '/run/:id/log',
+  autorizado,
+  manejar(async (req, res) => {
+    const log = await obtenerLogRun(req.params.id)
+    res.type('text/plain').send(log.slice(-15_000))
   }),
 )
 

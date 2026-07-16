@@ -37,7 +37,8 @@ async function leerMensajeError(resp) {
 }
 
 // Modo sync: Apify lo corta a los 300s; suficiente para búsquedas de 1-3 páginas.
-export async function ejecutarActorSync(actorId, input, { timeoutMs = 300_000 } = {}) {
+// Con `conMeta: true` devuelve { items, runId } para poder inspeccionar el log del run.
+export async function ejecutarActorSync(actorId, input, { timeoutMs = 300_000, conMeta = false } = {}) {
   const url = `${API_BASE}/acts/${actorId}/run-sync-get-dataset-items?clean=true&format=json`
   let resp
   try {
@@ -66,7 +67,15 @@ export async function ejecutarActorSync(actorId, input, { timeoutMs = 300_000 } 
   if (!Array.isArray(items)) {
     throw new ApifyError(`Respuesta inesperada de ${actorId}: se esperaba un array de items`, { actorId })
   }
+  if (conMeta) return { items, runId: resp.headers.get('x-apify-run-id') ?? null }
   return items
+}
+
+// Log de un run (diagnóstico de runs que terminan vacíos)
+export async function obtenerLogRun(runId) {
+  const resp = await fetch(`${API_BASE}/actor-runs/${runId}/log`, { headers: cabeceras() })
+  if (!resp.ok) throw new ApifyError(`Apify respondió ${resp.status} leyendo log del run ${runId}`, { status: resp.status })
+  return resp.text()
 }
 
 // Modo async para runs largos (batches del nivel 2 en Fase 2): inicia el run y hace polling.
