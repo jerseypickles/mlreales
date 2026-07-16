@@ -5,6 +5,8 @@ import rutasProductos from './routes/productos.js'
 import rutasDebug from './routes/debug.js'
 import rutasMargen from './routes/margen.js'
 import { obtenerColas } from '../jobs/queues.js'
+import { gastoDelMes, mesActual } from '../services/gastos.js'
+import { config } from '../config/env.js'
 
 export function crearApp() {
   const app = express()
@@ -42,6 +44,12 @@ export function crearApp() {
       // queda "desconectado"
     }
     res.json({ ok: mongo === 'ok' && redis === 'ok', mongo, redis })
+  })
+
+  // gasto del mes vs techo: cuando gastado >= presupuesto, programador y radar se detienen solos
+  app.get('/api/gastos', async (_req, res) => {
+    const gastadoUsd = await gastoDelMes()
+    res.json({ mes: mesActual(), gastadoUsd, presupuestoUsd: config.presupuestoUsdMes })
   })
 
   app.use('/api/nichos', rutasNichos)

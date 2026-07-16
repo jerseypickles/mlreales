@@ -10,6 +10,7 @@ import { generarReporteNicho } from '../services/metricas.js'
 import { analizarNicho } from '../services/analista.js'
 import { sugerirNichos, palabrasSaturadas } from '../services/sugeridor.js'
 import { keywordReal, palabrasClave } from '../services/busquedasReales.js'
+import { registrarGasto, gastoDelMes } from '../services/gastos.js'
 import { llmDisponible } from '../services/llm.js'
 import {
   COLA_SCAN_NICHO,
@@ -30,7 +31,7 @@ export async function procesarScanNicho(job) {
 
   const fecha = new Date()
   const { items: crudos, costoUsd } = await buscarNivel1(nicho.keyword, { domainCode: nicho.domainCode })
-  if (costoUsd) await Nicho.updateOne({ _id: nicho._id }, { $inc: { costoUsd } })
+  await registrarGasto(nicho._id, costoUsd)
   if (!crudos.length) {
     throw new Error(
       `Apify devolvió 0 items para "${nicho.keyword}": posible bloqueo del actor o keyword sin resultados`,
@@ -58,9 +59,12 @@ export async function procesarScanNicho(job) {
   await colas.calcularMetricas.add('reporte', { nichoId: String(nicho._id) })
 
   if (config.nivel2Activo) {
+    // screening: detalle barato para que los candidatos del radar prueben que
+    // merecen el detalle completo antes de gastar como un nicho consolidado
+    const topN = nicho.fase === 'screening' ? config.detalleScreeningN : config.detalleTopN
     const top = items
       .sort((a, b) => (a.snapshot.posicion ?? Infinity) - (b.snapshot.posicion ?? Infinity))
-      .slice(0, config.detalleTopN)
+      .slice(0, topN)
       .filter((i) => i.producto.url)
       .map((i) => ({ sku: i.producto.sku, url: i.producto.url }))
     await colas.scanDetalle.add('detalle', {
@@ -107,7 +111,7 @@ export async function procesarScanDetalle(job) {
         { pollMs: 10_000, timeoutMs: 12 * 60_000, conMeta: true },
       )
       crudos = r.items
-      if (r.costoUsd) await Nicho.updateOne({ _id: nichoId }, { $inc: { costoUsd: r.costoUsd } })
+      await registrarGasto(nichoId, r.costoUsd)
     } catch (err) {
       // un batch caído no bota el scan completo; queda registrado en el resultado
       console.error(`[scan-detalle] batch ${i / config.detalleBatch + 1} falló: ${err.message}`)
@@ -157,6 +161,20 @@ export async function procesarCalcularMetricas(job) {
     { upsert: true, new: true },
   )
 
+  // embudo del radar: en screening el score decide — bajo el umbral se pausa sin
+  // gastar LLM; sobre el umbral se gradúa a detalle completo y sigue al análisis
+  if (nicho.fase === 'screening' && reporte.metricas.scoreOportunidad != null) {
+    if (reporte.metricas.scoreOportunidad < config.screeningScoreMin) {
+      if (nicho.origen === 'radar' && nicho.estado === 'activo') {
+        nicho.estado = 'pausado'
+        await nicho.save()
+      }
+      return { reporteId: String(doc._id), score: reporte.metricas.scoreOportunidad, screening: 'descartado' }
+    }
+    nicho.fase = 'completo'
+    await nicho.save()
+  }
+
   // análisis IA automático: primer reporte con score, o score que se movió ≥10 puntos
   let analisisEncolado = false
   if (config.analisisAuto && llmDisponible() && reporte.metricas.scoreOportunidad != null && !doc.analisis) {
@@ -203,6 +221,11 @@ export async function procesarAnalisisNicho(job) {
 // métricas → análisis IA → auto-pausa si no vale la pena).
 export async function procesarRadar() {
   if (!llmDisponible()) return { omitido: true, motivo: 'sin ANTHROPIC_API_KEY' }
+
+  const gastado = await gastoDelMes()
+  if (gastado >= config.presupuestoUsdMes) {
+    return { omitido: true, motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})` }
+  }
 
   // techo de nichos activos: el dinamismo no puede disparar el gasto de Apify
   const activos = await Nicho.countDocuments({ estado: 'activo' })
@@ -255,6 +278,7 @@ export async function procesarRadar() {
       keyword,
       origen: 'radar',
       frecuenciaScan: 'semanal',
+      fase: 'screening',
       radarInfo: {
         razon: s.razon,
         categoria: s.categoria,
@@ -276,6 +300,11 @@ export async function procesarRadar() {
 // Programador: encola scans de nichos activos cuyo último scan ya venció
 // (diario ≈ 20 h, semanal ≈ 6.5 días). jobId por ventana de 3 h evita duplicados.
 export async function procesarProgramadorScans() {
+  const gastado = await gastoDelMes()
+  if (gastado >= config.presupuestoUsdMes) {
+    return { omitido: true, motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})` }
+  }
+
   const ahora = Date.now()
   const umbrales = { diario: 20 * 3600e3, semanal: 6.5 * 86400e3 }
   const nichos = await Nicho.find({ estado: 'activo' }).lean()

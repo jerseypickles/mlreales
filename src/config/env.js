@@ -22,11 +22,16 @@ export const config = {
   // radar autónomo: descubre nichos por temporada/tendencia y los escanea solo
   radarActivo: process.env.RADAR_ACTIVO !== 'false',
   radarCron: process.env.RADAR_CRON || '0 8 * * *', // diario 08:00 Chile
-  radarMaxNichos: Number(process.env.RADAR_MAX_NICHOS) || 3,
+  radarMaxNichos: Number(process.env.RADAR_MAX_NICHOS) || 5,
   radarMaxActivos: Number(process.env.RADAR_MAX_ACTIVOS) || 15, // techo de nichos activos (control de costos)
   programadorCron: process.env.PROGRAMADOR_CRON || '*/30 * * * *',
   analisisAuto: process.env.ANALISIS_AUTO !== 'false',
   detalleTopN: Number(process.env.DETALLE_TOP_N) || 50,
   detalleBatch: Number(process.env.DETALLE_BATCH) || 15,
+  // embudo del radar: screening barato (top-10) y score mínimo para ganarse el detalle completo
+  detalleScreeningN: Number(process.env.DETALLE_SCREENING_N) || 10,
+  screeningScoreMin: Number(process.env.SCREENING_SCORE_MIN) || 45,
+  // techo de gasto mensual (Apify + LLM): al alcanzarlo, programador y radar dejan de encolar
+  presupuestoUsdMes: Number(process.env.PRESUPUESTO_USD_MES) || 40,
   port: Number(process.env.PORT) || 3000,
 }

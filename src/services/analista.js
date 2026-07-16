@@ -139,8 +139,8 @@ export async function analizarNicho(nicho) {
   reporte.markModified('analisis')
   await reporte.save()
 
-  const { Nicho } = await import('../models/Nicho.js')
-  await Nicho.updateOne({ _id: nicho._id }, { $inc: { costoUsd } })
+  const { registrarGasto } = await import('./gastos.js')
+  await registrarGasto(nicho._id, costoUsd)
 
   return reporte.analisis
 }

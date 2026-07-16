@@ -5,6 +5,9 @@ const nichoSchema = new mongoose.Schema({
   domainCode: { type: String, default: 'CL', uppercase: true },
   estado: { type: String, enum: ['activo', 'pausado'], default: 'activo' },
   frecuenciaScan: { type: String, enum: ['diario', 'semanal'], default: 'diario' },
+  // screening = detalle barato (top-10) hasta que el score justifique el completo;
+  // los nichos del radar nacen en screening, los manuales en completo
+  fase: { type: String, enum: ['screening', 'completo'], default: 'completo' },
   origen: { type: String, enum: ['manual', 'radar'], default: 'manual' },
   // metadata del descubrimiento del radar: razon, estacionalidad, ventanaImportacion
   radarInfo: { type: mongoose.Schema.Types.Mixed, default: null },
