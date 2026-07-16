@@ -1,26 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api.js'
-
-const CLP = new Intl.NumberFormat('es-CL', {
-  style: 'currency',
-  currency: 'CLP',
-  maximumFractionDigits: 0,
-})
-const fmtPrecio = (v) => (Number.isFinite(v) ? CLP.format(v) : '—')
-const fmtPct = (v) => (Number.isFinite(v) ? `${v}%` : '—')
-const fmtNum = (v) => (Number.isFinite(v) ? new Intl.NumberFormat('es-CL').format(v) : '—')
-const fmtFecha = (iso) =>
-  iso ? new Date(iso).toLocaleString('es-CL', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
-
-function StatTile({ label, value, detalle }) {
-  return (
-    <div className="tile">
-      <div className="tile-label">{label}</div>
-      <div className="tile-value">{value}</div>
-      {detalle ? <div className="tile-detalle">{detalle}</div> : null}
-    </div>
-  )
-}
+import { Resumen } from './components/Resumen.jsx'
+import { Productos } from './components/Productos.jsx'
+import { Simulador } from './components/Simulador.jsx'
+import { Cargando } from './components/ui.jsx'
+import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
 
 function FormNuevoNicho({ onCreado }) {
   const [keyword, setKeyword] = useState('')
@@ -51,8 +35,9 @@ function FormNuevoNicho({ onCreado }) {
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
         disabled={enviando}
+        aria-label="Keyword del nuevo nicho"
       />
-      <button type="submit" disabled={enviando || keyword.trim().length < 2}>
+      <button type="submit" className="boton-primario" disabled={enviando || keyword.trim().length < 2}>
         {enviando ? 'Creando…' : 'Crear nicho'}
       </button>
       {error ? <span className="error-inline">{error}</span> : null}
@@ -72,10 +57,15 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
             className={n._id === seleccionado ? 'nicho activo' : 'nicho'}
             onClick={() => onSeleccionar(n._id)}
           >
-            <span className="nicho-keyword">{n.keyword}</span>
+            <span className="nicho-fila">
+              <span className="nicho-keyword">{n.keyword}</span>
+              {n.ultimoReporte?.scoreOportunidad != null ? (
+                <span className="nicho-score">{n.ultimoReporte.scoreOportunidad}</span>
+              ) : null}
+            </span>
             <span className="nicho-meta">
               {n.ultimoReporte
-                ? `${n.ultimoReporte.scoreOportunidad != null ? `score ${n.ultimoReporte.scoreOportunidad} · ` : ''}${fmtNum(n.ultimoReporte.productosAnalizados)} productos · mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}`
+                ? `${fmtNum(n.ultimoReporte.productosAnalizados)} productos · mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}`
                 : n.ultimoScanEl
                   ? 'scan hecho, sin reporte'
                   : 'scan pendiente…'}
@@ -87,80 +77,14 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
   )
 }
 
-function TablaProductos({ productos }) {
-  return (
-    <div className="tabla-envoltura">
-      <table>
-        <thead>
-          <tr>
-            <th className="num">#</th>
-            <th>Producto</th>
-            <th className="num">Precio</th>
-            <th className="num">Desc.</th>
-            <th className="num">Rating</th>
-            <th>Vendedor</th>
-            <th>Tipo</th>
-            <th>Full</th>
-          </tr>
-        </thead>
-        <tbody>
-          {productos.map((p) => (
-            <tr key={p.sku}>
-              <td className="num">{p.posicion ?? '—'}</td>
-              <td className="celda-titulo">
-                {p.url ? (
-                  <a href={p.url} target="_blank" rel="noreferrer">
-                    {p.titulo ?? p.sku}
-                  </a>
-                ) : (
-                  (p.titulo ?? p.sku)
-                )}
-              </td>
-              <td className="num">{fmtPrecio(p.precio)}</td>
-              <td className="num">{Number.isFinite(p.descuentoPct) ? `-${p.descuentoPct}%` : '—'}</td>
-              <td className="num">{p.rating ?? '—'}</td>
-              <td>{p.vendedor ?? '—'}</td>
-              <td>{p.tipoListing === 'catalogo' ? 'catálogo' : 'listing'}</td>
-              <td>{p.esFull ? 'Sí' : '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function TablaSellers({ sellers }) {
-  if (!sellers?.length) return <p className="vacio">Nivel 1 no identifica todos los vendedores; el nivel 2 (Fase 2) completa esta tabla.</p>
-  return (
-    <div className="tabla-envoltura">
-      <table>
-        <thead>
-          <tr>
-            <th>Vendedor</th>
-            <th className="num">Items en top 50</th>
-            <th className="num">% del listado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sellers.map((s) => (
-            <tr key={s.vendedor}>
-              <td>{s.vendedor}</td>
-              <td className="num">{s.items}</td>
-              <td className="num">{fmtPct(s.pctItems)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function VistaReporte({ nichoId, alCambiarNichos }) {
+function VistaNicho({ nichoId, alCambiarNichos }) {
   const [datos, setDatos] = useState(null)
-  const [estado, setEstado] = useState('cargando') // cargando | listo | sin-datos | error
+  const [estado, setEstado] = useState('cargando')
   const [error, setError] = useState(null)
+  const [pestana, setPestana] = useState('resumen')
+  const [productos, setProductos] = useState(null)
   const [escaneando, setEscaneando] = useState(false)
+  const [precioSimulador, setPrecioSimulador] = useState(null)
   const encuesta = useRef(null)
 
   const cargar = useCallback(async () => {
@@ -168,6 +92,7 @@ function VistaReporte({ nichoId, alCambiarNichos }) {
       const cuerpo = await api.reporte(nichoId)
       setDatos(cuerpo)
       setEstado('listo')
+      api.productosNicho(nichoId).then(setProductos).catch(() => setProductos(null))
       return cuerpo
     } catch (err) {
       if (String(err.message).includes('aún no hay scans')) setEstado('sin-datos')
@@ -182,11 +107,13 @@ function VistaReporte({ nichoId, alCambiarNichos }) {
   useEffect(() => {
     setEstado('cargando')
     setDatos(null)
+    setProductos(null)
+    setPestana('resumen')
+    setPrecioSimulador(null)
     cargar()
     return () => clearInterval(encuesta.current)
   }, [cargar])
 
-  // tras disparar un scan, refrescar hasta que llegue un reporte con fecha nueva
   function vigilarNuevoReporte(fechaAnterior) {
     clearInterval(encuesta.current)
     encuesta.current = setInterval(async () => {
@@ -211,19 +138,33 @@ function VistaReporte({ nichoId, alCambiarNichos }) {
     }
   }
 
-  if (estado === 'cargando') return <p className="vacio">Cargando reporte…</p>
+  function simularProducto(producto) {
+    setPrecioSimulador(producto.precio)
+    setPestana('simulador')
+  }
+
+  if (estado === 'cargando') return <Cargando texto="Cargando reporte…" />
   if (estado === 'error') return <p className="error-bloque">Error: {error}</p>
   if (estado === 'sin-datos') {
     return (
       <div>
-        <p className="vacio">Aún no hay scans completados para este nicho (el primero corre solo al crearlo, toma ~1 min).</p>
-        <button onClick={cargar}>Revisar de nuevo</button>
+        <p className="vacio">
+          Aún no hay scans completados (el primero corre solo al crear el nicho, toma 1-5 min con el
+          nivel de detalle).
+        </p>
+        <button onClick={cargar} className="boton-secundario">
+          Revisar de nuevo
+        </button>
       </div>
     )
   }
 
   const { nicho, reporte } = datos
-  const m = reporte.metricas
+  const pestanas = [
+    ['resumen', 'Resumen'],
+    ['productos', productos ? `Productos (${productos.total})` : 'Productos'],
+    ['simulador', 'Simulador'],
+  ]
 
   return (
     <div>
@@ -232,79 +173,33 @@ function VistaReporte({ nichoId, alCambiarNichos }) {
           <h2>{nicho.keyword}</h2>
           <p className="reporte-fecha">
             Último scan: {fmtFecha(reporte.fecha)}
-            {m.universo.totalResultadosBusqueda
-              ? ` · ${fmtNum(m.universo.totalResultadosBusqueda)}${m.universo.totalEsMinimo ? '+' : ''} resultados en ML`
-              : ''}
+            {escaneando ? ' · escaneando…' : ''}
           </p>
         </div>
-        <button onClick={escanear} disabled={escaneando}>
+        <button onClick={escanear} disabled={escaneando} className="boton-primario">
           {escaneando ? 'Escaneando…' : 'Re-escanear ahora'}
         </button>
       </div>
 
-      <div className="tiles">
-        {m.scoreOportunidad != null ? (
-          <StatTile
-            label="Score oportunidad"
-            value={m.scoreOportunidad}
-            detalle={`demanda ${m.oportunidad.componentes.demanda} · competencia ${m.oportunidad.componentes.competencia} · calidad ${m.oportunidad.componentes.calidad} · full ${m.oportunidad.componentes.full}`}
-          />
-        ) : null}
-        {m.demanda ? (
-          <StatTile
-            label="Ventas estimadas/día"
-            value={m.demanda.ventasEstimadasPorDia ?? '—'}
-            detalle={
-              m.demanda.ventasEstimadasPorDia == null
-                ? 'el delta requiere 2 scans'
-                : m.demanda.base === 'reviews'
-                  ? 'proxy: reseñas nuevas × factor'
-                  : 'desde vendidos'
-            }
-          />
-        ) : null}
-        {m.demanda?.reviews ? (
-          <StatTile
-            label="Reseñas top 50"
-            value={fmtNum(m.demanda.reviews.total)}
-            detalle={`mediana ${fmtNum(m.demanda.reviews.mediana)} por producto`}
-          />
-        ) : null}
-        <StatTile label="Productos analizados" value={fmtNum(m.universo.productosAnalizados)} detalle="top del listado" />
-        <StatTile
-          label="Precio mediana"
-          value={fmtPrecio(m.precio.mediana)}
-          detalle={`p25 ${fmtPrecio(m.precio.p25)} · p75 ${fmtPrecio(m.precio.p75)}`}
-        />
-        <StatTile
-          label="Banda dominante"
-          value={m.precio.bandaDominante ? `${fmtPrecio(m.precio.bandaDominante.desde)}–${fmtPrecio(m.precio.bandaDominante.hasta)}` : '—'}
-          detalle={m.precio.bandaDominante ? `${fmtPct(m.precio.bandaDominante.pctItems)} de los items` : ''}
-        />
-        <StatTile
-          label="Descuento promedio"
-          value={fmtPct(m.precio.descuentoPromedioPct)}
-          detalle={`${fmtPct(m.precio.pctConDescuento)} de items con descuento`}
-        />
-        <StatTile label="Sellers únicos" value={fmtNum(m.competencia.sellersUnicos)} detalle={`concentración top 3: ${fmtPct(m.competencia.concentracionTop3Pct)}`} />
-        <StatTile label="Tiendas oficiales" value={fmtPct(m.competencia.pctTiendaOficial)} detalle="del top 50" />
-        <StatTile label="Items con Full" value={fmtPct(m.competencia.pctFull)} detalle={`envío rápido: ${fmtPct(m.competencia.pctEnvioRapido)}`} />
-        <StatTile label="Rating promedio" value={m.calidad.ratingPromedio ?? '—'} detalle={`${fmtPct(m.calidad.pctConRating)} con rating`} />
-      </div>
+      <nav className="pestanas" role="tablist">
+        {pestanas.map(([clave, etiqueta]) => (
+          <button
+            key={clave}
+            role="tab"
+            aria-selected={pestana === clave}
+            className={pestana === clave ? 'pestana activa' : 'pestana'}
+            onClick={() => setPestana(clave)}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </nav>
 
-      <section>
-        <h3>Top productos</h3>
-        <TablaProductos productos={reporte.topProductos ?? []} />
-      </section>
-
-      <section>
-        <h3>Top sellers</h3>
-        <TablaSellers sellers={reporte.topSellers} />
-      </section>
-
-      <p className="nota">
-        Demanda (vendidos) y score de oportunidad llegan con la Fase 2 (scraper de detalle).
-      </p>
+      {pestana === 'resumen' ? <Resumen reporte={reporte} productos={productos?.productos} /> : null}
+      {pestana === 'productos' ? <Productos nichoId={nichoId} onSimular={simularProducto} /> : null}
+      {pestana === 'simulador' ? (
+        <Simulador nicho={nicho} reporte={reporte} precioInicial={precioSimulador} />
+      ) : null}
     </div>
   )
 }
@@ -333,7 +228,7 @@ export default function App() {
     <div className="app">
       <header>
         <h1>MELI Intel</h1>
-        <span className="subtitulo">nichos en mercadolibre.cl</span>
+        <span className="subtitulo">inteligencia de nichos · mercadolibre.cl</span>
       </header>
       <div className="cuerpo">
         <aside>
@@ -348,7 +243,7 @@ export default function App() {
         </aside>
         <main>
           {seleccionado ? (
-            <VistaReporte key={seleccionado} nichoId={seleccionado} alCambiarNichos={cargarNichos} />
+            <VistaNicho key={seleccionado} nichoId={seleccionado} alCambiarNichos={cargarNichos} />
           ) : (
             <p className="vacio">Selecciona o crea un nicho para ver su reporte.</p>
           )}

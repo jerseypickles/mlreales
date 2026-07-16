@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { Nicho } from '../../models/Nicho.js'
 import { Reporte } from '../../models/Reporte.js'
+import { Producto } from '../../models/Producto.js'
+import { Snapshot } from '../../models/Snapshot.js'
 import { encolarScanNicho } from '../../jobs/queues.js'
 import { generarReporteNicho } from '../../services/metricas.js'
 
@@ -104,6 +106,52 @@ router.get(
         ultimoScanEl: nicho.ultimoScanEl,
       },
       reporte,
+    })
+  }),
+)
+
+// Todos los productos del último scan (para la tabla del dashboard)
+router.get(
+  '/:id/productos',
+  manejar(async (req, res) => {
+    const nicho = await Nicho.findById(req.params.id)
+    if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
+
+    const ultimo = await Snapshot.findOne({ keyword: nicho.keyword }).sort({ fecha: -1 }).lean()
+    if (!ultimo) return res.status(404).json({ error: 'aún no hay scans completados para este nicho' })
+
+    const snapshots = await Snapshot.find({ keyword: nicho.keyword, fecha: ultimo.fecha })
+      .sort({ posicion: 1 })
+      .lean()
+    const productos = await Producto.find({ sku: { $in: snapshots.map((s) => s.sku) } }).lean()
+    const porSku = new Map(productos.map((p) => [p.sku, p]))
+
+    res.json({
+      fechaScan: ultimo.fecha,
+      total: snapshots.length,
+      productos: snapshots.map((s) => {
+        const p = porSku.get(s.sku) ?? {}
+        return {
+          sku: s.sku,
+          posicion: s.posicion,
+          titulo: p.titulo ?? null,
+          url: p.url ?? null,
+          precio: s.precio,
+          precioAnterior: s.precioAnterior,
+          descuentoPct: s.descuentoPct,
+          rating: s.rating,
+          numReviews: s.numReviews,
+          cuotas: s.cuotas,
+          vendedor: p.vendedor ?? null,
+          sellerId: p.sellerId ?? null,
+          esTiendaOficial: p.esTiendaOficial ?? false,
+          esFull: p.esFull ?? false,
+          envioRapido: p.envioRapido ?? false,
+          origenCrossBorder: p.origenCrossBorder ?? false,
+          tipoListing: p.tipoListing ?? null,
+          primeraVezVisto: p.primeraVezVisto ?? null,
+        }
+      }),
     })
   }),
 )

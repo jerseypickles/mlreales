@@ -120,6 +120,17 @@ test('reporte e historia sobre datos de un scan', async () => {
   assert.equal(noExiste.status, 404)
 })
 
+test('GET /api/nichos/:id/productos entrega el último scan completo', async () => {
+  const nicho = await modelos.Nicho.findOne({ keyword: 'foco solares' })
+  const resp = await fetch(`${baseUrl}/api/nichos/${nicho._id}/productos`)
+  assert.equal(resp.status, 200)
+  const cuerpo = await resp.json()
+  assert.equal(cuerpo.total, 3)
+  assert.equal(cuerpo.productos[0].sku, 'MLC45499727') // ordenado por posición
+  assert.equal(cuerpo.productos[0].esFull, true)
+  assert.ok(cuerpo.productos.every((p) => 'origenCrossBorder' in p))
+})
+
 test('ids inválidos e inexistentes', async () => {
   const invalido = await fetch(`${baseUrl}/api/nichos/no-es-un-id/reporte`)
   assert.equal(invalido.status, 400)

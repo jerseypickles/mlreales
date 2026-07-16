@@ -7,14 +7,19 @@ async function pedir(ruta, opciones) {
   return cuerpo
 }
 
+const json = (body) => ({
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+})
+
 export const api = {
   listarNichos: () => pedir('/api/nichos'),
-  crearNicho: (keyword) =>
-    pedir('/api/nichos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keyword }),
-    }),
+  crearNicho: (keyword) => pedir('/api/nichos', json({ keyword })),
   reporte: (id) => pedir(`/api/nichos/${id}/reporte`),
+  productosNicho: (id) => pedir(`/api/nichos/${id}/productos`),
   escanear: (id) => pedir(`/api/nichos/${id}/scan`, { method: 'POST' }),
+  historia: (sku) => pedir(`/api/productos/${sku}/historia`),
+  simularMargen: (entrada) => pedir('/api/margen', json(entrada)),
+  parametrosMargen: () => pedir('/api/margen/parametros'),
 }
