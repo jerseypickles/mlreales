@@ -240,6 +240,62 @@ button {
   padding: 1px 8px;
 }
 
+.nicho-score.score-alto {
+  color: var(--exito-tinta);
+  background: var(--exito-tenue);
+  border-color: currentColor;
+}
+
+.nicho-score.score-medio {
+  color: var(--avisa-tinta);
+  background: var(--avisa-tenue);
+  border-color: currentColor;
+}
+
+.nicho-score.score-bajo {
+  color: var(--tinta-3);
+  background: var(--superficie-2);
+  border-color: var(--borde);
+}
+
+.lista-envoltura {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filtro-nichos {
+  margin-bottom: 4px;
+}
+
+.grupo-titulo {
+  margin: 6px 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tinta-3);
+}
+
+.grupo-descartados {
+  margin-top: 6px;
+}
+
+.grupo-descartados summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--tinta-3);
+  font-weight: 600;
+}
+
+.grupo-descartados[open] summary {
+  margin-bottom: 6px;
+}
+
+.grupo-descartados .nicho {
+  opacity: 0.7;
+}
+
 .nicho-meta {
   color: var(--tinta-3);
   font-size: 12px;

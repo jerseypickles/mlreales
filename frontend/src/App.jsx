@@ -53,53 +53,102 @@ const ETAPAS = {
   analizando: 'analizando con IA…',
 }
 
+function claseScore(score) {
+  if (!Number.isFinite(score)) return ''
+  if (score >= 70) return 'score-alto'
+  if (score >= 50) return 'score-medio'
+  return 'score-bajo'
+}
+
+function NichoItem({ n, seleccionado, onSeleccionar }) {
+  const score = n.ultimoReporte?.scoreOportunidad
+  return (
+    <li>
+      <button className={n._id === seleccionado ? 'nicho activo' : 'nicho'} onClick={() => onSeleccionar(n._id)}>
+        <span className="nicho-fila">
+          <span className="nicho-keyword">
+            {n.origen === 'radar' ? <span className="punto-radar" title="descubierto por el radar" /> : null}
+            {n.keyword}
+          </span>
+          {score != null ? <span className={`nicho-score ${claseScore(score)}`}>{score}</span> : null}
+        </span>
+        <span className="nicho-meta">
+          {n.enProceso ? (
+            <span className="en-proceso">
+              <span className="spinner" aria-hidden="true" />
+              {ETAPAS[n.enProceso] ?? 'procesando…'}
+            </span>
+          ) : (
+            <>
+              {n.veredicto ? (
+                <span className={`veredicto veredicto-${n.veredicto}`}>{n.veredicto.replace(/_/g, ' ')}</span>
+              ) : null}
+              {n.ultimoReporte
+                ? `mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}`
+                : n.ultimoScanEl
+                  ? 'scan hecho, sin reporte'
+                  : 'scan pendiente…'}
+            </>
+          )}
+        </span>
+      </button>
+    </li>
+  )
+}
+
 function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
+  const [filtro, setFiltro] = useState('')
+
   if (!nichos.length) {
     return <p className="vacio">Sin nichos todavía. Crea el primero con una keyword.</p>
   }
+
+  const q = filtro.trim().toLowerCase()
+  const visibles = q ? nichos.filter((n) => n.keyword.includes(q)) : nichos
+
+  const puntaje = (n) => n.ultimoReporte?.scoreOportunidad ?? -1
+  const descartado = (n) => n.veredicto === 'no_entrar' || n.estado === 'pausado'
+  const oportunidades = visibles.filter((n) => !descartado(n) && n.veredicto).sort((a, b) => puntaje(b) - puntaje(a))
+  const evaluando = visibles.filter((n) => !descartado(n) && !n.veredicto)
+  const descartados = visibles.filter(descartado).sort((a, b) => puntaje(b) - puntaje(a))
+
+  const render = (lista) =>
+    lista.map((n) => <NichoItem key={n._id} n={n} seleccionado={seleccionado} onSeleccionar={onSeleccionar} />)
+
   return (
-    <ul className="lista-nichos">
-      {nichos.map((n) => (
-        <li key={n._id}>
-          <button
-            className={n._id === seleccionado ? 'nicho activo' : 'nicho'}
-            onClick={() => onSeleccionar(n._id)}
-          >
-            <span className="nicho-fila">
-              <span className="nicho-keyword">
-                {n.origen === 'radar' ? <span className="punto-radar" title="descubierto por el radar" /> : null}
-                {n.keyword}
-              </span>
-              {n.ultimoReporte?.scoreOportunidad != null ? (
-                <span className="nicho-score">{n.ultimoReporte.scoreOportunidad}</span>
-              ) : null}
-            </span>
-            <span className="nicho-meta">
-              {n.enProceso ? (
-                <span className="en-proceso">
-                  <span className="spinner" aria-hidden="true" />
-                  {ETAPAS[n.enProceso] ?? 'procesando…'}
-                </span>
-              ) : (
-                <>
-                  {n.veredicto ? (
-                    <span className={`veredicto veredicto-${n.veredicto}`}>
-                      {n.veredicto.replace(/_/g, ' ')}
-                    </span>
-                  ) : null}
-                  {n.estado === 'pausado' ? 'pausado · ' : ''}
-                  {n.ultimoReporte
-                    ? `${fmtNum(n.ultimoReporte.productosAnalizados)} productos · mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}`
-                    : n.ultimoScanEl
-                      ? 'scan hecho, sin reporte'
-                      : 'scan pendiente…'}
-                </>
-              )}
-            </span>
-          </button>
-        </li>
-      ))}
-    </ul>
+    <div className="lista-envoltura">
+      {nichos.length > 6 ? (
+        <input
+          type="search"
+          className="filtro-nichos"
+          placeholder="Filtrar nichos…"
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+          aria-label="Filtrar nichos"
+        />
+      ) : null}
+
+      {oportunidades.length ? (
+        <>
+          <p className="grupo-titulo">Oportunidades</p>
+          <ul className="lista-nichos">{render(oportunidades)}</ul>
+        </>
+      ) : null}
+
+      {evaluando.length ? (
+        <>
+          <p className="grupo-titulo">En evaluación</p>
+          <ul className="lista-nichos">{render(evaluando)}</ul>
+        </>
+      ) : null}
+
+      {descartados.length ? (
+        <details className="grupo-descartados">
+          <summary>Descartados ({descartados.length})</summary>
+          <ul className="lista-nichos">{render(descartados)}</ul>
+        </details>
+      ) : null}
+    </div>
   )
 }
 
