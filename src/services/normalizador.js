@@ -81,7 +81,7 @@ export function calcularDescuentoPct(precio, precioAnterior) {
   return Math.round(((precioAnterior - precio) / precioAnterior) * 1000) / 10
 }
 
-export function normalizarItemBusqueda(raw, { fecha, keyword } = {}) {
+export function normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal } = {}) {
   if (!raw || typeof raw !== 'object') return null
   const sku = extraerSku(raw)
   if (!sku) return null
@@ -118,7 +118,8 @@ export function normalizarItemBusqueda(raw, { fecha, keyword } = {}) {
     numReviews: parsearNumero(raw.numeroEvaluaciones),
     vendidos: null, // Fase 2
     stock: null, // Fase 2
-    posicion: parsearNumero(raw.itemPosition),
+    // itemPosition del actor reinicia en cada página; el orden del dataset es la posición global
+    posicion: posicionGlobal ?? parsearNumero(raw.itemPosition),
     keyword: kw,
   }
 
@@ -131,11 +132,11 @@ export function normalizarScan(rawItems, { fecha, keyword } = {}) {
   let descartados = 0
   let totalResultados = null
 
-  for (const raw of rawItems ?? []) {
+  for (const [indice, raw] of (rawItems ?? []).entries()) {
     const tot = parsearResultadosTotales(raw?.resultadosTotales)
     if (tot && (!totalResultados || tot.total > totalResultados.total)) totalResultados = tot
 
-    const norm = normalizarItemBusqueda(raw, { fecha, keyword })
+    const norm = normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal: indice + 1 })
     if (!norm) {
       descartados++
       continue

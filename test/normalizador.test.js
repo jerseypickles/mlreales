@@ -150,3 +150,18 @@ test('normalizarScan: dedup por SKU, descarta items sin SKU y parsea totales', (
   assert.equal(importadora.snapshot.precio, 9747.93)
   assert.equal(importadora.producto.tipoListing, 'listing')
 })
+
+test('normalizarScan: la posición es global aunque itemPosition reinicie por página', () => {
+  const fecha = new Date('2026-07-16T12:00:00Z')
+  const paginas = [
+    { SKU: 'MLC100000001', itemPosition: 1, nuevoPrecio: '1000' },
+    { SKU: 'MLC100000002', itemPosition: 2, nuevoPrecio: '2000' },
+    { SKU: 'MLC100000003', itemPosition: 1, nuevoPrecio: '3000' }, // página 2 reinicia
+    { SKU: 'MLC100000004', itemPosition: 2, nuevoPrecio: '4000' },
+  ]
+  const { items } = normalizarScan(paginas, { fecha, keyword: 'x' })
+  assert.deepEqual(
+    items.map((i) => i.snapshot.posicion),
+    [1, 2, 3, 4],
+  )
+})
