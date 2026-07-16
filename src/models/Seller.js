@@ -5,8 +5,9 @@ const sellerSchema = new mongoose.Schema({
   sellerId: { type: String, required: true, unique: true },
   nombre: String,
   esTiendaOficial: Boolean,
-  reputacion: mongoose.Schema.Types.Mixed,
-  powerSeller: Boolean,
+  officialStoreId: mongoose.Schema.Types.Mixed,
+  reputacion: String, // ej: "5_green"
+  powerSeller: String, // nivel MercadoLíder: "platinum" | "gold" | "silver" | null
   productosTrackeados: { type: [String], default: [] },
   ultimaActualizacion: Date,
 })

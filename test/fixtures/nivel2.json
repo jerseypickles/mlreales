@@ -1,0 +1,123 @@
+[
+  {
+    "item_id": "MLC1545874413",
+    "catalog_product_id": "MLC45499727",
+    "user_product_id": "not_apply",
+    "title": "Foco LED Solar 400W EOLAND Exterior con Sensor Movimiento y Control Remoto",
+    "price": 15990,
+    "original_price": 25990,
+    "currency_id": "CLP",
+    "reviews": {
+      "count": 921,
+      "reviews_with_comment": 557,
+      "rate": 4.6
+    },
+    "review_rate": 4,
+    "seller_id": 413173645,
+    "seller_name": "EOLAND",
+    "reputation_level": "5_green",
+    "power_seller_status": "platinum",
+    "official_store_id": 109714,
+    "logistic_type": "fulfillment",
+    "free_shipping": false,
+    "item_origins": [
+      "CLRM03"
+    ],
+    "category_id": "MLC174442",
+    "domain_id": "MLC-FLOOD_LIGHTS",
+    "item_condition": "new",
+    "subtitle_types": [
+      "SOLD_QUANTITY"
+    ],
+    "tags": [
+      "kvs_primary",
+      "good_quality_thumbnail",
+      "immediate_payment",
+      "cart_eligible",
+      "has_published_clips",
+      "standard_price_by_quantity",
+      "user_product_unify"
+    ]
+  },
+  {
+    "item_id": "MLC4161416820",
+    "catalog_product_id": "MLC69288644",
+    "user_product_id": "not_apply",
+    "title": "Luz Solar Osmao Foco Triple Cabezal Con Sensor De Movimientos",
+    "price": 7875,
+    "original_price": 8290,
+    "currency_id": "CLP",
+    "reviews": {
+      "count": 9,
+      "reviews_with_comment": 5,
+      "rate": 4.8
+    },
+    "review_rate": 5,
+    "seller_id": 1434745497,
+    "seller_name": "OSMAO",
+    "reputation_level": "5_green",
+    "power_seller_status": "platinum",
+    "official_store_id": 94670,
+    "logistic_type": "fulfillment",
+    "free_shipping": false,
+    "item_origins": [
+      "CLRM03"
+    ],
+    "category_id": "MLC179777",
+    "domain_id": "MLC-FLOOR_CEILING_AND_WALL_LIGHTS",
+    "item_condition": "new",
+    "subtitle_types": [
+      "SOLD_QUANTITY"
+    ],
+    "tags": [
+      "kvs_primary",
+      "immediate_payment",
+      "cart_eligible",
+      "has_published_clips",
+      "user_product_unify"
+    ]
+  },
+  {
+    "item_id": "MLC1825201217",
+    "catalog_product_id": "MLC2080444096",
+    "user_product_id": "MLCU3706237055",
+    "title": "Foco Solar Exterior Led Doble Haz Pared Pack 2 Unidades",
+    "price": 7292,
+    "original_price": 7292,
+    "currency_id": "CLP",
+    "reviews": {
+      "count": 11,
+      "reviews_with_comment": 8,
+      "rate": 4.3
+    },
+    "review_rate": 4,
+    "seller_id": 3133834010,
+    "seller_name": "Tienda Shunxiang",
+    "reputation_level": "5_green",
+    "power_seller_status": "silver",
+    "official_store_id": null,
+    "logistic_type": "fulfillment",
+    "free_shipping": false,
+    "item_origins": [
+      "CNGD01"
+    ],
+    "category_id": "MLC457924",
+    "domain_id": "MLC-FLOOR_CEILING_AND_WALL_LIGHTS",
+    "item_condition": "new",
+    "subtitle_types": [
+      "SOLD_QUANTITY"
+    ],
+    "tags": [
+      "kvs_primary",
+      "good_quality_thumbnail",
+      "net_proceeds_prices",
+      "immediate_payment",
+      "user_product_listing",
+      "cart_eligible",
+      "cbt_item",
+      "modified_sale_fee",
+      "standard_price_by_channel",
+      "cbt_fulfillment_cn"
+    ]
+  }
+]

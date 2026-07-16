@@ -13,6 +13,7 @@ const productoSchema = new mongoose.Schema({
   esTiendaOficial: { type: Boolean, default: false },
   esFull: { type: Boolean, default: false },
   envioRapido: { type: Boolean, default: false },
+  origenCrossBorder: { type: Boolean, default: false }, // despachado desde China (nivel 2)
   activo: { type: Boolean, default: true },
   primeraVezVisto: Date,
   ultimaVezVisto: Date,

@@ -75,7 +75,7 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
             <span className="nicho-keyword">{n.keyword}</span>
             <span className="nicho-meta">
               {n.ultimoReporte
-                ? `${fmtNum(n.ultimoReporte.productosAnalizados)} productos · mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}`
+                ? `${n.ultimoReporte.scoreOportunidad != null ? `score ${n.ultimoReporte.scoreOportunidad} · ` : ''}${fmtNum(n.ultimoReporte.productosAnalizados)} productos · mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}`
                 : n.ultimoScanEl
                   ? 'scan hecho, sin reporte'
                   : 'scan pendiente…'}
@@ -243,6 +243,33 @@ function VistaReporte({ nichoId, alCambiarNichos }) {
       </div>
 
       <div className="tiles">
+        {m.scoreOportunidad != null ? (
+          <StatTile
+            label="Score oportunidad"
+            value={m.scoreOportunidad}
+            detalle={`demanda ${m.oportunidad.componentes.demanda} · competencia ${m.oportunidad.componentes.competencia} · calidad ${m.oportunidad.componentes.calidad} · full ${m.oportunidad.componentes.full}`}
+          />
+        ) : null}
+        {m.demanda ? (
+          <StatTile
+            label="Ventas estimadas/día"
+            value={m.demanda.ventasEstimadasPorDia ?? '—'}
+            detalle={
+              m.demanda.ventasEstimadasPorDia == null
+                ? 'el delta requiere 2 scans'
+                : m.demanda.base === 'reviews'
+                  ? 'proxy: reseñas nuevas × factor'
+                  : 'desde vendidos'
+            }
+          />
+        ) : null}
+        {m.demanda?.reviews ? (
+          <StatTile
+            label="Reseñas top 50"
+            value={fmtNum(m.demanda.reviews.total)}
+            detalle={`mediana ${fmtNum(m.demanda.reviews.mediana)} por producto`}
+          />
+        ) : null}
         <StatTile label="Productos analizados" value={fmtNum(m.universo.productosAnalizados)} detalle="top del listado" />
         <StatTile
           label="Precio mediana"

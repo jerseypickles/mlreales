@@ -1,5 +1,6 @@
 import { Producto } from '../models/Producto.js'
 import { Snapshot } from '../models/Snapshot.js'
+import { Seller } from '../models/Seller.js'
 
 // Upsert por SKU: re-ejecutar un scan no duplica productos, solo agrega snapshots.
 export async function guardarScan({ items, fecha }) {
@@ -31,5 +32,67 @@ export async function guardarScan({ items, fecha }) {
     productosNuevos: resultado.upsertedCount ?? 0,
     productosActualizados: resultado.modifiedCount ?? 0,
     snapshotsInsertados: snapshots.length,
+  }
+}
+
+// Aplica los resultados del nivel 2 sobre productos, sellers y los snapshots del scan.
+export async function aplicarDetalleScan({ porSku, fecha }) {
+  if (!porSku?.size) return { productosActualizados: 0, snapshotsActualizados: 0, sellersActualizados: 0 }
+
+  const opsProducto = []
+  const opsSnapshot = []
+  const sellersPorId = new Map()
+
+  for (const [sku, det] of porSku) {
+    const setProd = { esFull: det.esFull, origenCrossBorder: det.origenCrossBorder }
+    if (det.categoriaML) setProd.categoriaML = det.categoriaML
+    if (det.seller) {
+      setProd.sellerId = det.seller.sellerId
+      setProd.esTiendaOficial = det.seller.esTiendaOficial
+      if (det.seller.nombre) setProd.vendedor = det.seller.nombre
+    }
+    opsProducto.push({ updateOne: { filter: { sku }, update: { $set: setProd } } })
+
+    const setSnap = {}
+    if (det.numReviews !== null) setSnap.numReviews = det.numReviews
+    if (det.rating !== null) setSnap.rating = det.rating
+    if (det.precio !== null) setSnap.precio = det.precio
+    if (Object.keys(setSnap).length) {
+      opsSnapshot.push({ updateOne: { filter: { sku, fecha }, update: { $set: setSnap } } })
+    }
+
+    if (det.seller) {
+      const previo = sellersPorId.get(det.seller.sellerId) ?? { ...det.seller, skus: [] }
+      previo.skus.push(sku)
+      sellersPorId.set(det.seller.sellerId, previo)
+    }
+  }
+
+  const opsSeller = [...sellersPorId.values()].map((s) => ({
+    updateOne: {
+      filter: { sellerId: s.sellerId },
+      update: {
+        $set: {
+          nombre: s.nombre,
+          esTiendaOficial: s.esTiendaOficial,
+          officialStoreId: s.officialStoreId,
+          reputacion: s.reputacion,
+          powerSeller: s.powerSeller,
+          ultimaActualizacion: fecha,
+        },
+        $addToSet: { productosTrackeados: { $each: s.skus } },
+      },
+      upsert: true,
+    },
+  }))
+
+  const resProd = opsProducto.length ? await Producto.bulkWrite(opsProducto, { ordered: false }) : null
+  const resSnap = opsSnapshot.length ? await Snapshot.bulkWrite(opsSnapshot, { ordered: false }) : null
+  if (opsSeller.length) await Seller.bulkWrite(opsSeller, { ordered: false })
+
+  return {
+    productosActualizados: resProd?.modifiedCount ?? 0,
+    snapshotsActualizados: resSnap?.modifiedCount ?? 0,
+    sellersActualizados: opsSeller.length,
   }
 }

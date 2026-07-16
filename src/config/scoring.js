@@ -13,8 +13,11 @@ export const scoring = {
     ratingPiso: 3.5, // rating promedio <= piso → componente calidad = 100
   },
   escalas: {
-    // demanda = min(100, factorLog * log10(1 + vendidosTop50))
-    // con factor 20: 10.000 vendidos ≈ 80 pts; 100.000 ≈ 100 pts
+    // demanda = min(100, factorLog * log10(1 + volumenVentasEstimado))
+    // con factor 20: 10.000 ventas ≈ 80 pts; 100.000 ≈ 100 pts
     demandaFactorLog: 20,
+    // ML no expone vendidos exactos (solo buckets congelados); la señal continua
+    // es el conteo de reseñas: ~1 de cada N compradores reseña. Heurística ajustable.
+    reviewsAVentasFactor: 25,
   },
 }

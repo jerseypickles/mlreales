@@ -1,11 +1,19 @@
 import { Worker } from 'bullmq'
+import { config } from '../config/env.js'
 import { Nicho } from '../models/Nicho.js'
 import { Reporte } from '../models/Reporte.js'
-import { buscarNivel1 } from '../services/apify.js'
+import { buscarNivel1, ejecutarActorAsync } from '../services/apify.js'
 import { normalizarScan } from '../services/normalizador.js'
-import { guardarScan } from '../services/persistencia.js'
+import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
+import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
 import { generarReporteNicho } from '../services/metricas.js'
-import { COLA_SCAN_NICHO, COLA_CALCULAR_METRICAS, crearConexionRedis, obtenerColas } from './queues.js'
+import {
+  COLA_SCAN_NICHO,
+  COLA_SCAN_DETALLE,
+  COLA_CALCULAR_METRICAS,
+  crearConexionRedis,
+  obtenerColas,
+} from './queues.js'
 
 export async function procesarScanNicho(job) {
   const nicho = await Nicho.findById(job.data.nichoId)
@@ -36,14 +44,81 @@ export async function procesarScanNicho(job) {
   nicho.ultimoTotalResultados = totalResultados
   await nicho.save()
 
-  await obtenerColas().calcularMetricas.add('reporte', { nichoId: String(nicho._id) })
+  const colas = obtenerColas()
+  // reporte rápido con lo del nivel 1; el nivel 2 lo recalcula al terminar
+  await colas.calcularMetricas.add('reporte', { nichoId: String(nicho._id) })
+
+  if (config.nivel2Activo) {
+    const top = items
+      .sort((a, b) => (a.snapshot.posicion ?? Infinity) - (b.snapshot.posicion ?? Infinity))
+      .slice(0, config.detalleTopN)
+      .filter((i) => i.producto.url)
+      .map((i) => ({ sku: i.producto.sku, url: i.producto.url }))
+    await colas.scanDetalle.add('detalle', {
+      nichoId: String(nicho._id),
+      fechaScan: fecha.toISOString(),
+      objetivos: top,
+    })
+  }
 
   return {
     ...resultado,
     itemsCrudos: crudos.length,
     descartados,
     totalResultados: totalResultados?.total ?? null,
+    nivel2Encolado: config.nivel2Activo,
   }
+}
+
+// Nivel 2 en batches con el modo async de Apify (sin el límite de 300s del sync).
+export async function procesarScanDetalle(job) {
+  const { nichoId, fechaScan, objetivos } = job.data
+  const fecha = new Date(fechaScan)
+  if (!objetivos?.length) return { omitido: true, motivo: 'sin objetivos' }
+
+  const skusPedidos = objetivos.map((o) => o.sku)
+  let aplicados = 0
+  let sinMatch = 0
+  let fallidos = 0
+
+  for (let i = 0; i < objetivos.length; i += config.detalleBatch) {
+    const batch = objetivos.slice(i, i + config.detalleBatch)
+    let crudos
+    try {
+      crudos = await ejecutarActorAsync(
+        config.actorDetails,
+        {
+          urls: batch.map((o) => o.url),
+          max_retries_per_url: 2,
+          ignore_url_failures: true,
+          proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] },
+        },
+        { pollMs: 10_000, timeoutMs: 12 * 60_000 },
+      )
+    } catch (err) {
+      // un batch caído no bota el scan completo; queda registrado en el resultado
+      console.error(`[scan-detalle] batch ${i / config.detalleBatch + 1} falló: ${err.message}`)
+      fallidos += batch.length
+      continue
+    }
+    const { porSku, sinMatch: sm } = indexarDetallesPorSku(crudos, skusPedidos)
+    sinMatch += sm
+    const res = await aplicarDetalleScan({ porSku, fecha })
+    aplicados += porSku.size
+    await job.updateProgress(Math.round(((i + batch.length) / objetivos.length) * 100))
+    void res
+  }
+
+  if (!aplicados) {
+    throw new Error(
+      `Nivel 2 no aplicó ningún detalle (${objetivos.length} objetivos, ${fallidos} fallidos, ${sinMatch} sin match de SKU)`,
+    )
+  }
+
+  // recalcular el reporte ahora que hay reviews/seller/Full del nivel 2
+  await obtenerColas().calcularMetricas.add('reporte', { nichoId })
+
+  return { objetivos: objetivos.length, aplicados, sinMatch, fallidos }
 }
 
 export async function procesarCalcularMetricas(job) {
@@ -53,16 +128,22 @@ export async function procesarCalcularMetricas(job) {
   const reporte = await generarReporteNicho(nicho)
   if (!reporte) throw new Error(`No hay snapshots para "${nicho.keyword}": el scan no guardó datos`)
 
-  const doc = await Reporte.create({
-    nichoId: nicho._id,
-    keyword: nicho.keyword,
-    fecha: reporte.fechaScan,
-    metricas: reporte.metricas,
-    topProductos: reporte.topProductos,
-    topSellers: reporte.topSellers,
-    scoreOportunidad: reporte.metricas.scoreOportunidad,
-  })
-  return { reporteId: String(doc._id) }
+  // un reporte por scan: el recálculo post-nivel-2 actualiza el mismo documento
+  const doc = await Reporte.findOneAndUpdate(
+    { nichoId: nicho._id, fecha: reporte.fechaScan },
+    {
+      $set: {
+        keyword: nicho.keyword,
+        metricas: reporte.metricas,
+        topProductos: reporte.topProductos,
+        topSellers: reporte.topSellers,
+        scoreOportunidad: reporte.metricas.scoreOportunidad,
+      },
+      $setOnInsert: { creadoEl: new Date() },
+    },
+    { upsert: true, new: true },
+  )
+  return { reporteId: String(doc._id), score: reporte.metricas.scoreOportunidad }
 }
 
 export function iniciarWorkers() {
@@ -72,12 +153,17 @@ export function iniciarWorkers() {
     concurrency: 1,
     limiter: { max: 2, duration: 60_000 },
   })
+  const workerDetalle = new Worker(COLA_SCAN_DETALLE, procesarScanDetalle, {
+    connection: crearConexionRedis(),
+    concurrency: 1,
+    limiter: { max: 2, duration: 60_000 },
+  })
   const workerMetricas = new Worker(COLA_CALCULAR_METRICAS, procesarCalcularMetricas, {
     connection: crearConexionRedis(),
     concurrency: 1,
   })
 
-  for (const worker of [workerScan, workerMetricas]) {
+  for (const worker of [workerScan, workerDetalle, workerMetricas]) {
     worker.on('failed', (job, err) => {
       console.error(`[${worker.name}] job ${job?.id} (intento ${job?.attemptsMade}) falló: ${err.message}`)
     })
@@ -87,5 +173,5 @@ export function iniciarWorkers() {
     worker.on('error', (err) => console.error(`[${worker.name}] error de worker:`, err.message))
   }
 
-  return [workerScan, workerMetricas]
+  return [workerScan, workerDetalle, workerMetricas]
 }

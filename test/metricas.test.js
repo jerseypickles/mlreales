@@ -109,23 +109,45 @@ test('calcularDemanda: totales y delta entre scans', () => {
   ]
 
   const d = calcularDemanda(actuales, previos)
-  assert.equal(d.vendidosTotal, 700)
-  assert.equal(d.vendidosMediana, 150)
-  assert.equal(d.itemsComparables, 2)
-  assert.equal(d.ventasPeriodo, 70) // (150-100) + (500-480)
-  assert.equal(d.periodoDias, 2)
-  assert.equal(d.ventasPorDia, 35)
+  assert.equal(d.base, 'vendidos')
+  assert.equal(d.vendidos.total, 700)
+  assert.equal(d.vendidos.mediana, 150)
+  assert.equal(d.vendidos.itemsComparables, 2)
+  assert.equal(d.vendidos.delta, 70) // (150-100) + (500-480)
+  assert.equal(d.vendidos.periodoDias, 2)
+  assert.equal(d.ventasEstimadasPorDia, 35)
+  assert.equal(d.volumenVentasEstimado, 700)
 })
 
 test('calcularDemanda: primer scan sin previos', () => {
-  const d = calcularDemanda([{ sku: 'A', vendidos: 200, fecha: new Date() }])
-  assert.equal(d.vendidosTotal, 200)
-  assert.equal(d.ventasPorDia, null)
+  const d = calcularDemanda([{ sku: 'A', vendidos: 200, fecha: new Date('2026-07-16') }])
+  assert.equal(d.vendidos.total, 200)
+  assert.equal(d.ventasEstimadasPorDia, null)
+})
+
+test('calcularDemanda: sin vendidos usa delta de reseñas como proxy', () => {
+  const fechaPrevia = new Date('2026-07-14T12:00:00Z')
+  const fechaActual = new Date('2026-07-16T12:00:00Z')
+  const actuales = [
+    { sku: 'A', numReviews: 930, fecha: fechaActual },
+    { sku: 'B', numReviews: 110, fecha: fechaActual },
+  ]
+  const previos = [
+    { sku: 'A', numReviews: 921, fecha: fechaPrevia },
+    { sku: 'B', numReviews: 105, fecha: fechaPrevia },
+  ]
+  const d = calcularDemanda(actuales, previos)
+  assert.equal(d.base, 'reviews')
+  assert.equal(d.reviews.total, 1040)
+  assert.equal(d.reviews.delta, 14) // 9 + 5
+  assert.equal(d.reviews.porDia, 7)
+  assert.equal(d.ventasEstimadasPorDia, 175) // 7 reseñas/día × factor 25
+  assert.equal(d.volumenVentasEstimado, 26000) // 1040 × 25
 })
 
 test('calcularScoreOportunidad: composición según pesos', () => {
   const r = calcularScoreOportunidad({
-    demanda: { vendidosTotal: 10000 },
+    demanda: { volumenVentasEstimado: 10000 },
     competencia: { concentracionTop3Pct: 40, pctFull: 10 },
     calidad: { ratingPromedio: 4.0 },
   })
@@ -153,7 +175,8 @@ test('calcularMetricas: integra demanda y score cuando hay vendidos', () => {
     ['A2', { sku: 'A2', vendedor: 'Y', esFull: false }],
   ])
   const m = calcularMetricas({ snapshots, productosPorSku })
-  assert.equal(m.demanda.vendidosTotal, 8000)
+  assert.equal(m.demanda.vendidos.total, 8000)
+  assert.equal(m.demanda.volumenVentasEstimado, 8000)
   assert.ok(m.scoreOportunidad > 0)
   assert.ok(m.oportunidad.componentes.demanda > 70)
 })

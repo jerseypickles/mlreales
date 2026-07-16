@@ -16,5 +16,8 @@ export const config = {
   actorSearch: process.env.APIFY_ACTOR_SEARCH || 'karamelo~mercadolibre-scraper-espanol-castellano',
   actorDetails: process.env.APIFY_ACTOR_DETAILS || 'ecomscrape~mercadolibre-product-details-scraper',
   maxPagesBusqueda: Number(process.env.APIFY_SEARCH_MAX_PAGES) || 2,
+  nivel2Activo: process.env.NIVEL2_ACTIVO !== 'false',
+  detalleTopN: Number(process.env.DETALLE_TOP_N) || 50,
+  detalleBatch: Number(process.env.DETALLE_BATCH) || 15,
   port: Number(process.env.PORT) || 3000,
 }

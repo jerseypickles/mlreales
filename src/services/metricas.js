@@ -50,35 +50,34 @@ function bandaDominante(preciosOrdenados) {
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n))
 
-// Métricas de demanda a partir de `vendidos` (nivel 2). `snapshotsPrevios` es el
-// scan anterior del mismo nicho: el delta de vendidos entre scans es la venta
-// estimada del período — la métrica estrella.
-export function calcularDemanda(snapshots, snapshotsPrevios = null) {
-  const vendidos = snapshots.map((s) => s.vendidos).filter(Number.isFinite)
-  if (!vendidos.length) return null
+// Serie de un campo numérico con delta entre el scan actual y el anterior.
+function extraerSenal(snapshots, snapshotsPrevios, campo) {
+  const valores = snapshots.map((s) => s[campo]).filter(Number.isFinite)
+  if (!valores.length) return null
 
-  const ordenados = [...vendidos].sort((a, b) => a - b)
-  const demanda = {
-    itemsConVendidos: vendidos.length,
-    vendidosTotal: vendidos.reduce((a, b) => a + b, 0),
-    vendidosMediana: redondear(percentil(ordenados, 50), 0),
-    ventasPeriodo: null, // requiere >= 2 scans con vendidos
-    ventasPorDia: null,
+  const orden = [...valores].sort((a, b) => a - b)
+  const senal = {
+    itemsConDato: valores.length,
+    total: valores.reduce((a, b) => a + b, 0),
+    mediana: redondear(percentil(orden, 50), 0),
+    delta: null, // requiere >= 2 scans con el dato
     periodoDias: null,
+    porDia: null,
+    itemsComparables: null,
   }
 
   if (snapshotsPrevios?.length) {
     const previosPorSku = new Map(
-      snapshotsPrevios.filter((s) => Number.isFinite(s.vendidos)).map((s) => [s.sku, s]),
+      snapshotsPrevios.filter((s) => Number.isFinite(s[campo])).map((s) => [s.sku, s]),
     )
     let delta = 0
     let comparables = 0
     let fechaPrevia = null
     for (const snap of snapshots) {
       const previo = previosPorSku.get(snap.sku)
-      if (!previo || !Number.isFinite(snap.vendidos)) continue
+      if (!previo || !Number.isFinite(snap[campo])) continue
       comparables++
-      delta += Math.max(0, snap.vendidos - previo.vendidos)
+      delta += Math.max(0, snap[campo] - previo[campo])
       fechaPrevia = previo.fecha
     }
     if (comparables > 0 && fechaPrevia) {
@@ -86,22 +85,48 @@ export function calcularDemanda(snapshots, snapshotsPrevios = null) {
         (new Date(snapshots[0].fecha) - new Date(fechaPrevia)) / 86_400_000,
         1 / 24, // piso de 1 hora para no dividir por ~0 en re-scans seguidos
       )
-      demanda.ventasPeriodo = delta
-      demanda.periodoDias = redondear(dias, 1)
-      demanda.ventasPorDia = redondear(delta / dias, 1)
-      demanda.itemsComparables = comparables
+      senal.delta = delta
+      senal.periodoDias = redondear(dias, 1)
+      senal.porDia = redondear(delta / dias, 1)
+      senal.itemsComparables = comparables
     }
   }
 
-  return demanda
+  return senal
+}
+
+// Demanda del nicho. ML no expone vendidos exactos (buckets congelados), así que la
+// señal continua es el conteo de reseñas (exacto, se mueve a diario): delta de
+// reseñas × factor = ventas estimadas del período — la métrica estrella.
+export function calcularDemanda(snapshots, snapshotsPrevios = null) {
+  const vendidos = extraerSenal(snapshots, snapshotsPrevios, 'vendidos')
+  const reviews = extraerSenal(snapshots, snapshotsPrevios, 'numReviews')
+  if (!vendidos && !reviews) return null
+
+  const factor = scoring.escalas.reviewsAVentasFactor
+  const ventasEstimadasPorDia =
+    vendidos?.porDia ?? (reviews?.porDia != null ? redondear(reviews.porDia * factor, 1) : null)
+  const volumenVentasEstimado = vendidos?.total ?? (reviews ? reviews.total * factor : null)
+
+  return {
+    base: vendidos ? 'vendidos' : 'reviews',
+    vendidos,
+    reviews,
+    ventasEstimadasPorDia,
+    volumenVentasEstimado,
+  }
 }
 
 // Score 0-100 según config/scoring.js. Devuelve null si aún no hay datos de demanda.
 export function calcularScoreOportunidad({ demanda, competencia, calidad }) {
-  if (!demanda || !Number.isFinite(demanda.vendidosTotal)) return null
+  if (!demanda || !Number.isFinite(demanda.volumenVentasEstimado)) return null
   const { pesos, umbrales, escalas } = scoring
 
-  const componenteDemanda = clamp(escalas.demandaFactorLog * Math.log10(1 + demanda.vendidosTotal), 0, 100)
+  const componenteDemanda = clamp(
+    escalas.demandaFactorLog * Math.log10(1 + demanda.volumenVentasEstimado),
+    0,
+    100,
+  )
   const componenteCompetencia = clamp(100 - (competencia.concentracionTop3Pct ?? 100), 0, 100)
   const rating = calidad.ratingPromedio
   const componenteCalidad = Number.isFinite(rating)
