@@ -8,6 +8,15 @@ export function crearApp() {
   const app = express()
   app.use(express.json())
 
+  // el dashboard corre en otro dominio (static site); CORS_ORIGEN restringe si se define
+  app.use((req, res, next) => {
+    res.set('Access-Control-Allow-Origin', process.env.CORS_ORIGEN || '*')
+    res.set('Access-Control-Allow-Headers', 'Content-Type')
+    res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    if (req.method === 'OPTIONS') return res.sendStatus(204)
+    next()
+  })
+
   app.get('/api/salud', async (_req, res) => {
     const mongo = mongoose.connection.readyState === 1 ? 'ok' : 'desconectado'
     let redis = 'desconectado'

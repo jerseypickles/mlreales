@@ -4,6 +4,8 @@ Backend que analiza nichos de productos en mercadolibre.cl para decidir qué imp
 
 **Estado: Fase 1 (MVP)** — scan nivel 1 vía Apify, normalización, persistencia con serie temporal y reporte de precio/competencia. `demanda` y `scoreOportunidad` quedan en `null` hasta la Fase 2 (nivel 2: vendidos, sellers).
 
+Monorepo: el backend vive en la raíz (`src/`) y el dashboard en `frontend/` (Vite + React). En Render son dos servicios sobre el mismo repo: el web service (raíz) y un static site (Root Directory `frontend`).
+
 ## Stack
 
 Node.js 20+ / Express · MongoDB (Mongoose) · BullMQ + Redis · Apify API
@@ -102,9 +104,20 @@ src/
 test/           unit (normalizador, métricas) + integración (persistencia, API) con mongodb-memory-server
 ```
 
+## Frontend (dashboard)
+
+```bash
+cd frontend
+npm install
+npm run dev    # proxy /api → localhost:3000 (levanta el backend aparte)
+npm run build  # genera dist/
+```
+
+En producción el dashboard es un static site; `VITE_API_URL` apunta a la URL pública de la API. La API expone CORS abierto por defecto (restringible con `CORS_ORIGEN`).
+
 ## Deploy en Render
 
-`render.yaml` define el blueprint: web service `meli-intel` (API + workers en un proceso) y Key Value `meli-intel-redis` para BullMQ (`noeviction`, requerido). Al crear el blueprint, Render pide `MONGO_URI` (usar MongoDB Atlas — Render no ofrece Mongo) y `APIFY_TOKEN`. `PORT` lo inyecta Render automáticamente.
+`render.yaml` define el blueprint: web service `meli-intel` (API + workers en un proceso), static site `meli-intel-dashboard` (Root Directory `frontend`) y Key Value `meli-intel-redis` para BullMQ (`noeviction`, requerido). Al crear el blueprint, Render pide `MONGO_URI` (usar MongoDB Atlas — Render no ofrece Mongo) y `APIFY_TOKEN`. `PORT` lo inyecta Render automáticamente.
 
 ## Próximas fases
 

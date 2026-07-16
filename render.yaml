@@ -21,6 +21,16 @@ services:
           name: meli-intel-redis
           property: connectionString
 
+  - type: web
+    name: meli-intel-dashboard
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://mlreales.onrender.com
+
   - type: keyvalue
     name: meli-intel-redis
     plan: free

@@ -1,0 +1,298 @@
+:root {
+  --fondo: #f5f6f8;
+  --superficie: #ffffff;
+  --borde: #e2e5ea;
+  --tinta: #1b1f26;
+  --tinta-2: #555e6b;
+  --tinta-3: #8a93a1;
+  --acento: #1a56c4;
+  --acento-tenue: #e8effc;
+  --peligro: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #14171c;
+    --superficie: #1d2129;
+    --borde: #2e3440;
+    --tinta: #e8eaf0;
+    --tinta-2: #a6adba;
+    --tinta-3: #737c8c;
+    --acento: #6c9ef2;
+    --acento-tenue: #1e2c47;
+    --peligro: #ef8a84;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  background: var(--fondo);
+  color: var(--tinta);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px 48px;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 20px 0 16px;
+}
+
+header h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.subtitulo {
+  color: var(--tinta-3);
+}
+
+.cuerpo {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .cuerpo {
+    grid-template-columns: 1fr;
+  }
+}
+
+aside {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-nicho {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+input[type='text'] {
+  padding: 8px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--superficie);
+  color: var(--tinta);
+  font: inherit;
+}
+
+button {
+  padding: 8px 14px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--superficie);
+  color: var(--tinta);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.form-nicho button {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #fff;
+}
+
+.form-nicho button:hover:not(:disabled) {
+  color: #fff;
+  opacity: 0.92;
+}
+
+.lista-nichos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nicho {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 500;
+}
+
+.nicho.activo {
+  border-color: var(--acento);
+  background: var(--acento-tenue);
+}
+
+.nicho-keyword {
+  font-weight: 600;
+}
+
+.nicho-meta {
+  color: var(--tinta-3);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+main {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 20px 24px;
+  min-height: 300px;
+}
+
+.reporte-encabezado {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.reporte-encabezado h2 {
+  margin: 0 0 2px;
+  font-size: 18px;
+}
+
+.reporte-fecha {
+  margin: 0;
+  color: var(--tinta-3);
+  font-size: 12.5px;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+  margin: 18px 0 6px;
+}
+
+.tile {
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--fondo);
+}
+
+.tile-label {
+  color: var(--tinta-2);
+  font-size: 12px;
+}
+
+.tile-value {
+  font-size: 22px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.tile-detalle {
+  color: var(--tinta-3);
+  font-size: 11.5px;
+  margin-top: 2px;
+}
+
+section {
+  margin-top: 22px;
+}
+
+section h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+  color: var(--tinta-2);
+}
+
+.tabla-envoltura {
+  overflow-x: auto;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--borde);
+  white-space: nowrap;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+th {
+  color: var(--tinta-3);
+  font-weight: 600;
+  font-size: 12px;
+  background: var(--fondo);
+}
+
+th.num,
+td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.celda-titulo {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+td a {
+  color: var(--acento);
+  text-decoration: none;
+}
+
+td a:hover {
+  text-decoration: underline;
+}
+
+.vacio {
+  color: var(--tinta-3);
+}
+
+.nota {
+  color: var(--tinta-3);
+  font-size: 12px;
+  margin-top: 20px;
+}
+
+.error-inline {
+  color: var(--peligro);
+  font-size: 12.5px;
+}
+
+.error-bloque {
+  color: var(--peligro);
+}
