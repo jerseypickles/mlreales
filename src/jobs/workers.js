@@ -200,12 +200,17 @@ export async function procesarAnalisisNicho(job) {
 export async function procesarRadar() {
   if (!llmDisponible()) return { omitido: true, motivo: 'sin ANTHROPIC_API_KEY' }
 
+  // techo de nichos activos: el dinamismo no puede disparar el gasto de Apify
+  const activos = await Nicho.countDocuments({ estado: 'activo' })
+  const cupo = Math.min(config.radarMaxNichos, Math.max(0, config.radarMaxActivos - activos))
+  if (cupo === 0) return { omitido: true, motivo: `tope de ${config.radarMaxActivos} nichos activos alcanzado` }
+
   const { sugerencias } = await sugerirNichos()
   const existentes = new Set((await Nicho.find().select('keyword').lean()).map((n) => n.keyword))
 
   const creados = []
   for (const s of sugerencias) {
-    if (creados.length >= config.radarMaxNichos) break
+    if (creados.length >= cupo) break
     const keyword = String(s.keyword ?? '').trim().toLowerCase()
     if (keyword.length < 2 || existentes.has(keyword)) continue
 

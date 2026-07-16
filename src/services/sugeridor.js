@@ -1,5 +1,6 @@
 import { pedirJSON } from './llm.js'
 import { Nicho } from '../models/Nicho.js'
+import { Reporte } from '../models/Reporte.js'
 
 const SCHEMA_SUGERENCIAS = {
   type: 'object',
@@ -45,20 +46,56 @@ Propones keywords de búsqueda para nichos que valga la pena INVESTIGAR con dato
 - Tendencias de producto que ya se ven en otros mercados y llegan a Chile con rezago.
 - Evita nichos dominados por marcas oficiales fuertes (electrónica de marca, juguetes con licencia).
 
-Entrega 8-12 keywords variadas: mezcla apuestas de temporada próxima (comprables ya) con tendencias emergentes. Keywords concretas como las escribiría un comprador chileno.`
+APRENDE DEL HISTORIAL del importador (te lo paso con resultados):
+- Los nichos que él creó a mano revelan sus intereses: propone VECINOS de esos (misma categoría, otro ángulo, accesorios, complementos).
+- Los nichos con veredicto entrar/entrar_con_condiciones y score alto son ganadores: propone adyacentes que compartan comprador o proveedor en China.
+- Los descartados (no_entrar) enseñan qué evitar: no propongas variaciones triviales de esos.
+
+Entrega 8-12 keywords variadas: prioriza adyacencias al historial, y completa con temporada próxima (comprable ya) y tendencias emergentes. Keywords concretas como las escribiría un comprador chileno.`
+
+// Historial con resultados para que el sugeridor aprenda qué busca el usuario y qué funcionó.
+async function armarHistorial() {
+  const nichos = await Nicho.find().select('keyword origen estado').lean()
+  if (!nichos.length) return { existentes: [], lineas: [] }
+
+  const reportes = await Reporte.aggregate([
+    { $match: { analisis: { $ne: null } } },
+    { $sort: { fecha: -1 } },
+    {
+      $group: {
+        _id: '$nichoId',
+        veredicto: { $first: '$analisis.veredicto' },
+        score: { $first: '$scoreOportunidad' },
+      },
+    },
+  ])
+  const porNicho = new Map(reportes.map((r) => [String(r._id), r]))
+
+  const lineas = nichos.map((n) => {
+    const r = porNicho.get(String(n._id))
+    const partes = [`"${n.keyword}" (${n.origen === 'radar' ? 'propuesto por radar' : 'BUSCADO POR EL USUARIO'})`]
+    if (r) partes.push(`score ${r.score ?? '?'}, veredicto ${r.veredicto}`)
+    if (n.estado === 'pausado') partes.push('descartado')
+    return partes.join(' — ')
+  })
+
+  return { existentes: nichos.map((n) => n.keyword), lineas }
+}
 
 export async function sugerirNichos({ contexto } = {}) {
-  const existentes = await Nicho.find().select('keyword').lean()
+  const historial = await armarHistorial()
   const fecha = new Date().toLocaleDateString('es-CL', { month: 'long', year: 'numeric', timeZone: 'America/Santiago' })
 
   const user = [
     `Fecha actual: ${fecha}.`,
-    existentes.length ? `Nichos que ya estamos trackeando (no los repitas): ${existentes.map((n) => n.keyword).join(', ')}.` : '',
+    historial.lineas.length
+      ? `Historial del importador con resultados (no repitas estas keywords):\n${historial.lineas.join('\n')}`
+      : '',
     contexto ? `Contexto del importador: ${contexto}` : '',
-    'Propón los nichos a investigar ahora.',
+    'Propón los nichos a investigar ahora, priorizando adyacencias a lo que el usuario busca y a los ganadores.',
   ]
     .filter(Boolean)
-    .join('\n')
+    .join('\n\n')
 
   return pedirJSON({
     system: SYSTEM_SUGERIDOR,
