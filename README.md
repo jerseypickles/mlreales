@@ -70,6 +70,8 @@ Normalizaciones sobre su output (campos en español, casi todo string):
 | GET | `/api/salud` | estado de Mongo y Redis |
 | POST | `/api/margen` | simular unit economics de importación China→Chile (ver abajo) |
 | GET | `/api/margen/parametros` | parámetros por defecto del modelo de costos |
+| POST | `/api/nichos/:id/analisis` | análisis IA: veredicto entrar/no entrar, segmentos por atributos, precio de entrada y FOB máximo (requiere `ANTHROPIC_API_KEY`) |
+| POST | `/api/nichos/sugerencias` | sugerencias IA de nichos por temporada chilena y tendencia, con ventana de compra en China (requiere `ANTHROPIC_API_KEY`) |
 
 ### Calculadora de margen (China → Chile → ML Full)
 

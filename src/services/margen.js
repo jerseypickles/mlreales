@@ -13,6 +13,50 @@ function parametrosCon(overrides = {}) {
   }
 }
 
+// Invierte el modelo: dado un precio de venta y un margen objetivo, ¿cuál es el
+// FOB máximo (USD/unidad) que se puede pagar en China? Misma matemática que
+// calcularMargen, despejando el FOB.
+export function fobMaximoUsd(entrada) {
+  const {
+    precioVentaClp,
+    margenObjetivoPct = 25,
+    unidades = 500,
+    volumenM3 = 0.003,
+    pesoKg = 0.5,
+    modoFlete = 'maritimo',
+    parametros: overrides,
+  } = entrada
+
+  if (!Number.isFinite(precioVentaClp) || precioVentaClp <= 0) throw new Error('precioVentaClp requerido (> 0)')
+
+  const p = {
+    tipoCambioUsdClp: overrides?.tipoCambioUsdClp ?? importacion.tipoCambioUsdClp,
+    flete: { ...importacion.flete, ...overrides?.flete },
+    aduana: { ...importacion.aduana, ...overrides?.aduana },
+    mercadoLibre: { ...importacion.mercadoLibre, ...overrides?.mercadoLibre },
+  }
+  const tc = p.tipoCambioUsdClp
+  const factorIva = 1 + p.aduana.ivaPct / 100
+
+  const ingresoNetoClp = precioVentaClp / factorIva
+  const comisionBrutaClp =
+    precioVentaClp * (p.mercadoLibre.comisionPct / 100) +
+    (precioVentaClp < p.mercadoLibre.umbralCargoFijoClp ? p.mercadoLibre.cargoFijoBajoUmbralClp : 0)
+  const comisionNetaClp = comisionBrutaClp / factorIva
+  const fullNetoClp = p.mercadoLibre.fullPorUnidadClp / factorIva
+  const despachoClp = (p.aduana.despachoUsd * tc) / unidades
+  const fleteUsd = modoFlete === 'aereo' ? pesoKg * p.flete.aereoUsdPorKg : volumenM3 * p.flete.maritimoUsdPorM3
+  const fleteClp = fleteUsd * tc
+
+  // margen = ingresoNeto - landed - comision - full, con landed = cif(1+arancel) + despacho
+  // y cif = fob*tc*(1+seguro) + flete → despejar fob
+  const restanteClp = ingresoNetoClp * (1 - margenObjetivoPct / 100) - comisionNetaClp - fullNetoClp - despachoClp
+  const cifMaxClp = restanteClp / (1 + p.aduana.arancelPct / 100)
+  const fobMax = (cifMaxClp - fleteClp) / (tc * (1 + p.flete.seguroPctFob / 100))
+
+  return fobMax > 0 ? Math.round(fobMax * 100) / 100 : null
+}
+
 // Unit economics de importar y vender por ML Full.
 // Los costos se tratan a valores netos (el IVA de importación y de comisiones es
 // crédito fiscal para un vendedor formal); la caja necesaria sí incluye IVA.

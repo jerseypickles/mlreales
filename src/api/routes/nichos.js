@@ -1,10 +1,11 @@
 import { Router } from 'express'
 import { Nicho } from '../../models/Nicho.js'
 import { Reporte } from '../../models/Reporte.js'
-import { Producto } from '../../models/Producto.js'
-import { Snapshot } from '../../models/Snapshot.js'
 import { encolarScanNicho } from '../../jobs/queues.js'
-import { generarReporteNicho } from '../../services/metricas.js'
+import { generarReporteNicho, obtenerProductosUltimoScan } from '../../services/metricas.js'
+import { analizarNicho } from '../../services/analista.js'
+import { sugerirNichos } from '../../services/sugeridor.js'
+import { llmDisponible } from '../../services/llm.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -117,42 +118,46 @@ router.get(
     const nicho = await Nicho.findById(req.params.id)
     if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
 
-    const ultimo = await Snapshot.findOne({ keyword: nicho.keyword }).sort({ fecha: -1 }).lean()
-    if (!ultimo) return res.status(404).json({ error: 'aún no hay scans completados para este nicho' })
+    const vista = await obtenerProductosUltimoScan(nicho)
+    if (!vista) return res.status(404).json({ error: 'aún no hay scans completados para este nicho' })
 
-    const snapshots = await Snapshot.find({ keyword: nicho.keyword, fecha: ultimo.fecha })
-      .sort({ posicion: 1 })
-      .lean()
-    const productos = await Producto.find({ sku: { $in: snapshots.map((s) => s.sku) } }).lean()
-    const porSku = new Map(productos.map((p) => [p.sku, p]))
+    res.json({ fechaScan: vista.fechaScan, total: vista.productos.length, productos: vista.productos })
+  }),
+)
 
-    res.json({
-      fechaScan: ultimo.fecha,
-      total: snapshots.length,
-      productos: snapshots.map((s) => {
-        const p = porSku.get(s.sku) ?? {}
-        return {
-          sku: s.sku,
-          posicion: s.posicion,
-          titulo: p.titulo ?? null,
-          url: p.url ?? null,
-          precio: s.precio,
-          precioAnterior: s.precioAnterior,
-          descuentoPct: s.descuentoPct,
-          rating: s.rating,
-          numReviews: s.numReviews,
-          cuotas: s.cuotas,
-          vendedor: p.vendedor ?? null,
-          sellerId: p.sellerId ?? null,
-          esTiendaOficial: p.esTiendaOficial ?? false,
-          esFull: p.esFull ?? false,
-          envioRapido: p.envioRapido ?? false,
-          origenCrossBorder: p.origenCrossBorder ?? false,
-          tipoListing: p.tipoListing ?? null,
-          primeraVezVisto: p.primeraVezVisto ?? null,
-        }
-      }),
-    })
+// Análisis con IA: veredicto de entrada, segmentos y recomendación de compra
+router.post(
+  '/:id/analisis',
+  manejar(async (req, res) => {
+    if (!llmDisponible()) {
+      return res.status(503).json({ error: 'análisis IA no configurado: falta ANTHROPIC_API_KEY en el entorno' })
+    }
+    const nicho = await Nicho.findById(req.params.id)
+    if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
+    try {
+      const analisis = await analizarNicho(nicho)
+      res.json({ analisis })
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ error: err.message })
+      throw err
+    }
+  }),
+)
+
+// Sugerencias de nichos por temporada/tendencia (calendario chileno + lead time de importación)
+router.post(
+  '/sugerencias',
+  manejar(async (req, res) => {
+    if (!llmDisponible()) {
+      return res.status(503).json({ error: 'sugerencias IA no configuradas: falta ANTHROPIC_API_KEY en el entorno' })
+    }
+    try {
+      const resultado = await sugerirNichos({ contexto: req.body?.contexto })
+      res.json(resultado)
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ error: err.message })
+      throw err
+    }
   }),
 )
 

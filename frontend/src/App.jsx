@@ -3,6 +3,8 @@ import { api } from './api.js'
 import { Resumen } from './components/Resumen.jsx'
 import { Productos } from './components/Productos.jsx'
 import { Simulador } from './components/Simulador.jsx'
+import { Analisis } from './components/Analisis.jsx'
+import { Sugerencias } from './components/Sugerencias.jsx'
 import { Cargando } from './components/ui.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
 
@@ -163,6 +165,7 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
   const pestanas = [
     ['resumen', 'Resumen'],
     ['productos', productos ? `Productos (${productos.total})` : 'Productos'],
+    ['analisis', reporte.analisis ? `Análisis: ${reporte.analisis.veredicto?.replace(/_/g, ' ')}` : 'Análisis IA'],
     ['simulador', 'Simulador'],
   ]
 
@@ -197,6 +200,7 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
 
       {pestana === 'resumen' ? <Resumen reporte={reporte} productos={productos?.productos} /> : null}
       {pestana === 'productos' ? <Productos nichoId={nichoId} onSimular={simularProducto} /> : null}
+      {pestana === 'analisis' ? <Analisis nichoId={nichoId} analisisInicial={reporte.analisis} /> : null}
       {pestana === 'simulador' ? (
         <Simulador nicho={nicho} reporte={reporte} precioInicial={precioSimulador} />
       ) : null}
@@ -240,6 +244,12 @@ export default function App() {
           />
           {errorLista ? <p className="error-bloque">No se pudo cargar la lista: {errorLista}</p> : null}
           <ListaNichos nichos={nichos} seleccionado={seleccionado} onSeleccionar={setSeleccionado} />
+          <Sugerencias
+            onCrear={(nicho) => {
+              cargarNichos()
+              setSeleccionado(nicho._id)
+            }}
+          />
         </aside>
         <main>
           {seleccionado ? (

@@ -12,6 +12,15 @@ export function skusCandidatos(raw) {
     .filter((v) => typeof v === 'string' && REGEX_SKU.test(v))
 }
 
+// La galería trae IDs de fotos + templates de URL; {sanitizedTitle} puede ir vacío.
+export function extraerImagen(raw) {
+  const galeria = raw?.gallery
+  const foto = galeria?.pictures?.[0]?.id
+  const template = galeria?.picture_config?.template_thumbnail
+  if (!foto || typeof template !== 'string') return null
+  return template.replace('{id}', foto).replace('{sanitizedTitle}', '')
+}
+
 export function normalizarItemDetalle(raw) {
   if (!raw || typeof raw !== 'object') return null
   const candidatos = skusCandidatos(raw)
@@ -32,6 +41,7 @@ export function normalizarItemDetalle(raw) {
     envioGratis: raw.free_shipping === true,
     categoriaML: raw.category_id ?? null,
     condicion: raw.item_condition ?? null,
+    imagen: extraerImagen(raw),
     // items despachados desde China (CNGD01, etc.) = competencia cross-border directa
     origenCrossBorder: Array.isArray(raw.item_origins)
       ? raw.item_origins.some((o) => String(o).startsWith('CN'))

@@ -245,6 +245,46 @@ export function calcularMetricas({
   }
 }
 
+// Vista producto+snapshot del último scan (tabla del dashboard y análisis IA).
+export async function obtenerProductosUltimoScan(nicho) {
+  const ultimo = await Snapshot.findOne({ keyword: nicho.keyword }).sort({ fecha: -1 }).lean()
+  if (!ultimo) return null
+
+  const snapshots = await Snapshot.find({ keyword: nicho.keyword, fecha: ultimo.fecha })
+    .sort({ posicion: 1 })
+    .lean()
+  const productos = await Producto.find({ sku: { $in: snapshots.map((s) => s.sku) } }).lean()
+  const porSku = new Map(productos.map((p) => [p.sku, p]))
+
+  return {
+    fechaScan: ultimo.fecha,
+    productos: snapshots.map((s) => {
+      const p = porSku.get(s.sku) ?? {}
+      return {
+        sku: s.sku,
+        posicion: s.posicion,
+        titulo: p.titulo ?? null,
+        url: p.url ?? null,
+        imagen: p.imagen ?? null,
+        precio: s.precio,
+        precioAnterior: s.precioAnterior,
+        descuentoPct: s.descuentoPct,
+        rating: s.rating,
+        numReviews: s.numReviews,
+        cuotas: s.cuotas,
+        vendedor: p.vendedor ?? null,
+        sellerId: p.sellerId ?? null,
+        esTiendaOficial: p.esTiendaOficial ?? false,
+        esFull: p.esFull ?? false,
+        envioRapido: p.envioRapido ?? false,
+        origenCrossBorder: p.origenCrossBorder ?? false,
+        tipoListing: p.tipoListing ?? null,
+        primeraVezVisto: p.primeraVezVisto ?? null,
+      }
+    }),
+  }
+}
+
 // Arma el reporte del último scan de un nicho leyendo de Mongo.
 export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   const ultimoSnap = await Snapshot.findOne({ keyword: nicho.keyword }).sort({ fecha: -1 }).lean()
@@ -279,6 +319,7 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
         sku: snap.sku,
         posicion: snap.posicion,
         titulo: prod?.titulo ?? null,
+        imagen: prod?.imagen ?? null,
         precio: snap.precio,
         descuentoPct: snap.descuentoPct,
         rating: snap.rating,

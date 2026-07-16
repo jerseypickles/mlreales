@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcularMargen } from '../src/services/margen.js'
+import { calcularMargen, fobMaximoUsd } from '../src/services/margen.js'
 
 const base = {
   costoFobUsd: 3,
@@ -50,6 +50,32 @@ test('calcularMargen: overrides de parámetros', () => {
   assert.equal(r.porUnidad.fobClp, 3000)
   assert.ok(r.porUnidad.arancelClp > 0) // sin certificado de origen
   assert.equal(r.supuestos.arancelPct, 6)
+})
+
+test('fobMaximoUsd: es la inversa de calcularMargen', () => {
+  const objetivo = 25
+  const fobMax = fobMaximoUsd({
+    precioVentaClp: 15990,
+    margenObjetivoPct: objetivo,
+    unidades: 500,
+    volumenM3: 0.002,
+    modoFlete: 'maritimo',
+  })
+  assert.ok(fobMax > 0)
+
+  // comprando exactamente al FOB máximo, el margen debe ser el objetivo
+  const r = calcularMargen({
+    costoFobUsd: fobMax,
+    unidades: 500,
+    volumenM3: 0.002,
+    precioVentaClp: 15990,
+    modoFlete: 'maritimo',
+  })
+  assert.ok(Math.abs(r.resultado.margenPctSobreVenta - objetivo) < 0.3)
+})
+
+test('fobMaximoUsd: precio muy bajo no da espacio', () => {
+  assert.equal(fobMaximoUsd({ precioVentaClp: 900, margenObjetivoPct: 40 }), null)
 })
 
 test('calcularMargen: valida entradas', () => {

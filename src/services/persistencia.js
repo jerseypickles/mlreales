@@ -46,6 +46,7 @@ export async function aplicarDetalleScan({ porSku, fecha }) {
   for (const [sku, det] of porSku) {
     const setProd = { esFull: det.esFull, origenCrossBorder: det.origenCrossBorder }
     if (det.categoriaML) setProd.categoriaML = det.categoriaML
+    if (det.imagen) setProd.imagen = det.imagen
     if (det.seller) {
       setProd.sellerId = det.seller.sellerId
       setProd.esTiendaOficial = det.seller.esTiendaOficial

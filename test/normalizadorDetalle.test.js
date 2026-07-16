@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { normalizarItemDetalle, indexarDetallesPorSku } from '../src/services/normalizadorDetalle.js'
+import { normalizarItemDetalle, indexarDetallesPorSku, extraerImagen } from '../src/services/normalizadorDetalle.js'
 
 // output real del actor ecomscrape capturado el 2026-07-16
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/nivel2.json', import.meta.url), 'utf8'))
@@ -47,4 +47,16 @@ test('indexarDetallesPorSku: items no pedidos cuentan como sin match', () => {
 test('normalizarItemDetalle: entrada inválida devuelve null', () => {
   assert.equal(normalizarItemDetalle(null), null)
   assert.equal(normalizarItemDetalle({ title: 'sin ids' }), null)
+})
+
+test('extraerImagen: arma la URL del thumbnail desde la galería', () => {
+  const raw = {
+    gallery: {
+      picture_config: { template_thumbnail: 'https://http2.mlstatic.com/D_Q_NP_{id}-R{sanitizedTitle}.webp' },
+      pictures: [{ id: '899630-MLA99916451389_112025' }],
+    },
+  }
+  assert.equal(extraerImagen(raw), 'https://http2.mlstatic.com/D_Q_NP_899630-MLA99916451389_112025-R.webp')
+  assert.equal(extraerImagen({}), null)
+  assert.equal(extraerImagen({ gallery: { pictures: [] } }), null)
 })

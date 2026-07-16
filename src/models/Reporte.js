@@ -8,6 +8,7 @@ const reporteSchema = new mongoose.Schema({
   topProductos: { type: [mongoose.Schema.Types.Mixed], default: [] },
   topSellers: { type: [mongoose.Schema.Types.Mixed], default: [] },
   scoreOportunidad: { type: Number, default: null }, // Fase 2
+  analisis: { type: mongoose.Schema.Types.Mixed, default: null }, // veredicto IA (analista.js)
   creadoEl: { type: Date, default: Date.now },
 })
 

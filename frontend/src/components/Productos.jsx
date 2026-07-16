@@ -18,6 +18,9 @@ function FilaProducto({ p, onAbrir }) {
     <tr onClick={() => onAbrir(p)} className="fila-clickable" tabIndex={0}
         onKeyDown={(e) => { if (e.key === 'Enter') onAbrir(p) }}>
       <td className="num">{p.posicion ?? '—'}</td>
+      <td className="celda-imagen">
+        {p.imagen ? <img src={p.imagen} alt="" loading="lazy" width="36" height="36" /> : <span className="sin-imagen" />}
+      </td>
       <td className="celda-titulo" title={p.titulo ?? p.sku}>
         {p.titulo ?? p.sku}
       </td>
@@ -77,6 +80,9 @@ function PanelHistoria({ producto, onCerrar, onSimular }) {
     <div className="panel-fondo" onClick={onCerrar}>
       <aside className="panel" onClick={(e) => e.stopPropagation()} aria-label="Historia del producto">
         <div className="panel-encabezado">
+          {producto.imagen ? (
+            <img className="panel-imagen" src={producto.imagen} alt="" width="64" height="64" />
+          ) : null}
           <div>
             <h3>{producto.titulo ?? producto.sku}</h3>
             <p className="panel-meta">
@@ -227,6 +233,7 @@ export function Productos({ nichoId, onSimular }) {
           <thead>
             <tr>
               <th className="num">#</th>
+              <th aria-label="imagen" />
               <th>Producto</th>
               <th className="num">Precio</th>
               <th className="num">Desc.</th>
