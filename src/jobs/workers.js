@@ -8,8 +8,8 @@ import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
 import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
 import { generarReporteNicho } from '../services/metricas.js'
 import { analizarNicho } from '../services/analista.js'
-import { sugerirNichos } from '../services/sugeridor.js'
-import { keywordReal } from '../services/busquedasReales.js'
+import { sugerirNichos, palabrasSaturadas } from '../services/sugeridor.js'
+import { keywordReal, palabrasClave } from '../services/busquedasReales.js'
 import { llmDisponible } from '../services/llm.js'
 import {
   COLA_SCAN_NICHO,
@@ -210,13 +210,24 @@ export async function procesarRadar() {
   if (cupo === 0) return { omitido: true, motivo: `tope de ${config.radarMaxActivos} nichos activos alcanzado` }
 
   const { sugerencias } = await sugerirNichos()
-  const existentes = new Set((await Nicho.find().select('keyword').lean()).map((n) => n.keyword))
+  const todos = await Nicho.find().select('keyword estado').lean()
+  const existentes = new Set(todos.map((n) => n.keyword))
+
+  // regla dura de diversificación: si una raíz domina el tablero activo
+  // (3+ nichos, ej. "solar"), no se abren más nichos que la contengan —
+  // el radar explora categorías nuevas en vez de profundizar el embudo
+  const saturadas = palabrasSaturadas(todos.filter((n) => n.estado === 'activo').map((n) => n.keyword))
 
   const creados = []
   for (const s of sugerencias) {
     if (creados.length >= cupo) break
     const ideada = String(s.keyword ?? '').trim().toLowerCase()
     if (ideada.length < 2) continue
+    const saturada = [...palabrasClave(ideada)].find((p) => saturadas.has(p))
+    if (saturada) {
+      console.log(`[radar] "${ideada}" descartada: vertical saturada ("${saturada}" ya domina el tablero)`)
+      continue
+    }
 
     // la keyword ideada se canoniza a lo que la gente escribe de verdad
     // (autocompletado de ML); si nadie busca nada parecido, el nicho mediría
@@ -232,6 +243,11 @@ export async function procesarRadar() {
       if (keyword !== ideada) console.log(`[radar] "${ideada}" → búsqueda real "${keyword}"`)
     } catch (err) {
       console.error(`[radar] autosuggest no disponible para "${ideada}": ${err.message} — se usa tal cual`)
+    }
+    const saturadaReal = [...palabrasClave(keyword)].find((p) => saturadas.has(p))
+    if (saturadaReal) {
+      console.log(`[radar] "${keyword}" descartada: vertical saturada ("${saturadaReal}" ya domina el tablero)`)
+      continue
     }
     if (existentes.has(keyword)) continue
 

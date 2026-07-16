@@ -53,3 +53,18 @@ test('elegirMejorSugerencia: coincidencia exacta puntúa 1', () => {
 test('elegirMejorSugerencia: sin sugerencias devuelve null', () => {
   assert.equal(elegirMejorSugerencia('lo que sea', []), null)
 })
+
+test('palabrasSaturadas: detecta la raíz que domina el tablero', async () => {
+  const { palabrasSaturadas } = await import('../src/services/sugeridor.js')
+  const saturadas = palabrasSaturadas([
+    'foco solares',
+    'fuente agua solar',
+    'lampara solar jardin',
+    'guirnalda solar',
+    'freidora de aire',
+    'depiladora laser',
+  ])
+  assert.ok(saturadas.has('solar'))
+  assert.ok(!saturadas.has('freidora'))
+  assert.ok(!saturadas.has('depiladora'))
+})
