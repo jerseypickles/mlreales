@@ -271,6 +271,25 @@ export function iniciarWorkers() {
     limiter: { max: 4, duration: 60_000 },
     maxStalledCount: 3, // los deploys de Render reinician el proceso; no botar el job por eso
   })
+  // El bloqueo de ML al detalle repetido dura horas, no segundos: agotados los
+  // intentos rápidos, reintentar en 2/4/8 h para que el nicho no quede sin
+  // análisis hasta su próximo scan programado.
+  workerDetalle.on('failed', async (job) => {
+    if (!job || job.attemptsMade < (job.opts.attempts ?? 1)) return
+    const reintentos = job.data.reintentosLargos ?? 0
+    if (reintentos >= 3) return
+    const delay = 2 * 3600e3 * 2 ** reintentos
+    try {
+      await obtenerColas().scanDetalle.add(
+        'detalle',
+        { ...job.data, reintentosLargos: reintentos + 1 },
+        { delay },
+      )
+      console.log(`[scan-detalle] job ${job.id} agotó intentos: reintento largo ${reintentos + 1}/3 en ${delay / 3600e3} h`)
+    } catch (err) {
+      console.error(`[scan-detalle] no se pudo encolar el reintento largo: ${err.message}`)
+    }
+  })
   const workerMetricas = new Worker(COLA_CALCULAR_METRICAS, procesarCalcularMetricas, {
     connection: crearConexionRedis(),
     concurrency: 1,

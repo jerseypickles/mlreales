@@ -72,6 +72,7 @@ Reglas:
 - % Full bajo en un segmento con demanda = oportunidad (Full gana el buy box y el envío rápido).
 - Rating promedio alto (>4.5) en un segmento = difícil diferenciarse por calidad; busca segmentos con ratings mediocres y volumen.
 - El FOB máximo de tu recomendación debe salir de la tabla precalculada (interpola si el precio sugerido está entre dos puntos). No inventes números de costos.
+- CALENDARIO Y LEAD TIME (eliminatorio): te paso la fecha actual. Entre comprar en China y tener stock vendible en Full pasan 50-70 días (producción + 35-50 días de mar + internación + ingreso a Full). Si el nicho es estacional y su pico de venta ya pasó o termina antes de que alcance a llegar un pedido hecho HOY, el veredicto es no_entrar aunque las métricas sean excelentes: la demanda que ves es de la temporada en curso y el stock llegaría a bodega muerta. En el resumen di explícitamente que es por ventana de importación e indica en qué mes comprar para el próximo pico. Producto de la estación en curso (ej: ropa de invierno en pleno invierno) ya es tarde. Si la ventana es justa (el pedido llega apenas al inicio del pico), solo entrar_con_condiciones con envío aéreo o pedido chico, y dilo.
 - Sé directo y escéptico: si el nicho no da, di no_entrar y explica por qué. Un veredicto inflado cuesta dinero real.
 - El usuario quiere LA decisión, no un informe: titular de máximo 90 caracteres con el producto concreto a traer, resumen de máximo 2 frases, razón de cada segmento en 1 frase, riesgos de 1 línea cada uno. Cero relleno.
 - Todo en español de Chile, precios en CLP.`
@@ -113,6 +114,14 @@ export async function analizarNicho(nicho) {
 
   const entrada = {
     keyword: nicho.keyword,
+    fechaActual: new Date().toLocaleDateString('es-CL', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'America/Santiago',
+    }),
+    estacionalidad: nicho.radarInfo?.estacionalidad ?? undefined,
+    ventanaImportacionSegunRadar: nicho.radarInfo?.ventanaImportacion ?? undefined,
     metricas: reporte.metricas,
     tablaFobMaximo: tablaFobMaximo(reporte.metricas),
     supuestosTabla: 'FOB máximo por unidad asumiendo 500 unidades, 0.003 m³/unidad, flete marítimo, TLC 0% arancel, comisión ML 16%, tarifa Full incluida',

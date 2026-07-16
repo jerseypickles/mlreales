@@ -197,6 +197,11 @@ router.post(
     if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
     try {
       const analisis = await analizarNicho(nicho)
+      // misma regla que el pipeline: descubrimiento del radar que no da, se pausa y deja de gastar
+      if (nicho.origen === 'radar' && analisis.veredicto === 'no_entrar' && nicho.estado === 'activo') {
+        nicho.estado = 'pausado'
+        await nicho.save()
+      }
       res.json({ analisis })
     } catch (err) {
       if (err.status) return res.status(err.status).json({ error: err.message })
