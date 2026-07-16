@@ -68,6 +68,19 @@ Normalizaciones sobre su output (campos en español, casi todo string):
 | POST | `/api/nichos/:id/scan` | fuerza un scan manual |
 | GET | `/api/productos/:sku/historia` | serie de snapshots (precio, posición; `?limit=`) |
 | GET | `/api/salud` | estado de Mongo y Redis |
+| POST | `/api/margen` | simular unit economics de importación China→Chile (ver abajo) |
+| GET | `/api/margen/parametros` | parámetros por defecto del modelo de costos |
+
+### Calculadora de margen (China → Chile → ML Full)
+
+```bash
+curl -X POST localhost:3000/api/margen -H 'Content-Type: application/json' -d '{
+  "costoFobUsd": 3, "unidades": 500, "volumenM3": 0.002,
+  "modoFlete": "maritimo", "nichoId": "<id>"
+}'
+```
+
+Sin `precioVentaClp` usa la mediana del último reporte del nicho. Devuelve desglose por unidad (FOB, flete, seguro, arancel, IVA, despacho, comisión ML, Full), margen neto, ROI e inversión de caja del embarque. Los parámetros por defecto (`src/config/importacion.js`) son estimaciones: tipo de cambio, tarifas de flete, arancel (0% con certificado de origen TLC China-Chile), comisión ML y tarifa Full se pueden sobreescribir por request (`parametros: {...}`).
 
 ```bash
 curl -X POST localhost:3000/api/nichos -H 'Content-Type: application/json' -d '{"keyword": "foco solares"}'
@@ -121,7 +134,7 @@ En producción el dashboard es un static site; `VITE_API_URL` apunta a la URL p�
 
 ## Próximas fases
 
-- **Fase 2**: actor de detalle `ecomscrape~mercadolibre-product-details-scraper` (correr primero con 3-5 URLs y ajustar mapeo al output real — no asumir schema), sellers, vendidos y delta entre snapshots (la métrica estrella), score de oportunidad.
+- **Fase 2**: actor de detalle `ecomscrape~mercadolibre-product-details-scraper` — **bloqueado: es actor de renta (US$20/mes + uso) y requiere activarlo en la consola de Apify**. La sonda `POST /api/debug/nivel2` (header `x-debug-key`) ya está lista para validar su output real con 3-5 URLs apenas se rente. Luego: mapeo de campos, sellers, vendidos y delta entre snapshots (la métrica estrella), score de oportunidad.
 - **Fase 3**: cron diario multi-nicho según `frecuenciaScan`, alertas (precio >15%, seller nuevo en top 10), export CSV.
 
 ## No hacer
