@@ -1,0 +1,12 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - heading "MELI Intel" [level=1] [ref=e5]
+    - generic [ref=e6]: nichos en mercadolibre.cl
+  - generic [ref=e7]:
+    - complementary [ref=e8]:
+      - generic [ref=e9]:
+        - 'textbox "Nueva keyword, ej: foco solares" [ref=e10]'
+        - button "Crear nicho" [disabled] [ref=e11]
+      - paragraph [ref=e12]: Sin nichos todavía. Crea el primero con una keyword.
+    - main [ref=e13]:
+      - paragraph [ref=e14]: Selecciona o crea un nicho para ver su reporte.

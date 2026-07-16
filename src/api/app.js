@@ -2,6 +2,7 @@ import express from 'express'
 import mongoose from 'mongoose'
 import rutasNichos from './routes/nichos.js'
 import rutasProductos from './routes/productos.js'
+import rutasDebug from './routes/debug.js'
 import { obtenerColas } from '../jobs/queues.js'
 
 export function crearApp() {
@@ -35,6 +36,7 @@ export function crearApp() {
 
   app.use('/api/nichos', rutasNichos)
   app.use('/api/productos', rutasProductos)
+  app.use('/api/debug', rutasDebug)
 
   app.use((_req, res) => res.status(404).json({ error: 'ruta no encontrada' }))
 
