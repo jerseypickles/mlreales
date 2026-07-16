@@ -69,9 +69,9 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
               ) : null}
             </span>
             <span className="nicho-meta">
-              {n.ultimoReporte?.veredicto ? (
-                <span className={`veredicto veredicto-${n.ultimoReporte.veredicto}`}>
-                  {n.ultimoReporte.veredicto.replace(/_/g, ' ')}
+              {n.veredicto ? (
+                <span className={`veredicto veredicto-${n.veredicto}`}>
+                  {n.veredicto.replace(/_/g, ' ')}
                 </span>
               ) : null}
               {n.estado === 'pausado' ? 'pausado · ' : ''}

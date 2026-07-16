@@ -57,7 +57,6 @@ router.get(
                 _id: 0,
                 fecha: 1,
                 scoreOportunidad: 1,
-                veredicto: '$analisis.veredicto',
                 ventasEstimadasPorDia: '$metricas.demanda.ventasEstimadasPorDia',
                 precioMediana: '$metricas.precio.mediana',
                 sellersUnicos: '$metricas.competencia.sellersUnicos',
@@ -69,7 +68,27 @@ router.get(
           as: 'ultimoReporte',
         },
       },
-      { $addFields: { ultimoReporte: { $ifNull: [{ $first: '$ultimoReporte' }, null] } } },
+      {
+        // el veredicto sale del último reporte CON análisis (los scans nuevos nacen sin él)
+        $lookup: {
+          from: 'reportes',
+          let: { nid: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$nichoId', '$$nid'] }, analisis: { $ne: null } } },
+            { $sort: { fecha: -1 } },
+            { $limit: 1 },
+            { $project: { _id: 0, veredicto: '$analisis.veredicto' } },
+          ],
+          as: 'ultimoAnalisis',
+        },
+      },
+      {
+        $addFields: {
+          ultimoReporte: { $ifNull: [{ $first: '$ultimoReporte' }, null] },
+          veredicto: { $first: '$ultimoAnalisis.veredicto' },
+        },
+      },
+      { $project: { ultimoAnalisis: 0 } },
     ])
     res.json({ nichos })
   }),
@@ -98,6 +117,15 @@ router.get(
         topSellers: calculado.topSellers,
       })
       reporte = doc.toObject()
+    }
+
+    // un scan nuevo crea un reporte sin análisis: entregar el último análisis
+    // disponible del nicho mientras no exista uno más fresco
+    if (!reporte.analisis) {
+      const conAnalisis = await Reporte.findOne({ nichoId: nicho._id, analisis: { $ne: null } })
+        .sort({ fecha: -1 })
+        .lean()
+      if (conAnalisis) reporte.analisis = conAnalisis.analisis
     }
 
     res.json({

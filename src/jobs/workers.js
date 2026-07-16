@@ -165,6 +165,11 @@ export async function procesarCalcularMetricas(job) {
     if (debeAnalizar) {
       await obtenerColas().analisis.add('analizar', { nichoId: String(nicho._id) })
       analisisEncolado = true
+    } else {
+      // el análisis anterior sigue vigente: heredarlo para que el reporte nuevo no quede huérfano
+      doc.analisis = ultimoAnalizado.analisis
+      doc.markModified('analisis')
+      await doc.save()
     }
   }
 
