@@ -1,5 +1,6 @@
 import { Producto } from '../models/Producto.js'
 import { Snapshot } from '../models/Snapshot.js'
+import { scoring } from '../config/scoring.js'
 
 export function percentil(valoresOrdenados, p) {
   const n = valoresOrdenados.length
@@ -47,9 +48,98 @@ function bandaDominante(preciosOrdenados) {
   }
 }
 
-// Scorecard Fase 1: precio + competencia + calidad sobre el top-N por posición.
-// `demanda` y `scoreOportunidad` quedan en null hasta que el nivel 2 aporte `vendidos`.
-export function calcularMetricas({ snapshots, productosPorSku, totalResultados = null, topN = 50 }) {
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n))
+
+// Métricas de demanda a partir de `vendidos` (nivel 2). `snapshotsPrevios` es el
+// scan anterior del mismo nicho: el delta de vendidos entre scans es la venta
+// estimada del período — la métrica estrella.
+export function calcularDemanda(snapshots, snapshotsPrevios = null) {
+  const vendidos = snapshots.map((s) => s.vendidos).filter(Number.isFinite)
+  if (!vendidos.length) return null
+
+  const ordenados = [...vendidos].sort((a, b) => a - b)
+  const demanda = {
+    itemsConVendidos: vendidos.length,
+    vendidosTotal: vendidos.reduce((a, b) => a + b, 0),
+    vendidosMediana: redondear(percentil(ordenados, 50), 0),
+    ventasPeriodo: null, // requiere >= 2 scans con vendidos
+    ventasPorDia: null,
+    periodoDias: null,
+  }
+
+  if (snapshotsPrevios?.length) {
+    const previosPorSku = new Map(
+      snapshotsPrevios.filter((s) => Number.isFinite(s.vendidos)).map((s) => [s.sku, s]),
+    )
+    let delta = 0
+    let comparables = 0
+    let fechaPrevia = null
+    for (const snap of snapshots) {
+      const previo = previosPorSku.get(snap.sku)
+      if (!previo || !Number.isFinite(snap.vendidos)) continue
+      comparables++
+      delta += Math.max(0, snap.vendidos - previo.vendidos)
+      fechaPrevia = previo.fecha
+    }
+    if (comparables > 0 && fechaPrevia) {
+      const dias = Math.max(
+        (new Date(snapshots[0].fecha) - new Date(fechaPrevia)) / 86_400_000,
+        1 / 24, // piso de 1 hora para no dividir por ~0 en re-scans seguidos
+      )
+      demanda.ventasPeriodo = delta
+      demanda.periodoDias = redondear(dias, 1)
+      demanda.ventasPorDia = redondear(delta / dias, 1)
+      demanda.itemsComparables = comparables
+    }
+  }
+
+  return demanda
+}
+
+// Score 0-100 según config/scoring.js. Devuelve null si aún no hay datos de demanda.
+export function calcularScoreOportunidad({ demanda, competencia, calidad }) {
+  if (!demanda || !Number.isFinite(demanda.vendidosTotal)) return null
+  const { pesos, umbrales, escalas } = scoring
+
+  const componenteDemanda = clamp(escalas.demandaFactorLog * Math.log10(1 + demanda.vendidosTotal), 0, 100)
+  const componenteCompetencia = clamp(100 - (competencia.concentracionTop3Pct ?? 100), 0, 100)
+  const rating = calidad.ratingPromedio
+  const componenteCalidad = Number.isFinite(rating)
+    ? clamp(
+        ((umbrales.ratingDiferenciacion - rating) / (umbrales.ratingDiferenciacion - umbrales.ratingPiso)) * 100,
+        0,
+        100,
+      )
+    : 50 // sin ratings: neutro
+  const componenteFull = clamp(100 - (competencia.pctFull ?? 0), 0, 100)
+
+  const score = Math.round(
+    pesos.demanda * componenteDemanda +
+      pesos.competencia * componenteCompetencia +
+      pesos.calidad * componenteCalidad +
+      pesos.full * componenteFull,
+  )
+
+  return {
+    score,
+    componentes: {
+      demanda: Math.round(componenteDemanda),
+      competencia: Math.round(componenteCompetencia),
+      calidad: Math.round(componenteCalidad),
+      full: Math.round(componenteFull),
+    },
+  }
+}
+
+// Scorecard: precio + competencia + calidad sobre el top-N por posición;
+// demanda y score si el nivel 2 ya aportó `vendidos`.
+export function calcularMetricas({
+  snapshots,
+  productosPorSku,
+  totalResultados = null,
+  topN = 50,
+  snapshotsPrevios = null,
+}) {
   const top = [...snapshots]
     .sort((a, b) => (a.posicion ?? Infinity) - (b.posicion ?? Infinity))
     .slice(0, topN)
@@ -83,6 +173,27 @@ export function calcularMetricas({ snapshots, productosPorSku, totalResultados =
 
   const pct = (parte, total = n) => (total > 0 ? redondear((parte / total) * 100) : null)
 
+  const competencia = {
+    sellersUnicos: cuentaPorVendedor.size,
+    pctTiendaOficial: pct(oficiales),
+    concentracionTop3Pct: conVendedor > 0 ? redondear((itemsTop3 / conVendedor) * 100) : null,
+    pctFull: pct(full),
+    pctEnvioRapido: pct(rapido),
+    topSellers: vendedoresOrdenados
+      .slice(0, 5)
+      .map(([vendedor, items]) => ({ vendedor, items, pctItems: pct(items) })),
+  }
+
+  const calidad = {
+    ratingPromedio: ratings.length
+      ? redondear(ratings.reduce((a, b) => a + b, 0) / ratings.length, 2)
+      : null,
+    pctConRating: pct(ratings.length),
+  }
+
+  const demanda = calcularDemanda(top, snapshotsPrevios)
+  const oportunidad = calcularScoreOportunidad({ demanda, competencia, calidad })
+
   return {
     universo: {
       productosAnalizados: n,
@@ -101,24 +212,11 @@ export function calcularMetricas({ snapshots, productosPorSku, totalResultados =
         : null,
       pctConDescuento: pct(descuentos.length),
     },
-    competencia: {
-      sellersUnicos: cuentaPorVendedor.size,
-      pctTiendaOficial: pct(oficiales),
-      concentracionTop3Pct: conVendedor > 0 ? redondear((itemsTop3 / conVendedor) * 100) : null,
-      pctFull: pct(full),
-      pctEnvioRapido: pct(rapido),
-      topSellers: vendedoresOrdenados
-        .slice(0, 5)
-        .map(([vendedor, items]) => ({ vendedor, items, pctItems: pct(items) })),
-    },
-    calidad: {
-      ratingPromedio: ratings.length
-        ? redondear(ratings.reduce((a, b) => a + b, 0) / ratings.length, 2)
-        : null,
-      pctConRating: pct(ratings.length),
-    },
-    demanda: null, // Fase 2: requiere `vendidos` del nivel 2
-    scoreOportunidad: null, // Fase 2: ver config/scoring.js
+    competencia,
+    calidad,
+    demanda, // null hasta que el nivel 2 aporte `vendidos`
+    oportunidad, // { score, componentes } | null
+    scoreOportunidad: oportunidad?.score ?? null,
   }
 }
 
@@ -131,11 +229,20 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   const productos = await Producto.find({ sku: { $in: snapshots.map((s) => s.sku) } }).lean()
   const productosPorSku = new Map(productos.map((p) => [p.sku, p]))
 
+  // scan anterior para el delta de vendidos
+  const snapPrevio = await Snapshot.findOne({ keyword: nicho.keyword, fecha: { $lt: ultimoSnap.fecha } })
+    .sort({ fecha: -1 })
+    .lean()
+  const snapshotsPrevios = snapPrevio
+    ? await Snapshot.find({ keyword: nicho.keyword, fecha: snapPrevio.fecha }).lean()
+    : null
+
   const metricas = calcularMetricas({
     snapshots,
     productosPorSku,
     totalResultados: nicho.ultimoTotalResultados ?? null,
     topN,
+    snapshotsPrevios,
   })
 
   const topProductos = [...snapshots]

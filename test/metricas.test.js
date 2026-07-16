@@ -1,6 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { percentil, calcularMetricas } from '../src/services/metricas.js'
+import {
+  percentil,
+  calcularMetricas,
+  calcularDemanda,
+  calcularScoreOportunidad,
+} from '../src/services/metricas.js'
 
 test('percentil: interpolación lineal', () => {
   assert.equal(percentil([], 50), null)
@@ -84,4 +89,71 @@ test('calcularMetricas: sin datos no revienta', () => {
   assert.equal(m.precio.mediana, null)
   assert.equal(m.precio.bandaDominante, null)
   assert.equal(m.competencia.sellersUnicos, 0)
+})
+
+test('calcularDemanda: sin vendidos devuelve null', () => {
+  assert.equal(calcularDemanda([{ sku: 'A', vendidos: null }]), null)
+})
+
+test('calcularDemanda: totales y delta entre scans', () => {
+  const fechaPrevia = new Date('2026-07-14T12:00:00Z')
+  const fechaActual = new Date('2026-07-16T12:00:00Z') // 2 días después
+  const actuales = [
+    { sku: 'A', vendidos: 150, fecha: fechaActual },
+    { sku: 'B', vendidos: 500, fecha: fechaActual },
+    { sku: 'C', vendidos: 50, fecha: fechaActual }, // nuevo, sin previo
+  ]
+  const previos = [
+    { sku: 'A', vendidos: 100, fecha: fechaPrevia },
+    { sku: 'B', vendidos: 480, fecha: fechaPrevia },
+  ]
+
+  const d = calcularDemanda(actuales, previos)
+  assert.equal(d.vendidosTotal, 700)
+  assert.equal(d.vendidosMediana, 150)
+  assert.equal(d.itemsComparables, 2)
+  assert.equal(d.ventasPeriodo, 70) // (150-100) + (500-480)
+  assert.equal(d.periodoDias, 2)
+  assert.equal(d.ventasPorDia, 35)
+})
+
+test('calcularDemanda: primer scan sin previos', () => {
+  const d = calcularDemanda([{ sku: 'A', vendidos: 200, fecha: new Date() }])
+  assert.equal(d.vendidosTotal, 200)
+  assert.equal(d.ventasPorDia, null)
+})
+
+test('calcularScoreOportunidad: composición según pesos', () => {
+  const r = calcularScoreOportunidad({
+    demanda: { vendidosTotal: 10000 },
+    competencia: { concentracionTop3Pct: 40, pctFull: 10 },
+    calidad: { ratingPromedio: 4.0 },
+  })
+  // demanda 20*log10(10001)≈80 · competencia 60 · calidad (4.4-4)/0.9*100≈44 · full 90
+  assert.equal(r.componentes.demanda, 80)
+  assert.equal(r.componentes.competencia, 60)
+  assert.equal(r.componentes.calidad, 44)
+  assert.equal(r.componentes.full, 90)
+  // 0.4*80 + 0.25*60 + 0.2*44.4 + 0.15*90 ≈ 69
+  assert.equal(r.score, 69)
+})
+
+test('calcularScoreOportunidad: sin demanda devuelve null', () => {
+  assert.equal(calcularScoreOportunidad({ demanda: null, competencia: {}, calidad: {} }), null)
+})
+
+test('calcularMetricas: integra demanda y score cuando hay vendidos', () => {
+  const fecha = new Date('2026-07-16T12:00:00Z')
+  const snapshots = [
+    { sku: 'A1', precio: 10000, vendidos: 5000, rating: 4.0, posicion: 1, fecha },
+    { sku: 'A2', precio: 12000, vendidos: 3000, rating: 4.2, posicion: 2, fecha },
+  ]
+  const productosPorSku = new Map([
+    ['A1', { sku: 'A1', vendedor: 'X', esFull: false }],
+    ['A2', { sku: 'A2', vendedor: 'Y', esFull: false }],
+  ])
+  const m = calcularMetricas({ snapshots, productosPorSku })
+  assert.equal(m.demanda.vendidosTotal, 8000)
+  assert.ok(m.scoreOportunidad > 0)
+  assert.ok(m.oportunidad.componentes.demanda > 70)
 })
