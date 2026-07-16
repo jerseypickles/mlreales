@@ -761,6 +761,21 @@ h4 {
   margin-top: 22px;
 }
 
+.ayuda-campo {
+  font-size: 11px;
+  color: var(--tinta-3);
+  font-weight: 400;
+}
+
+.enlace-boton {
+  border: none;
+  background: none;
+  color: var(--acento);
+  font-size: 11px;
+  padding: 0 4px;
+  text-decoration: underline;
+}
+
 .resultado-simulacion .tabla-envoltura {
   max-width: 480px;
 }
