@@ -939,6 +939,15 @@ h4 {
   text-decoration: underline;
 }
 
+.sim-comision {
+  margin: 0 0 12px;
+}
+
+.pliegue-suave {
+  background: transparent;
+  padding: 8px 10px;
+}
+
 .resultado-simulacion .tabla-envoltura {
   max-width: 480px;
 }

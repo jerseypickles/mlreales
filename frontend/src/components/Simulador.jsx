@@ -60,7 +60,8 @@ export function Simulador({ nicho, reporte, precioInicial }) {
     precioVentaClp: precioInicial ?? rec?.precioVentaClp ?? reporte?.metricas?.precio?.mediana ?? '',
     costoFobUsd: rec?.fobMaximoUsd ?? '',
     unidades: unidadesPrueba ?? 500,
-    comisionPct: 16,
+    // la comisión la estima el análisis según la categoría; 17% conservador si no hay análisis
+    comisionPct: rec?.comisionMlPct ?? 17,
     modoFlete: 'maritimo',
     volumenM3: 0.003,
     pesoKg: 0.5,
@@ -152,29 +153,37 @@ export function Simulador({ nicho, reporte, precioInicial }) {
               </span>
             ) : null}
           </label>
-          <label className="sim-campo">
-            Comisión Mercado Libre (%)
-            <input type="number" min="0" max="30" step="0.5" {...campo('comisionPct')} />
-            <span className="ayuda-campo">13-19% según categoría; bajo $9.990 se suma cargo fijo solo</span>
-          </label>
-          <label className="sim-campo">
-            Flete
-            <select {...campo('modoFlete')}>
-              <option value="maritimo">Marítimo (por m³)</option>
-              <option value="aereo">Aéreo (por kg)</option>
-            </select>
-          </label>
-          {form.modoFlete === 'maritimo' ? (
+          <p className="ayuda-campo sim-comision">
+            Comisión ML: <strong>{form.comisionPct}%</strong>
+            {rec?.comisionMlPct ? ' (estimada para esta categoría por el análisis)' : ' (estándar)'} · el
+            cargo fijo bajo $9.990 se aplica solo
+          </p>
+          <details className="pliegue pliegue-suave">
+            <summary>Ajustes avanzados</summary>
             <label className="sim-campo">
-              Volumen por unidad (m³)
-              <input type="number" min="0.0001" step="0.0001" {...campo('volumenM3')} />
+              Comisión Mercado Libre (%)
+              <input type="number" min="0" max="30" step="0.5" {...campo('comisionPct')} />
+              <span className="ayuda-campo">si conoces la tarifa exacta de tu categoría, ponla aquí</span>
             </label>
-          ) : (
             <label className="sim-campo">
-              Peso por unidad (kg)
-              <input type="number" min="0.01" step="0.01" {...campo('pesoKg')} />
+              Flete
+              <select {...campo('modoFlete')}>
+                <option value="maritimo">Marítimo (por m³)</option>
+                <option value="aereo">Aéreo (por kg)</option>
+              </select>
             </label>
-          )}
+            {form.modoFlete === 'maritimo' ? (
+              <label className="sim-campo">
+                Volumen por unidad (m³)
+                <input type="number" min="0.0001" step="0.0001" {...campo('volumenM3')} />
+              </label>
+            ) : (
+              <label className="sim-campo">
+                Peso por unidad (kg)
+                <input type="number" min="0.01" step="0.01" {...campo('pesoKg')} />
+              </label>
+            )}
+          </details>
           {error ? <p className="error-bloque">{error}</p> : null}
         </div>
 

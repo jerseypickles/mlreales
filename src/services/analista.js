@@ -37,7 +37,7 @@ const SCHEMA_ANALISIS = {
     recomendacion: {
       type: 'object',
       additionalProperties: false,
-      required: ['aplica', 'titular', 'segmento', 'precioVentaClp', 'fobMaximoUsd', 'primeraCompra', 'especificacionProducto', 'comoValidar'],
+      required: ['aplica', 'titular', 'segmento', 'precioVentaClp', 'fobMaximoUsd', 'primeraCompra', 'comisionMlPct', 'especificacionProducto', 'comoValidar'],
       properties: {
         aplica: { type: 'boolean', description: 'false si el veredicto es no_entrar' },
         titular: {
@@ -48,6 +48,10 @@ const SCHEMA_ANALISIS = {
         precioVentaClp: { type: 'integer', description: 'Precio de entrada sugerido' },
         fobMaximoUsd: { type: 'number', description: 'FOB máximo a pagar en China, coherente con la tabla precalculada' },
         primeraCompra: { type: 'string', description: 'Tamaño del pedido de prueba, ej: "50-100 unidades"' },
+        comisionMlPct: {
+          type: 'number',
+          description: 'Comisión típica de Mercado Libre Chile para la categoría de este producto en publicación Clásica (13-19.5). Si no la conoces con certeza, usa 17',
+        },
         especificacionProducto: { type: 'string', description: 'Qué producto exacto buscar en Alibaba/1688 (specs, potencia, accesorios)' },
         comoValidar: { type: 'string', description: 'Cómo validar antes de comprar el embarque' },
       },
