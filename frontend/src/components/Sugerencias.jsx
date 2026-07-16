@@ -26,9 +26,9 @@ export function Radar() {
     <div className="radar">
       <h4 className="radar-titulo">Radar de nichos</h4>
       <p className="radar-texto">
-        Corre solo cada semana: propone nichos por temporada chilena y tendencia, los escanea, los
-        analiza con IA y pausa los descartados. Los descubrimientos aparecen arriba con la etiqueta{' '}
-        <span className="badge badge-neutro">radar</span>.
+        Corre solo cada mañana y aprende de tu historial: propone vecinos de tus búsquedas y de los
+        nichos ganadores, más apuestas de temporada. Los escanea, los analiza con IA y pausa los
+        descartados. Los descubrimientos aparecen arriba con un punto azul.
       </p>
       <button className="boton-secundario boton-ancho" onClick={correrAhora} disabled={corriendo}>
         {corriendo ? 'Encolando…' : 'Explorar ahora'}
