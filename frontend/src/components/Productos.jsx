@@ -23,11 +23,11 @@ function FilaProducto({ p, onAbrir }) {
       </td>
       <td className="num">{fmtPrecio(p.precio)}</td>
       <td className="num">{Number.isFinite(p.descuentoPct) ? `-${p.descuentoPct}%` : '—'}</td>
-      <td className="num">{p.rating ?? '—'}</td>
+      <td className="num">{p.rating || '—'}</td>
       <td className="num">{fmtNum(p.numReviews)}</td>
       <td>
         <span className="celda-vendedor">
-          {p.vendedor ?? '—'}
+          <span>{p.vendedor ?? '—'}</span>
           {p.esTiendaOficial ? <Badge tipo="oficial">Oficial</Badge> : null}
         </span>
       </td>
@@ -128,7 +128,7 @@ function PanelHistoria({ producto, onCerrar, onSimular }) {
                       <td className="num">{fmtPrecio(s.precio)}</td>
                       <td className="num">{s.posicion ?? '—'}</td>
                       <td className="num">{fmtNum(s.numReviews)}</td>
-                      <td className="num">{s.rating ?? '—'}</td>
+                      <td className="num">{s.rating || '—'}</td>
                     </tr>
                   ))}
                 </tbody>

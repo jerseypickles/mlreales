@@ -104,6 +104,12 @@ header h1 {
   align-items: start;
 }
 
+/* una tabla ancha no debe reventar el track del grid */
+.cuerpo > main,
+.cuerpo > aside {
+  min-width: 0;
+}
+
 @media (max-width: 860px) {
   .cuerpo {
     grid-template-columns: 1fr;
@@ -351,7 +357,9 @@ main {
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  /* separate + spacing 0: collapse rompe los headers sticky en Chrome */
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13px;
 }
 
@@ -412,6 +420,12 @@ td.num {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  max-width: 200px;
+}
+
+.celda-vendedor > :first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fila-total td {
