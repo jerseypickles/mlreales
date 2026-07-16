@@ -1027,6 +1027,30 @@ h4 {
   color: var(--tinta-3);
 }
 
+.en-proceso {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--acento);
+  font-weight: 500;
+}
+
+.spinner {
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--acento);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: girar 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .punto-radar {
   display: inline-block;
   width: 7px;

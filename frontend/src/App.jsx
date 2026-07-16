@@ -47,6 +47,12 @@ function FormNuevoNicho({ onCreado }) {
   )
 }
 
+const ETAPAS = {
+  escaneando: 'escaneando listado…',
+  detalle: 'leyendo detalle de productos…',
+  analizando: 'analizando con IA…',
+}
+
 function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
   if (!nichos.length) {
     return <p className="vacio">Sin nichos todavía. Crea el primero con una keyword.</p>
@@ -69,17 +75,26 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
               ) : null}
             </span>
             <span className="nicho-meta">
-              {n.veredicto ? (
-                <span className={`veredicto veredicto-${n.veredicto}`}>
-                  {n.veredicto.replace(/_/g, ' ')}
+              {n.enProceso ? (
+                <span className="en-proceso">
+                  <span className="spinner" aria-hidden="true" />
+                  {ETAPAS[n.enProceso] ?? 'procesando…'}
                 </span>
-              ) : null}
-              {n.estado === 'pausado' ? 'pausado · ' : ''}
-              {n.ultimoReporte
-                ? `${fmtNum(n.ultimoReporte.productosAnalizados)} productos · mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}`
-                : n.ultimoScanEl
-                  ? 'scan hecho, sin reporte'
-                  : 'scan pendiente…'}
+              ) : (
+                <>
+                  {n.veredicto ? (
+                    <span className={`veredicto veredicto-${n.veredicto}`}>
+                      {n.veredicto.replace(/_/g, ' ')}
+                    </span>
+                  ) : null}
+                  {n.estado === 'pausado' ? 'pausado · ' : ''}
+                  {n.ultimoReporte
+                    ? `${fmtNum(n.ultimoReporte.productosAnalizados)} productos · mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}`
+                    : n.ultimoScanEl
+                      ? 'scan hecho, sin reporte'
+                      : 'scan pendiente…'}
+                </>
+              )}
             </span>
           </button>
         </li>
@@ -235,6 +250,9 @@ export default function App() {
 
   useEffect(() => {
     cargarNichos()
+    // el radar y los scans corren solos: refrescar la lista para ver el avance en vivo
+    const intervalo = setInterval(cargarNichos, 15_000)
+    return () => clearInterval(intervalo)
   }, [cargarNichos])
 
   return (

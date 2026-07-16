@@ -90,7 +90,31 @@ router.get(
       },
       { $project: { ultimoAnalisis: 0 } },
     ])
-    res.json({ nichos })
+
+    // etapa en proceso por nicho, leída de las colas reales (para el spinner del dashboard)
+    const etapas = new Map()
+    try {
+      const colas = obtenerColas()
+      const estados = ['active', 'waiting', 'delayed', 'prioritized']
+      // con Redis caído getJobs no resuelve nunca: acotar con timeout
+      const [analisis, detalles, scans] = await Promise.race([
+        Promise.all([
+          colas.analisis.getJobs(estados),
+          colas.scanDetalle.getJobs(estados),
+          colas.scanNicho.getJobs(estados),
+        ]),
+        new Promise((_, rechazar) => setTimeout(() => rechazar(new Error('timeout')), 1500)),
+      ])
+      for (const j of analisis) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'analizando')
+      for (const j of detalles) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'detalle')
+      for (const j of scans) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'escaneando')
+    } catch {
+      // sin Redis no hay etapas; la lista funciona igual
+    }
+
+    res.json({
+      nichos: nichos.map((n) => ({ ...n, enProceso: etapas.get(String(n._id)) ?? null })),
+    })
   }),
 )
 
