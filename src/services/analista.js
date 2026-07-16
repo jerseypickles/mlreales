@@ -119,7 +119,7 @@ export async function analizarNicho(nicho) {
     top50: resumirProductosParaLLM(vista.productos),
   }
 
-  const analisis = await pedirJSON({
+  const { datos: analisis, costoUsd } = await pedirJSON({
     system: SYSTEM_ANALISTA,
     user: `Analiza este nicho de mercadolibre.cl y decide si entrar:\n\n${JSON.stringify(entrada)}`,
     schema: SCHEMA_ANALISIS,
@@ -129,6 +129,9 @@ export async function analizarNicho(nicho) {
   reporte.analisis = { ...analisis, generadoEl: new Date(), modelo: 'claude' }
   reporte.markModified('analisis')
   await reporte.save()
+
+  const { Nicho } = await import('../models/Nicho.js')
+  await Nicho.updateOne({ _id: nicho._id }, { $inc: { costoUsd } })
 
   return reporte.analisis
 }

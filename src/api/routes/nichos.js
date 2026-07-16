@@ -95,19 +95,25 @@ router.get(
     const etapas = new Map()
     try {
       const colas = obtenerColas()
-      const estados = ['active', 'waiting', 'delayed', 'prioritized']
+      const enEspera = ['waiting', 'delayed', 'prioritized']
       // con Redis caído getJobs no resuelve nunca: acotar con timeout
-      const [analisis, detalles, scans] = await Promise.race([
+      const [analisisAct, detallesAct, scansAct, analisisEsp, detallesEsp, scansEsp] = await Promise.race([
         Promise.all([
-          colas.analisis.getJobs(estados),
-          colas.scanDetalle.getJobs(estados),
-          colas.scanNicho.getJobs(estados),
+          colas.analisis.getJobs(['active']),
+          colas.scanDetalle.getJobs(['active']),
+          colas.scanNicho.getJobs(['active']),
+          colas.analisis.getJobs(enEspera),
+          colas.scanDetalle.getJobs(enEspera),
+          colas.scanNicho.getJobs(enEspera),
         ]),
         new Promise((_, rechazar) => setTimeout(() => rechazar(new Error('timeout')), 1500)),
       ])
-      for (const j of analisis) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'analizando')
-      for (const j of detalles) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'detalle')
-      for (const j of scans) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'escaneando')
+      // primero lo que espera turno; lo activo pisa con su etapa real
+      for (const j of [...analisisEsp, ...detallesEsp, ...scansEsp])
+        if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'cola')
+      for (const j of analisisAct) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'analizando')
+      for (const j of detallesAct) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'detalle')
+      for (const j of scansAct) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'escaneando')
     } catch {
       // sin Redis no hay etapas; la lista funciona igual
     }
@@ -159,6 +165,7 @@ router.get(
         domainCode: nicho.domainCode,
         estado: nicho.estado,
         ultimoScanEl: nicho.ultimoScanEl,
+        costoUsd: Math.round((nicho.costoUsd ?? 0) * 100) / 100,
       },
       reporte,
     })
@@ -227,6 +234,40 @@ router.post(
       if (err.status) return res.status(err.status).json({ error: err.message })
       throw err
     }
+  }),
+)
+
+// Evolución del nicho a través de los scans (para los gráficos de tendencia)
+router.get(
+  '/:id/tendencia',
+  manejar(async (req, res) => {
+    const nicho = await Nicho.findById(req.params.id)
+    if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
+
+    const reportes = await Reporte.find({ nichoId: nicho._id }).sort({ fecha: 1 }).lean()
+    const puntos = reportes.map((r) => ({
+      fecha: r.fecha,
+      score: r.scoreOportunidad ?? null,
+      mediana: r.metricas?.precio?.mediana ?? null,
+      reviewsTotal: r.metricas?.demanda?.reviews?.total ?? null,
+      ventasDia: r.metricas?.demanda?.ventasEstimadasPorDia ?? null,
+      pctFull: r.metricas?.competencia?.pctFull ?? null,
+      sellersUnicos: r.metricas?.competencia?.sellersUnicos ?? null,
+    }))
+
+    // señal de aceleración de demanda: compara los dos últimos deltas de reseñas
+    let aceleracion = null
+    const conReviews = puntos.filter((p) => Number.isFinite(p.reviewsTotal))
+    if (conReviews.length >= 3) {
+      const [a, b, c] = conReviews.slice(-3)
+      const d1 = b.reviewsTotal - a.reviewsTotal
+      const d2 = c.reviewsTotal - b.reviewsTotal
+      if (d1 > 0 || d2 > 0) {
+        aceleracion = d2 > d1 * 1.15 ? 'acelerando' : d2 < d1 * 0.85 ? 'frenando' : 'estable'
+      }
+    }
+
+    res.json({ puntos, aceleracion })
   }),
 )
 

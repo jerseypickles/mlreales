@@ -1,10 +1,36 @@
+import { useEffect, useState } from 'react'
+import { api } from '../api.js'
 import { StatTile } from './ui.jsx'
-import { HistogramaPrecios } from './graficos.jsx'
+import { HistogramaPrecios, MiniSerie } from './graficos.jsx'
 import { fmtNum, fmtPrecio, fmtPct } from '../lib/formato.js'
 
-export function Resumen({ reporte, productos }) {
+const ACELERACION = {
+  acelerando: { texto: '▲ demanda acelerando', clase: 'acel-sube' },
+  estable: { texto: '● demanda estable', clase: 'acel-estable' },
+  frenando: { texto: '▼ demanda frenando', clase: 'acel-baja' },
+}
+
+export function Resumen({ reporte, productos, nichoId, nicho }) {
   const m = reporte.metricas
   const precios = (productos ?? []).map((p) => p.precio)
+  const [tendencia, setTendencia] = useState(null)
+
+  useEffect(() => {
+    let vigente = true
+    if (nichoId) {
+      api
+        .tendencia(nichoId)
+        .then((t) => vigente && setTendencia(t))
+        .catch(() => {})
+    }
+    return () => {
+      vigente = false
+    }
+  }, [nichoId])
+
+  const serie = (campo) =>
+    (tendencia?.puntos ?? []).map((p) => ({ fecha: p.fecha, valor: p[campo] }))
+  const acel = tendencia?.aceleracion ? ACELERACION[tendencia.aceleracion] : null
 
   return (
     <div>
@@ -68,7 +94,28 @@ export function Resumen({ reporte, productos }) {
           value={`${fmtNum(m.universo.totalResultadosBusqueda)}${m.universo.totalEsMinimo ? '+' : ''}`}
           detalle={`${fmtNum(m.universo.productosAnalizados)} analizados`}
         />
+        {nicho?.costoUsd ? (
+          <StatTile
+            label="Costo de esta inteligencia"
+            value={`US$ ${nicho.costoUsd}`}
+            detalle="Apify + IA acumulado del nicho"
+          />
+        ) : null}
       </div>
+
+      {tendencia && tendencia.puntos.length >= 2 ? (
+        <section>
+          <div className="tendencia-encabezado">
+            <h3>Evolución del nicho</h3>
+            {acel ? <span className={`acel ${acel.clase}`}>{acel.texto}</span> : null}
+          </div>
+          <div className="fila-3col">
+            <MiniSerie titulo="Score de oportunidad" puntos={serie('score')} />
+            <MiniSerie titulo="Demanda (reseñas del top 50)" puntos={serie('reviewsTotal')} />
+            <MiniSerie titulo="Precio mediana" puntos={serie('mediana')} formato={fmtPrecio} />
+          </div>
+        </section>
+      ) : null}
 
       <section className="fila-2col">
         <HistogramaPrecios precios={precios} bandaDominante={m.precio.bandaDominante} />

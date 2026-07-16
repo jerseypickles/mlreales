@@ -12,6 +12,7 @@ const nichoSchema = new mongoose.Schema({
   ultimoScanEl: { type: Date, default: null },
   // { total, esMinimo } — "+9.999 resultados" del listado; esMinimo indica que ML capea el contador
   ultimoTotalResultados: { type: mongoose.Schema.Types.Mixed, default: null },
+  costoUsd: { type: Number, default: 0 }, // gasto acumulado Apify + LLM atribuible al nicho
 })
 
 nichoSchema.index({ keyword: 1, domainCode: 1 }, { unique: true })

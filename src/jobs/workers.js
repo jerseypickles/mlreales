@@ -28,7 +28,8 @@ export async function procesarScanNicho(job) {
   if (nicho.estado !== 'activo') return { omitido: true, motivo: `nicho en estado "${nicho.estado}"` }
 
   const fecha = new Date()
-  const crudos = await buscarNivel1(nicho.keyword, { domainCode: nicho.domainCode })
+  const { items: crudos, costoUsd } = await buscarNivel1(nicho.keyword, { domainCode: nicho.domainCode })
+  if (costoUsd) await Nicho.updateOne({ _id: nicho._id }, { $inc: { costoUsd } })
   if (!crudos.length) {
     throw new Error(
       `Apify devolvió 0 items para "${nicho.keyword}": posible bloqueo del actor o keyword sin resultados`,
@@ -94,7 +95,7 @@ export async function procesarScanDetalle(job) {
     const batch = objetivos.slice(i, i + config.detalleBatch)
     let crudos
     try {
-      crudos = await ejecutarActorAsync(
+      const r = await ejecutarActorAsync(
         config.actorDetails,
         {
           urls: batch.map((o) => o.url),
@@ -102,8 +103,10 @@ export async function procesarScanDetalle(job) {
           ignore_url_failures: true,
           proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] },
         },
-        { pollMs: 10_000, timeoutMs: 12 * 60_000 },
+        { pollMs: 10_000, timeoutMs: 12 * 60_000, conMeta: true },
       )
+      crudos = r.items
+      if (r.costoUsd) await Nicho.updateOne({ _id: nichoId }, { $inc: { costoUsd: r.costoUsd } })
     } catch (err) {
       // un batch caído no bota el scan completo; queda registrado en el resultado
       console.error(`[scan-detalle] batch ${i / config.detalleBatch + 1} falló: ${err.message}`)
@@ -264,8 +267,9 @@ export function iniciarWorkers() {
   })
   const workerDetalle = new Worker(COLA_SCAN_DETALLE, procesarScanDetalle, {
     connection: crearConexionRedis(),
-    concurrency: 1,
-    limiter: { max: 2, duration: 60_000 },
+    concurrency: 2, // dos nichos en detalle a la vez: la cola del radar no se eterniza
+    limiter: { max: 4, duration: 60_000 },
+    maxStalledCount: 3, // los deploys de Render reinician el proceso; no botar el job por eso
   })
   const workerMetricas = new Worker(COLA_CALCULAR_METRICAS, procesarCalcularMetricas, {
     connection: crearConexionRedis(),

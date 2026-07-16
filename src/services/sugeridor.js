@@ -97,10 +97,11 @@ export async function sugerirNichos({ contexto } = {}) {
     .filter(Boolean)
     .join('\n\n')
 
-  return pedirJSON({
+  const { datos } = await pedirJSON({
     system: SYSTEM_SUGERIDOR,
     user,
     schema: SCHEMA_SUGERENCIAS,
     maxTokens: 8000,
   })
+  return datos
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from './api.js'
+import { api, claveApi } from './api.js'
 import { Resumen } from './components/Resumen.jsx'
 import { Productos } from './components/Productos.jsx'
 import { Simulador } from './components/Simulador.jsx'
@@ -48,6 +48,7 @@ function FormNuevoNicho({ onCreado }) {
 }
 
 const ETAPAS = {
+  cola: 'en cola, esperando turno…',
   escaneando: 'escaneando listado…',
   detalle: 'leyendo detalle de productos…',
   analizando: 'analizando con IA…',
@@ -271,7 +272,9 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
         ))}
       </nav>
 
-      {pestana === 'resumen' ? <Resumen reporte={reporte} productos={productos?.productos} /> : null}
+      {pestana === 'resumen' ? (
+        <Resumen reporte={reporte} productos={productos?.productos} nichoId={nichoId} nicho={nicho} />
+      ) : null}
       {pestana === 'productos' ? <Productos nichoId={nichoId} onSimular={simularProducto} /> : null}
       {pestana === 'analisis' ? <Analisis nichoId={nichoId} analisisInicial={reporte.analisis} /> : null}
       {pestana === 'simulador' ? (
@@ -281,10 +284,49 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
   )
 }
 
+function Candado() {
+  const [clave, setClave] = useState('')
+  return (
+    <div className="candado">
+      <h2>Acceso</h2>
+      <p className="vacio">Esta herramienta es privada. Ingresa la clave de acceso.</p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          claveApi.guardar(clave.trim())
+          location.reload()
+        }}
+      >
+        <input
+          type="password"
+          value={clave}
+          onChange={(e) => setClave(e.target.value)}
+          placeholder="Clave de acceso"
+          aria-label="Clave de acceso"
+          autoFocus
+        />
+        <button type="submit" className="boton-primario" disabled={!clave.trim()}>
+          Entrar
+        </button>
+      </form>
+    </div>
+  )
+}
+
 export default function App() {
   const [nichos, setNichos] = useState([])
   const [seleccionado, setSeleccionado] = useState(null)
   const [errorLista, setErrorLista] = useState(null)
+  const [bloqueada, setBloqueada] = useState(false)
+
+  useEffect(() => {
+    const alBloquear = () => {
+      claveApi.borrar()
+      setBloqueada(true)
+    }
+    window.addEventListener('api-bloqueada', alBloquear)
+    return () => window.removeEventListener('api-bloqueada', alBloquear)
+  }, [])
 
   const cargarNichos = useCallback(async () => {
     try {
@@ -303,6 +345,8 @@ export default function App() {
     const intervalo = setInterval(cargarNichos, 15_000)
     return () => clearInterval(intervalo)
   }, [cargarNichos])
+
+  if (bloqueada) return <Candado />
 
   return (
     <div className="app">

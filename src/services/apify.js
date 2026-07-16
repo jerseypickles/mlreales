@@ -78,8 +78,22 @@ export async function obtenerLogRun(runId) {
   return resp.text()
 }
 
+// Costo real en USD de un run (para el medidor de costo por nicho). No-fatal.
+export async function obtenerCostoRun(runId) {
+  if (!runId) return 0
+  try {
+    const resp = await fetch(`${API_BASE}/actor-runs/${runId}`, { headers: cabeceras() })
+    if (!resp.ok) return 0
+    const { data } = await resp.json()
+    return Number(data?.usageTotalUsd) || 0
+  } catch {
+    return 0
+  }
+}
+
 // Modo async para runs largos (batches del nivel 2 en Fase 2): inicia el run y hace polling.
-export async function ejecutarActorAsync(actorId, input, { pollMs = 10_000, timeoutMs = 15 * 60_000 } = {}) {
+// Con `conMeta: true` devuelve { items, costoUsd }.
+export async function ejecutarActorAsync(actorId, input, { pollMs = 10_000, timeoutMs = 15 * 60_000, conMeta = false } = {}) {
   const inicio = Date.now()
   const arranque = await fetch(`${API_BASE}/acts/${actorId}/runs`, {
     method: 'POST',
@@ -96,6 +110,7 @@ export async function ejecutarActorAsync(actorId, input, { pollMs = 10_000, time
 
   let estado = run.status
   let datasetId = run.defaultDatasetId
+  let costoUsd = 0
   while (!['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'].includes(estado)) {
     if (Date.now() - inicio > timeoutMs) {
       throw new ApifyError(`Run ${run.id} de ${actorId} superó ${Math.round(timeoutMs / 1000)}s`, { actorId })
@@ -111,6 +126,7 @@ export async function ejecutarActorAsync(actorId, input, { pollMs = 10_000, time
     const { data } = await resp.json()
     estado = data.status
     datasetId = data.defaultDatasetId
+    costoUsd = Number(data.usageTotalUsd) || costoUsd
   }
   if (estado !== 'SUCCEEDED') {
     throw new ApifyError(`Run ${run.id} de ${actorId} terminó en estado ${estado}`, { actorId })
@@ -125,13 +141,21 @@ export async function ejecutarActorAsync(actorId, input, { pollMs = 10_000, time
       actorId,
     })
   }
-  return items.json()
+  const datos = await items.json()
+  if (conMeta) return { items: datos, costoUsd }
+  return datos
 }
 
+// Devuelve { items, costoUsd } para el medidor de costo por nicho.
 export async function buscarNivel1(keyword, { domainCode = 'CL', maxPages = config.maxPagesBusqueda } = {}) {
   const country = URL_LISTADO_POR_DOMINIO[domainCode]
   if (!country) {
     throw new ApifyError(`domainCode "${domainCode}" sin URL de listado configurada (services/apify.js)`)
   }
-  return ejecutarActorSync(config.actorSearch, { keyword, country, maxPages, promoted: false })
+  const { items, runId } = await ejecutarActorSync(
+    config.actorSearch,
+    { keyword, country, maxPages, promoted: false },
+    { conMeta: true },
+  )
+  return { items, costoUsd: await obtenerCostoRun(runId) }
 }

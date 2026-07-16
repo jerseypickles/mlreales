@@ -54,5 +54,12 @@ export async function pedirJSON({ system, user, schema, maxTokens = 8000 }) {
 
   const bloqueTexto = respuesta.content.find((b) => b.type === 'text')
   if (!bloqueTexto) throw new Error('El modelo no devolvió contenido')
-  return JSON.parse(bloqueTexto.text)
+
+  // costo real de la llamada (Opus 4.8: US$5/M entrada, US$25/M salida)
+  const uso = respuesta.usage ?? {}
+  const costoUsd =
+    ((uso.input_tokens ?? 0) + (uso.cache_read_input_tokens ?? 0) * 0.1) * (5 / 1e6) +
+    (uso.output_tokens ?? 0) * (25 / 1e6)
+
+  return { datos: JSON.parse(bloqueTexto.text), costoUsd: Math.round(costoUsd * 10000) / 10000 }
 }

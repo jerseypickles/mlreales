@@ -131,6 +131,20 @@ test('GET /api/nichos/:id/productos entrega el último scan completo', async () 
   assert.ok(cuerpo.productos.every((p) => 'origenCrossBorder' in p))
 })
 
+test('con API_KEY definida, la API exige x-api-key (salvo /salud)', async () => {
+  process.env.API_KEY = 'clave-de-prueba'
+  try {
+    const sin = await fetch(`${baseUrl}/api/nichos`)
+    assert.equal(sin.status, 401)
+    const salud = await fetch(`${baseUrl}/api/salud`)
+    assert.equal(salud.status, 200) // el health check de Render no manda headers
+    const con = await fetch(`${baseUrl}/api/nichos`, { headers: { 'x-api-key': 'clave-de-prueba' } })
+    assert.equal(con.status, 200)
+  } finally {
+    delete process.env.API_KEY
+  }
+})
+
 test('ids inválidos e inexistentes', async () => {
   const invalido = await fetch(`${baseUrl}/api/nichos/no-es-un-id/reporte`)
   assert.equal(invalido.status, 400)

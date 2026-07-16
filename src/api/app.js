@@ -13,10 +13,19 @@ export function crearApp() {
   // el dashboard corre en otro dominio (static site); CORS_ORIGEN restringe si se define
   app.use((req, res, next) => {
     res.set('Access-Control-Allow-Origin', process.env.CORS_ORIGEN || '*')
-    res.set('Access-Control-Allow-Headers', 'Content-Type')
+    res.set('Access-Control-Allow-Headers', 'Content-Type, x-api-key, x-debug-key')
     res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
     if (req.method === 'OPTIONS') return res.sendStatus(204)
     next()
+  })
+
+  // API key: si API_KEY está definida, toda la API la exige salvo /api/salud
+  // (el health check de Render no manda headers)
+  app.use('/api', (req, res, next) => {
+    const clave = process.env.API_KEY
+    if (!clave || req.path === '/salud') return next()
+    if (req.get('x-api-key') === clave) return next()
+    res.status(401).json({ error: 'no autorizado: falta o no coincide x-api-key' })
   })
 
   app.get('/api/salud', async (_req, res) => {
