@@ -1,0 +1,28 @@
+# Blueprint de Render: web service (API + workers) + Key Value (Redis para BullMQ).
+# MongoDB no existe en Render: MONGO_URI debe apuntar a Atlas (sync: false pide el valor al desplegar).
+services:
+  - type: web
+    name: meli-intel
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/salud
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: APIFY_TOKEN
+        sync: false
+      - key: APIFY_SEARCH_MAX_PAGES
+        value: "2"
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: meli-intel-redis
+          property: connectionString
+
+  - type: keyvalue
+    name: meli-intel-redis
+    plan: free
+    maxmemoryPolicy: noeviction # BullMQ exige que Redis no desaloje claves
+    ipAllowList: [] # solo conexiones internas de Render
