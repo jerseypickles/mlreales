@@ -126,9 +126,12 @@ export async function procesarScanDetalle(job) {
     void res
   }
 
-  if (!aplicados) {
+  // aplicar casi nada equivale a no medir: mejor reintentar (el bloqueo de ML
+  // es temporal) que dar por bueno un scan cuya demanda saldría de 1-2 productos
+  const minimoAplicados = Math.max(1, Math.ceil(objetivos.length * 0.2))
+  if (aplicados < minimoAplicados) {
     throw new Error(
-      `Nivel 2 no aplicó ningún detalle (${objetivos.length} objetivos, ${fallidos} fallidos, ${sinMatch} sin match de SKU)`,
+      `Nivel 2 aplicó muy poco (${aplicados}/${objetivos.length}, mínimo ${minimoAplicados}; ${fallidos} fallidos, ${sinMatch} sin match de SKU): probable bloqueo de ML`,
     )
   }
 

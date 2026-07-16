@@ -95,6 +95,23 @@ test('calcularDemanda: sin vendidos devuelve null', () => {
   assert.equal(calcularDemanda([{ sku: 'A', vendidos: null }]), null)
 })
 
+test('calcularDemanda: muestra bajo el mínimo no mide (mejor null que demanda falsa)', () => {
+  // caso cooler portatil: el detalle aplicó a 1 de 30 por bloqueo de ML y ese
+  // producto tenía 0 reseñas — sin mínimo, el nicho daba "demanda 0" con score 32
+  const fecha = new Date('2026-07-16T12:00:00Z')
+  const pocos = [
+    { sku: 'A', numReviews: 0, fecha },
+    { sku: 'B', fecha },
+    { sku: 'C', fecha },
+  ]
+  assert.equal(calcularDemanda(pocos), null)
+
+  const suficientes = Array.from({ length: 5 }, (_, i) => ({ sku: `S${i}`, numReviews: 10 * i, fecha }))
+  const d = calcularDemanda(suficientes)
+  assert.equal(d.base, 'reviews')
+  assert.equal(d.reviews.itemsConDato, 5)
+})
+
 test('calcularDemanda: totales y delta entre scans', () => {
   const fechaPrevia = new Date('2026-07-14T12:00:00Z')
   const fechaActual = new Date('2026-07-16T12:00:00Z') // 2 días después
@@ -108,7 +125,7 @@ test('calcularDemanda: totales y delta entre scans', () => {
     { sku: 'B', vendidos: 480, fecha: fechaPrevia },
   ]
 
-  const d = calcularDemanda(actuales, previos)
+  const d = calcularDemanda(actuales, previos, { minItems: 1 })
   assert.equal(d.base, 'vendidos')
   assert.equal(d.vendidos.total, 700)
   assert.equal(d.vendidos.mediana, 150)
@@ -120,7 +137,7 @@ test('calcularDemanda: totales y delta entre scans', () => {
 })
 
 test('calcularDemanda: primer scan sin previos', () => {
-  const d = calcularDemanda([{ sku: 'A', vendidos: 200, fecha: new Date('2026-07-16') }])
+  const d = calcularDemanda([{ sku: 'A', vendidos: 200, fecha: new Date('2026-07-16') }], null, { minItems: 1 })
   assert.equal(d.vendidos.total, 200)
   assert.equal(d.ventasEstimadasPorDia, null)
 })
@@ -136,7 +153,7 @@ test('calcularDemanda: sin vendidos usa delta de reseñas como proxy', () => {
     { sku: 'A', numReviews: 921, fecha: fechaPrevia },
     { sku: 'B', numReviews: 105, fecha: fechaPrevia },
   ]
-  const d = calcularDemanda(actuales, previos)
+  const d = calcularDemanda(actuales, previos, { minItems: 1 })
   assert.equal(d.base, 'reviews')
   assert.equal(d.reviews.total, 1040)
   assert.equal(d.reviews.delta, 14) // 9 + 5
@@ -169,14 +186,20 @@ test('calcularMetricas: integra demanda y score cuando hay vendidos', () => {
   const snapshots = [
     { sku: 'A1', precio: 10000, vendidos: 5000, rating: 4.0, posicion: 1, fecha },
     { sku: 'A2', precio: 12000, vendidos: 3000, rating: 4.2, posicion: 2, fecha },
+    { sku: 'A3', precio: 11000, vendidos: 1000, rating: 4.1, posicion: 3, fecha },
+    { sku: 'A4', precio: 9000, vendidos: 500, rating: 3.9, posicion: 4, fecha },
+    { sku: 'A5', precio: 13000, vendidos: 500, rating: 4.3, posicion: 5, fecha },
   ]
   const productosPorSku = new Map([
     ['A1', { sku: 'A1', vendedor: 'X', esFull: false }],
     ['A2', { sku: 'A2', vendedor: 'Y', esFull: false }],
+    ['A3', { sku: 'A3', vendedor: 'Z', esFull: false }],
+    ['A4', { sku: 'A4', vendedor: 'X', esFull: false }],
+    ['A5', { sku: 'A5', vendedor: 'W', esFull: false }],
   ])
   const m = calcularMetricas({ snapshots, productosPorSku })
-  assert.equal(m.demanda.vendidos.total, 8000)
-  assert.equal(m.demanda.volumenVentasEstimado, 8000)
+  assert.equal(m.demanda.vendidos.total, 10000)
+  assert.equal(m.demanda.volumenVentasEstimado, 10000)
   assert.ok(m.scoreOportunidad > 0)
   assert.ok(m.oportunidad.componentes.demanda > 70)
 })

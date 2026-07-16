@@ -98,10 +98,19 @@ function extraerSenal(snapshots, snapshotsPrevios, campo) {
 // Demanda del nicho. ML no expone vendidos exactos (buckets congelados), así que la
 // señal continua es el conteo de reseñas (exacto, se mueve a diario): delta de
 // reseñas × factor = ventas estimadas del período — la métrica estrella.
-export function calcularDemanda(snapshots, snapshotsPrevios = null) {
+export function calcularDemanda(
+  snapshots,
+  snapshotsPrevios = null,
+  { minItems = scoring.umbrales.minItemsDemanda } = {},
+) {
   const vendidos = extraerSenal(snapshots, snapshotsPrevios, 'vendidos')
   const reviews = extraerSenal(snapshots, snapshotsPrevios, 'numReviews')
   if (!vendidos && !reviews) return null
+
+  // representatividad: si la señal sale de una muestra ínfima (detalle aplicado
+  // a medias por bloqueo de ML), diría "demanda 0" con cara seria — sin score
+  // el pipeline espera el reintento en vez de vender un número falso
+  if ((vendidos ?? reviews).itemsConDato < minItems) return null
 
   const factor = scoring.escalas.reviewsAVentasFactor
   const ventasEstimadasPorDia =

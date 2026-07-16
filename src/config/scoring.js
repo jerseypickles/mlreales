@@ -11,6 +11,9 @@ export const scoring = {
   umbrales: {
     ratingDiferenciacion: 4.4, // rating promedio >= umbral → componente calidad = 0
     ratingPiso: 3.5, // rating promedio <= piso → componente calidad = 100
+    // items del top con dato de reseñas para que la demanda sea medible:
+    // con menos que esto (detalle bloqueado a medias) mejor no medir que medir mal
+    minItemsDemanda: 5,
   },
   escalas: {
     // demanda = min(100, factorLog * log10(1 + volumenVentasEstimado))
