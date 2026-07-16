@@ -31,9 +31,9 @@ export function Analisis({ nichoId, analisisInicial }) {
     return (
       <div className="analisis-vacio">
         <p className="vacio">
-          El análisis con IA lee el top 50 del nicho, lo segmenta por atributos (watts, packs,
-          tipo), cruza la demanda con la calculadora de importación y entrega un veredicto:
-          entrar o no, en qué segmento, a qué precio vender y cuánto pagar máximo en China.
+          El análisis se genera solo después de cada scan. También puedes generarlo ahora: lee el
+          top 50, lo segmenta por atributos y responde directo qué traer, a qué precio y cuánto
+          pagar en China.
         </p>
         <button className="boton-primario" onClick={generar} disabled={generando}>
           {generando ? 'Analizando… (30-90 s)' : 'Generar análisis'}
@@ -48,48 +48,56 @@ export function Analisis({ nichoId, analisisInicial }) {
 
   return (
     <div className="analisis">
-      <div className="analisis-encabezado">
-        <div className="analisis-veredicto">
+      {/* ---- LA DECISIÓN ---- */}
+      <div className={`decision decision-${analisis.veredicto}`}>
+        <div className="decision-fila">
           <Badge tipo={v.tipo}>{v.etiqueta}</Badge>
           <span className="analisis-confianza">confianza {analisis.confianza}</span>
+          <button className="boton-secundario boton-regenerar" onClick={generar} disabled={generando}>
+            {generando ? 'Analizando…' : 'Regenerar'}
+          </button>
         </div>
-        <button className="boton-secundario" onClick={generar} disabled={generando}>
-          {generando ? 'Analizando…' : 'Regenerar'}
-        </button>
+
+        {rec?.aplica ? (
+          <>
+            <h2 className="decision-titular">{rec.titular ?? rec.segmento}</h2>
+            <div className="decision-datos">
+              <div>
+                <span className="dato-label">Vender a</span>
+                <span className="dato-valor">{fmtPrecio(rec.precioVentaClp)}</span>
+              </div>
+              <div>
+                <span className="dato-label">Pagar máx en China</span>
+                <span className="dato-valor">US$ {rec.fobMaximoUsd}</span>
+              </div>
+              <div>
+                <span className="dato-label">Pedido de prueba</span>
+                <span className="dato-valor">{rec.primeraCompra ?? '50-100 u'}</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <h2 className="decision-titular">{rec?.titular ?? 'No traigas nada de este nicho.'}</h2>
+        )}
+        <p className="decision-resumen">{analisis.resumen}</p>
+        {error ? <p className="error-bloque">{error}</p> : null}
       </div>
 
-      <p className="analisis-resumen">{analisis.resumen}</p>
-      {error ? <p className="error-bloque">{error}</p> : null}
-
+      {/* ---- DETALLE PLEGADO ---- */}
       {rec?.aplica ? (
-        <div className="recomendacion">
-          <h3>La jugada recomendada</h3>
-          <div className="tiles">
-            <div className="tile tile-destacado">
-              <div className="tile-label">Segmento</div>
-              <div className="tile-value tile-texto">{rec.segmento}</div>
-            </div>
-            <div className="tile">
-              <div className="tile-label">Precio de entrada</div>
-              <div className="tile-value">{fmtPrecio(rec.precioVentaClp)}</div>
-            </div>
-            <div className="tile">
-              <div className="tile-label">FOB máximo en China</div>
-              <div className="tile-value">US$ {rec.fobMaximoUsd}</div>
-              <div className="tile-detalle">por unidad, margen objetivo incluido</div>
-            </div>
-          </div>
+        <details className="pliegue" open>
+          <summary>Qué buscar en Alibaba/1688 y cómo validar</summary>
           <p>
-            <strong>Qué buscar en Alibaba/1688:</strong> {rec.especificacionProducto}
+            <strong>Especificación:</strong> {rec.especificacionProducto}
           </p>
           <p>
-            <strong>Antes de comprar el embarque:</strong> {rec.comoValidar}
+            <strong>Validación antes del embarque:</strong> {rec.comoValidar}
           </p>
-        </div>
+        </details>
       ) : null}
 
-      <section>
-        <h3>Segmentos del nicho</h3>
+      <details className="pliegue">
+        <summary>Segmentos del nicho ({analisis.segmentos.length})</summary>
         <div className="tabla-envoltura">
           <table>
             <thead>
@@ -107,7 +115,6 @@ export function Analisis({ nichoId, analisisInicial }) {
                 <tr key={s.nombre} className={s.atractivo === 'alto' ? 'fila-destacada' : ''}>
                   <td>
                     <strong>{s.nombre}</strong>
-                    <div className="celda-secundaria">{s.criterio}</div>
                   </td>
                   <td className="sin-corte">
                     {fmtPrecio(s.rangoPrecioClp?.desde)}–{fmtPrecio(s.rangoPrecioClp?.hasta)}
@@ -125,28 +132,25 @@ export function Analisis({ nichoId, analisisInicial }) {
             </tbody>
           </table>
         </div>
-      </section>
+      </details>
 
-      <section>
-        <h3>Plan de entrada</h3>
+      <details className="pliegue">
+        <summary>Plan de entrada y riesgos</summary>
+        <h4>Plan</h4>
         <p className="analisis-jugada">{analisis.jugada}</p>
-      </section>
-
-      <section>
-        <h3>Riesgos</h3>
+        <h4>Riesgos</h4>
         <ul className="lista-riesgos">
           {analisis.riesgos.map((r, i) => (
             <li key={i}>{r}</li>
           ))}
         </ul>
-      </section>
+      </details>
 
       <p className="nota">
-        Generado {fmtFecha(analisis.generadoEl)} con Claude sobre los datos del último scan y la
-        calculadora de importación. Es una recomendación, no una garantía: valida con muestras
-        antes de comprar un embarque.
+        Generado {fmtFecha(analisis.generadoEl)} con Claude sobre el último scan + calculadora de
+        importación. Valida con muestras antes de comprar un embarque.
       </p>
-      {generando ? <Cargando texto="Regenerando análisis…" /> : null}
+      {generando ? <Cargando texto="Regenerando…" /> : null}
     </div>
   )
 }

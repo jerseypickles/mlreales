@@ -37,12 +37,17 @@ const SCHEMA_ANALISIS = {
     recomendacion: {
       type: 'object',
       additionalProperties: false,
-      required: ['aplica', 'segmento', 'precioVentaClp', 'fobMaximoUsd', 'especificacionProducto', 'comoValidar'],
+      required: ['aplica', 'titular', 'segmento', 'precioVentaClp', 'fobMaximoUsd', 'primeraCompra', 'especificacionProducto', 'comoValidar'],
       properties: {
         aplica: { type: 'boolean', description: 'false si el veredicto es no_entrar' },
+        titular: {
+          type: 'string',
+          description: 'LA decisión en una frase de máximo 90 caracteres, formato "Trae: <producto concreto>". Si no_entrar: "No traigas nada de este nicho: <porqué en 5 palabras>"',
+        },
         segmento: { type: 'string' },
         precioVentaClp: { type: 'integer', description: 'Precio de entrada sugerido' },
         fobMaximoUsd: { type: 'number', description: 'FOB máximo a pagar en China, coherente con la tabla precalculada' },
+        primeraCompra: { type: 'string', description: 'Tamaño del pedido de prueba, ej: "50-100 unidades"' },
         especificacionProducto: { type: 'string', description: 'Qué producto exacto buscar en Alibaba/1688 (specs, potencia, accesorios)' },
         comoValidar: { type: 'string', description: 'Cómo validar antes de comprar el embarque' },
       },
@@ -64,6 +69,7 @@ Reglas:
 - Rating promedio alto (>4.5) en un segmento = difícil diferenciarse por calidad; busca segmentos con ratings mediocres y volumen.
 - El FOB máximo de tu recomendación debe salir de la tabla precalculada (interpola si el precio sugerido está entre dos puntos). No inventes números de costos.
 - Sé directo y escéptico: si el nicho no da, di no_entrar y explica por qué. Un veredicto inflado cuesta dinero real.
+- El usuario quiere LA decisión, no un informe: titular de máximo 90 caracteres con el producto concreto a traer, resumen de máximo 2 frases, razón de cada segmento en 1 frase, riesgos de 1 línea cada uno. Cero relleno.
 - Todo en español de Chile, precios en CLP.`
 
 function resumirProductosParaLLM(productos) {
