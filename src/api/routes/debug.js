@@ -12,23 +12,24 @@ function autorizado(req, res, next) {
   next()
 }
 
-// Sonda para validar el output real del actor nivel 2 (el brief prohíbe asumir su
-// schema). Acepta `input` arbitrario para iterar la configuración sin redesplegar.
+// Sonda para validar el output real de actores candidatos (el brief prohíbe asumir
+// schemas). Acepta `input` arbitrario y `actorId` opcional para probar alternativas.
 router.post(
   '/nivel2',
   autorizado,
   manejar(async (req, res) => {
+    const actorId = typeof req.body?.actorId === 'string' ? req.body.actorId : config.actorDetails
     let input = req.body?.input
     if (!input) {
       const urls = Array.isArray(req.body?.urls) ? req.body.urls.slice(0, 5) : []
       if (!urls.length) return res.status(400).json({ error: 'urls o input requeridos' })
       input = { urls, max_retries_per_url: 2, ignore_url_failures: true, proxy: { useApifyProxy: true } }
     }
-    const { items, runId } = await ejecutarActorSync(config.actorDetails, input, {
+    const { items, runId } = await ejecutarActorSync(actorId, input, {
       timeoutMs: 280_000,
       conMeta: true,
     })
-    res.json({ cantidad: items.length, runId, items })
+    res.json({ cantidad: items.length, runId, actorId, items })
   }),
 )
 
