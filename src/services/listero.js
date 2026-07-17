@@ -86,6 +86,7 @@ REGLAS DEL TÍTULO (las más importantes):
 DESCRIPCIÓN:
 - Texto plano puro: sin HTML, sin markdown, sin emojis. Secciones separadas por línea en blanco: gancho de 2 líneas → QUÉ INCLUYE → ESPECIFICACIONES (lista con guiones) → USOS → DESPACHO Y GARANTÍA.
 - Teje las keywords secundarias de forma natural (el buscador de ML también lee la descripción).
+- Te paso PREGUNTAS REALES de compradores del nicho: la descripción debe responder las más repetidas de frente (qué incluye, compatibilidad, medidas, potencia) — cada pregunta respondida antes de que la hagan es una venta que no se cae.
 
 FICHA TÉCNICA: los atributos que ML exige al publicar en la categoría (Marca, Modelo, y los específicos). Si el producto es genérico importado, Marca = "Genérica" y Modelo inventado corto.
 
@@ -124,9 +125,15 @@ export async function generarListing(nicho) {
     busquedasReales = []
   }
 
+  // preguntas reales de compradores del nicho: objeciones que la descripción debe responder
+  const preguntasCompradores = [
+    ...new Set(vista.productos.flatMap((p) => (p.preguntas ?? []).map((q) => q?.texto)).filter(Boolean)),
+  ].slice(0, 15)
+
   const entrada = {
     keyword: nicho.keyword,
     busquedasReales,
+    preguntasRealesDeCompradores: preguntasCompradores,
     categoriasMLObservadas: categoriasML,
     medianaPrecioNicho: reporte?.metricas?.precio?.mediana ?? null,
     recomendacionDelAnalisis: reporte?.analisis?.recomendacion ?? null,

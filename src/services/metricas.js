@@ -187,6 +187,7 @@ export function calcularMetricas({
   const ratings = top.map((s) => s.rating).filter(Number.isFinite)
 
   const cuentaPorVendedor = new Map()
+  const infoVendedor = new Map() // reputación/power seller del nivel 2, primera vista
   let oficiales = 0
   let full = 0
   let rapido = 0
@@ -200,6 +201,12 @@ export function calcularMetricas({
     if (prod.vendedor) {
       conVendedor++
       cuentaPorVendedor.set(prod.vendedor, (cuentaPorVendedor.get(prod.vendedor) ?? 0) + 1)
+      if (!infoVendedor.has(prod.vendedor) && (prod.reputacionSeller || prod.powerSeller)) {
+        infoVendedor.set(prod.vendedor, {
+          reputacion: prod.reputacionSeller ?? null,
+          powerSeller: prod.powerSeller ?? null,
+        })
+      }
     }
   }
   const vendedoresOrdenados = [...cuentaPorVendedor.entries()].sort((a, b) => b[1] - a[1])
@@ -215,7 +222,7 @@ export function calcularMetricas({
     pctEnvioRapido: pct(rapido),
     topSellers: vendedoresOrdenados
       .slice(0, 5)
-      .map(([vendedor, items]) => ({ vendedor, items, pctItems: pct(items) })),
+      .map(([vendedor, items]) => ({ vendedor, items, pctItems: pct(items), ...(infoVendedor.get(vendedor) ?? {}) })),
   }
 
   const calidad = {
@@ -302,6 +309,10 @@ export async function obtenerProductosUltimoScan(nicho) {
         cuotas: s.cuotas,
         vendedor: p.vendedor ?? null,
         sellerId: p.sellerId ?? null,
+        reputacionSeller: p.reputacionSeller ?? null,
+        powerSeller: p.powerSeller ?? null,
+        categoriaRuta: p.categoriaRuta ?? null,
+        preguntas: p.preguntas ?? null,
         esTiendaOficial: p.esTiendaOficial ?? false,
         esFull: p.esFull ?? false,
         envioRapido: p.envioRapido ?? false,

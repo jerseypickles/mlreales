@@ -58,6 +58,22 @@ export function Badge({ tipo = 'neutro', children, title }) {
   )
 }
 
+// Chip de reputación de seller ML: "5_green" → nivel 1-5 con color semáforo
+export function RepSeller({ reputacion, powerSeller }) {
+  if (!reputacion && !powerSeller) return null
+  const nivel = reputacion ? parseInt(reputacion, 10) : null
+  const banda = nivel >= 4 ? 'rep-buena' : nivel === 3 ? 'rep-media' : nivel ? 'rep-mala' : 'rep-media'
+  const titulo = [reputacion && `reputación ${nivel}/5`, powerSeller && `power seller ${powerSeller}`]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <span className={`rep ${banda}`} title={titulo}>
+      {nivel ? `${nivel}/5` : ''}
+      {powerSeller ? <span className="rep-power">{powerSeller}</span> : null}
+    </span>
+  )
+}
+
 export function IconoExterno() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

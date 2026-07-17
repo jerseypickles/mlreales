@@ -50,6 +50,10 @@ export async function aplicarDetalleScan({ porSku, fecha }) {
     if (det.esFull != null) setProd.esFull = det.esFull
     if (det.origenCrossBorder != null) setProd.origenCrossBorder = det.origenCrossBorder
     if (det.categoriaML) setProd.categoriaML = det.categoriaML
+    if (det.categoriaRuta) setProd.categoriaRuta = det.categoriaRuta
+    if (det.preguntas?.length) setProd.preguntas = det.preguntas
+    if (det.seller?.reputacion) setProd.reputacionSeller = det.seller.reputacion
+    if (det.seller?.powerSeller) setProd.powerSeller = det.seller.powerSeller
     if (det.imagen) setProd.imagen = det.imagen
     if (det.seller) {
       setProd.sellerId = det.seller.sellerId

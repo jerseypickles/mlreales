@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
-import { Badge, IconoExterno, Cargando } from './ui.jsx'
+import { Badge, IconoExterno, RepSeller, Cargando } from './ui.jsx'
 import { MiniSerie } from './graficos.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 
@@ -32,6 +32,7 @@ function FilaProducto({ p, onAbrir }) {
         <span className="celda-vendedor">
           <span>{p.vendedor ?? '—'}</span>
           {p.esTiendaOficial ? <Badge tipo="oficial">Oficial</Badge> : null}
+          <RepSeller reputacion={p.reputacionSeller} powerSeller={p.powerSeller} />
         </span>
       </td>
       <td>
@@ -107,6 +108,18 @@ function PanelHistoria({ producto, onCerrar, onSimular }) {
             Simular margen a {fmtPrecio(producto.precio)}
           </button>
         </div>
+
+        {producto.preguntas?.length ? (
+          <section className="panel-preguntas">
+            <h4>Preguntas de compradores</h4>
+            {producto.preguntas.map((q, i) => (
+              <div className="pregunta" key={i}>
+                <p className="pregunta-texto">{q.texto}</p>
+                {q.respuesta ? <p className="pregunta-respuesta">{q.respuesta}</p> : null}
+              </div>
+            ))}
+          </section>
+        ) : null}
 
         {error ? <p className="error-bloque">{error}</p> : null}
         {!historia && !error ? <Cargando texto="Cargando historia…" /> : null}

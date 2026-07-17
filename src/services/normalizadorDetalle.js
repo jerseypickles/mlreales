@@ -55,6 +55,14 @@ function normalizarItemSourabh(raw) {
     esFull: null,
     envioGratis: raw.freeShipping === true,
     categoriaML: raw.categoryId ?? (Array.isArray(raw.breadcrumbs) ? raw.breadcrumbs.join(' > ') : null),
+    categoriaRuta:
+      Array.isArray(raw.breadcrumbs) && raw.breadcrumbs.length ? raw.breadcrumbs.join(' > ') : null,
+    preguntas: Array.isArray(raw.questions)
+      ? raw.questions
+          .filter((q) => q?.text)
+          .slice(0, 5)
+          .map((q) => ({ texto: q.text, respuesta: q.answer ?? null }))
+      : null,
     condicion: raw.condition ?? null,
     imagen: raw.thumbnail ?? (Array.isArray(raw.images) ? raw.images[0] : null) ?? null,
     // solo afirmar cross-border cuando el actor entrega el origen; null = desconocido

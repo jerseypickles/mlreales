@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { StatTile, ScoreRing } from './ui.jsx'
+import { StatTile, ScoreRing, RepSeller } from './ui.jsx'
 import { HistogramaPrecios, MiniSerie } from './graficos.jsx'
 import { fmtNum, fmtPrecio, fmtPct } from '../lib/formato.js'
 
@@ -61,8 +61,17 @@ export function Resumen({ reporte, productos, nichoId, nicho }) {
     (tendencia?.puntos ?? []).map((p) => ({ fecha: p.fecha, valor: p[campo] }))
   const acel = tendencia?.aceleracion ? ACELERACION[tendencia.aceleracion] : null
 
+  // categoría real dominante entre los productos medidos (breadcrumbs del nivel 2)
+  const rutas = (productos ?? []).map((p) => p.categoriaRuta).filter(Boolean)
+  const categoria = rutas.length
+    ? [...rutas.reduce((m2, r) => m2.set(r, (m2.get(r) ?? 0) + 1), new Map()).entries()].sort(
+        (a, b) => b[1] - a[1],
+      )[0][0]
+    : null
+
   return (
     <div>
+      {categoria ? <p className="categoria-nicho">{categoria}</p> : null}
       {m.scoreOportunidad != null ? (
         <ScoreHero score={m.scoreOportunidad} componentes={m.oportunidad.componentes} />
       ) : null}
@@ -151,6 +160,7 @@ export function Resumen({ reporte, productos, nichoId, nicho }) {
                 <thead>
                   <tr>
                     <th>Vendedor</th>
+                    <th>Reputación</th>
                     <th className="num">Items</th>
                     <th className="num">% top 50</th>
                   </tr>
@@ -159,6 +169,9 @@ export function Resumen({ reporte, productos, nichoId, nicho }) {
                   {reporte.topSellers.map((s) => (
                     <tr key={s.vendedor}>
                       <td>{s.vendedor}</td>
+                      <td>
+                        <RepSeller reputacion={s.reputacion} powerSeller={s.powerSeller} />
+                      </td>
                       <td className="num">{s.items}</td>
                       <td className="num">{fmtPct(s.pctItems)}</td>
                     </tr>

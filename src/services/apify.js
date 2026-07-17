@@ -103,7 +103,7 @@ export function construirInputDetalle(actorId, urls, { domainCode = 'CL' } = {})
       productUrls: urls,
       maxItems: 0,
       includeReviews: false,
-      includeQuestions: false,
+      includeQuestions: true, // preguntas de compradores: objeciones reales para listing/análisis
       includeVariations: false,
       maxConcurrency: 8,
       useResidentialProxy: true,
