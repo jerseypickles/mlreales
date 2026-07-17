@@ -12,6 +12,8 @@ import { analizarNicho } from '../services/analista.js'
 import { sugerirNichos, palabrasSaturadas } from '../services/sugeridor.js'
 import { keywordReal, palabrasClave } from '../services/busquedasReales.js'
 import { registrarGasto, gastoDelMes } from '../services/gastos.js'
+import { escanearPropios } from '../services/propios.js'
+import { ProductoPropio } from '../models/ProductoPropio.js'
 import { llmDisponible } from '../services/llm.js'
 import {
   COLA_SCAN_NICHO,
@@ -20,6 +22,7 @@ import {
   COLA_ANALISIS,
   COLA_RADAR,
   COLA_PROGRAMADOR,
+  COLA_PROPIOS,
   crearConexionRedis,
   obtenerColas,
   encolarScanNicho,
@@ -342,7 +345,29 @@ export async function procesarProgramadorScans() {
     })
     encolados++
   }
-  return { activos: nichos.length, encolados }
+
+  // productos propios: una medición diaria en batch si alguno está vencido
+  const propioVencido = await ProductoPropio.exists({
+    estado: 'activo',
+    $or: [{ ultimoScanEl: null }, { ultimoScanEl: { $lt: new Date(ahora - umbrales.diario) } }],
+  })
+  if (propioVencido) {
+    await obtenerColas().propios.add(
+      'medir',
+      {},
+      { jobId: `propios-${Math.floor(ahora / (3 * 3600e3))}` },
+    )
+  }
+
+  return { activos: nichos.length, encolados, propiosEncolados: Boolean(propioVencido) }
+}
+
+export async function procesarScanPropios() {
+  const gastado = await gastoDelMes()
+  if (gastado >= config.presupuestoUsdMes) {
+    return { omitido: true, motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})` }
+  }
+  return escanearPropios()
 }
 
 export function iniciarWorkers() {
@@ -394,8 +419,13 @@ export function iniciarWorkers() {
     connection: crearConexionRedis(),
     concurrency: 1,
   })
+  const workerPropios = new Worker(COLA_PROPIOS, procesarScanPropios, {
+    connection: crearConexionRedis(),
+    concurrency: 1,
+    maxStalledCount: 3,
+  })
 
-  for (const worker of [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador]) {
+  for (const worker of [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios]) {
     worker.on('failed', (job, err) => {
       console.error(`[${worker.name}] job ${job?.id} (intento ${job?.attemptsMade}) falló: ${err.message}`)
     })
@@ -405,5 +435,5 @@ export function iniciarWorkers() {
     worker.on('error', (err) => console.error(`[${worker.name}] error de worker:`, err.message))
   }
 
-  return [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador]
+  return [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios]
 }

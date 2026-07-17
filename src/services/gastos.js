@@ -17,7 +17,8 @@ export function mesActual(fecha = new Date()) {
 export async function registrarGasto(nichoId, usd) {
   if (!usd || !Number.isFinite(usd)) return
   await Promise.all([
-    Nicho.updateOne({ _id: nichoId }, { $inc: { costoUsd: usd } }),
+    // nichoId null = gasto del sistema sin nicho (ej: scan de productos propios)
+    nichoId ? Nicho.updateOne({ _id: nichoId }, { $inc: { costoUsd: usd } }) : Promise.resolve(),
     GastoMensual.updateOne({ mes: mesActual() }, { $inc: { usd } }, { upsert: true }),
   ])
 }

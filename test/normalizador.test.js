@@ -166,3 +166,10 @@ test('normalizarScan: la posición es global aunque itemPosition reinicie por p�
     [1, 2, 3, 4],
   )
 })
+
+test('extraerSkuDeUrl: saca el ID desde URLs de catálogo y de artículo', async () => {
+  const { extraerSkuDeUrl } = await import('../src/services/propios.js')
+  assert.equal(extraerSkuDeUrl('https://www.mercadolibre.cl/foo/p/MLC62124281'), 'MLC62124281')
+  assert.equal(extraerSkuDeUrl('https://articulo.mercadolibre.cl/MLC-1234567890-panel-_JM'), 'MLC1234567890')
+  assert.equal(extraerSkuDeUrl('https://google.com'), null)
+})

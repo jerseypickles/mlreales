@@ -5,6 +5,7 @@ import { Productos } from './components/Productos.jsx'
 import { Simulador } from './components/Simulador.jsx'
 import { Analisis } from './components/Analisis.jsx'
 import { Listing } from './components/Listing.jsx'
+import { MisProductos } from './components/MisProductos.jsx'
 import { Radar } from './components/Sugerencias.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
@@ -343,6 +344,7 @@ export default function App() {
   const [seleccionado, setSeleccionado] = useState(null)
   const [errorLista, setErrorLista] = useState(null)
   const [bloqueada, setBloqueada] = useState(false)
+  const [vista, setVista] = useState('nichos')
 
   useEffect(() => {
     const alBloquear = () => {
@@ -385,8 +387,25 @@ export default function App() {
             <span className="subtitulo">inteligencia de nichos · mercadolibre.cl</span>
           </div>
         </div>
+        <nav className="secciones" aria-label="Secciones">
+          <button
+            className={vista === 'nichos' ? 'seccion activa' : 'seccion'}
+            onClick={() => setVista('nichos')}
+          >
+            Nichos
+          </button>
+          <button
+            className={vista === 'propios' ? 'seccion activa' : 'seccion'}
+            onClick={() => setVista('propios')}
+          >
+            Mis productos
+          </button>
+        </nav>
         <PresupuestoChip />
       </header>
+      {vista === 'propios' ? (
+        <MisProductos />
+      ) : (
       <div className="cuerpo">
         <aside>
           <FormNuevoNicho
@@ -407,6 +426,7 @@ export default function App() {
           )}
         </main>
       </div>
+      )}
     </div>
   )
 }
