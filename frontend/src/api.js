@@ -41,6 +41,8 @@ export const api = {
   gastos: () => pedir('/api/gastos'),
   generarListing: (id) => pedir(`/api/nichos/${id}/listing`, { method: 'POST' }),
   listarPropios: () => pedir('/api/propios'),
+  tendencias: (dias) => pedir(`/api/tendencias${dias ? `?dias=${dias}` : ''}`),
+  capturarTendencias: () => pedir('/api/tendencias/capturar', { method: 'POST' }),
   crearPropio: (url) => pedir('/api/propios', json({ url })),
   medirPropios: () => pedir('/api/propios/scan', { method: 'POST' }),
   eliminarPropio: (id) => pedir(`/api/propios/${id}`, { method: 'DELETE' }),

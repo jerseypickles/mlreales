@@ -4,6 +4,7 @@ import { crearApp } from './api/app.js'
 import { iniciarWorkers } from './jobs/workers.js'
 import { obtenerColas, cerrarColas, registrarProgramados } from './jobs/queues.js'
 import { diaChile } from './services/tendencias.js'
+import { TendenciaBusqueda } from './models/TendenciaBusqueda.js'
 
 validarEnv()
 
@@ -12,13 +13,24 @@ console.log('[mongo] conectado')
 
 obtenerColas()
 await registrarProgramados()
-// primera captura de tendencias del día al arrancar (jobId por día = idempotente
-// entre deploys): el baseline del autocompletado se junta desde hoy, no desde el
-// próximo cron de las 08:30
+// captura de tendencias al arrancar si el día aún no tiene snapshots: el
+// baseline del autocompletado se asegura desde hoy, y un día que quedó en cero
+// (ML bloqueando) se reintenta en el próximo deploy. jobId por hora evita que
+// las dos instancias de un deploy zero-downtime encolen doble.
 if (config.tendenciasActivo) {
-  await obtenerColas()
-    .tendencias.add('capturar', { motivo: 'arranque' }, { jobId: `tendencias-arranque-${diaChile()}` })
-    .catch((err) => console.error('[tendencias] no se pudo encolar la captura de arranque:', err.message))
+  try {
+    const dia = diaChile()
+    const hayHoy = await TendenciaBusqueda.exists({ dia })
+    if (!hayHoy) {
+      await obtenerColas().tendencias.add(
+        'capturar',
+        { motivo: 'arranque' },
+        { jobId: `tendencias-arranque-${dia}-${new Date().getUTCHours()}` },
+      )
+    }
+  } catch (err) {
+    console.error('[tendencias] no se pudo encolar la captura de arranque:', err.message)
+  }
 }
 const workers = iniciarWorkers()
 console.log('[bullmq] workers: scan-nicho, scan-detalle, calcular-metricas, analisis, radar, programador, scan-propios, tendencias-busqueda')

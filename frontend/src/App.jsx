@@ -6,6 +6,7 @@ import { Simulador } from './components/Simulador.jsx'
 import { Analisis } from './components/Analisis.jsx'
 import { Listing } from './components/Listing.jsx'
 import { MisProductos } from './components/MisProductos.jsx'
+import { Tendencias } from './components/Tendencias.jsx'
 import { Radar } from './components/Sugerencias.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
@@ -400,11 +401,19 @@ export default function App() {
           >
             Mis productos
           </button>
+          <button
+            className={vista === 'tendencias' ? 'seccion activa' : 'seccion'}
+            onClick={() => setVista('tendencias')}
+          >
+            Tendencias
+          </button>
         </nav>
         <PresupuestoChip />
       </header>
       {vista === 'propios' ? (
         <MisProductos />
+      ) : vista === 'tendencias' ? (
+        <Tendencias />
       ) : (
       <div className="cuerpo">
         <aside>

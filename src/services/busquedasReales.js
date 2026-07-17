@@ -3,6 +3,8 @@
 // para no crear nichos con keywords que nadie escribe (un nicho así mide un
 // listado que ningún comprador ve).
 
+import { fetchResidencial } from './proxyApify.js'
+
 const SITE_POR_DOMINIO = { CL: 'MLC' }
 
 // palabras que no cambian la búsqueda ("freidora de aire" ≡ "freidora aire")
@@ -44,10 +46,20 @@ export async function sugerenciasReales(query, { domainCode = 'CL', limit = 6 } 
     throw new Error(`domainCode "${domainCode}" sin site de autosuggest configurado (services/busquedasReales.js)`)
   }
   const url = `https://http2.mlstatic.com/resources/sites/${site}/autosuggest?showFilters=true&limit=${limit}&api_version=2&q=${encodeURIComponent(query)}`
-  const res = await fetch(url, {
+  const opciones = () => ({
     signal: AbortSignal.timeout(10_000),
     headers: { 'user-agent': 'Mozilla/5.0 (compatible; MeliIntel/1.0)' },
   })
+  let res = await fetch(url, opciones())
+  // ML bloquea IPs de datacenter (403 sostenido desde Render): reintentar la
+  // misma consulta saliendo por el proxy residencial de Apify si está configurado
+  if (res.status === 403) {
+    const conProxy = await fetchResidencial(url, opciones()).catch((err) => {
+      console.error(`[autosuggest] proxy residencial no disponible: ${err.message}`)
+      return null
+    })
+    if (conProxy) res = conProxy
+  }
   if (!res.ok) throw new Error(`autosuggest respondió ${res.status} para "${query}"`)
   const datos = await res.json()
   return (datos.suggested_queries ?? []).map((s) => normalizarTexto(s.q)).filter(Boolean)
