@@ -110,8 +110,19 @@ router.get(
         ]),
         new Promise((_, rechazar) => setTimeout(() => rechazar(new Error('timeout')), 1500)),
       ])
-      // reintentos programados (bloqueo de ML) primero; la espera real y lo activo pisan
-      for (const j of retrasados) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'reintento')
+      // reintentos programados (bloqueo de ML) primero; la espera real y lo activo pisan.
+      // un reintento de un scan ya superado por otro más nuevo se va a descartar solo:
+      // no confundir a la UI mostrándolo como pendiente
+      const ultimoScanPorNicho = new Map(
+        nichos.map((n) => [String(n._id), n.ultimoScanEl ? new Date(n.ultimoScanEl).getTime() : 0]),
+      )
+      for (const j of retrasados) {
+        const id = j?.data?.nichoId
+        if (!id) continue
+        const fechaScan = j.data.fechaScan ? new Date(j.data.fechaScan).getTime() : 0
+        if ((ultimoScanPorNicho.get(id) ?? 0) - fechaScan > 30 * 60_000) continue
+        etapas.set(id, 'reintento')
+      }
       for (const j of [...analisisEsp, ...detallesEsp, ...scansEsp])
         if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'cola')
       for (const j of analisisAct) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'analizando')
