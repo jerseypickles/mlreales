@@ -5,8 +5,36 @@ import { Productos } from './components/Productos.jsx'
 import { Simulador } from './components/Simulador.jsx'
 import { Analisis } from './components/Analisis.jsx'
 import { Radar } from './components/Sugerencias.jsx'
-import { Cargando } from './components/ui.jsx'
+import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
+
+function PresupuestoChip() {
+  const [gastos, setGastos] = useState(null)
+
+  useEffect(() => {
+    let vigente = true
+    const cargar = () => api.gastos().then((g) => vigente && setGastos(g)).catch(() => {})
+    cargar()
+    const intervalo = setInterval(cargar, 5 * 60_000)
+    return () => {
+      vigente = false
+      clearInterval(intervalo)
+    }
+  }, [])
+
+  if (!gastos) return null
+  const pct = Math.min(100, Math.round((gastos.gastadoUsd / gastos.presupuestoUsd) * 100))
+  return (
+    <div className="presupuesto" title={`Gasto de ${gastos.mes}: Apify + IA`}>
+      <span className="presupuesto-texto">
+        US$ {gastos.gastadoUsd.toFixed(2)} <span className="presupuesto-tope">/ {gastos.presupuestoUsd} este mes</span>
+      </span>
+      <span className="presupuesto-riel" aria-hidden="true">
+        <span className={pct >= 80 ? 'presupuesto-uso alto' : 'presupuesto-uso'} style={{ width: `${pct}%` }} />
+      </span>
+    </div>
+  )
+}
 
 function FormNuevoNicho({ onCreado }) {
   const [keyword, setKeyword] = useState('')
@@ -54,13 +82,6 @@ const ETAPAS = {
   analizando: 'analizando con IA…',
 }
 
-function claseScore(score) {
-  if (!Number.isFinite(score)) return ''
-  if (score >= 70) return 'score-alto'
-  if (score >= 50) return 'score-medio'
-  return 'score-bajo'
-}
-
 function NichoItem({ n, seleccionado, onSeleccionar }) {
   const score = n.ultimoReporte?.scoreOportunidad
   return (
@@ -71,7 +92,7 @@ function NichoItem({ n, seleccionado, onSeleccionar }) {
             {n.origen === 'radar' ? <span className="punto-radar" title="descubierto por el radar" /> : null}
             {n.keyword}
           </span>
-          {score != null ? <span className={`nicho-score ${claseScore(score)}`}>{score}</span> : null}
+          {score != null ? <ScoreRing valor={score} size={30} grosor={3.5} /> : null}
         </span>
         <span className="nicho-meta">
           {n.enProceso ? (
@@ -351,8 +372,16 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <h1>MELI Intel</h1>
-        <span className="subtitulo">inteligencia de nichos · mercadolibre.cl</span>
+        <div className="marca">
+          <span className="marca-icono" aria-hidden="true">
+            <MarcaIcono />
+          </span>
+          <div className="marca-texto">
+            <h1>MELI Intel</h1>
+            <span className="subtitulo">inteligencia de nichos · mercadolibre.cl</span>
+          </div>
+        </div>
+        <PresupuestoChip />
       </header>
       <div className="cuerpo">
         <aside>

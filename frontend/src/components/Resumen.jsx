@@ -1,8 +1,37 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { StatTile } from './ui.jsx'
+import { StatTile, ScoreRing } from './ui.jsx'
 import { HistogramaPrecios, MiniSerie } from './graficos.jsx'
 import { fmtNum, fmtPrecio, fmtPct } from '../lib/formato.js'
+
+const COMPONENTES_SCORE = [
+  ['demanda', 'Demanda'],
+  ['competencia', 'Competencia'],
+  ['calidad', 'Calidad'],
+  ['full', 'Full'],
+]
+
+function ScoreHero({ score, componentes }) {
+  return (
+    <div className="score-hero">
+      <ScoreRing valor={score} size={104} grosor={10} />
+      <div className="score-hero-info">
+        <span className="score-hero-label">Score de oportunidad</span>
+        <div className="score-barras">
+          {COMPONENTES_SCORE.map(([clave, etiqueta]) => (
+            <div className="score-barra" key={clave}>
+              <span className="score-barra-label">{etiqueta}</span>
+              <span className="score-barra-riel" aria-hidden="true">
+                <span style={{ width: `${componentes[clave] ?? 0}%` }} />
+              </span>
+              <span className="score-barra-num">{componentes[clave] ?? '—'}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const ACELERACION = {
   acelerando: { texto: '▲ demanda acelerando', clase: 'acel-sube' },
@@ -34,15 +63,10 @@ export function Resumen({ reporte, productos, nichoId, nicho }) {
 
   return (
     <div>
+      {m.scoreOportunidad != null ? (
+        <ScoreHero score={m.scoreOportunidad} componentes={m.oportunidad.componentes} />
+      ) : null}
       <div className="tiles">
-        {m.scoreOportunidad != null ? (
-          <StatTile
-            destacado
-            label="Score oportunidad"
-            value={m.scoreOportunidad}
-            detalle={`demanda ${m.oportunidad.componentes.demanda} · competencia ${m.oportunidad.componentes.competencia} · calidad ${m.oportunidad.componentes.calidad} · full ${m.oportunidad.componentes.full}`}
-          />
-        ) : null}
         {m.demanda ? (
           <StatTile
             label="Ventas estimadas/día"

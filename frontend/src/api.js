@@ -38,4 +38,5 @@ export const api = {
   correrRadar: () => pedir('/api/nichos/radar', { method: 'POST' }),
   simularMargen: (entrada) => pedir('/api/margen', json(entrada)),
   parametrosMargen: () => pedir('/api/margen/parametros'),
+  gastos: () => pedir('/api/gastos'),
 }
