@@ -23,9 +23,7 @@ const SCHEMA_LISTING = {
   properties: {
     titulos: {
       type: 'array',
-      minItems: 3,
-      maxItems: 3,
-      description: '3 opciones de título, cada una de MÁXIMO 60 caracteres (cuenta cada letra)',
+      description: 'EXACTAMENTE 3 opciones de título, cada una de MÁXIMO 60 caracteres (cuenta cada letra)',
       items: { type: 'string' },
     },
     categoriaSugerida: { type: 'string', description: 'Ruta de categoría ML, ej: Hogar > Climatización > Ventiladores' },
@@ -51,9 +49,7 @@ const SCHEMA_LISTING = {
     },
     bullets: {
       type: 'array',
-      minItems: 4,
-      maxItems: 6,
-      description: 'Características destacadas para el inicio de la descripción, 1 línea cada una',
+      description: '4 a 6 características destacadas para el inicio de la descripción, 1 línea cada una',
       items: { type: 'string' },
     },
     descripcion: {
@@ -67,9 +63,7 @@ const SCHEMA_LISTING = {
     },
     fotos: {
       type: 'array',
-      minItems: 5,
-      maxItems: 8,
-      description: 'Plan de fotos: qué mostrar en cada una, en orden',
+      description: 'Plan de 5 a 8 fotos: qué mostrar en cada una, en orden',
       items: { type: 'string' },
     },
     checklist: {
