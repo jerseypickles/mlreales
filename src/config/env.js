@@ -28,6 +28,11 @@ export const config = {
   radarMaxNichos: Number(process.env.RADAR_MAX_NICHOS) || 5,
   radarMaxActivos: Number(process.env.RADAR_MAX_ACTIVOS) || 15, // techo de nichos activos (control de costos)
   programadorCron: process.env.PROGRAMADOR_CRON || '*/30 * * * *',
+  // tendencias de búsqueda: snapshot diario del autocompletado de ML. Corre
+  // DESPUÉS del radar: sus ~30 consultas pueden gatillar el bloqueo anti-ráfaga
+  // y dejarían al radar sin canonización de keywords si corriera antes.
+  tendenciasActivo: process.env.TENDENCIAS_ACTIVO !== 'false',
+  tendenciasCron: process.env.TENDENCIAS_CRON || '30 8 * * *',
   analisisAuto: process.env.ANALISIS_AUTO !== 'false',
   detalleTopN: Number(process.env.DETALLE_TOP_N) || 50,
   detalleBatch: Number(process.env.DETALLE_BATCH) || 15,

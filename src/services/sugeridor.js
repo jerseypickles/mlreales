@@ -99,7 +99,7 @@ async function armarHistorial() {
   return { existentes: nichos.map((n) => n.keyword), lineas, saturadas: palabrasSaturadas(activas) }
 }
 
-export async function sugerirNichos({ contexto } = {}) {
+export async function sugerirNichos({ contexto, tendencias } = {}) {
   const historial = await armarHistorial()
   const fecha = new Date().toLocaleDateString('es-CL', { month: 'long', year: 'numeric', timeZone: 'America/Santiago' })
 
@@ -110,6 +110,9 @@ export async function sugerirNichos({ contexto } = {}) {
       : '',
     historial.saturadas?.size
       ? `Verticales SATURADAS del tablero — ninguna keyword puede contener estas palabras: ${[...historial.saturadas].join(', ')}`
+      : '',
+    tendencias?.length
+      ? `Búsquedas EN ALZA esta semana según el autocompletado real de ML (gente escribiéndolas más que antes — priorízalas como candidatas si cumplen las demás reglas):\n${tendencias.join('\n')}`
       : '',
     contexto ? `Contexto del importador: ${contexto}` : '',
     'Propón los nichos a investigar ahora: abre categorías nuevas para diversificar el portafolio (máximo 2 vecinas de lo existente).',

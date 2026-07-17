@@ -13,6 +13,7 @@ import { sugerirNichos, palabrasSaturadas } from '../services/sugeridor.js'
 import { keywordReal, palabrasClave } from '../services/busquedasReales.js'
 import { registrarGasto, gastoDelMes } from '../services/gastos.js'
 import { escanearPropios } from '../services/propios.js'
+import { capturarTendencias, movimientosRecientes, lineasEnAlza } from '../services/tendencias.js'
 import { ProductoPropio } from '../models/ProductoPropio.js'
 import { llmDisponible } from '../services/llm.js'
 import {
@@ -23,6 +24,7 @@ import {
   COLA_RADAR,
   COLA_PROGRAMADOR,
   COLA_PROPIOS,
+  COLA_TENDENCIAS,
   crearConexionRedis,
   obtenerColas,
   encolarScanNicho,
@@ -258,7 +260,16 @@ export async function procesarRadar() {
   const cupo = Math.min(config.radarMaxNichos, Math.max(0, config.radarMaxActivos - activos))
   if (cupo === 0) return { omitido: true, motivo: `tope de ${config.radarMaxActivos} nichos activos alcanzado` }
 
-  const { sugerencias } = await sugerirNichos()
+  // búsquedas en alza según el autocompletado (tracker de tendencias): el
+  // sugeridor prioriza demanda que ya se ve subiendo en vez de idear desde cero
+  let tendencias = []
+  try {
+    tendencias = lineasEnAlza(await movimientosRecientes())
+  } catch (err) {
+    console.error(`[radar] tendencias no disponibles: ${err.message}`)
+  }
+
+  const { sugerencias } = await sugerirNichos({ tendencias })
   const todos = await Nicho.find().select('keyword estado').lean()
   const existentes = new Set(todos.map((n) => n.keyword))
 
@@ -370,6 +381,12 @@ export async function procesarScanPropios() {
   return escanearPropios()
 }
 
+// Tendencias: snapshot diario del ranking del autocompletado de ML.
+// No gasta Apify ni LLM, así que no pasa por el techo de presupuesto.
+export async function procesarTendencias() {
+  return capturarTendencias()
+}
+
 export function iniciarWorkers() {
   // concurrencia 1 + rate limit: cada scan quema créditos de Apify
   const workerScan = new Worker(COLA_SCAN_NICHO, procesarScanNicho, {
@@ -424,8 +441,13 @@ export function iniciarWorkers() {
     concurrency: 1,
     maxStalledCount: 3,
   })
+  const workerTendencias = new Worker(COLA_TENDENCIAS, procesarTendencias, {
+    connection: crearConexionRedis(),
+    concurrency: 1,
+    maxStalledCount: 3, // la pasada dura ~1 min; un deploy en medio no debe botarla
+  })
 
-  for (const worker of [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios]) {
+  for (const worker of [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios, workerTendencias]) {
     worker.on('failed', (job, err) => {
       console.error(`[${worker.name}] job ${job?.id} (intento ${job?.attemptsMade}) falló: ${err.message}`)
     })
@@ -435,5 +457,5 @@ export function iniciarWorkers() {
     worker.on('error', (err) => console.error(`[${worker.name}] error de worker:`, err.message))
   }
 
-  return [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios]
+  return [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios, workerTendencias]
 }

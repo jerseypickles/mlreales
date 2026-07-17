@@ -9,6 +9,7 @@ export const COLA_ANALISIS = 'analisis-nicho'
 export const COLA_RADAR = 'radar'
 export const COLA_PROGRAMADOR = 'programador-scans'
 export const COLA_PROPIOS = 'scan-propios'
+export const COLA_TENDENCIAS = 'tendencias-busqueda'
 
 // Criterio Fase 1: 3 intentos con backoff exponencial (5s, 10s, 20s) y el job
 // queda en `failed` con el mensaje legible de ApifyError como failedReason.
@@ -43,6 +44,8 @@ export function obtenerColas() {
       radar: new Queue(COLA_RADAR, { connection, defaultJobOptions: opcionesJob }),
       programador: new Queue(COLA_PROGRAMADOR, { connection, defaultJobOptions: opcionesJob }),
       propios: new Queue(COLA_PROPIOS, { connection, defaultJobOptions: { ...opcionesJob, attempts: 1 } }),
+      // la pasada tolera 403 por prefijo internamente; reintentar completa solo repite ráfagas
+      tendencias: new Queue(COLA_TENDENCIAS, { connection, defaultJobOptions: { ...opcionesJob, attempts: 1 } }),
       connection,
     }
   }
@@ -71,6 +74,15 @@ export async function registrarProgramados() {
   } else {
     await colas.radar.removeJobScheduler('radar-periodico').catch(() => {})
   }
+  if (config.tendenciasActivo) {
+    await colas.tendencias.upsertJobScheduler(
+      'tendencias-diarias',
+      { pattern: config.tendenciasCron, tz: 'America/Santiago' },
+      { name: 'capturar', data: { motivo: 'programado' } },
+    )
+  } else {
+    await colas.tendencias.removeJobScheduler('tendencias-diarias').catch(() => {})
+  }
 }
 
 export async function cerrarColas() {
@@ -85,6 +97,7 @@ export async function cerrarColas() {
       colas.radar.close(),
       colas.programador.close(),
       colas.propios.close(),
+      colas.tendencias.close(),
     ]),
     new Promise((resolver) => setTimeout(resolver, 3000)),
   ])

@@ -3,6 +3,7 @@ import { conectarMongo, desconectarMongo } from './db/mongo.js'
 import { crearApp } from './api/app.js'
 import { iniciarWorkers } from './jobs/workers.js'
 import { obtenerColas, cerrarColas, registrarProgramados } from './jobs/queues.js'
+import { diaChile } from './services/tendencias.js'
 
 validarEnv()
 
@@ -11,8 +12,16 @@ console.log('[mongo] conectado')
 
 obtenerColas()
 await registrarProgramados()
+// primera captura de tendencias del día al arrancar (jobId por día = idempotente
+// entre deploys): el baseline del autocompletado se junta desde hoy, no desde el
+// próximo cron de las 08:30
+if (config.tendenciasActivo) {
+  await obtenerColas()
+    .tendencias.add('capturar', { motivo: 'arranque' }, { jobId: `tendencias-arranque-${diaChile()}` })
+    .catch((err) => console.error('[tendencias] no se pudo encolar la captura de arranque:', err.message))
+}
 const workers = iniciarWorkers()
-console.log('[bullmq] workers: scan-nicho, scan-detalle, calcular-metricas, analisis, radar, programador')
+console.log('[bullmq] workers: scan-nicho, scan-detalle, calcular-metricas, analisis, radar, programador, scan-propios, tendencias-busqueda')
 
 const servidor = crearApp().listen(config.port, () => {
   console.log(`[api] MELI Intel escuchando en http://localhost:${config.port}`)

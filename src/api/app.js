@@ -5,6 +5,7 @@ import rutasProductos from './routes/productos.js'
 import rutasPropios from './routes/propios.js'
 import rutasDebug from './routes/debug.js'
 import rutasMargen from './routes/margen.js'
+import rutasTendencias from './routes/tendencias.js'
 import { obtenerColas } from '../jobs/queues.js'
 import { gastoDelMes, mesActual } from '../services/gastos.js'
 import { config } from '../config/env.js'
@@ -58,6 +59,7 @@ export function crearApp() {
   app.use('/api/propios', rutasPropios)
   app.use('/api/debug', rutasDebug)
   app.use('/api/margen', rutasMargen)
+  app.use('/api/tendencias', rutasTendencias)
 
   app.use((_req, res) => res.status(404).json({ error: 'ruta no encontrada' }))
 
