@@ -39,4 +39,5 @@ export const api = {
   simularMargen: (entrada) => pedir('/api/margen', json(entrada)),
   parametrosMargen: () => pedir('/api/margen/parametros'),
   gastos: () => pedir('/api/gastos'),
+  generarListing: (id) => pedir(`/api/nichos/${id}/listing`, { method: 'POST' }),
 }

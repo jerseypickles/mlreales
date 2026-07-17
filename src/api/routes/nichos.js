@@ -4,6 +4,7 @@ import { Reporte } from '../../models/Reporte.js'
 import { encolarScanNicho, obtenerColas } from '../../jobs/queues.js'
 import { generarReporteNicho, obtenerProductosUltimoScan } from '../../services/metricas.js'
 import { analizarNicho } from '../../services/analista.js'
+import { generarListing } from '../../services/listero.js'
 import { sugerirNichos } from '../../services/sugeridor.js'
 import { llmDisponible } from '../../services/llm.js'
 
@@ -203,6 +204,25 @@ router.post(
         await nicho.save()
       }
       res.json({ analisis })
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ error: err.message })
+      throw err
+    }
+  }),
+)
+
+// Borrador de listing con IA: títulos ≤60, ficha técnica, descripción y checklist
+router.post(
+  '/:id/listing',
+  manejar(async (req, res) => {
+    if (!llmDisponible()) {
+      return res.status(503).json({ error: 'listing IA no configurado: falta ANTHROPIC_API_KEY en el entorno' })
+    }
+    const nicho = await Nicho.findById(req.params.id)
+    if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
+    try {
+      const listing = await generarListing(nicho)
+      res.json({ listing })
     } catch (err) {
       if (err.status) return res.status(err.status).json({ error: err.message })
       throw err

@@ -11,6 +11,8 @@ const nichoSchema = new mongoose.Schema({
   origen: { type: String, enum: ['manual', 'radar'], default: 'manual' },
   // metadata del descubrimiento del radar: razon, estacionalidad, ventanaImportacion
   radarInfo: { type: mongoose.Schema.Types.Mixed, default: null },
+  // último borrador de listing generado con IA (títulos, ficha, descripción…)
+  listingDraft: { type: mongoose.Schema.Types.Mixed, default: null },
   creadoEl: { type: Date, default: Date.now },
   ultimoScanEl: { type: Date, default: null },
   // { total, esMinimo } — "+9.999 resultados" del listado; esMinimo indica que ML capea el contador

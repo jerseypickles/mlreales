@@ -4,6 +4,7 @@ import { Resumen } from './components/Resumen.jsx'
 import { Productos } from './components/Productos.jsx'
 import { Simulador } from './components/Simulador.jsx'
 import { Analisis } from './components/Analisis.jsx'
+import { Listing } from './components/Listing.jsx'
 import { Radar } from './components/Sugerencias.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
@@ -261,6 +262,7 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
     ['resumen', 'Resumen'],
     ['productos', productos ? `Productos (${productos.total})` : 'Productos'],
     ['analisis', reporte.analisis ? `Análisis: ${reporte.analisis.veredicto?.replace(/_/g, ' ')}` : 'Análisis IA'],
+    ['listing', nicho.listingDraft ? 'Listing ✓' : 'Listing'],
     ['simulador', 'Simulador'],
   ]
 
@@ -298,6 +300,7 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
       ) : null}
       {pestana === 'productos' ? <Productos nichoId={nichoId} onSimular={simularProducto} /> : null}
       {pestana === 'analisis' ? <Analisis nichoId={nichoId} analisisInicial={reporte.analisis} /> : null}
+      {pestana === 'listing' ? <Listing nichoId={nichoId} listingInicial={nicho.listingDraft} /> : null}
       {pestana === 'simulador' ? (
         <Simulador nicho={nicho} reporte={reporte} precioInicial={precioSimulador} />
       ) : null}
