@@ -89,6 +89,15 @@ export async function procesarScanDetalle(job) {
   const fecha = new Date(fechaScan)
   if (!objetivos?.length) return { omitido: true, motivo: 'sin objetivos' }
 
+  // los reintentos pendientes no deben gastar en nichos que ya no interesan
+  // ni aplicar datos a un scan superado por otro más nuevo (quedarían huérfanos)
+  const nicho = await Nicho.findById(nichoId).select('estado ultimoScanEl keyword').lean()
+  if (!nicho) return { omitido: true, motivo: 'nicho eliminado' }
+  if (nicho.estado !== 'activo') return { omitido: true, motivo: `nicho en estado "${nicho.estado}"` }
+  if (nicho.ultimoScanEl && new Date(nicho.ultimoScanEl) - fecha > 30 * 60_000) {
+    return { omitido: true, motivo: 'scan superado por uno más nuevo' }
+  }
+
   const skusPedidos = objetivos.map((o) => o.sku)
   let aplicados = 0
   let sinMatch = 0
@@ -205,6 +214,8 @@ export async function procesarAnalisisNicho(job) {
   if (!llmDisponible()) return { omitido: true, motivo: 'sin ANTHROPIC_API_KEY' }
   const nicho = await Nicho.findById(job.data.nichoId)
   if (!nicho) throw new Error(`Nicho ${job.data.nichoId} no existe`)
+  // no gastar LLM en nichos que se pausaron mientras el job esperaba en la cola
+  if (nicho.estado !== 'activo') return { omitido: true, motivo: `nicho en estado "${nicho.estado}"` }
 
   const analisis = await analizarNicho(nicho)
 
