@@ -93,6 +93,38 @@ export async function obtenerCostoRun(runId) {
 
 // Modo async para runs largos (batches del nivel 2 en Fase 2): inicia el run y hace polling.
 // Con `conMeta: true` devuelve { items, costoUsd }.
+// Para la sonda debug: iniciar un run sin esperarlo (el proxy de Render corta
+// respuestas largas) y consultar estado + items después con el runId.
+export async function iniciarRun(actorId, input) {
+  const resp = await fetch(`${API_BASE}/acts/${actorId}/runs`, {
+    method: 'POST',
+    headers: cabeceras(),
+    body: JSON.stringify(input),
+  })
+  if (!resp.ok) {
+    throw new ApifyError(
+      `Apify respondió ${resp.status} al iniciar run de ${actorId}: ${await leerMensajeError(resp)}`,
+      { status: resp.status, actorId },
+    )
+  }
+  const { data: run } = await resp.json()
+  return { runId: run.id }
+}
+
+export async function estadoRun(runId) {
+  const resp = await fetch(`${API_BASE}/actor-runs/${runId}`, { headers: cabeceras() })
+  if (!resp.ok) throw new ApifyError(`Apify respondió ${resp.status} consultando run ${runId}`, { status: resp.status })
+  const { data } = await resp.json()
+  const resultado = { estado: data.status, costoUsd: Number(data.usageTotalUsd) || 0, items: null }
+  if (data.status === 'SUCCEEDED' && data.defaultDatasetId) {
+    const items = await fetch(`${API_BASE}/datasets/${data.defaultDatasetId}/items?clean=true&format=json`, {
+      headers: cabeceras(),
+    })
+    if (items.ok) resultado.items = await items.json()
+  }
+  return resultado
+}
+
 export async function ejecutarActorAsync(actorId, input, { pollMs = 10_000, timeoutMs = 15 * 60_000, conMeta = false } = {}) {
   const inicio = Date.now()
   const arranque = await fetch(`${API_BASE}/acts/${actorId}/runs`, {

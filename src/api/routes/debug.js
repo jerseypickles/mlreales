@@ -1,11 +1,13 @@
 import { Router } from 'express'
 import { config } from '../../config/env.js'
-import { ejecutarActorSync, obtenerLogRun } from '../../services/apify.js'
+import { ejecutarActorSync, iniciarRun, estadoRun, obtenerLogRun } from '../../services/apify.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 
 function autorizado(req, res, next) {
+  // con API_KEY global activa, el middleware de app.js ya validó la request
+  if (process.env.API_KEY) return next()
   if (!process.env.DEBUG_KEY || req.get('x-debug-key') !== process.env.DEBUG_KEY) {
     return res.status(401).json({ error: 'no autorizado' })
   }
@@ -25,11 +27,27 @@ router.post(
       if (!urls.length) return res.status(400).json({ error: 'urls o input requeridos' })
       input = { urls, max_retries_per_url: 2, ignore_url_failures: true, proxy: { useApifyProxy: true } }
     }
+    // esperar=false: iniciar y devolver el runId al tiro (el proxy de Render
+    // corta respuestas de +100s); los items se leen con GET /run/:id/items
+    if (req.body?.esperar === false) {
+      const { runId } = await iniciarRun(actorId, input)
+      return res.status(202).json({ runId, actorId })
+    }
     const { items, runId } = await ejecutarActorSync(actorId, input, {
       timeoutMs: 280_000,
       conMeta: true,
     })
     res.json({ cantidad: items.length, runId, actorId, items })
+  }),
+)
+
+// Estado + items de un run lanzado con esperar=false
+router.get(
+  '/run/:id/items',
+  autorizado,
+  manejar(async (req, res) => {
+    const r = await estadoRun(req.params.id)
+    res.json({ estado: r.estado, costoUsd: r.costoUsd, cantidad: r.items?.length ?? null, items: r.items })
   }),
 )
 
