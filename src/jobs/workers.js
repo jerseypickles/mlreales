@@ -2,6 +2,7 @@ import { Worker } from 'bullmq'
 import { config } from '../config/env.js'
 import { Nicho } from '../models/Nicho.js'
 import { Reporte } from '../models/Reporte.js'
+import { Snapshot } from '../models/Snapshot.js'
 import { buscarNivel1, ejecutarActorAsync } from '../services/apify.js'
 import { normalizarScan } from '../services/normalizador.js'
 import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
@@ -98,15 +99,27 @@ export async function procesarScanDetalle(job) {
     return { omitido: true, motivo: 'scan superado por uno más nuevo' }
   }
 
-  const skusPedidos = objetivos.map((o) => o.sku)
+  // no re-pagar proxy por URLs que una pasada anterior ya midió en este scan:
+  // el reintento pide solo las faltantes
+  const yaMedidos = new Set(
+    (
+      await Snapshot.find({ sku: { $in: objetivos.map((o) => o.sku) }, fecha, numReviews: { $ne: null } })
+        .select('sku')
+        .lean()
+    ).map((s) => s.sku),
+  )
+  const pendientes = objetivos.filter((o) => !yaMedidos.has(o.sku))
+  if (!pendientes.length) return { omitido: true, motivo: 'detalle ya aplicado para este scan' }
+
+  const skusPedidos = pendientes.map((o) => o.sku)
   let aplicados = 0
   let sinMatch = 0
   let fallidos = 0
 
-  for (let i = 0; i < objetivos.length; i += config.detalleBatch) {
+  for (let i = 0; i < pendientes.length; i += config.detalleBatch) {
     // pausa entre batches: menos agresivo con ML = menos páginas vacías por bloqueo
     if (i > 0) await new Promise((resolver) => setTimeout(resolver, 20_000))
-    const batch = objetivos.slice(i, i + config.detalleBatch)
+    const batch = pendientes.slice(i, i + config.detalleBatch)
     let crudos
     try {
       const r = await ejecutarActorAsync(
@@ -131,23 +144,24 @@ export async function procesarScanDetalle(job) {
     sinMatch += sm
     const res = await aplicarDetalleScan({ porSku, fecha })
     aplicados += porSku.size
-    await job.updateProgress(Math.round(((i + batch.length) / objetivos.length) * 100))
+    await job.updateProgress(Math.round(((i + batch.length) / pendientes.length) * 100))
     void res
   }
 
-  // aplicar casi nada equivale a no medir: mejor reintentar (el bloqueo de ML
-  // es temporal) que dar por bueno un scan cuya demanda saldría de 1-2 productos
+  // medir casi nada equivale a no medir: mejor reintentar (el bloqueo de ML es
+  // temporal) que dar por bueno un scan cuya demanda saldría de 1-2 productos
+  const totalConDetalle = yaMedidos.size + aplicados
   const minimoAplicados = Math.max(1, Math.ceil(objetivos.length * 0.2))
-  if (aplicados < minimoAplicados) {
+  if (totalConDetalle < minimoAplicados) {
     throw new Error(
-      `Nivel 2 aplicó muy poco (${aplicados}/${objetivos.length}, mínimo ${minimoAplicados}; ${fallidos} fallidos, ${sinMatch} sin match de SKU): probable bloqueo de ML`,
+      `Nivel 2 quedó corto (${totalConDetalle}/${objetivos.length} con detalle, mínimo ${minimoAplicados}; esta pasada aplicó ${aplicados} de ${pendientes.length}; ${fallidos} fallidos, ${sinMatch} sin match de SKU): probable bloqueo de ML`,
     )
   }
 
   // recalcular el reporte ahora que hay reviews/seller/Full del nivel 2
   await obtenerColas().calcularMetricas.add('reporte', { nichoId })
 
-  return { objetivos: objetivos.length, aplicados, sinMatch, fallidos }
+  return { objetivos: objetivos.length, aplicados, yaMedidos: yaMedidos.size, sinMatch, fallidos }
 }
 
 export async function procesarCalcularMetricas(job) {

@@ -34,7 +34,9 @@ export function obtenerColas() {
     const connection = crearConexionRedis()
     colas = {
       scanNicho: new Queue(COLA_SCAN_NICHO, { connection, defaultJobOptions: opcionesJob }),
-      scanDetalle: new Queue(COLA_SCAN_DETALLE, { connection, defaultJobOptions: opcionesJob }),
+      // el fallo típico del detalle es el bloqueo de ML, que dura horas: reintentar
+      // en segundos solo multiplica el gasto de proxy — 1 intento y a la escalera de 2/4/8 h
+      scanDetalle: new Queue(COLA_SCAN_DETALLE, { connection, defaultJobOptions: { ...opcionesJob, attempts: 1 } }),
       calcularMetricas: new Queue(COLA_CALCULAR_METRICAS, { connection, defaultJobOptions: opcionesJob }),
       analisis: new Queue(COLA_ANALISIS, { connection, defaultJobOptions: opcionesJob }),
       radar: new Queue(COLA_RADAR, { connection, defaultJobOptions: opcionesJob }),
