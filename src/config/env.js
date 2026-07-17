@@ -14,7 +14,10 @@ export const config = {
   redisUrl: process.env.REDIS_URL,
   apifyToken: process.env.APIFY_TOKEN,
   actorSearch: process.env.APIFY_ACTOR_SEARCH || 'karamelo~mercadolibre-scraper-espanol-castellano',
-  actorDetails: process.env.APIFY_ACTOR_DETAILS || 'ecomscrape~mercadolibre-product-details-scraper',
+  // sourabhbgp desde 2026-07-17: pasó el muro nocturno de ML 10/10 donde ecomscrape
+  // daba 0/30, cuesta ~US$0.05/10 urls sin arriendo y entrega seller+reputación+IDs.
+  // Rollback: APIFY_ACTOR_DETAILS=ecomscrape~mercadolibre-product-details-scraper
+  actorDetails: process.env.APIFY_ACTOR_DETAILS || 'sourabhbgp~mercadolibre-scraper',
   maxPagesBusqueda: Number(process.env.APIFY_SEARCH_MAX_PAGES) || 2,
   nivel2Activo: process.env.NIVEL2_ACTIVO !== 'false',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,

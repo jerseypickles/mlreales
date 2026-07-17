@@ -45,7 +45,10 @@ export async function aplicarDetalleScan({ porSku, fecha }) {
   const sellersPorId = new Map()
 
   for (const [sku, det] of porSku) {
-    const setProd = { esFull: det.esFull, origenCrossBorder: det.origenCrossBorder }
+    // null = el actor no expone ese dato: conservar lo que dijo el nivel 1 / scan previo
+    const setProd = {}
+    if (det.esFull != null) setProd.esFull = det.esFull
+    if (det.origenCrossBorder != null) setProd.origenCrossBorder = det.origenCrossBorder
     if (det.categoriaML) setProd.categoriaML = det.categoriaML
     if (det.imagen) setProd.imagen = det.imagen
     if (det.seller) {

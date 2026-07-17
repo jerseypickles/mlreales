@@ -1,7 +1,9 @@
-// Normaliza el output del actor nivel 2 (ecomscrape/mercadolibre-product-details-scraper).
-// Schema validado contra output real el 2026-07-16 (ver test/fixtures/nivel2.json).
-// Nota: este actor NO entrega vendidos ni stock numérico pese a lo que anuncia;
-// la señal de demanda continua es reviews.count (exacto) vía delta entre scans.
+// Normaliza el output del actor nivel 2. Soporta dos formatos con auto-detección:
+// - sourabhbgp/mercadolibre-scraper (camelCase, mode:"product") — actual; schema
+//   validado contra output real el 2026-07-17 (test/fixtures/nivel2-sourabhbgp.json)
+// - ecomscrape/mercadolibre-product-details-scraper (snake_case) — legado/rollback
+// Ninguno entrega vendidos ni stock numérico; la señal de demanda continua es el
+// conteo de calificaciones (exacto) vía delta entre scans.
 
 const REGEX_SKU = /^MLCU?\d{6,}$/
 
@@ -21,8 +23,61 @@ export function extraerImagen(raw) {
   return template.replace('{id}', foto).replace('{sanitizedTitle}', '')
 }
 
+// sourabhbgp: el ID pedido puede venir como catalogProductId, productId, sku o
+// dentro de variations[].id (comprobado: pedir /p/MLC62124281 devuelve el catálogo
+// padre MLC62133922 con la variante pedida en variations)
+function skusCandidatosSourabh(raw) {
+  const variantes = Array.isArray(raw?.variations) ? raw.variations.map((v) => v?.id) : []
+  return [raw?.catalogProductId, raw?.productId, raw?.sku, ...variantes].filter(
+    (v, i, arr) => typeof v === 'string' && REGEX_SKU.test(v) && arr.indexOf(v) === i,
+  )
+}
+
+function normalizarItemSourabh(raw) {
+  const candidatos = skusCandidatosSourabh(raw)
+  if (!candidatos.length) return null
+
+  const numero = (v) => (Number.isFinite(v) ? v : null)
+  const sellerId = raw.sellerId != null ? String(raw.sellerId) : null
+  const origen = raw.shipping?.originCountry ?? null
+
+  return {
+    skusCandidatos: candidatos,
+    itemId: typeof raw.productId === 'string' ? raw.productId : null,
+    titulo: raw.title ?? null,
+    precio: numero(raw.price),
+    precioAnterior: numero(raw.originalPrice),
+    rating: numero(raw.rating),
+    // ratingCount = total de calificaciones (equivale al reviews.count de ecomscrape);
+    // reviewCount son solo las reseñas con texto — fallback si falta el primero
+    numReviews: numero(raw.ratingCount) ?? numero(raw.reviewCount),
+    // este actor no expone el flag de Full: null = no tocar lo que dijo el nivel 1
+    esFull: null,
+    envioGratis: raw.freeShipping === true,
+    categoriaML: raw.categoryId ?? (Array.isArray(raw.breadcrumbs) ? raw.breadcrumbs.join(' > ') : null),
+    condicion: raw.condition ?? null,
+    imagen: raw.thumbnail ?? (Array.isArray(raw.images) ? raw.images[0] : null) ?? null,
+    // solo afirmar cross-border cuando el actor entrega el origen; null = desconocido
+    origenCrossBorder: origen ? String(origen).toUpperCase().startsWith('CN') : null,
+    seller: sellerId
+      ? {
+          sellerId,
+          nombre: raw.sellerName ?? null,
+          reputacion: raw.sellerReputation ?? null,
+          powerSeller: raw.sellerPowerStatus ?? null,
+          esTiendaOficial: raw.isOfficialStore === true,
+          officialStoreId: raw.officialStoreName ?? null,
+        }
+      : null,
+  }
+}
+
 export function normalizarItemDetalle(raw) {
   if (!raw || typeof raw !== 'object') return null
+  // formato sourabhbgp: camelCase con mode/productId; ecomscrape usa snake_case
+  if (raw.mode === 'product' || raw.catalogProductId !== undefined || raw.productId !== undefined) {
+    return normalizarItemSourabh(raw)
+  }
   const candidatos = skusCandidatos(raw)
   if (!candidatos.length) return null
 

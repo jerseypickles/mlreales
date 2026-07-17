@@ -60,3 +60,27 @@ test('extraerImagen: arma la URL del thumbnail desde la galería', () => {
   assert.equal(extraerImagen({}), null)
   assert.equal(extraerImagen({ gallery: { pictures: [] } }), null)
 })
+
+// ---- formato sourabhbgp (actor actual desde 2026-07-17) ----
+
+const fixtureSourabh = JSON.parse(
+  readFileSync(new URL('./fixtures/nivel2-sourabhbgp.json', import.meta.url), 'utf8'),
+)
+
+test('normalizarItemDetalle sourabhbgp: mapea calificaciones, seller y variantes', () => {
+  const det = normalizarItemDetalle(fixtureSourabh[0])
+  assert.ok(det)
+  assert.equal(det.numReviews, fixtureSourabh[0].ratingCount) // calificaciones, no reseñas con texto
+  assert.equal(det.rating, fixtureSourabh[0].rating)
+  assert.equal(det.esFull, null) // el actor no expone Full: no pisar el nivel 1
+  assert.equal(det.seller.nombre, fixtureSourabh[0].sellerName)
+  assert.equal(det.seller.esTiendaOficial, Boolean(fixtureSourabh[0].isOfficialStore))
+  assert.ok(det.skusCandidatos.includes('MLC62124281')) // el ID pedido viene en variations
+})
+
+test('indexarDetallesPorSku sourabhbgp: matchea por ID de variante', () => {
+  const { porSku, sinMatch } = indexarDetallesPorSku([fixtureSourabh[0]], ['MLC62124281'])
+  assert.equal(porSku.size, 1)
+  assert.equal(sinMatch, 0)
+  assert.ok(porSku.get('MLC62124281'))
+})

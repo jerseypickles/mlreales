@@ -1,0 +1,445 @@
+[
+ {
+  "mode": "product",
+  "country": "CL",
+  "siteId": "MLC",
+  "productId": "MLC62133922",
+  "catalogProductId": "MLC62133922",
+  "title": "Kit Panel Solar 20w Con Cargador De Bateria 12v Feelsales Negro",
+  "url": "https://www.mercadolibre.cl/kit-panel-solar-20w-con-cargador-de-bateria-12v-feelsales-negro/p/MLC62133922",
+  "thumbnail": "https://http2.mlstatic.com/D_NQ_NP_928655-MLA97802713106_112025-O.webp",
+  "images": [
+   "https://http2.mlstatic.com/D_NQ_NP_928655-MLA97802713106_112025-O.jpg",
+   "https://http2.mlstatic.com/D_NQ_NP_649363-MLA97802594558_112025-O.jpg"
+  ],
+  "brand": "FeelSales",
+  "description": "Potencia máxima: 20 W. | Cantidad de celdas: 36. | Dimensiones: 35cm de ancho x 45cm de largo. | Pesa 1.9kg.",
+  "price": 29990,
+  "originalPrice": 69990,
+  "discountPercentage": 57,
+  "currency": "CLP",
+  "availability": "InStock",
+  "condition": "NewCondition",
+  "sku": "MLC62133922",
+  "rating": 4.9,
+  "ratingCount": 136,
+  "reviewCount": 67,
+  "installments": {
+   "quantity": 6,
+   "amount": 4998,
+   "total": 29988
+  },
+  "freeShipping": true,
+  "shippingText": null,
+  "shipping": {
+   "free": true,
+   "text": null,
+   "cost": 0,
+   "currency": null,
+   "originCountry": null,
+   "originRegion": null,
+   "destinationCountry": null,
+   "destinationRegion": null,
+   "handlingMinDays": null,
+   "handlingMaxDays": null,
+   "transitMinDays": null,
+   "transitMaxDays": null
+  },
+  "returnPolicy": {
+   "country": "CL",
+   "category": "MerchantReturnFiniteReturnWindow",
+   "days": 30,
+   "method": "ReturnByMail",
+   "fees": "FreeReturn"
+  },
+  "sellerId": "2204331794",
+  "sellerName": "FeelSales",
+  "sellerReputation": "5_green",
+  "sellerPowerStatus": "platinum",
+  "isOfficialStore": true,
+  "officialStoreName": "Feelsales",
+  "breadcrumbs": [
+   "Construcción",
+   "Electricidad",
+   "Energía Solar",
+   "Paneles Solares"
+  ],
+  "categoryId": "MLC85782",
+  "domainId": "MLC-SOLAR_PANELS",
+  "attributes": [
+   {
+    "name": "Marca",
+    "value": "FeelSales"
+   },
+   {
+    "name": "Modelo",
+    "value": "12V - 20W FeelSales"
+   },
+   {
+    "name": "Color",
+    "value": "Negro"
+   },
+   {
+    "name": "Voltaje máximo del sistema",
+    "value": "12V"
+   }
+  ],
+  "variations": [
+   {
+    "id": "MLC62124281",
+    "attributes": {
+     "units_per_pack": "1"
+    }
+   },
+   {
+    "id": "MLC62133922",
+    "attributes": {
+     "units_per_pack": "2"
+    }
+   },
+   {
+    "id": "MLC62133922",
+    "attributes": {
+     "color": "Negro"
+    }
+   },
+   {
+    "id": "MLC62133922",
+    "attributes": {
+     "open_circuit_voltage": "18V"
+    }
+   },
+   {
+    "id": "MLC62453417",
+    "attributes": {
+     "open_circuit_voltage": "21V"
+    }
+   },
+   {
+    "id": "MLC62133922",
+    "attributes": {
+     "sale_format": "Pack"
+    }
+   },
+   {
+    "id": "MLC62124281",
+    "attributes": {
+     "sale_format": "Unidad"
+    }
+   },
+   {
+    "id": "MLC62133922",
+    "attributes": {
+     "max_system_voltage": "12V"
+    }
+   },
+   {
+    "id": "MLC62453417",
+    "attributes": {
+     "max_system_voltage": "18V"
+    }
+   },
+   {
+    "id": "MLC62124281",
+    "attributes": {
+     "max_system_voltage": "1000V"
+    }
+   }
+  ],
+  "reviews": [
+   {
+    "text": "Lo uso con un inversor de 1000w y me sirve para la tv. Para un ventilador carga vateria.",
+    "rating": 5,
+    "country": "Usuario de Mercado Libre"
+   }
+  ],
+  "questions": [
+   {
+    "id": 13617309104,
+    "text": "Que viene?",
+    "answer": "Buen día Panel solar de 20w y regulador de carga Saludos.",
+    "answerDate": "08/07/2026"
+   }
+  ],
+  "promotions": null,
+  "scrapedAt": "2026-07-17T06:39:10.165Z"
+ },
+ {
+  "mode": "product",
+  "country": "CL",
+  "siteId": "MLC",
+  "productId": "MLC50446759",
+  "catalogProductId": "MLC50446759",
+  "title": "Panel Solar Monocristalino Fotovoltaico 12v 100w Color Negro Voltaje Máximo Del Sistema 21v",
+  "url": "https://www.mercadolibre.cl/panel-solar-monocristalino-fotovoltaico-12v-100w-color-negro-voltaje-maximo-del-sistema-21v/p/MLC50446759",
+  "thumbnail": "https://http2.mlstatic.com/D_NQ_NP_800631-MLA96099595841_102025-O.webp",
+  "images": [
+   "https://http2.mlstatic.com/D_NQ_NP_800631-MLA96099595841_102025-O.jpg",
+   "https://http2.mlstatic.com/D_NQ_NP_603007-MLA85184161315_052025-O.jpg"
+  ],
+  "brand": "Osmao",
+  "description": "Unidades por pack: 1. | Potencia máxima: 100 W. | Cantidad de celdas: 36. | Voltaje de circuito abierto: 12V. | Voltaje máximo del sistema: 21V. | Panel solar de tecnología monocristalina para mayor e",
+  "price": 36660,
+  "originalPrice": 38590,
+  "discountPercentage": 5,
+  "currency": "CLP",
+  "availability": "InStock",
+  "condition": "NewCondition",
+  "sku": "MLC50446759",
+  "rating": 4.8,
+  "ratingCount": 94,
+  "reviewCount": 49,
+  "installments": {
+   "quantity": 6,
+   "amount": 6110,
+   "total": 36660
+  },
+  "freeShipping": true,
+  "shippingText": null,
+  "shipping": {
+   "free": true,
+   "text": null,
+   "cost": 0,
+   "currency": null,
+   "originCountry": null,
+   "originRegion": null,
+   "destinationCountry": null,
+   "destinationRegion": null,
+   "handlingMinDays": null,
+   "handlingMaxDays": null,
+   "transitMinDays": null,
+   "transitMaxDays": null
+  },
+  "returnPolicy": {
+   "country": "CL",
+   "category": "MerchantReturnFiniteReturnWindow",
+   "days": 30,
+   "method": "ReturnByMail",
+   "fees": "FreeReturn"
+  },
+  "sellerId": "2530618254",
+  "sellerName": "CC20250701122005",
+  "sellerReputation": "5_green",
+  "sellerPowerStatus": "platinum",
+  "isOfficialStore": null,
+  "officialStoreName": null,
+  "breadcrumbs": [
+   "Construcción",
+   "Electricidad",
+   "Energía Solar",
+   "Paneles Solares",
+   "Panel Solar"
+  ],
+  "categoryId": "MLC85782",
+  "domainId": "MLC-SOLAR_PANELS",
+  "attributes": [
+   {
+    "name": "Marca",
+    "value": "Osmao"
+   },
+   {
+    "name": "Modelo",
+    "value": "100W"
+   },
+   {
+    "name": "Color",
+    "value": "Negro"
+   },
+   {
+    "name": "Voltaje máximo del sistema",
+    "value": "21V"
+   }
+  ],
+  "variations": [
+   {
+    "id": "MLC50446759",
+    "attributes": {
+     "color": "Negro"
+    }
+   }
+  ],
+  "reviews": [
+   {
+    "text": "Excelente compra, paneles con las 3b, en un momento cuando salió el sol marcaron 204w lo que indica que son muy eficientes. Fácil instalación, lo que si necesitas para dejarlos en el techo es un cable extensor de 10m mc4 que no viene incluido, pero lo demás 10/10.",
+    "rating": 5,
+    "country": "Usuario de Mercado Libre"
+   }
+  ],
+  "questions": [
+   {
+    "id": 13622718534,
+    "text": "Hola sirven para cargar bateríaas de 12 v de 120 hamperes",
+    "answer": "Este panel solar es 12v sirve para bateria 12v 120 a",
+    "answerDate": "15/07/2026"
+   }
+  ],
+  "promotions": null,
+  "scrapedAt": "2026-07-17T06:39:22.097Z"
+ },
+ {
+  "mode": "product",
+  "country": "CL",
+  "siteId": "MLC",
+  "productId": "MLC62124281",
+  "catalogProductId": "MLC62124281",
+  "title": "Panel Solar 12v 20w Feelsales Negro 1000v 21v",
+  "url": "https://www.mercadolibre.cl/panel-solar-12v-20w-feelsales-negro-1000v-21v/p/MLC62124281",
+  "thumbnail": "https://http2.mlstatic.com/D_NQ_NP_964102-MLA97785371116_112025-O.webp",
+  "images": [
+   "https://http2.mlstatic.com/D_NQ_NP_964102-MLA97785371116_112025-O.jpg",
+   "https://http2.mlstatic.com/D_NQ_NP_858890-MLA98251699599_112025-O.jpg"
+  ],
+  "brand": "FeelSales",
+  "description": "Potencia máxima: 20 W. | Cantidad de celdas: 36. | Dimensiones: 35cm de ancho x 45cm de largo. | Pesa 1.9kg.",
+  "price": 18430,
+  "originalPrice": 25990,
+  "discountPercentage": 29,
+  "currency": "CLP",
+  "availability": "InStock",
+  "condition": "NewCondition",
+  "sku": "MLC62124281",
+  "rating": 4.9,
+  "ratingCount": 136,
+  "reviewCount": 67,
+  "installments": {
+   "quantity": 6,
+   "amount": 3072,
+   "total": 18432
+  },
+  "freeShipping": null,
+  "shippingText": null,
+  "shipping": {
+   "free": null,
+   "text": null,
+   "cost": null,
+   "currency": null,
+   "originCountry": null,
+   "originRegion": null,
+   "destinationCountry": null,
+   "destinationRegion": null,
+   "handlingMinDays": null,
+   "handlingMaxDays": null,
+   "transitMinDays": null,
+   "transitMaxDays": null
+  },
+  "returnPolicy": {
+   "country": "CL",
+   "category": "MerchantReturnFiniteReturnWindow",
+   "days": 30,
+   "method": "ReturnByMail",
+   "fees": "FreeReturn"
+  },
+  "sellerId": "2204331794",
+  "sellerName": "FeelSales",
+  "sellerReputation": "5_green",
+  "sellerPowerStatus": "platinum",
+  "isOfficialStore": true,
+  "officialStoreName": "Feelsales",
+  "breadcrumbs": [
+   "Construcción",
+   "Electricidad",
+   "Energía Solar",
+   "Paneles Solares",
+   "Panel Solar"
+  ],
+  "categoryId": "MLC85782",
+  "domainId": "MLC-SOLAR_PANELS",
+  "attributes": [
+   {
+    "name": "Marca",
+    "value": "FeelSales"
+   },
+   {
+    "name": "Modelo",
+    "value": "12V - 20W FeelSales"
+   },
+   {
+    "name": "Color",
+    "value": "Negro"
+   },
+   {
+    "name": "Voltaje máximo del sistema",
+    "value": "1000V"
+   }
+  ],
+  "variations": [
+   {
+    "id": "MLC62124281",
+    "attributes": {
+     "units_per_pack": "1"
+    }
+   },
+   {
+    "id": "MLC62453417",
+    "attributes": {
+     "units_per_pack": "2"
+    }
+   },
+   {
+    "id": "MLC62124281",
+    "attributes": {
+     "color": "Negro"
+    }
+   },
+   {
+    "id": "MLC62133922",
+    "attributes": {
+     "open_circuit_voltage": "18V"
+    }
+   },
+   {
+    "id": "MLC62124281",
+    "attributes": {
+     "open_circuit_voltage": "21V"
+    }
+   },
+   {
+    "id": "MLC62453417",
+    "attributes": {
+     "sale_format": "Pack"
+    }
+   },
+   {
+    "id": "MLC62124281",
+    "attributes": {
+     "sale_format": "Unidad"
+    }
+   },
+   {
+    "id": "MLC62133922",
+    "attributes": {
+     "max_system_voltage": "12V"
+    }
+   },
+   {
+    "id": "MLC62453417",
+    "attributes": {
+     "max_system_voltage": "18V"
+    }
+   },
+   {
+    "id": "MLC62124281",
+    "attributes": {
+     "max_system_voltage": "1000V"
+    }
+   }
+  ],
+  "reviews": [
+   {
+    "text": "Lo uso con un inversor de 1000w y me sirve para la tv. Para un ventilador carga vateria.",
+    "rating": 5,
+    "country": "Usuario de Mercado Libre"
+   }
+  ],
+  "questions": [
+   {
+    "id": 13608051072,
+    "text": "Hola sirve para cargar un foco solar led se 400 watts",
+    "answer": "Buenos días,No no sirve",
+    "answerDate": "22/06/2026"
+   }
+  ],
+  "promotions": null,
+  "scrapedAt": "2026-07-17T06:39:18.096Z"
+ }
+]

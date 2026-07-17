@@ -3,7 +3,7 @@ import { config } from '../config/env.js'
 import { Nicho } from '../models/Nicho.js'
 import { Reporte } from '../models/Reporte.js'
 import { Snapshot } from '../models/Snapshot.js'
-import { buscarNivel1, ejecutarActorAsync } from '../services/apify.js'
+import { buscarNivel1, ejecutarActorAsync, construirInputDetalle } from '../services/apify.js'
 import { normalizarScan } from '../services/normalizador.js'
 import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
 import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
@@ -92,7 +92,7 @@ export async function procesarScanDetalle(job) {
 
   // los reintentos pendientes no deben gastar en nichos que ya no interesan
   // ni aplicar datos a un scan superado por otro más nuevo (quedarían huérfanos)
-  const nicho = await Nicho.findById(nichoId).select('estado ultimoScanEl keyword').lean()
+  const nicho = await Nicho.findById(nichoId).select('estado ultimoScanEl keyword domainCode').lean()
   if (!nicho) return { omitido: true, motivo: 'nicho eliminado' }
   if (nicho.estado !== 'activo') return { omitido: true, motivo: `nicho en estado "${nicho.estado}"` }
   if (nicho.ultimoScanEl && new Date(nicho.ultimoScanEl) - fecha > 30 * 60_000) {
@@ -124,12 +124,7 @@ export async function procesarScanDetalle(job) {
     try {
       const r = await ejecutarActorAsync(
         config.actorDetails,
-        {
-          urls: batch.map((o) => o.url),
-          max_retries_per_url: 2,
-          ignore_url_failures: true,
-          proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] },
-        },
+        construirInputDetalle(config.actorDetails, batch.map((o) => o.url), { domainCode: nicho.domainCode }),
         { pollMs: 10_000, timeoutMs: 12 * 60_000, conMeta: true },
       )
       crudos = r.items

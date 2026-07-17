@@ -93,6 +93,30 @@ export async function obtenerCostoRun(runId) {
 
 // Modo async para runs largos (batches del nivel 2 en Fase 2): inicia el run y hace polling.
 // Con `conMeta: true` devuelve { items, costoUsd }.
+// Input del actor de detalle según su familia: sourabhbgp (actual) y ecomscrape
+// (legado/rollback) reciben formatos distintos.
+export function construirInputDetalle(actorId, urls, { domainCode = 'CL' } = {}) {
+  if (String(actorId).includes('sourabhbgp')) {
+    return {
+      mode: 'product',
+      country: domainCode,
+      productUrls: urls,
+      maxItems: 0,
+      includeReviews: false,
+      includeQuestions: false,
+      includeVariations: false,
+      maxConcurrency: 8,
+      useResidentialProxy: true,
+    }
+  }
+  return {
+    urls,
+    max_retries_per_url: 2,
+    ignore_url_failures: true,
+    proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] },
+  }
+}
+
 // Para la sonda debug: iniciar un run sin esperarlo (el proxy de Render corta
 // respuestas largas) y consultar estado + items después con el runId.
 export async function iniciarRun(actorId, input) {
