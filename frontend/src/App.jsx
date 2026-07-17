@@ -81,6 +81,7 @@ const ETAPAS = {
   escaneando: 'escaneando listado…',
   detalle: 'leyendo detalle de productos…',
   analizando: 'analizando con IA…',
+  reintento: 'ML bloqueó el detalle — reintento programado (horas)…',
 }
 
 function NichoItem({ n, seleccionado, onSeleccionar }) {

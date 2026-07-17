@@ -96,9 +96,9 @@ router.get(
     const etapas = new Map()
     try {
       const colas = obtenerColas()
-      const enEspera = ['waiting', 'delayed', 'prioritized']
+      const enEspera = ['waiting', 'prioritized']
       // con Redis caído getJobs no resuelve nunca: acotar con timeout
-      const [analisisAct, detallesAct, scansAct, analisisEsp, detallesEsp, scansEsp] = await Promise.race([
+      const [analisisAct, detallesAct, scansAct, analisisEsp, detallesEsp, scansEsp, retrasados] = await Promise.race([
         Promise.all([
           colas.analisis.getJobs(['active']),
           colas.scanDetalle.getJobs(['active']),
@@ -106,10 +106,12 @@ router.get(
           colas.analisis.getJobs(enEspera),
           colas.scanDetalle.getJobs(enEspera),
           colas.scanNicho.getJobs(enEspera),
+          colas.scanDetalle.getJobs(['delayed']),
         ]),
         new Promise((_, rechazar) => setTimeout(() => rechazar(new Error('timeout')), 1500)),
       ])
-      // primero lo que espera turno; lo activo pisa con su etapa real
+      // reintentos programados (bloqueo de ML) primero; la espera real y lo activo pisan
+      for (const j of retrasados) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'reintento')
       for (const j of [...analisisEsp, ...detallesEsp, ...scansEsp])
         if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'cola')
       for (const j of analisisAct) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'analizando')
