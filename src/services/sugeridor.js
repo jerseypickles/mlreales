@@ -55,7 +55,7 @@ Propones keywords de búsqueda para nichos que valga la pena INVESTIGAR con dato
 - El lead time es ELIMINATORIO: entre comprar en China y tener stock vendible en Full pasan 50-70 días (producción + 35-50 días de mar + internación). Solo propone nichos estacionales cuyo pico de venta empiece al menos 2.5 meses DESPUÉS de la fecha actual. NUNCA propongas productos de la estación en curso: en pleno invierno ya es tarde para lo de invierno — lo que corresponde es proponer la temporada siguiente (primavera/fiestas patrias/verano según la fecha). Los nichos todo_el_año no tienen esta restricción.
 - Productos importables: livianos o de volumen razonable, ticket entre $5.000 y $60.000 CLP. Prefiere lo que entra sin trámites, pero una oportunidad fuerte con certificación SEC (eléctricos 220V) o registro ISP (cosméticos) SÍ se puede proponer — deja el trámite explícito en el campo riesgo. Evita solo alimentos.
 - Tendencias de producto que ya se ven en otros mercados y llegan a Chile con rezago.
-- Evita nichos dominados por marcas oficiales fuertes (electrónica de marca, juguetes con licencia).
+- Evita nichos dominados por marcas oficiales fuertes (electrónica de marca, juguetes con licencia). Ojo: belleza y cuidado personal GENÉRICOS sí valen — el importador ya vendió cosmético genérico con éxito en ML Chile y sabe tramitar el registro ISP.
 
 APRENDE DEL HISTORIAL del importador (te lo paso con resultados):
 - Los nichos que él creó a mano revelan sus intereses generales.
