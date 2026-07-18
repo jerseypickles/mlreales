@@ -2,6 +2,7 @@ import { pedirJSON } from './llm.js'
 import { palabrasClave } from './busquedasReales.js'
 import { Nicho } from '../models/Nicho.js'
 import { Reporte } from '../models/Reporte.js'
+import { criteriosActivos } from './criterios.js'
 
 // Palabras que dominan el tablero: si una raíz aparece en 3+ keywords activas
 // (ej: "solar"), esa vertical está saturada y el radar no debe abrir más ahí.
@@ -101,10 +102,14 @@ async function armarHistorial() {
 
 export async function sugerirNichos({ contexto, tendencias } = {}) {
   const historial = await armarHistorial()
+  const criterios = await criteriosActivos().catch(() => [])
   const fecha = new Date().toLocaleDateString('es-CL', { month: 'long', year: 'numeric', timeZone: 'America/Santiago' })
 
   const user = [
     `Fecha actual: ${fecha}.`,
+    criterios.length
+      ? `CRITERIOS DEL IMPORTADOR (los escribió él — cúmplelos al proponer):\n${criterios.map((c) => `- ${c}`).join('\n')}`
+      : '',
     historial.lineas.length
       ? `Historial del importador con resultados (no repitas estas keywords):\n${historial.lineas.join('\n')}`
       : '',

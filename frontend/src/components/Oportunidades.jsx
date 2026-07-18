@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { Cargando, ScoreRing } from './ui.jsx'
+import { Criterios } from './Criterios.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 
 const FLECHA = { sube: ['↑', 'delta-sube'], baja: ['↓', 'delta-baja'], estable: ['→', 'delta-neutra'] }
@@ -157,6 +158,8 @@ export function Oportunidades({ onAbrirNicho }) {
           })()}
         </div>
       )}
+
+      <Criterios />
 
       <p className="nota">
         Ranking por score con desempate por demanda. "EXW máx" es lo más que puedes pagar en China (precio ex-fábrica)

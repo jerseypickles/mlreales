@@ -17,20 +17,50 @@ function obtenerCliente() {
   return cliente
 }
 
-// Llamada con salida estructurada (JSON garantizado por output_config.format).
-export async function pedirJSON({ system, user, schema, maxTokens = 8000 }) {
-  const anthropic = obtenerCliente()
+// US$ por millón de tokens [entrada, salida] según modelo
+const PRECIOS = {
+  'claude-fable-5': [10, 50],
+  'claude-opus-4-8': [5, 25],
+}
+const precioDe = (modelo) => PRECIOS[modelo] ?? PRECIOS['claude-opus-4-8']
 
-  let respuesta
-  try {
-    respuesta = await anthropic.messages.create({
-      model: config.llmModel,
+function costoDe(respuesta, modelo) {
+  const [entrada, salida] = precioDe(modelo)
+  const uso = respuesta.usage ?? {}
+  const costo =
+    ((uso.input_tokens ?? 0) + (uso.cache_read_input_tokens ?? 0) * 0.1) * (entrada / 1e6) +
+    (uso.output_tokens ?? 0) * (salida / 1e6)
+  return Math.round(costo * 10000) / 10000
+}
+
+// Llamada con salida estructurada (JSON garantizado por output_config.format).
+// `modelo` permite subir una llamada puntual (ej: el analista corre en Fable 5);
+// si ese modelo rechaza o falla, se reintenta solo con el modelo base.
+export async function pedirJSON({ system, user, schema, maxTokens = 8000, modelo }) {
+  const anthropic = obtenerCliente()
+  const modeloPedido = modelo ?? config.llmModel
+
+  const llamar = (m) =>
+    anthropic.messages.create({
+      model: m,
       max_tokens: maxTokens,
       thinking: { type: 'adaptive' },
       system,
       output_config: { format: { type: 'json_schema', schema } },
       messages: [{ role: 'user', content: user }],
     })
+
+  let respuesta
+  let modeloUsado = modeloPedido
+  try {
+    respuesta = await llamar(modeloPedido)
+    // los clasificadores de Fable 5 pueden declinar contenido benigno: el
+    // modelo base responde la misma solicitud
+    if (respuesta.stop_reason === 'refusal' && modeloPedido !== config.llmModel) {
+      console.error(`[llm] ${modeloPedido} rechazó la solicitud: reintentando con ${config.llmModel}`)
+      modeloUsado = config.llmModel
+      respuesta = await llamar(config.llmModel)
+    }
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) {
       const e = new Error('Límite de tasa de la API de Anthropic; intenta de nuevo en unos segundos')
@@ -42,7 +72,20 @@ export async function pedirJSON({ system, user, schema, maxTokens = 8000 }) {
       e.status = 503
       throw e
     }
-    throw err
+    // modelo premium no disponible para la cuenta (404/403/400 de modelo):
+    // degradar al modelo base en vez de botar el análisis
+    if (
+      modeloPedido !== config.llmModel &&
+      (err instanceof Anthropic.NotFoundError ||
+        err instanceof Anthropic.PermissionDeniedError ||
+        err instanceof Anthropic.BadRequestError)
+    ) {
+      console.error(`[llm] ${modeloPedido} no disponible (${err.status}): usando ${config.llmModel}`)
+      modeloUsado = config.llmModel
+      respuesta = await llamar(config.llmModel)
+    } else {
+      throw err
+    }
   }
 
   if (respuesta.stop_reason === 'refusal') {
@@ -55,11 +98,5 @@ export async function pedirJSON({ system, user, schema, maxTokens = 8000 }) {
   const bloqueTexto = respuesta.content.find((b) => b.type === 'text')
   if (!bloqueTexto) throw new Error('El modelo no devolvió contenido')
 
-  // costo real de la llamada (Opus 4.8: US$5/M entrada, US$25/M salida)
-  const uso = respuesta.usage ?? {}
-  const costoUsd =
-    ((uso.input_tokens ?? 0) + (uso.cache_read_input_tokens ?? 0) * 0.1) * (5 / 1e6) +
-    (uso.output_tokens ?? 0) * (25 / 1e6)
-
-  return { datos: JSON.parse(bloqueTexto.text), costoUsd: Math.round(costoUsd * 10000) / 10000 }
+  return { datos: JSON.parse(bloqueTexto.text), costoUsd: costoDe(respuesta, modeloUsado), modelo: modeloUsado }
 }

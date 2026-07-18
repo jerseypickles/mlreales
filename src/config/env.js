@@ -22,6 +22,9 @@ export const config = {
   nivel2Activo: process.env.NIVEL2_ACTIVO !== 'false',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
   llmModel: process.env.LLM_MODEL || 'claude-opus-4-8',
+  // el analista decide dónde va la plata: corre en el modelo más capaz, con
+  // degradación automática al modelo base si no está disponible (llm.js)
+  llmModelAnalista: process.env.LLM_MODEL_ANALISTA || 'claude-fable-5',
   // radar autónomo: descubre nichos por temporada/tendencia y los escanea solo
   radarActivo: process.env.RADAR_ACTIVO !== 'false',
   radarCron: process.env.RADAR_CRON || '0 8 * * *', // diario 08:00 Chile

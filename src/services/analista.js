@@ -2,6 +2,9 @@ import { pedirJSON } from './llm.js'
 import { exwMaximoUsd } from './margen.js'
 import { obtenerProductosUltimoScan } from './metricas.js'
 import { Reporte } from '../models/Reporte.js'
+import { criteriosActivos } from './criterios.js'
+import { movimientosRecientes, lineasEnAlza, prefijoDeKeyword } from './tendencias.js'
+import { config } from '../config/env.js'
 
 const SCHEMA_ANALISIS = {
   type: 'object',
@@ -92,6 +95,8 @@ Reglas:
 - CALENDARIO Y LEAD TIME (eliminatorio): te paso la fecha actual. Entre comprar en China y tener stock vendible en Full pasan 50-70 días (producción + 35-50 días de mar + internación + ingreso a Full). Si el nicho es estacional y su pico de venta ya pasó o termina antes de que alcance a llegar un pedido hecho HOY, el veredicto es no_entrar aunque las métricas sean excelentes: la demanda que ves es de la temporada en curso y el stock llegaría a bodega muerta. En el resumen di explícitamente que es por ventana de importación e indica en qué mes comprar para el próximo pico. Producto de la estación en curso (ej: ropa de invierno en pleno invierno) ya es tarde. Si la ventana es justa (el pedido llega apenas al inicio del pico), solo entrar_con_condiciones con envío aéreo o pedido chico, y dilo.
 - BARRERAS DE IMPORTACIÓN (informar, no vetar): los eléctricos que se enchufan a la red (220V) requieren certificación SEC en Chile; los cosméticos, registro ISP. Son trámites con costo y semanas — NO descartan un nicho bueno por sí solos, pero la recomendación debe dejarlos explícitos: nómbralos en riesgos, súmalos a la jugada (tramitar mientras se valida) e indica si existe una variante del producto sin la barrera (ej: a pilas/USB/12V) para partir más rápido.
 - EXPERIENCIA REAL DEL IMPORTADOR (pésala más que tus supuestos de manual): ya vende en Mercado Libre Chile y HA VENDIDO COSMÉTICO GENÉRICO con éxito — en Chile el comprador sí compra genérico, también en belleza. No descartes un nicho por "categoría de marca" a priori: mídelo en el top 50 que te paso (campo "oficial"): si hay productos genéricos/no-oficiales con reseñas, el genérico vende; descarta por marca solo si el top está copado por tiendas oficiales Y los genéricos no tienen tracción. El registro ISP el importador ya lo tramitó antes (se hace por producto): trátalo como costo y plazo conocidos dentro de la jugada, nunca como razón de no_entrar.
+- CRITERIOS DEL IMPORTADOR (campo criteriosImportador, si viene): reglas que él escribió en su libreta — cúmplelas al pie de la letra, están por encima de tus heurísticas generales.
+- BÚSQUEDAS EN ALZA (campo busquedasEnAlza, si viene): consultas del autocompletado de ML que están subiendo esta semana en la vertical de este nicho — señal de demanda en tiempo real que complementa el delta de reseñas; úsala para elegir el segmento y el ángulo del producto.
 - CONTEXTO DEL IMPORTADOR SOBRE ESTE NICHO (campo contextoImportador, si viene): es experiencia de primera mano — ventas reales suyas en este nicho, conocimiento del segmento, canal o temporada. Pésalo POR SOBRE lo que infieras de las reseñas: las reseñas acumuladas por listing miden permanencia, y los vendedores genéricos rotan publicaciones — sus ventas se dispersan en listings de vida corta que no acumulan reseñas, así que "genéricos con pocas reseñas" NO prueba que el genérico no venda si el importador ya lo vendió. Si su experiencia contradice tu lectura de los datos, dilo explícitamente en el resumen y ajusta el veredicto considerando ambas evidencias.
 - Sé directo y escéptico: si el nicho no da, di no_entrar y explica por qué. Un veredicto inflado cuesta dinero real.
 - El usuario quiere LA decisión, no un informe: titular de máximo 90 caracteres con el producto concreto a traer, resumen de máximo 2 frases, razón de cada segmento en 1 frase, riesgos de 1 línea cada uno. Cero relleno.
@@ -132,6 +137,18 @@ export async function analizarNicho(nicho) {
   const vista = await obtenerProductosUltimoScan(nicho)
   if (!vista) throw Object.assign(new Error('el nicho no tiene snapshots'), { status: 409 })
 
+  // criterios de la libreta + búsquedas en alza de la vertical (mejores
+  // entradas = mejores veredictos; ambas opcionales y a prueba de fallos)
+  const criterios = await criteriosActivos().catch(() => [])
+  let busquedasEnAlza
+  try {
+    const prefijo = prefijoDeKeyword(nicho.keyword)
+    const movimientos = (await movimientosRecientes()).filter((m) => m.prefijo === prefijo)
+    if (movimientos.length) busquedasEnAlza = lineasEnAlza(movimientos, { max: 8 })
+  } catch {
+    // sin datos de tendencias: el campo simplemente no viaja
+  }
+
   const entrada = {
     keyword: nicho.keyword,
     fechaActual: new Date().toLocaleDateString('es-CL', {
@@ -143,20 +160,23 @@ export async function analizarNicho(nicho) {
     estacionalidad: nicho.radarInfo?.estacionalidad ?? undefined,
     ventanaImportacionSegunRadar: nicho.radarInfo?.ventanaImportacion ?? undefined,
     contextoImportador: nicho.contextoUsuario ?? undefined,
+    criteriosImportador: criterios.length ? criterios : undefined,
+    busquedasEnAlza,
     metricas: reporte.metricas,
     tablaExwMaximo: tablaExwMaximo(reporte.metricas),
     supuestosTabla: 'EXW máximo por unidad (precio ex-fábrica; la tarifa del forwarder cubre retiro y flete marítimo) asumiendo 500 unidades, 0.003 m³/unidad, TLC 0% arancel, comisión ML 16%, tarifa Full incluida',
     top50: resumirProductosParaLLM(vista.productos),
   }
 
-  const { datos: analisis, costoUsd } = await pedirJSON({
+  const { datos: analisis, costoUsd, modelo } = await pedirJSON({
     system: SYSTEM_ANALISTA,
     user: `Analiza este nicho de mercadolibre.cl y decide si entrar:\n\n${JSON.stringify(entrada)}`,
     schema: SCHEMA_ANALISIS,
     maxTokens: 12_000,
+    modelo: config.llmModelAnalista, // la decisión cara corre en el modelo más capaz
   })
 
-  reporte.analisis = { ...analisis, generadoEl: new Date(), modelo: 'claude' }
+  reporte.analisis = { ...analisis, generadoEl: new Date(), modelo }
   reporte.markModified('analisis')
   await reporte.save()
 
