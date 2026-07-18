@@ -44,6 +44,12 @@ export function detectarTramites(textos) {
   return tramites
 }
 
+// Un "entrar" con un solo scan es una foto; confirmado = la demanda se sostuvo
+// en al menos 3 scans y no viene cayendo. Distingue hipótesis de evidencia.
+export function confirmacionVeredicto(scansConDemanda, tendencia) {
+  return scansConDemanda >= 3 && tendencia !== 'baja' ? 'confirmado' : 'preliminar'
+}
+
 // Dirección de la demanda entre los dos últimos reportes (±15% = ruido).
 export function tendenciaVentas(ultimo, anterior) {
   const a = ultimo?.metricas?.demanda?.ventasEstimadasPorDia

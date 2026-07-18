@@ -7,6 +7,7 @@ import {
   unidadesPrimeraCompra,
   cambiosPorEtapa,
   ETAPAS_COMPRA,
+  confirmacionVeredicto,
 } from '../../services/oportunidades.js'
 import { generarRfqPendientes } from '../../services/rfq.js'
 import { llmDisponible } from '../../services/llm.js'
@@ -51,8 +52,26 @@ router.get(
         },
       },
       {
+        // cuántos scans respaldan la demanda: la base de "confirmado vs preliminar"
+        $lookup: {
+          from: 'reportes',
+          let: { nid: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$nichoId', '$$nid'] },
+                'metricas.demanda.ventasEstimadasPorDia': { $ne: null },
+              },
+            },
+            { $count: 'n' },
+          ],
+          as: 'conteoDemanda',
+        },
+      },
+      {
         $project: {
           keyword: 1,
+          conteoDemanda: 1,
           origen: 1,
           estado: 1,
           etapaCompra: 1,
@@ -79,6 +98,9 @@ router.get(
       const rec = analisis.recomendacion ?? {}
       // análisis viejos guardaron fobMaximoUsd; el significado nuevo es EXW
       const exwMax = rec.exwMaximoUsd ?? rec.fobMaximoUsd ?? null
+      const scansConDemanda = n.conteoDemanda?.[0]?.n ?? 0
+      const tendencia = tendenciaVentas(n.ultimos?.[0], n.ultimos?.[1])
+      const gemelos = ultimo?.metricas?.competencia?.sellersGemelos ?? null
       oportunidades.push({
         nichoId: n._id,
         keyword: n.keyword,
@@ -90,7 +112,13 @@ router.get(
         fechaScan: ultimo?.fecha ?? null,
         mediana: ultimo?.metricas?.precio?.mediana ?? null,
         ventasDia: ultimo?.metricas?.demanda?.ventasEstimadasPorDia ?? null,
-        tendenciaVentas: tendenciaVentas(n.ultimos?.[0], n.ultimos?.[1]),
+        tendenciaVentas: tendencia,
+        scansConDemanda,
+        confirmacion: confirmacionVeredicto(scansConDemanda, tendencia),
+        sellersGemelos: gemelos ? gemelos.length : null,
+        gemelosDetalle: gemelos?.length
+          ? gemelos.map((g) => `${g.vendedor} (+${g.reviewsNuevas} reseñas)`).join(', ')
+          : null,
         pctFull: ultimo?.metricas?.competencia?.pctFull ?? null,
         sellersUnicos: ultimo?.metricas?.competencia?.sellersUnicos ?? null,
         titular: rec.titular ?? null,

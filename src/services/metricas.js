@@ -324,6 +324,39 @@ export async function obtenerProductosUltimoScan(nicho) {
   }
 }
 
+// Sellers "gemelos": vendedores NO oficiales, chicos, que están ganando
+// reseñas AHORA dentro del nicho — la prueba directa de que un entrante
+// genérico (como el importador) puede vender aquí. Requiere dos scans.
+export function detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPrevios }) {
+  if (!snapshotsPrevios?.length) return null
+  const previasPorSku = new Map(snapshotsPrevios.map((s) => [s.sku, s.numReviews]))
+
+  const porSeller = new Map()
+  for (const snap of snapshots) {
+    const prod = productosPorSku.get(snap.sku)
+    if (!prod?.vendedor || prod.esTiendaOficial) continue
+    const antes = previasPorSku.get(snap.sku)
+    if (!Number.isFinite(snap.numReviews) || !Number.isFinite(antes)) continue
+    const g = porSeller.get(prod.vendedor) ?? {
+      vendedor: prod.vendedor,
+      productos: 0,
+      reviewsNuevas: 0,
+      reviewsTotal: 0,
+    }
+    g.productos++
+    g.reviewsNuevas += Math.max(0, snap.numReviews - antes)
+    g.reviewsTotal += snap.numReviews
+    porSeller.set(prod.vendedor, g)
+  }
+
+  // "chico" = venía con ≤500 reseñas acumuladas en el nicho antes de crecer:
+  // un no-oficial gigante no es gemelo de un entrante
+  return [...porSeller.values()]
+    .filter((g) => g.reviewsNuevas > 0 && g.reviewsTotal - g.reviewsNuevas <= 500)
+    .sort((a, b) => b.reviewsNuevas - a.reviewsNuevas)
+    .slice(0, 5)
+}
+
 // Arma el reporte del último scan de un nicho leyendo de Mongo.
 export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   const ultimoSnap = await Snapshot.findOne({ keyword: nicho.keyword }).sort({ fecha: -1 }).lean()
@@ -348,6 +381,8 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
     topN,
     snapshotsPrevios,
   })
+  const gemelos = detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPrevios })
+  if (gemelos) metricas.competencia.sellersGemelos = gemelos
 
   const topProductos = [...snapshots]
     .sort((a, b) => (a.posicion ?? Infinity) - (b.posicion ?? Infinity))

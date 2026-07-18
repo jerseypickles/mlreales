@@ -68,3 +68,42 @@ test('inversionEstimadaUsd: unidades × FOB máximo', () => {
   assert.equal(inversionEstimadaUsd('50-100 unidades', null), null)
   assert.equal(inversionEstimadaUsd('sin número', 6), null)
 })
+
+test('confirmacionVeredicto: 3+ scans sin caída = confirmado; lo demás preliminar', async () => {
+  const { confirmacionVeredicto } = await import('../src/services/oportunidades.js')
+  assert.equal(confirmacionVeredicto(3, 'sube'), 'confirmado')
+  assert.equal(confirmacionVeredicto(4, 'estable'), 'confirmado')
+  assert.equal(confirmacionVeredicto(3, 'baja'), 'preliminar') // demanda cayendo no confirma
+  assert.equal(confirmacionVeredicto(1, 'sube'), 'preliminar')
+  assert.equal(confirmacionVeredicto(0, null), 'preliminar')
+})
+
+test('detectarSellersGemelos: no-oficiales chicos ganando reseñas; oficiales y gigantes fuera', async () => {
+  const { detectarSellersGemelos } = await import('../src/services/metricas.js')
+  const snapshots = [
+    { sku: 'A', numReviews: 40 },
+    { sku: 'B', numReviews: 1200 },
+    { sku: 'C', numReviews: 15 },
+    { sku: 'D', numReviews: 90 },
+  ]
+  const productosPorSku = new Map([
+    ['A', { vendedor: 'TIENDITA_GEN', esTiendaOficial: false }],
+    ['B', { vendedor: 'GIGANTE_NO_OFICIAL', esTiendaOficial: false }],
+    ['C', { vendedor: 'NYX_OFICIAL', esTiendaOficial: true }],
+    ['D', { vendedor: 'OTRO_CHICO', esTiendaOficial: false }],
+  ])
+  const snapshotsPrevios = [
+    { sku: 'A', numReviews: 25 }, // +15: gemelo creciendo
+    { sku: 'B', numReviews: 1100 }, // +100 pero venía con 1100: gigante, fuera
+    { sku: 'C', numReviews: 5 }, // oficial, fuera
+    { sku: 'D', numReviews: 90 }, // sin reseñas nuevas, fuera
+  ]
+
+  const gemelos = detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPrevios })
+  assert.equal(gemelos.length, 1)
+  assert.equal(gemelos[0].vendedor, 'TIENDITA_GEN')
+  assert.equal(gemelos[0].reviewsNuevas, 15)
+
+  // sin scan previo no hay señal (se necesita la película, no la foto)
+  assert.equal(detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPrevios: null }), null)
+})

@@ -41,6 +41,18 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
               confianza {o.confianza}
             </span>
           ) : null}
+          {o.confirmacion ? (
+            <span
+              className={`op-confianza ${o.confirmacion === 'confirmado' ? 'op-confianza-alta' : 'op-confianza-media'}`}
+              title={
+                o.confirmacion === 'confirmado'
+                  ? `Demanda sostenida en ${o.scansConDemanda} scans`
+                  : `Solo ${o.scansConDemanda} scan(s) con demanda: espera 2-3 antes de apostar`
+              }
+            >
+              {o.confirmacion === 'confirmado' ? `✓ confirmado (${o.scansConDemanda} scans)` : `preliminar (${o.scansConDemanda} scan${o.scansConDemanda === 1 ? '' : 's'})`}
+            </span>
+          ) : null}
           {o.tramites.map((t) => (
             <span key={t} className="op-tramite" title="Requiere trámite de importación">
               ⚠ {t}
@@ -79,6 +91,13 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
           <Hecho etiqueta="mediana">{o.mediana ? fmtPrecio(o.mediana) : null}</Hecho>
           <Hecho etiqueta="Full">{o.pctFull != null ? `${Math.round(o.pctFull)}%` : null}</Hecho>
           <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
+          <Hecho etiqueta="gemelos creciendo">
+            {o.sellersGemelos != null ? (
+              <span title={o.gemelosDetalle ?? 'Vendedores chicos no-oficiales ganando reseñas en el nicho'}>
+                {o.sellersGemelos}
+              </span>
+            ) : null}
+          </Hecho>
         </div>
 
         {o.condiciones ? <p className="op-condicion">condición: {o.condiciones}</p> : null}

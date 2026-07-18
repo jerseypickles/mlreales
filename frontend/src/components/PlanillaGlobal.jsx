@@ -23,6 +23,23 @@ const COLUMNAS_IA = [
   },
   { clave: 'confianza', titulo: 'Confianza', tipo: 'texto', soloVista: true },
   {
+    clave: 'confirmacion',
+    titulo: 'Validación',
+    tipo: 'texto',
+    soloVista: true,
+    render: (o) =>
+      o.confirmacion ? (
+        <span
+          className={`op-confianza ${o.confirmacion === 'confirmado' ? 'op-confianza-alta' : 'op-confianza-media'}`}
+          title={`${o.scansConDemanda ?? 0} scan(s) con demanda`}
+        >
+          {o.confirmacion}
+        </span>
+      ) : (
+        '—'
+      ),
+  },
+  {
     clave: 'nichoIngles',
     titulo: 'Niche',
     tipo: 'texto',
