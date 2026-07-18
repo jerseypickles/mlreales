@@ -6,9 +6,9 @@ import { config } from '../config/env.js'
 // pool que ya usan los actores de detalle; el tráfico extra son KB por día.
 // La password del proxy no es el API token: se pide una vez a /users/me.
 
-let agentePromise = null
+let passwordPromise = null
 
-async function crearAgente() {
+async function obtenerPassword() {
   const res = await fetch(`https://api.apify.com/v2/users/me?token=${config.apifyToken}`, {
     signal: AbortSignal.timeout(10_000),
   })
@@ -16,20 +16,30 @@ async function crearAgente() {
   const { data } = await res.json()
   const password = data?.proxy?.password
   if (!password) throw new Error('la cuenta de Apify no expone proxy password')
-  return new ProxyAgent(`http://groups-RESIDENTIAL:${password}@proxy.apify.com:8000`)
+  return password
 }
 
-// Repite el request saliendo por una IP residencial. null si no hay APIFY_TOKEN
-// (tests, entorno local pelado). Se usa el fetch de undici y no el global: un
-// dispatcher de otra copia de undici no es intercambiable entre ambos.
+// Repite el request saliendo por una IP residencial NUEVA (sesión aleatoria por
+// llamada): un agente reutilizado mantiene el mismo túnel/IP y el WAF de ML la
+// quema tras un par de consultas — medido 2/27 con IP fija. null si no hay
+// APIFY_TOKEN (tests, entorno local pelado). Se usa el fetch de undici y no el
+// global: un dispatcher de otra copia de undici no es intercambiable entre ambos.
 export async function fetchResidencial(url, opciones = {}) {
   if (!config.apifyToken) return null
-  if (!agentePromise) {
-    agentePromise = crearAgente().catch((err) => {
-      agentePromise = null // la próxima llamada reintenta la creación
+  if (!passwordPromise) {
+    passwordPromise = obtenerPassword().catch((err) => {
+      passwordPromise = null // la próxima llamada reintenta
       throw err
     })
   }
-  const dispatcher = await agentePromise
-  return fetchUndici(url, { ...opciones, dispatcher })
+  const password = await passwordPromise
+  const sesion = `s${Math.floor(Math.random() * 1e9)}`
+  const dispatcher = new ProxyAgent(
+    `http://groups-RESIDENTIAL,session-${sesion}:${password}@proxy.apify.com:8000`,
+  )
+  try {
+    return await fetchUndici(url, { ...opciones, dispatcher })
+  } finally {
+    dispatcher.close().catch(() => {})
+  }
 }

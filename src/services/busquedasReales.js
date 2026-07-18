@@ -46,9 +46,18 @@ export async function sugerenciasReales(query, { domainCode = 'CL', limit = 6 } 
     throw new Error(`domainCode "${domainCode}" sin site de autosuggest configurado (services/busquedasReales.js)`)
   }
   const url = `https://http2.mlstatic.com/resources/sites/${site}/autosuggest?showFilters=true&limit=${limit}&api_version=2&q=${encodeURIComponent(query)}`
+  // headers del XHR real del sitio: el WAF puntúa UA+IP y un UA de bot declarado
+  // baja la tasa de éxito incluso desde IP residencial
   const opciones = () => ({
     signal: AbortSignal.timeout(10_000),
-    headers: { 'user-agent': 'Mozilla/5.0 (compatible; MeliIntel/1.0)' },
+    headers: {
+      'user-agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+      accept: 'application/json, text/plain, */*',
+      'accept-language': 'es-CL,es;q=0.9',
+      referer: 'https://www.mercadolibre.cl/',
+      origin: 'https://www.mercadolibre.cl',
+    },
   })
   let res = await fetch(url, opciones())
   // ML bloquea IPs de datacenter (403 sostenido desde Render): reintentar la

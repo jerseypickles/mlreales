@@ -3,7 +3,7 @@ import { conectarMongo, desconectarMongo } from './db/mongo.js'
 import { crearApp } from './api/app.js'
 import { iniciarWorkers } from './jobs/workers.js'
 import { obtenerColas, cerrarColas, registrarProgramados } from './jobs/queues.js'
-import { diaChile } from './services/tendencias.js'
+import { diaChile, prefijosSemilla } from './services/tendencias.js'
 import { TendenciaBusqueda } from './models/TendenciaBusqueda.js'
 
 validarEnv()
@@ -13,15 +13,16 @@ console.log('[mongo] conectado')
 
 obtenerColas()
 await registrarProgramados()
-// captura de tendencias al arrancar si el día aún no tiene snapshots: el
-// baseline del autocompletado se asegura desde hoy, y un día que quedó en cero
-// (ML bloqueando) se reintenta en el próximo deploy. jobId por hora evita que
-// las dos instancias de un deploy zero-downtime encolen doble.
+// captura de tendencias al arrancar si al día le faltan prefijos (la captura
+// upsertea por prefijo, así que re-correrla solo rellena los huecos que dejó el
+// WAF de ML). jobId por hora: máximo un reintento por hora aunque haya varios
+// deploys, y las dos instancias de un deploy zero-downtime no encolan doble.
 if (config.tendenciasActivo) {
   try {
     const dia = diaChile()
-    const hayHoy = await TendenciaBusqueda.exists({ dia })
-    if (!hayHoy) {
+    const capturados = await TendenciaBusqueda.countDocuments({ dia })
+    const prefijos = await prefijosSemilla()
+    if (capturados < prefijos.length) {
       await obtenerColas().tendencias.add(
         'capturar',
         { motivo: 'arranque' },
