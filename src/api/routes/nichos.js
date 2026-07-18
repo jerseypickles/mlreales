@@ -181,6 +181,8 @@ router.get(
         estado: nicho.estado,
         ultimoScanEl: nicho.ultimoScanEl,
         costoUsd: Math.round((nicho.costoUsd ?? 0) * 100) / 100,
+        contextoUsuario: nicho.contextoUsuario ?? null,
+        listingDraft: nicho.listingDraft ?? null,
       },
       reporte,
     })
@@ -267,7 +269,14 @@ router.post(
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {
   const cambios = {}
-  const { estado, frecuenciaScan } = req.body ?? {}
+  const { estado, frecuenciaScan, contextoUsuario } = req.body ?? {}
+  if (contextoUsuario !== undefined) {
+    const texto = String(contextoUsuario ?? '').trim()
+    if (texto.length > 2000) {
+      return res.status(400).json({ error: 'contextoUsuario demasiado largo (máx 2000 caracteres)' })
+    }
+    cambios.contextoUsuario = texto || null
+  }
   if (estado !== undefined) {
     if (!['activo', 'pausado'].includes(estado)) {
       return res.status(400).json({ error: 'estado debe ser "activo" o "pausado"' })
@@ -285,7 +294,12 @@ const ajustarNicho = manejar(async (req, res) => {
   }
   const nicho = await Nicho.findByIdAndUpdate(req.params.id, cambios, { new: true })
   if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
-  res.json({ keyword: nicho.keyword, estado: nicho.estado, frecuenciaScan: nicho.frecuenciaScan })
+  res.json({
+    keyword: nicho.keyword,
+    estado: nicho.estado,
+    frecuenciaScan: nicho.frecuenciaScan,
+    contextoUsuario: nicho.contextoUsuario ?? null,
+  })
 })
 router.patch('/:id', ajustarNicho)
 router.patch('/:id/estado', ajustarNicho) // compatibilidad con la ruta original

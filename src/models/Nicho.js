@@ -16,6 +16,9 @@ const nichoSchema = new mongoose.Schema({
   // campos en inglés para la hoja de cotización al proveedor (rfq.js):
   // { nichoIngles, productoIngles, especificacion, desdeAnalisis, generadoEl }
   rfq: { type: mongoose.Schema.Types.Mixed, default: null },
+  // experiencia real del importador con este nicho ("ya vendimos esta paleta,
+  // X unidades en Y meses"): el analista la pesa por sobre lo que infiera
+  contextoUsuario: { type: String, default: null },
   creadoEl: { type: Date, default: Date.now },
   ultimoScanEl: { type: Date, default: null },
   // { total, esMinimo } — "+9.999 resultados" del listado; esMinimo indica que ML capea el contador

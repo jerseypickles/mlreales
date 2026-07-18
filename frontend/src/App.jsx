@@ -306,7 +306,13 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
       {pestana === 'productos' ? (
         <Productos nichoId={nichoId} keyword={nicho.keyword} onSimular={simularProducto} />
       ) : null}
-      {pestana === 'analisis' ? <Analisis nichoId={nichoId} analisisInicial={reporte.analisis} /> : null}
+      {pestana === 'analisis' ? (
+        <Analisis
+          nichoId={nichoId}
+          analisisInicial={reporte.analisis}
+          contextoInicial={nicho.contextoUsuario}
+        />
+      ) : null}
       {pestana === 'listing' ? <Listing nichoId={nichoId} listingInicial={nicho.listingDraft} /> : null}
       {pestana === 'simulador' ? (
         <Simulador nicho={nicho} reporte={reporte} precioInicial={precioSimulador} />

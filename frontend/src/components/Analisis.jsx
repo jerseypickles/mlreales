@@ -9,7 +9,51 @@ const VEREDICTOS = {
   no_entrar: { etiqueta: 'NO ENTRAR', tipo: 'peligro' },
 }
 
-export function Analisis({ nichoId, analisisInicial }) {
+function ContextoImportador({ nichoId, contextoInicial }) {
+  const [contexto, setContexto] = useState(contextoInicial ?? '')
+  const [guardado, setGuardado] = useState(contextoInicial ?? '')
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function guardar() {
+    setGuardando(true)
+    setError(null)
+    try {
+      await api.ajustarNicho(nichoId, { contextoUsuario: contexto })
+      setGuardado(contexto)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  const sinGuardar = contexto.trim() !== guardado.trim()
+
+  return (
+    <details className="contexto-analista" open={Boolean(guardado)}>
+      <summary>Tu experiencia con este nicho (el analista la lee y la pesa sobre los datos)</summary>
+      <textarea
+        rows={3}
+        value={contexto}
+        onChange={(e) => setContexto(e.target.value)}
+        placeholder="ej: nosotros ya vendimos esta paleta de sombras 88 colores genérica en ML — se vendía bien a $X; el comprador de este segmento no busca marca"
+        aria-label="Contexto del importador para el analista"
+      />
+      <div className="contexto-analista-acciones">
+        <button className="boton-secundario" onClick={guardar} disabled={guardando || !sinGuardar}>
+          {guardando ? 'Guardando…' : sinGuardar ? 'Guardar contexto' : 'Guardado ✓'}
+        </button>
+        {guardado && !sinGuardar ? (
+          <span className="ayuda-campo">regenera el análisis para que lo considere</span>
+        ) : null}
+      </div>
+      {error ? <p className="error-bloque">{error}</p> : null}
+    </details>
+  )
+}
+
+export function Analisis({ nichoId, analisisInicial, contextoInicial }) {
   const [analisis, setAnalisis] = useState(analisisInicial ?? null)
   const [generando, setGenerando] = useState(false)
   const [error, setError] = useState(null)
@@ -35,6 +79,7 @@ export function Analisis({ nichoId, analisisInicial }) {
           top 50, lo segmenta por atributos y responde directo qué traer, a qué precio y cuánto
           pagar en China.
         </p>
+        <ContextoImportador nichoId={nichoId} contextoInicial={contextoInicial} />
         <button className="boton-primario" onClick={generar} disabled={generando}>
           {generando ? 'Analizando… (30-90 s)' : 'Generar análisis'}
         </button>
@@ -67,7 +112,7 @@ export function Analisis({ nichoId, analisisInicial }) {
                 <span className="dato-valor">{fmtPrecio(rec.precioVentaClp)}</span>
               </div>
               <div>
-                <span className="dato-label">Pagar máx en China</span>
+                <span className="dato-label">Pagar máx en China (EXW)</span>
                 <span className="dato-valor">US$ {rec.exwMaximoUsd ?? rec.fobMaximoUsd}</span>
               </div>
               <div>
@@ -82,6 +127,8 @@ export function Analisis({ nichoId, analisisInicial }) {
         <p className="decision-resumen">{analisis.resumen}</p>
         {error ? <p className="error-bloque">{error}</p> : null}
       </div>
+
+      <ContextoImportador nichoId={nichoId} contextoInicial={contextoInicial} />
 
       {/* ---- DETALLE PLEGADO ---- */}
       {rec?.aplica ? (
