@@ -88,8 +88,12 @@ const ETAPAS = {
   reintento: 'ML bloqueó el detalle — reintento programado (horas)…',
 }
 
+const esNuevo = (n) => n.creadoEl && Date.now() - new Date(n.creadoEl).getTime() < 72 * 3600e3
+const EN_CARTERA = new Set(['cotizando', 'muestra', 'pedido', 'vendiendo', 'en-espera'])
+
 function NichoItem({ n, seleccionado, onSeleccionar }) {
   const score = n.ultimoReporte?.scoreOportunidad
+  const etapa = n.etapaCompra && n.etapaCompra !== 'evaluando' ? n.etapaCompra : null
   return (
     <li>
       <button className={n._id === seleccionado ? 'nicho activo' : 'nicho'} onClick={() => onSeleccionar(n._id)}>
@@ -97,6 +101,7 @@ function NichoItem({ n, seleccionado, onSeleccionar }) {
           <span className="nicho-keyword">
             {n.origen === 'radar' ? <span className="punto-radar" title="descubierto por el radar" /> : null}
             {n.keyword}
+            {esNuevo(n) ? <span className="badge-nuevo" title="creado hace menos de 3 días">nuevo</span> : null}
           </span>
           {score != null ? <ScoreRing valor={score} size={30} grosor={3.5} /> : null}
         </span>
@@ -108,6 +113,7 @@ function NichoItem({ n, seleccionado, onSeleccionar }) {
             </span>
           ) : (
             <>
+              {etapa ? <span className="etapa-mini" title={n.notaEtapa ?? ''}>{etapa.replace(/-/g, ' ')}</span> : null}
               {n.veredicto ? (
                 <span className={`veredicto veredicto-${n.veredicto}`}>{n.veredicto.replace(/_/g, ' ')}</span>
               ) : null}
@@ -135,9 +141,20 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
   const visibles = q ? nichos.filter((n) => n.keyword.includes(q)) : nichos
 
   const puntaje = (n) => n.ultimoReporte?.scoreOportunidad ?? -1
-  const descartado = (n) => n.veredicto === 'no_entrar' || n.estado === 'pausado'
-  const oportunidades = visibles.filter((n) => !descartado(n) && n.veredicto).sort((a, b) => puntaje(b) - puntaje(a))
-  const evaluando = visibles.filter((n) => !descartado(n) && !n.veredicto)
+  const fechaCreado = (n) => (n.creadoEl ? new Date(n.creadoEl).getTime() : 0)
+  const enCartera = (n) => EN_CARTERA.has(n.etapaCompra)
+  const descartado = (n) =>
+    !enCartera(n) && (n.veredicto === 'no_entrar' || n.estado === 'pausado' || n.etapaCompra === 'descartado')
+
+  // el sidebar sigue el embudo: cartera (negocio en curso) arriba, luego las
+  // oportunidades por decidir, luego lo que aún se mide (nuevos primero)
+  const cartera = visibles.filter(enCartera).sort((a, b) => puntaje(b) - puntaje(a))
+  const oportunidades = visibles
+    .filter((n) => !enCartera(n) && !descartado(n) && n.veredicto)
+    .sort((a, b) => puntaje(b) - puntaje(a))
+  const evaluando = visibles
+    .filter((n) => !enCartera(n) && !descartado(n) && !n.veredicto)
+    .sort((a, b) => fechaCreado(b) - fechaCreado(a))
   const descartados = visibles.filter(descartado).sort((a, b) => puntaje(b) - puntaje(a))
 
   const render = (lista) =>
@@ -156,16 +173,23 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
         />
       ) : null}
 
+      {cartera.length ? (
+        <>
+          <p className="grupo-titulo">Cartera ({cartera.length})</p>
+          <ul className="lista-nichos">{render(cartera)}</ul>
+        </>
+      ) : null}
+
       {oportunidades.length ? (
         <>
-          <p className="grupo-titulo">Oportunidades</p>
+          <p className="grupo-titulo">Oportunidades ({oportunidades.length})</p>
           <ul className="lista-nichos">{render(oportunidades)}</ul>
         </>
       ) : null}
 
       {evaluando.length ? (
         <>
-          <p className="grupo-titulo">En evaluación</p>
+          <p className="grupo-titulo">En evaluación ({evaluando.length})</p>
           <ul className="lista-nichos">{render(evaluando)}</ul>
         </>
       ) : null}

@@ -91,7 +91,8 @@ router.get(
           veredicto: { $first: '$ultimoAnalisis.veredicto' },
         },
       },
-      { $project: { ultimoAnalisis: 0 } },
+      // el sidebar no necesita los blobs pesados
+      { $project: { ultimoAnalisis: 0, listingDraft: 0, rfq: 0, contextoUsuario: 0 } },
     ])
 
     // etapa en proceso por nicho, leída de las colas reales (para el spinner del dashboard)
