@@ -73,7 +73,9 @@ export function Planilla({ columnas, filas, nombreArchivo = 'planilla.csv', onFi
   }
 
   function descargar() {
-    descargarCsv(nombreArchivo, aCsvExcel(visibles, columnas))
+    // soloVista = contexto interno en pantalla que NO viaja en el CSV
+    // (ej: veredicto/confianza en la hoja que se le manda al proveedor)
+    descargarCsv(nombreArchivo, aCsvExcel(visibles, columnas.filter((c) => !c.soloVista)))
   }
 
   return (

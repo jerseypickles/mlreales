@@ -6,7 +6,7 @@ import { Reporte } from '../models/Reporte.js'
 const SCHEMA_ANALISIS = {
   type: 'object',
   additionalProperties: false,
-  required: ['veredicto', 'confianza', 'resumen', 'segmentos', 'recomendacion', 'riesgos', 'tramites', 'jugada'],
+  required: ['veredicto', 'confianza', 'resumen', 'segmentos', 'recomendacion', 'riesgos', 'tramites', 'jugada', 'nichoIngles'],
   properties: {
     veredicto: { type: 'string', enum: ['entrar', 'entrar_con_condiciones', 'no_entrar'] },
     confianza: { type: 'string', enum: ['alta', 'media', 'baja'] },
@@ -37,7 +37,7 @@ const SCHEMA_ANALISIS = {
     recomendacion: {
       type: 'object',
       additionalProperties: false,
-      required: ['aplica', 'titular', 'segmento', 'precioVentaClp', 'fobMaximoUsd', 'primeraCompra', 'comisionMlPct', 'especificacionProducto', 'comoValidar'],
+      required: ['aplica', 'titular', 'segmento', 'precioVentaClp', 'fobMaximoUsd', 'primeraCompra', 'comisionMlPct', 'especificacionProducto', 'productoIngles', 'comoValidar'],
       properties: {
         aplica: { type: 'boolean', description: 'false si el veredicto es no_entrar' },
         titular: {
@@ -53,6 +53,10 @@ const SCHEMA_ANALISIS = {
           description: 'Comisión típica de Mercado Libre Chile para la categoría de este producto en publicación Clásica (13-19.5). Si no la conoces con certeza, usa 17',
         },
         especificacionProducto: { type: 'string', description: 'Qué producto exacto buscar en Alibaba/1688 (specs, potencia, accesorios)' },
+        productoIngles: {
+          type: 'string',
+          description: 'El producto recomendado EN INGLÉS comercial con sus specs clave, listo para enviarle a un proveedor chino (ej: "IPL hair removal device, home use, 999,999 flashes, 5 intensity levels, sapphire ice cooling, EU/CL 220V plug")',
+        },
         comoValidar: { type: 'string', description: 'Cómo validar antes de comprar el embarque' },
       },
     },
@@ -64,6 +68,10 @@ const SCHEMA_ANALISIS = {
       items: { type: 'string', enum: ['SEC', 'ISP'] },
     },
     jugada: { type: 'string', description: 'Plan de entrada concreto en 3-5 pasos' },
+    nichoIngles: {
+      type: 'string',
+      description: 'Nombre del nicho en inglés comercial, como lo entendería un proveedor chino en Alibaba (ej: "solar garden fountain", "IPL hair removal device")',
+    },
   },
 }
 

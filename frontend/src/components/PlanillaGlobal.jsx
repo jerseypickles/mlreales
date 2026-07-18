@@ -4,52 +4,55 @@ import { Planilla } from './Planilla.jsx'
 import { Cargando, IconoExterno } from './ui.jsx'
 import { fmtPrecio, fmtFecha } from '../lib/formato.js'
 
-// ── Planilla de recomendaciones IA: una fila por nicho analizado ─────────
-// Es la hoja de sourcing: qué traer, a cuánto vender, cuánto pagar en China,
-// pedido de prueba, especificación para Alibaba y cómo validar.
+// ── Planilla de cotización para el proveedor (RFQ) ───────────────────────
+// Una fila por nicho con veredicto de entrada. Las columnas del CSV van en
+// inglés y sin datos internos (nunca el FOB máximo: es tu tope de negociación);
+// las columnas de precio/MOQ/tiempos van vacías para que las llene el
+// proveedor. Veredicto/confianza/nicho en español quedan solo en pantalla.
 
 const COLUMNAS_IA = [
-  { clave: 'keyword', titulo: 'Nicho', tipo: 'texto', fija: true },
+  { clave: 'keyword', titulo: 'Nicho', tipo: 'texto', fija: true, soloVista: true },
   {
     clave: 'veredicto',
     titulo: 'Veredicto',
     tipo: 'texto',
+    soloVista: true,
     render: (o) => (
       <span className={`veredicto veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span>
     ),
   },
-  { clave: 'confianza', titulo: 'Confianza', tipo: 'texto' },
-  { clave: 'score', titulo: 'Score', tipo: 'numero' },
-  { clave: 'titular', titulo: 'Producto a traer', tipo: 'texto', ancha: true },
+  { clave: 'confianza', titulo: 'Confianza', tipo: 'texto', soloVista: true },
   {
-    clave: 'precioVentaClp',
-    titulo: 'Vender a',
-    tipo: 'numero',
-    render: (o) => (o.precioVentaClp ? fmtPrecio(o.precioVentaClp) : '—'),
-  },
-  { clave: 'fobMaximoUsd', titulo: 'FOB máx US$', tipo: 'numero' },
-  { clave: 'primeraCompra', titulo: 'Pedido de prueba', tipo: 'texto' },
-  { clave: 'inversionEstimadaUsd', titulo: 'Inversión ~US$', tipo: 'numero' },
-  { clave: 'comisionMlPct', titulo: 'Comisión ML %', tipo: 'numero' },
-  { clave: 'segmento', titulo: 'Segmento', tipo: 'texto', ancha: true },
-  { clave: 'tramites', titulo: 'Trámites', tipo: 'texto' },
-  { clave: 'ventanaImportacion', titulo: 'Ventana compra', tipo: 'texto', ancha: true },
-  { clave: 'ventasDia', titulo: '~Ventas/día', tipo: 'numero' },
-  {
-    clave: 'mediana',
-    titulo: 'Mediana nicho',
-    tipo: 'numero',
-    render: (o) => (o.mediana ? fmtPrecio(o.mediana) : '—'),
-  },
-  { clave: 'especificacionProducto', titulo: 'Especificación (Alibaba/1688)', tipo: 'texto', ancha: true },
-  { clave: 'comoValidar', titulo: 'Cómo validar', tipo: 'texto', ancha: true },
-  {
-    clave: 'fechaAnalisis',
-    titulo: 'Análisis',
+    clave: 'nichoIngles',
+    titulo: 'Niche',
     tipo: 'texto',
-    render: (o) => (o.fechaAnalisis ? fmtFecha(o.fechaAnalisis) : '—'),
-    csv: (o) => (o.fechaAnalisis ? String(o.fechaAnalisis).slice(0, 16).replace('T', ' ') : null),
+    render: (o) => o.nichoIngles ?? <span className="vacio" title="Regenera el análisis para obtener el nombre en inglés">(regenerar análisis)</span>,
   },
+  {
+    clave: 'productoIngles',
+    titulo: 'Product',
+    tipo: 'texto',
+    ancha: true,
+    render: (o) =>
+      o.productoIngles ??
+      o.especificacionProducto ?? (
+        <span className="vacio" title="Regenera el análisis para obtener el producto en inglés">(regenerar análisis)</span>
+      ),
+    csv: (o) => o.productoIngles ?? o.especificacionProducto ?? null,
+  },
+  { clave: 'especificacionProducto', titulo: 'Specification', tipo: 'texto', ancha: true },
+  {
+    clave: 'unidadesPrueba',
+    titulo: 'Quantity (units)',
+    tipo: 'numero',
+    render: (o) => (o.unidadesPrueba != null ? o.unidadesPrueba : (o.primeraCompra ?? '—')),
+    csv: (o) => o.unidadesPrueba ?? o.primeraCompra ?? null,
+  },
+  { clave: 'fobUnitario', titulo: 'FOB unit price (USD)', tipo: 'texto' },
+  { clave: 'moq', titulo: 'MOQ', tipo: 'texto' },
+  { clave: 'tiempoProduccion', titulo: 'Production time (days)', tipo: 'texto' },
+  { clave: 'linkProducto', titulo: 'Product link / photos', tipo: 'texto' },
+  { clave: 'notas', titulo: 'Notes', tipo: 'texto' },
 ]
 
 function PlanillaIA({ onAbrirNicho }) {
@@ -94,7 +97,7 @@ function PlanillaIA({ onAbrirNicho }) {
     <Planilla
       columnas={COLUMNAS_IA}
       filas={datos.oportunidades}
-      nombreArchivo="recomendaciones-ia-meli-intel.csv"
+      nombreArchivo="supplier-quote-request.csv"
       filaKey={(o) => o.nichoId}
       onFilaClick={onAbrirNicho ? (o) => onAbrirNicho(o.nichoId) : undefined}
     />
@@ -188,7 +191,7 @@ export function PlanillaGlobal({ onAbrirNicho }) {
           <h2>Planilla</h2>
           <p className="reporte-fecha">
             {modo === 'ia'
-              ? 'La planilla de compra: solo los nichos con veredicto de entrada — qué traer, a cuánto vender, cuánto pagar en China y cómo validar. Ordena, filtra y descarga para trabajar con el proveedor.'
+              ? 'Hoja de cotización para el proveedor: producto y cantidades en inglés, con columnas en blanco (precio FOB, MOQ, tiempos) para que las llene él. El CSV sale limpio — veredicto y confianza se ven solo aquí.'
               : 'Todos los productos del último scan de cada nicho activo (materia prima de los análisis).'}
           </p>
         </div>

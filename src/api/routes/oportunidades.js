@@ -4,6 +4,7 @@ import {
   detectarTramites,
   tendenciaVentas,
   inversionEstimadaUsd,
+  unidadesPrimeraCompra,
 } from '../../services/oportunidades.js'
 
 const router = Router()
@@ -98,6 +99,9 @@ router.get(
         listingListo: n.tieneListing,
         estado: n.estado,
         resumen: analisis.resumen ?? null,
+        nichoIngles: analisis.nichoIngles ?? null,
+        productoIngles: rec.productoIngles ?? null,
+        unidadesPrueba: unidadesPrimeraCompra(rec.primeraCompra),
         especificacionProducto: rec.especificacionProducto ?? null,
         comoValidar: rec.comoValidar ?? null,
         comisionMlPct: rec.comisionMlPct ?? null,
