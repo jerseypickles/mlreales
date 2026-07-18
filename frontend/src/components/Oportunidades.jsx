@@ -45,6 +45,11 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
               ⚠ {t}
             </span>
           ))}
+          {o.etapaCompra && o.etapaCompra !== 'evaluando' ? (
+            <span className="op-confianza op-confianza-alta" title="Etapa del embudo de compra">
+              {o.etapaCompra}
+            </span>
+          ) : null}
           {o.listingListo ? <span className="op-listing" title="Borrador de listing generado">listing ✓</span> : null}
           {mismaCompraQue ? (
             <span

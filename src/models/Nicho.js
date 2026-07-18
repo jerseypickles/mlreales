@@ -19,6 +19,14 @@ const nichoSchema = new mongoose.Schema({
   // experiencia real del importador con este nicho ("ya vendimos esta paleta,
   // X unidades en Y meses"): el analista la pesa por sobre lo que infiera
   contextoUsuario: { type: String, default: null },
+  // embudo de compra tras el veredicto: evaluando → cotizando → muestra →
+  // pedido → vendiendo (o descartado). Solo "evaluando" ocupa cupo del radar.
+  etapaCompra: {
+    type: String,
+    enum: ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'descartado'],
+    default: 'evaluando',
+  },
+  etapaCompraEl: { type: Date, default: null },
   creadoEl: { type: Date, default: Date.now },
   ultimoScanEl: { type: Date, default: null },
   // { total, esMinimo } — "+9.999 resultados" del listado; esMinimo indica que ML capea el contador

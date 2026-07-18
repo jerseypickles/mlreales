@@ -68,16 +68,17 @@ export function fusionarCompras(oportunidades) {
   const resultado = []
   for (const o of oportunidades) {
     if (!o.productoClave) {
-      resultado.push(o)
+      resultado.push({ ...o, nichoIds: [o.nichoId] })
       continue
     }
     const grupo = porClave.get(o.productoClave)
     if (!grupo) {
-      const fila = { ...o, nichosDelGrupo: [o.keyword] }
+      const fila = { ...o, nichosDelGrupo: [o.keyword], nichoIds: [o.nichoId] }
       porClave.set(o.productoClave, fila)
       resultado.push(fila)
     } else {
       grupo.nichosDelGrupo.push(o.keyword)
+      grupo.nichoIds.push(o.nichoId)
       grupo.keyword = grupo.nichosDelGrupo.join(' + ')
       if (o.unidadesPrueba != null) {
         grupo.unidadesPrueba = (grupo.unidadesPrueba ?? 0) + o.unidadesPrueba
@@ -89,25 +90,60 @@ export function fusionarCompras(oportunidades) {
   return resultado
 }
 
+export const ETAPAS = ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'descartado']
+
+const TABS_ETAPA = [
+  ['por-cotizar', 'Por cotizar', (e) => e === 'evaluando'],
+  ['cotizando', 'Cotizando', (e) => e === 'cotizando'],
+  ['avanzados', 'Avanzados', (e) => ['muestra', 'pedido', 'vendiendo'].includes(e)],
+  ['todos', 'Todos', () => true],
+]
+
+function SelectorEtapa({ fila, onCambiada }) {
+  const [cambiando, setCambiando] = useState(false)
+  return (
+    <select
+      className="selector-etapa"
+      value={fila.etapaCompra ?? 'evaluando'}
+      disabled={cambiando}
+      onClick={(e) => e.stopPropagation()}
+      onChange={async (e) => {
+        e.stopPropagation()
+        setCambiando(true)
+        try {
+          await api.avanzarNichos(fila.nichoIds ?? [fila.nichoId], e.target.value)
+          await onCambiada()
+        } finally {
+          setCambiando(false)
+        }
+      }}
+      aria-label="Etapa de compra"
+    >
+      {ETAPAS.map((e) => (
+        <option key={e} value={e}>{e}</option>
+      ))}
+    </select>
+  )
+}
+
 function PlanillaIA({ onAbrirNicho }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [acotando, setAcotando] = useState(false)
   const [aviso, setAviso] = useState(null)
+  const [tab, setTab] = useState('por-cotizar')
 
   const cargar = () =>
     // solo entrar / entrar_con_condiciones de nichos activos: esta es la
     // planilla de compra que se trabaja con proveedores
     api.oportunidades().then((d) => ({
       ...d,
-      // trámites como texto para que la grilla y la descarga lo traten plano;
-      // nichos que comparten producto de fábrica se fusionan en una fila
-      oportunidades: fusionarCompras(
-        d.oportunidades.map((o) => ({
-          ...o,
-          tramites: (o.tramites ?? []).join(', ') || null,
-        })),
-      ),
+      // trámites como texto para que la grilla y la descarga lo traten plano
+      oportunidades: d.oportunidades.map((o) => ({
+        ...o,
+        etapaCompra: o.etapaCompra ?? 'evaluando',
+        tramites: (o.tramites ?? []).join(', ') || null,
+      })),
     }))
 
   useEffect(() => {
@@ -150,10 +186,49 @@ function PlanillaIA({ onAbrirNicho }) {
   }
 
   const pendientes = datos.oportunidades.filter((o) => !o.nichoIngles).length
+  const filtroTab = TABS_ETAPA.find(([clave]) => clave === tab)?.[2] ?? (() => true)
+  const filas = fusionarCompras(datos.oportunidades.filter((o) => filtroTab(o.etapaCompra)))
+  const conteoEtapa = (fn) => datos.oportunidades.filter((o) => fn(o.etapaCompra)).length
+
+  const columnas = [
+    ...COLUMNAS_IA.slice(0, 3),
+    {
+      clave: 'etapaCompra',
+      titulo: 'Etapa',
+      tipo: 'texto',
+      soloVista: true,
+      render: (o) => <SelectorEtapa fila={o} onCambiada={async () => setDatos(await cargar())} />,
+    },
+    ...COLUMNAS_IA.slice(3),
+  ]
+
+  // descargar la planilla de "Por cotizar" = esos productos avanzan a cotizando
+  async function alDescargar(visibles) {
+    if (tab !== 'por-cotizar' || !visibles.length) return
+    const ids = visibles.flatMap((f) => f.nichoIds ?? [f.nichoId])
+    const r = await api.avanzarNichos(ids, 'cotizando').catch(() => null)
+    if (r) {
+      setDatos(await cargar())
+      setAviso(`${r.avanzados} nicho(s) avanzaron a "cotizando" — la próxima descarga solo trae lo nuevo.`)
+    }
+  }
 
   return (
     <div>
       <div className="toolbar">
+        <div className="chips" role="tablist" aria-label="Etapa de compra">
+          {TABS_ETAPA.map(([clave, etiqueta, fn]) => (
+            <button
+              key={clave}
+              role="tab"
+              aria-selected={tab === clave}
+              className={tab === clave ? 'chip activo' : 'chip'}
+              onClick={() => setTab(clave)}
+            >
+              {etiqueta} ({conteoEtapa(fn)})
+            </button>
+          ))}
+        </div>
         <button className="boton-secundario" onClick={acotarConIA} disabled={acotando}>
           {acotando
             ? 'Acotando con IA…'
@@ -161,15 +236,20 @@ function PlanillaIA({ onAbrirNicho }) {
         </button>
         {aviso ? <span className="conteo">{aviso}</span> : null}
       </div>
-      <Planilla
-        columnas={COLUMNAS_IA}
-        filas={datos.oportunidades}
-        nombreArchivo="supplier-quote-request.xlsx"
-        hojaXlsx="Quote request"
-        formatoDescarga="xlsx"
-        filaKey={(o) => o.nichoId}
-        onFilaClick={onAbrirNicho ? (o) => onAbrirNicho(o.nichoId) : undefined}
-      />
+      {!filas.length ? (
+        <p className="vacio">Nada en esta etapa por ahora.</p>
+      ) : (
+        <Planilla
+          columnas={columnas}
+          filas={filas}
+          nombreArchivo="supplier-quote-request.xlsx"
+          hojaXlsx="Quote request"
+          formatoDescarga="xlsx"
+          onDescarga={alDescargar}
+          filaKey={(o) => o.nichoId}
+          onFilaClick={onAbrirNicho ? (o) => onAbrirNicho(o.nichoId) : undefined}
+        />
+      )}
     </div>
   )
 }

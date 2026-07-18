@@ -5,6 +5,8 @@ import {
   tendenciaVentas,
   inversionEstimadaUsd,
   unidadesPrimeraCompra,
+  cambiosPorEtapa,
+  ETAPAS_COMPRA,
 } from '../../services/oportunidades.js'
 import { generarRfqPendientes } from '../../services/rfq.js'
 import { llmDisponible } from '../../services/llm.js'
@@ -53,6 +55,8 @@ router.get(
           keyword: 1,
           origen: 1,
           estado: 1,
+          etapaCompra: 1,
+          etapaCompraEl: 1,
           frecuenciaScan: 1,
           radarInfo: 1,
           rfq: 1,
@@ -103,6 +107,8 @@ router.get(
         condiciones: analisis.veredicto === 'entrar_con_condiciones' ? (analisis.resumen ?? null) : null,
         listingListo: n.tieneListing,
         estado: n.estado,
+        etapaCompra: n.etapaCompra ?? 'evaluando',
+        etapaCompraEl: n.etapaCompraEl ?? null,
         resumen: analisis.resumen ?? null,
         // los campos del proveedor: el rfq acotado (services/rfq.js) manda;
         // si no existe, lo que traiga el análisis
@@ -121,6 +127,29 @@ router.get(
       (a, b) => (b.score ?? -1) - (a.score ?? -1) || (b.ventasDia ?? 0) - (a.ventasDia ?? 0),
     )
     res.json({ total: oportunidades.length, oportunidades })
+  }),
+)
+
+// Avanza varios nichos de etapa de una vez (ej: los incluidos en una descarga
+// de planilla pasan a "cotizando")
+router.post(
+  '/avanzar',
+  manejar(async (req, res) => {
+    const { nichoIds, etapa } = req.body ?? {}
+    if (!Array.isArray(nichoIds) || !nichoIds.length) {
+      return res.status(400).json({ error: 'nichoIds requerido (lista no vacía)' })
+    }
+    if (!ETAPAS_COMPRA.includes(etapa)) {
+      return res.status(400).json({ error: `etapa debe ser una de: ${ETAPAS_COMPRA.join(', ')}` })
+    }
+    let avanzados = 0
+    for (const id of nichoIds.slice(0, 100)) {
+      const nicho = await Nicho.findById(id).select('etapaCompra').lean().catch(() => null)
+      if (!nicho) continue
+      await Nicho.updateOne({ _id: id }, { $set: cambiosPorEtapa(etapa, nicho) })
+      avanzados++
+    }
+    res.json({ avanzados, etapa })
   }),
 )
 

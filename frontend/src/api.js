@@ -45,6 +45,7 @@ export const api = {
   tendencias: (dias) => pedir(`/api/tendencias${dias ? `?dias=${dias}` : ''}`),
   oportunidades: (opts) => pedir(`/api/oportunidades${opts?.todos ? '?todos=1' : ''}`),
   generarRfq: () => pedir('/api/oportunidades/rfq', { method: 'POST' }),
+  avanzarNichos: (nichoIds, etapa) => pedir('/api/oportunidades/avanzar', json({ nichoIds, etapa })),
   productosGlobal: () => pedir('/api/productos'),
   capturarTendencias: () => pedir('/api/tendencias/capturar', { method: 'POST' }),
   crearPropio: (url) => pedir('/api/propios', json({ url })),

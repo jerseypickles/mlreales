@@ -272,10 +272,15 @@ export async function procesarRadar() {
     return { omitido: true, motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})` }
   }
 
-  // techo de nichos activos: el dinamismo no puede disparar el gasto de Apify
-  const activos = await Nicho.countDocuments({ estado: 'activo' })
-  const cupo = Math.min(config.radarMaxNichos, Math.max(0, config.radarMaxActivos - activos))
-  if (cupo === 0) return { omitido: true, motivo: `tope de ${config.radarMaxActivos} nichos activos alcanzado` }
+  // techo de nichos EN EVALUACIÓN: los que avanzaron en el embudo de compra
+  // (cotizando/muestra/pedido/vendiendo) ya son negocio y no ocupan cupo de
+  // exploración — avanzar o descartar libera espacio para descubrir
+  const enEvaluacion = await Nicho.countDocuments({
+    estado: 'activo',
+    $or: [{ etapaCompra: null }, { etapaCompra: 'evaluando' }],
+  })
+  const cupo = Math.min(config.radarMaxNichos, Math.max(0, config.radarMaxActivos - enEvaluacion))
+  if (cupo === 0) return { omitido: true, motivo: `tope de ${config.radarMaxActivos} nichos en evaluación alcanzado` }
 
   // búsquedas en alza según el autocompletado (tracker de tendencias): el
   // sugeridor prioriza demanda que ya se ve subiendo en vez de idear desde cero

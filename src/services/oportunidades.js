@@ -1,5 +1,21 @@
 // Helpers puros del panel de oportunidades (testeables sin Mongo).
 
+export const ETAPAS_COMPRA = ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'descartado']
+const ETAPAS_AVANZADAS = new Set(['cotizando', 'muestra', 'pedido', 'vendiendo'])
+
+// Cambios que implica mover un nicho de etapa:
+// - descartado pausa el nicho (deja de gastar); salir de descartado lo reactiva
+// - etapas avanzadas bajan a scan semanal (seguimiento barato) y liberan cupo
+//   del radar (el cupo cuenta solo "evaluando")
+export function cambiosPorEtapa(etapa, nichoActual = {}) {
+  if (!ETAPAS_COMPRA.includes(etapa)) return null
+  const cambios = { etapaCompra: etapa, etapaCompraEl: new Date() }
+  if (etapa === 'descartado') cambios.estado = 'pausado'
+  else if (nichoActual.etapaCompra === 'descartado') cambios.estado = 'activo'
+  if (ETAPAS_AVANZADAS.has(etapa)) cambios.frecuenciaScan = 'semanal'
+  return cambios
+}
+
 // Una mención está negada si poco antes viene "no/sin/ni/exento/...":
 // los análisis suelen escribir "no requiere SEC ni ISP" y eso NO es un trámite.
 // la coma corta el alcance: "no requiere ISP, pero sí SEC" afirma SEC

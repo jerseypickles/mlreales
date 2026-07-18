@@ -8,6 +8,7 @@ import { generarListing } from '../../services/listero.js'
 import { sugerirNichos } from '../../services/sugeridor.js'
 import { llmDisponible } from '../../services/llm.js'
 import { aCsvExcel, COLUMNAS_PRODUCTO_CSV } from '../../services/csv.js'
+import { cambiosPorEtapa, ETAPAS_COMPRA } from '../../services/oportunidades.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -271,7 +272,15 @@ router.post(
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {
   const cambios = {}
-  const { estado, frecuenciaScan, contextoUsuario } = req.body ?? {}
+  const { estado, frecuenciaScan, contextoUsuario, etapaCompra } = req.body ?? {}
+  if (etapaCompra !== undefined) {
+    if (!ETAPAS_COMPRA.includes(etapaCompra)) {
+      return res.status(400).json({ error: `etapaCompra debe ser una de: ${ETAPAS_COMPRA.join(', ')}` })
+    }
+    const actual = await Nicho.findById(req.params.id).select('etapaCompra').lean()
+    if (!actual) return res.status(404).json({ error: 'nicho no encontrado' })
+    Object.assign(cambios, cambiosPorEtapa(etapaCompra, actual))
+  }
   if (contextoUsuario !== undefined) {
     const texto = String(contextoUsuario ?? '').trim()
     if (texto.length > 2000) {
@@ -301,6 +310,7 @@ const ajustarNicho = manejar(async (req, res) => {
     estado: nicho.estado,
     frecuenciaScan: nicho.frecuenciaScan,
     contextoUsuario: nicho.contextoUsuario ?? null,
+    etapaCompra: nicho.etapaCompra ?? 'evaluando',
   })
 })
 router.patch('/:id', ajustarNicho)

@@ -5,7 +5,23 @@ import {
   tendenciaVentas,
   unidadesPrimeraCompra,
   inversionEstimadaUsd,
+  cambiosPorEtapa,
 } from '../src/services/oportunidades.js'
+
+test('cambiosPorEtapa: descartado pausa, salir de descartado reactiva, avanzadas bajan a semanal', () => {
+  const descartar = cambiosPorEtapa('descartado', { etapaCompra: 'evaluando' })
+  assert.equal(descartar.estado, 'pausado')
+  assert.equal(descartar.etapaCompra, 'descartado')
+
+  const reactivar = cambiosPorEtapa('evaluando', { etapaCompra: 'descartado' })
+  assert.equal(reactivar.estado, 'activo')
+
+  const cotizar = cambiosPorEtapa('cotizando', { etapaCompra: 'evaluando' })
+  assert.equal(cotizar.frecuenciaScan, 'semanal')
+  assert.equal(cotizar.estado, undefined) // no toca el estado
+
+  assert.equal(cambiosPorEtapa('inexistente', {}), null)
+})
 
 test('detectarTramites: encuentra SEC e ISP en textos de riesgo', () => {
   assert.deepEqual(

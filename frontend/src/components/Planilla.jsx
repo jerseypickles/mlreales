@@ -56,6 +56,7 @@ export function Planilla({
   nombreArchivo = 'planilla.csv',
   hojaXlsx,
   formatoDescarga = 'csv', // 'csv' | 'xlsx'
+  onDescarga, // callback con las filas visibles tras una descarga exitosa
   onFilaClick,
   filaKey,
 }) {
@@ -93,9 +94,10 @@ export function Planilla({
       } finally {
         setDescargando(false)
       }
-      return
+    } else {
+      descargarCsv(nombreArchivo, aCsvExcel(visibles, exportables))
     }
-    descargarCsv(nombreArchivo, aCsvExcel(visibles, exportables))
+    if (onDescarga) await onDescarga(visibles)
   }
 
   return (
