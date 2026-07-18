@@ -43,7 +43,6 @@ const COLUMNAS_IA = [
   },
   { clave: 'especificacionProducto', titulo: 'Especificación (Alibaba/1688)', tipo: 'texto', ancha: true },
   { clave: 'comoValidar', titulo: 'Cómo validar', tipo: 'texto', ancha: true },
-  { clave: 'estado', titulo: 'Estado', tipo: 'texto' },
   {
     clave: 'fechaAnalisis',
     titulo: 'Análisis',
@@ -59,8 +58,10 @@ function PlanillaIA({ onAbrirNicho }) {
 
   useEffect(() => {
     let vigente = true
+    // solo entrar / entrar_con_condiciones de nichos activos: esta es la
+    // planilla de compra que se trabaja con proveedores
     api
-      .oportunidades({ todos: true })
+      .oportunidades()
       .then((d) => {
         if (!vigente) return
         // trámites como texto para que la grilla y el CSV lo traten plano
@@ -83,8 +84,8 @@ function PlanillaIA({ onAbrirNicho }) {
   if (!datos.oportunidades.length) {
     return (
       <p className="vacio">
-        Aún no hay nichos analizados por la IA. Cuando el pipeline analice (o pidas un análisis desde
-        el nicho), cada recomendación aparece aquí como fila.
+        Aún no hay nichos con veredicto de entrada. Cuando la IA recomiende entrar (o entrar con
+        condiciones), cada recomendación aparece aquí como fila lista para trabajar con el proveedor.
       </p>
     )
   }
@@ -187,7 +188,7 @@ export function PlanillaGlobal({ onAbrirNicho }) {
           <h2>Planilla</h2>
           <p className="reporte-fecha">
             {modo === 'ia'
-              ? 'Lo que la IA entregó por cada nicho analizado: qué traer, a cuánto vender, cuánto pagar en China y cómo validar. Ordena, filtra y descarga.'
+              ? 'La planilla de compra: solo los nichos con veredicto de entrada — qué traer, a cuánto vender, cuánto pagar en China y cómo validar. Ordena, filtra y descarga para trabajar con el proveedor.'
               : 'Todos los productos del último scan de cada nicho activo (materia prima de los análisis).'}
           </p>
         </div>
