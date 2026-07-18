@@ -6,7 +6,7 @@ import { Reporte } from '../models/Reporte.js'
 const SCHEMA_ANALISIS = {
   type: 'object',
   additionalProperties: false,
-  required: ['veredicto', 'confianza', 'resumen', 'segmentos', 'recomendacion', 'riesgos', 'jugada'],
+  required: ['veredicto', 'confianza', 'resumen', 'segmentos', 'recomendacion', 'riesgos', 'tramites', 'jugada'],
   properties: {
     veredicto: { type: 'string', enum: ['entrar', 'entrar_con_condiciones', 'no_entrar'] },
     confianza: { type: 'string', enum: ['alta', 'media', 'baja'] },
@@ -57,6 +57,12 @@ const SCHEMA_ANALISIS = {
       },
     },
     riesgos: { type: 'array', items: { type: 'string' } },
+    tramites: {
+      type: 'array',
+      description:
+        'Trámites de importación chilenos que el producto recomendado SÍ exige: "SEC" solo si es eléctrico 220V, "ISP" solo si es cosmético o de uso sanitario. Lista vacía si entra sin trámites.',
+      items: { type: 'string', enum: ['SEC', 'ISP'] },
+    },
     jugada: { type: 'string', description: 'Plan de entrada concreto en 3-5 pasos' },
   },
 }

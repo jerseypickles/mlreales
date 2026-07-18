@@ -17,6 +17,16 @@ test('detectarTramites: encuentra SEC e ISP en textos de riesgo', () => {
   assert.deepEqual(detectarTramites(['sequía de stock']), []) // "sec" dentro de otra palabra no cuenta
 })
 
+test('detectarTramites: las menciones negadas NO ponen chip (caso silla playa plegable)', () => {
+  assert.deepEqual(detectarTramites(['No requiere SEC ni ISP, entra directo']), [])
+  assert.deepEqual(detectarTramites(['sin trámites: ni certificación SEC ni registro sanitario']), [])
+  assert.deepEqual(detectarTramites(['producto exento de SEC']), [])
+  // negado uno, afirmado el otro
+  assert.deepEqual(detectarTramites(['no requiere ISP, pero sí certificación SEC por 220V']), ['SEC'])
+  // "sin embargo" no es negación
+  assert.deepEqual(detectarTramites(['parece simple; sin embargo requiere SEC']), ['SEC'])
+})
+
 test('tendenciaVentas: sube/baja/estable con umbral de ±15%', () => {
   const rep = (v) => ({ metricas: { demanda: { ventasEstimadasPorDia: v } } })
   assert.equal(tendenciaVentas(rep(12), rep(10)), 'sube')

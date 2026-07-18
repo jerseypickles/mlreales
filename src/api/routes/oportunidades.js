@@ -83,7 +83,10 @@ router.get(
         fobMaximoUsd: rec.fobMaximoUsd ?? null,
         primeraCompra: rec.primeraCompra ?? null,
         inversionEstimadaUsd: inversionEstimadaUsd(rec.primeraCompra, rec.fobMaximoUsd),
-        tramites: detectarTramites([...(analisis.riesgos ?? []), n.radarInfo?.riesgo]),
+        // análisis nuevos lo declaran estructurado; los viejos caen al detector de texto
+        tramites: Array.isArray(analisis.tramites)
+          ? analisis.tramites
+          : detectarTramites([...(analisis.riesgos ?? []), n.radarInfo?.riesgo]),
         ventanaImportacion: n.radarInfo?.ventanaImportacion ?? null,
         estacionalidad: n.radarInfo?.estacionalidad ?? null,
         condiciones: analisis.veredicto === 'entrar_con_condiciones' ? (analisis.resumen ?? null) : null,
