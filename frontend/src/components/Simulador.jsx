@@ -10,7 +10,7 @@ function parsearUnidades(texto) {
 
 // De cada peso de la venta (neta): producto, logística, Mercado Libre, y lo tuyo.
 function FlujoVenta({ porUnidad }) {
-  const producto = porUnidad.fobClp ?? 0
+  const producto = porUnidad.exwClp ?? porUnidad.fobClp ?? 0
   const logistica =
     (porUnidad.fleteClp ?? 0) + (porUnidad.seguroClp ?? 0) + (porUnidad.arancelClp ?? 0) + (porUnidad.despachoClp ?? 0)
   const ml = (porUnidad.comisionMlClp ?? 0) + (porUnidad.fullClp ?? 0)
@@ -58,7 +58,7 @@ export function Simulador({ nicho, reporte, precioInicial }) {
 
   const [form, setForm] = useState({
     precioVentaClp: precioInicial ?? rec?.precioVentaClp ?? reporte?.metricas?.precio?.mediana ?? '',
-    costoFobUsd: rec?.fobMaximoUsd ?? '',
+    costoExwUsd: rec?.exwMaximoUsd ?? rec?.fobMaximoUsd ?? '',
     unidades: unidadesPrueba ?? 500,
     // la comisión la estima el análisis según la categoría; 17% conservador si no hay análisis
     comisionPct: rec?.comisionMlPct ?? 17,
@@ -79,7 +79,7 @@ export function Simulador({ nicho, reporte, precioInicial }) {
   useEffect(() => {
     const listo =
       Number(form.precioVentaClp) > 0 &&
-      Number(form.costoFobUsd) > 0 &&
+      Number(form.costoExwUsd) > 0 &&
       Number(form.unidades) >= 1 &&
       (form.modoFlete === 'maritimo' ? Number(form.volumenM3) > 0 : Number(form.pesoKg) > 0)
     if (!listo) return
@@ -91,7 +91,7 @@ export function Simulador({ nicho, reporte, precioInicial }) {
       try {
         const r = await api.simularMargen({
           precioVentaClp: Number(form.precioVentaClp),
-          costoFobUsd: Number(form.costoFobUsd),
+          costoExwUsd: Number(form.costoExwUsd),
           unidades: Number(form.unidades),
           modoFlete: form.modoFlete,
           volumenM3: Number(form.volumenM3),
@@ -135,9 +135,9 @@ export function Simulador({ nicho, reporte, precioInicial }) {
             <input type="number" min="1" {...campo('precioVentaClp')} />
           </label>
           <label className="sim-campo">
-            Costo por unidad en China (USD FOB)
-            <input type="number" min="0.01" step="0.01" placeholder="ej: 3.50" {...campo('costoFobUsd')} />
-            {rec?.fobMaximoUsd ? <span className="ayuda-campo">máximo recomendado: US$ {rec.fobMaximoUsd}</span> : null}
+            Costo por unidad en China (USD EXW, precio ex-fábrica)
+            <input type="number" min="0.01" step="0.01" placeholder="ej: 3.50" {...campo('costoExwUsd')} />
+            {(rec?.exwMaximoUsd ?? rec?.fobMaximoUsd) ? <span className="ayuda-campo">máximo recomendado: US$ {rec.exwMaximoUsd ?? rec.fobMaximoUsd}</span> : null}
           </label>
           <label className="sim-campo">
             Unidades del pedido
@@ -190,7 +190,7 @@ export function Simulador({ nicho, reporte, precioInicial }) {
         {/* ---- RESULTADO ---- */}
         <div className={`sim-panel sim-resultado ${calculando ? 'calculando' : ''}`}>
           {!resultado ? (
-            <p className="vacio">Completa precio y costo FOB: el cálculo corre solo.</p>
+            <p className="vacio">Completa precio y costo EXW: el cálculo corre solo.</p>
           ) : (
             <>
               <div className={`sim-hero ${pierde ? 'sim-pierde' : ''}`}>
@@ -225,7 +225,7 @@ export function Simulador({ nicho, reporte, precioInicial }) {
                     <tbody>
                       <tr><td>Precio de venta (bruto)</td><td className="num">{fmtPrecio(resultado.porUnidad.precioVentaClp)}</td></tr>
                       <tr><td>Ingreso neto (sin IVA)</td><td className="num">{fmtPrecio(resultado.porUnidad.ingresoNetoClp)}</td></tr>
-                      <tr><td>Producto (FOB)</td><td className="num">{fmtPrecio(resultado.porUnidad.fobClp)}</td></tr>
+                      <tr><td>Producto (EXW)</td><td className="num">{fmtPrecio(resultado.porUnidad.exwClp ?? resultado.porUnidad.fobClp)}</td></tr>
                       <tr><td>Flete</td><td className="num">{fmtPrecio(resultado.porUnidad.fleteClp)}</td></tr>
                       <tr><td>Seguro</td><td className="num">{fmtPrecio(resultado.porUnidad.seguroClp)}</td></tr>
                       <tr><td>Arancel</td><td className="num">{fmtPrecio(resultado.porUnidad.arancelClp)}</td></tr>

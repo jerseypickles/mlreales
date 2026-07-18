@@ -1,5 +1,5 @@
 import { pedirJSON } from './llm.js'
-import { fobMaximoUsd } from './margen.js'
+import { exwMaximoUsd } from './margen.js'
 import { obtenerProductosUltimoScan } from './metricas.js'
 import { Reporte } from '../models/Reporte.js'
 
@@ -37,7 +37,7 @@ const SCHEMA_ANALISIS = {
     recomendacion: {
       type: 'object',
       additionalProperties: false,
-      required: ['aplica', 'titular', 'segmento', 'precioVentaClp', 'fobMaximoUsd', 'primeraCompra', 'comisionMlPct', 'especificacionProducto', 'productoIngles', 'comoValidar'],
+      required: ['aplica', 'titular', 'segmento', 'precioVentaClp', 'exwMaximoUsd', 'primeraCompra', 'comisionMlPct', 'especificacionProducto', 'productoIngles', 'comoValidar'],
       properties: {
         aplica: { type: 'boolean', description: 'false si el veredicto es no_entrar' },
         titular: {
@@ -46,7 +46,7 @@ const SCHEMA_ANALISIS = {
         },
         segmento: { type: 'string' },
         precioVentaClp: { type: 'integer', description: 'Precio de entrada sugerido' },
-        fobMaximoUsd: { type: 'number', description: 'FOB máximo a pagar en China, coherente con la tabla precalculada' },
+        exwMaximoUsd: { type: 'number', description: 'Precio EXW máximo a pagar en China (ex-fábrica, el forwarder cubre retiro y flete), coherente con la tabla precalculada' },
         primeraCompra: { type: 'string', description: 'Tamaño del pedido de prueba, ej: "50-100 unidades"' },
         comisionMlPct: {
           type: 'number',
@@ -88,7 +88,7 @@ Reglas:
 - Los items con origenCrossBorder=true son sellers chinos despachando directo: son a la vez señal de que el producto se puede importar barato y competencia difícil de ganar en precio.
 - % Full bajo en un segmento con demanda = oportunidad (Full gana el buy box y el envío rápido) SOLO si el producto es apto para Full: liviano y de caja normal. En productos voluminosos o pesados (línea blanca, muebles, aires con compresor, piscinas armadas) el Full bajo es ESTRUCTURAL — bodegaje caro y límites de tamaño — y no es ventaja para nadie; no lo cuentes a favor.
 - Rating promedio alto (>4.5) en un segmento = difícil diferenciarse por calidad; busca segmentos con ratings mediocres y volumen.
-- El FOB máximo de tu recomendación debe salir de la tabla precalculada (interpola si el precio sugerido está entre dos puntos). No inventes números de costos.
+- El EXW máximo de tu recomendación debe salir de la tabla precalculada (interpola si el precio sugerido está entre dos puntos). Se compra EXW: precio ex-fábrica, el forwarder cubre retiro y flete. No inventes números de costos.
 - CALENDARIO Y LEAD TIME (eliminatorio): te paso la fecha actual. Entre comprar en China y tener stock vendible en Full pasan 50-70 días (producción + 35-50 días de mar + internación + ingreso a Full). Si el nicho es estacional y su pico de venta ya pasó o termina antes de que alcance a llegar un pedido hecho HOY, el veredicto es no_entrar aunque las métricas sean excelentes: la demanda que ves es de la temporada en curso y el stock llegaría a bodega muerta. En el resumen di explícitamente que es por ventana de importación e indica en qué mes comprar para el próximo pico. Producto de la estación en curso (ej: ropa de invierno en pleno invierno) ya es tarde. Si la ventana es justa (el pedido llega apenas al inicio del pico), solo entrar_con_condiciones con envío aéreo o pedido chico, y dilo.
 - BARRERAS DE IMPORTACIÓN (informar, no vetar): los eléctricos que se enchufan a la red (220V) requieren certificación SEC en Chile; los cosméticos, registro ISP. Son trámites con costo y semanas — NO descartan un nicho bueno por sí solos, pero la recomendación debe dejarlos explícitos: nómbralos en riesgos, súmalos a la jugada (tramitar mientras se valida) e indica si existe una variante del producto sin la barrera (ej: a pilas/USB/12V) para partir más rápido.
 - EXPERIENCIA REAL DEL IMPORTADOR (pésala más que tus supuestos de manual): ya vende en Mercado Libre Chile y HA VENDIDO COSMÉTICO GENÉRICO con éxito — en Chile el comprador sí compra genérico, también en belleza. No descartes un nicho por "categoría de marca" a priori: mídelo en el top 50 que te paso (campo "oficial"): si hay productos genéricos/no-oficiales con reseñas, el genérico vende; descarta por marca solo si el top está copado por tiendas oficiales Y los genéricos no tienen tracción. El registro ISP el importador ya lo tramitó antes (se hace por producto): trátalo como costo y plazo conocidos dentro de la jugada, nunca como razón de no_entrar.
@@ -110,15 +110,15 @@ function resumirProductosParaLLM(productos) {
   }))
 }
 
-// Tabla de FOB máximo precalculada con el modelo de importación: el LLM razona
+// Tabla de EXW máximo precalculada con el modelo de importación: el LLM razona
 // sobre números que salen de nuestra calculadora, no de su imaginación.
-function tablaFobMaximo(metricas) {
+function tablaExwMaximo(metricas) {
   const precios = [metricas.precio.p25, metricas.precio.mediana, metricas.precio.p75].filter(Number.isFinite)
   const filas = []
   for (const precio of precios) {
     for (const margen of [25, 35]) {
-      const fob = fobMaximoUsd({ precioVentaClp: precio, margenObjetivoPct: margen })
-      filas.push({ precioVentaClp: Math.round(precio), margenObjetivoPct: margen, fobMaximoUsd: fob })
+      const exw = exwMaximoUsd({ precioVentaClp: precio, margenObjetivoPct: margen })
+      filas.push({ precioVentaClp: Math.round(precio), margenObjetivoPct: margen, exwMaximoUsd: exw })
     }
   }
   return filas
@@ -142,8 +142,8 @@ export async function analizarNicho(nicho) {
     estacionalidad: nicho.radarInfo?.estacionalidad ?? undefined,
     ventanaImportacionSegunRadar: nicho.radarInfo?.ventanaImportacion ?? undefined,
     metricas: reporte.metricas,
-    tablaFobMaximo: tablaFobMaximo(reporte.metricas),
-    supuestosTabla: 'FOB máximo por unidad asumiendo 500 unidades, 0.003 m³/unidad, flete marítimo, TLC 0% arancel, comisión ML 16%, tarifa Full incluida',
+    tablaExwMaximo: tablaExwMaximo(reporte.metricas),
+    supuestosTabla: 'EXW máximo por unidad (precio ex-fábrica; la tarifa del forwarder cubre retiro y flete marítimo) asumiendo 500 unidades, 0.003 m³/unidad, TLC 0% arancel, comisión ML 16%, tarifa Full incluida',
     top50: resumirProductosParaLLM(vista.productos),
   }
 

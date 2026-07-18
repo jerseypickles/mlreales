@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcularMargen, fobMaximoUsd } from '../src/services/margen.js'
+import { calcularMargen, exwMaximoUsd } from '../src/services/margen.js'
 
 const base = {
-  costoFobUsd: 3,
+  costoExwUsd: 3,
   unidades: 500,
   volumenM3: 0.002,
   precioVentaClp: 15990,
@@ -14,7 +14,7 @@ test('calcularMargen: caso marítimo con defaults', () => {
   const r = calcularMargen(base)
 
   // FOB 3 USD * 950 = 2850; flete 0.002 m3 * 180 USD = 342 CLP; seguro 0.5% FOB
-  assert.equal(r.porUnidad.fobClp, 2850)
+  assert.equal(r.porUnidad.exwClp, 2850)
   assert.equal(r.porUnidad.fleteClp, 342)
   assert.equal(r.porUnidad.seguroClp, 14)
   assert.equal(r.porUnidad.arancelClp, 0) // TLC China-Chile
@@ -47,25 +47,25 @@ test('calcularMargen: overrides de parámetros', () => {
     ...base,
     parametros: { tipoCambioUsdClp: 1000, aduana: { arancelPct: 6, ivaPct: 19, despachoUsd: 250 } },
   })
-  assert.equal(r.porUnidad.fobClp, 3000)
+  assert.equal(r.porUnidad.exwClp, 3000)
   assert.ok(r.porUnidad.arancelClp > 0) // sin certificado de origen
   assert.equal(r.supuestos.arancelPct, 6)
 })
 
-test('fobMaximoUsd: es la inversa de calcularMargen', () => {
+test('exwMaximoUsd: es la inversa de calcularMargen', () => {
   const objetivo = 25
-  const fobMax = fobMaximoUsd({
+  const exwMax = exwMaximoUsd({
     precioVentaClp: 15990,
     margenObjetivoPct: objetivo,
     unidades: 500,
     volumenM3: 0.002,
     modoFlete: 'maritimo',
   })
-  assert.ok(fobMax > 0)
+  assert.ok(exwMax > 0)
 
   // comprando exactamente al FOB máximo, el margen debe ser el objetivo
   const r = calcularMargen({
-    costoFobUsd: fobMax,
+    costoExwUsd: exwMax,
     unidades: 500,
     volumenM3: 0.002,
     precioVentaClp: 15990,
@@ -74,12 +74,12 @@ test('fobMaximoUsd: es la inversa de calcularMargen', () => {
   assert.ok(Math.abs(r.resultado.margenPctSobreVenta - objetivo) < 0.3)
 })
 
-test('fobMaximoUsd: precio muy bajo no da espacio', () => {
-  assert.equal(fobMaximoUsd({ precioVentaClp: 900, margenObjetivoPct: 40 }), null)
+test('exwMaximoUsd: precio muy bajo no da espacio', () => {
+  assert.equal(exwMaximoUsd({ precioVentaClp: 900, margenObjetivoPct: 40 }), null)
 })
 
 test('calcularMargen: valida entradas', () => {
-  assert.throws(() => calcularMargen({ ...base, costoFobUsd: 0 }), /costoFobUsd/)
+  assert.throws(() => calcularMargen({ ...base, costoExwUsd: 0 }), /costoExwUsd/)
   assert.throws(() => calcularMargen({ ...base, volumenM3: 0 }), /volumenM3/)
   assert.throws(() => calcularMargen({ ...base, modoFlete: 'aereo', pesoKg: 0 }), /pesoKg/)
   assert.throws(() => calcularMargen({ ...base, precioVentaClp: null }), /precioVentaClp/)

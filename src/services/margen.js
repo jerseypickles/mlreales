@@ -1,6 +1,8 @@
 import { importacion } from '../config/importacion.js'
 
 const redondear = (n) => (Number.isFinite(n) ? Math.round(n) : null)
+// overrides viejos pueden traer seguroPctFob: mismo significado, nombre anterior
+const seguroPct = (p) => p.flete.seguroPctExw ?? p.flete.seguroPctFob ?? 0
 const pct = (n) => (Number.isFinite(n) ? Math.round(n * 10) / 10 : null)
 
 // Fusión superficial de overrides sobre los parámetros por defecto.
@@ -14,9 +16,10 @@ function parametrosCon(overrides = {}) {
 }
 
 // Invierte el modelo: dado un precio de venta y un margen objetivo, ¿cuál es el
-// FOB máximo (USD/unidad) que se puede pagar en China? Misma matemática que
-// calcularMargen, despejando el FOB.
-export function fobMaximoUsd(entrada) {
+// EXW máximo (USD/unidad) que se puede pagar en China? Precio ex-fábrica: el
+// retiro, consolidación y flete van en la tarifa del forwarder (flete.*).
+// Misma matemática que calcularMargen, despejando el EXW.
+export function exwMaximoUsd(entrada) {
   const {
     precioVentaClp,
     margenObjetivoPct = 25,
@@ -49,12 +52,12 @@ export function fobMaximoUsd(entrada) {
   const fleteClp = fleteUsd * tc
 
   // margen = ingresoNeto - landed - comision - full, con landed = cif(1+arancel) + despacho
-  // y cif = fob*tc*(1+seguro) + flete → despejar fob
+  // y cif = exw*tc*(1+seguro) + flete → despejar exw
   const restanteClp = ingresoNetoClp * (1 - margenObjetivoPct / 100) - comisionNetaClp - fullNetoClp - despachoClp
   const cifMaxClp = restanteClp / (1 + p.aduana.arancelPct / 100)
-  const fobMax = (cifMaxClp - fleteClp) / (tc * (1 + p.flete.seguroPctFob / 100))
+  const exwMax = (cifMaxClp - fleteClp) / (tc * (1 + seguroPct(p) / 100))
 
-  return fobMax > 0 ? Math.round(fobMax * 100) / 100 : null
+  return exwMax > 0 ? Math.round(exwMax * 100) / 100 : null
 }
 
 // Unit economics de importar y vender por ML Full.
@@ -62,7 +65,8 @@ export function fobMaximoUsd(entrada) {
 // crédito fiscal para un vendedor formal); la caja necesaria sí incluye IVA.
 export function calcularMargen(entrada) {
   const {
-    costoFobUsd, // por unidad
+    costoExwUsd, // por unidad, precio ex-fábrica (costoFobUsd se acepta como alias viejo)
+    costoFobUsd,
     unidades,
     precioVentaClp, // precio de venta bruto (como se publica en ML)
     pesoKg = 0,
@@ -71,7 +75,8 @@ export function calcularMargen(entrada) {
     parametros: overrides,
   } = entrada
 
-  if (!Number.isFinite(costoFobUsd) || costoFobUsd <= 0) throw new Error('costoFobUsd requerido (> 0)')
+  const costoUnitarioUsd = costoExwUsd ?? costoFobUsd
+  if (!Number.isFinite(costoUnitarioUsd) || costoUnitarioUsd <= 0) throw new Error('costoExwUsd requerido (> 0)')
   if (!Number.isFinite(unidades) || unidades < 1) throw new Error('unidades requeridas (>= 1)')
   if (!Number.isFinite(precioVentaClp) || precioVentaClp <= 0) throw new Error('precioVentaClp requerido (> 0)')
   if (modoFlete === 'maritimo' && !(volumenM3 > 0)) throw new Error('volumenM3 requerido para flete marítimo (por unidad)')
@@ -82,11 +87,11 @@ export function calcularMargen(entrada) {
   const factorIva = 1 + p.aduana.ivaPct / 100
 
   // --- costos de importación por unidad (CLP, netos de IVA) ---
-  const fobClp = costoFobUsd * tc
+  const exwClp = costoUnitarioUsd * tc
   const fleteUsd = modoFlete === 'aereo' ? pesoKg * p.flete.aereoUsdPorKg : volumenM3 * p.flete.maritimoUsdPorM3
   const fleteClp = fleteUsd * tc
-  const seguroClp = fobClp * (p.flete.seguroPctFob / 100)
-  const cifClp = fobClp + fleteClp + seguroClp
+  const seguroClp = exwClp * (seguroPct(p) / 100)
+  const cifClp = exwClp + fleteClp + seguroClp
   const arancelClp = cifClp * (p.aduana.arancelPct / 100)
   const despachoClp = (p.aduana.despachoUsd * tc) / unidades
   const landedNetoClp = cifClp + arancelClp + despachoClp
@@ -124,7 +129,7 @@ export function calcularMargen(entrada) {
     porUnidad: {
       precioVentaClp: redondear(precioVentaClp),
       ingresoNetoClp: redondear(ingresoNetoClp),
-      fobClp: redondear(fobClp),
+      exwClp: redondear(exwClp),
       fleteClp: redondear(fleteClp),
       seguroClp: redondear(seguroClp),
       arancelClp: redondear(arancelClp),

@@ -5,9 +5,11 @@ export const importacion = {
   tipoCambioUsdClp: 950,
 
   flete: {
-    maritimoUsdPorM3: 180, // LCL China → San Antonio, puerta a puerta aprox
+    // tarifa all-in del forwarder comprando EXW: retiro en fábrica +
+    // consolidación + LCL China → San Antonio, aprox
+    maritimoUsdPorM3: 180,
     aereoUsdPorKg: 6.5,
-    seguroPctFob: 0.5, // % sobre FOB
+    seguroPctExw: 0.5, // % sobre valor EXW
   },
 
   aduana: {

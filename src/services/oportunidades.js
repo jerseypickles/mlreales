@@ -46,9 +46,9 @@ export function unidadesPrimeraCompra(texto) {
   return solo ? Number(solo[0]) : null
 }
 
-// Inversión aproximada del pedido de prueba: unidades × FOB máximo.
-export function inversionEstimadaUsd(primeraCompra, fobMaximoUsd) {
+// Inversión aproximada del pedido de prueba: unidades × EXW máximo.
+export function inversionEstimadaUsd(primeraCompra, exwMaximoUsd) {
   const unidades = unidadesPrimeraCompra(primeraCompra)
-  if (unidades == null || !Number.isFinite(fobMaximoUsd)) return null
-  return Math.round(unidades * fobMaximoUsd)
+  if (unidades == null || !Number.isFinite(exwMaximoUsd)) return null
+  return Math.round(unidades * exwMaximoUsd)
 }

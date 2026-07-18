@@ -52,7 +52,7 @@ function CartaOportunidad({ o, rank, onAbrir }) {
 
         <div className="op-hechos">
           <Hecho etiqueta="vender a">{o.precioVentaClp ? fmtPrecio(o.precioVentaClp) : null}</Hecho>
-          <Hecho etiqueta="FOB máx">{o.fobMaximoUsd != null ? `US$ ${o.fobMaximoUsd}` : null}</Hecho>
+          <Hecho etiqueta="EXW máx">{o.exwMaximoUsd != null ? `US$ ${o.exwMaximoUsd}` : null}</Hecho>
           <Hecho etiqueta="demanda">
             {o.ventasDia != null ? (
               <>
@@ -127,8 +127,8 @@ export function Oportunidades({ onAbrirNicho }) {
       )}
 
       <p className="nota">
-        Ranking por score con desempate por demanda. "FOB máx" es lo más que puedes pagar en China
-        para que el margen cierre al precio sugerido; la inversión estimada es FOB máx × pedido de
+        Ranking por score con desempate por demanda. "EXW máx" es lo más que puedes pagar en China (precio ex-fábrica)
+        para que el margen cierre al precio sugerido; la inversión estimada es EXW máx × pedido de
         prueba. Abre la carta para ver el análisis completo, el simulador y el listing.
       </p>
     </main>

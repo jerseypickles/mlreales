@@ -72,6 +72,8 @@ router.get(
 
       const ultimo = n.ultimos?.[0]
       const rec = analisis.recomendacion ?? {}
+      // análisis viejos guardaron fobMaximoUsd; el significado nuevo es EXW
+      const exwMax = rec.exwMaximoUsd ?? rec.fobMaximoUsd ?? null
       oportunidades.push({
         nichoId: n._id,
         keyword: n.keyword,
@@ -89,9 +91,9 @@ router.get(
         titular: rec.titular ?? null,
         segmento: rec.segmento ?? null,
         precioVentaClp: rec.precioVentaClp ?? null,
-        fobMaximoUsd: rec.fobMaximoUsd ?? null,
+        exwMaximoUsd: exwMax,
         primeraCompra: rec.primeraCompra ?? null,
-        inversionEstimadaUsd: inversionEstimadaUsd(rec.primeraCompra, rec.fobMaximoUsd),
+        inversionEstimadaUsd: inversionEstimadaUsd(rec.primeraCompra, exwMax),
         // análisis nuevos lo declaran estructurado; los viejos caen al detector de texto
         tramites: Array.isArray(analisis.tramites)
           ? analisis.tramites

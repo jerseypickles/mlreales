@@ -6,7 +6,7 @@ import { fmtPrecio, fmtFecha } from '../lib/formato.js'
 
 // ── Planilla de cotización para el proveedor (RFQ) ───────────────────────
 // Una fila por nicho con veredicto de entrada. Las columnas del CSV van en
-// inglés y sin datos internos (nunca el FOB máximo: es tu tope de negociación);
+// inglés y sin datos internos (nunca el EXW máximo: es tu tope de negociación);
 // las columnas de precio/MOQ/tiempos van vacías para que las llene el
 // proveedor. Veredicto/confianza/nicho en español quedan solo en pantalla.
 

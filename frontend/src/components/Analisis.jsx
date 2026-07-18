@@ -68,7 +68,7 @@ export function Analisis({ nichoId, analisisInicial }) {
               </div>
               <div>
                 <span className="dato-label">Pagar máx en China</span>
-                <span className="dato-valor">US$ {rec.fobMaximoUsd}</span>
+                <span className="dato-valor">US$ {rec.exwMaximoUsd ?? rec.fobMaximoUsd}</span>
               </div>
               <div>
                 <span className="dato-label">Pedido de prueba</span>
