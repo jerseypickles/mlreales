@@ -2,7 +2,7 @@ import { validarEnv, config } from './config/env.js'
 import { conectarMongo, desconectarMongo } from './db/mongo.js'
 import { crearApp } from './api/app.js'
 import { iniciarWorkers } from './jobs/workers.js'
-import { obtenerColas, cerrarColas, registrarProgramados } from './jobs/queues.js'
+import { obtenerColas, cerrarColas, registrarProgramados, encolarRfq } from './jobs/queues.js'
 import { diaChile, prefijosSemilla } from './services/tendencias.js'
 import { TendenciaBusqueda } from './models/TendenciaBusqueda.js'
 
@@ -13,6 +13,9 @@ console.log('[mongo] conectado')
 
 obtenerColas()
 await registrarProgramados()
+// acotado RFQ al arrancar (el servicio no gasta si no hay pendientes): los
+// análisis que llegaron entre deploys no quedan sin campos de proveedor
+await encolarRfq()
 // captura de tendencias al arrancar si al día le faltan prefijos (la captura
 // upsertea por prefijo, así que re-correrla solo rellena los huecos que dejó el
 // WAF de ML). jobId por hora: máximo un reintento por hora aunque haya varios

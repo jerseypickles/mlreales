@@ -27,7 +27,7 @@ const COLUMNAS_IA = [
     titulo: 'Niche',
     tipo: 'texto',
     anchoXlsx: 24,
-    render: (o) => o.nichoIngles ?? <span className="vacio" title="Regenera el análisis para obtener el nombre en inglés">(regenerar análisis)</span>,
+    render: (o) => o.nichoIngles ?? <span className="vacio" title="El acotador corre solo tras cada análisis; también puedes forzarlo con el botón de arriba">(pendiente)</span>,
   },
   {
     clave: 'productoIngles',
@@ -35,12 +35,14 @@ const COLUMNAS_IA = [
     tipo: 'texto',
     ancha: true,
     anchoXlsx: 42,
+    // nunca volcar la especificación larga aquí: o está acotado o está pendiente
     render: (o) =>
-      o.productoIngles ??
-      o.especificacionProducto ?? (
-        <span className="vacio" title="Regenera el análisis para obtener el producto en inglés">(regenerar análisis)</span>
+      o.productoIngles ?? (
+        <span className="vacio" title="El acotador corre solo tras cada análisis; también puedes forzarlo con el botón de arriba">
+          (pendiente de acotar)
+        </span>
       ),
-    csv: (o) => o.productoIngles ?? o.especificacionProducto ?? null,
+    csv: (o) => o.productoIngles ?? null,
   },
   { clave: 'especificacionProducto', titulo: 'Specification', tipo: 'texto', ancha: true, anchoXlsx: 60 },
   {

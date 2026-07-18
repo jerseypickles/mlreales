@@ -38,7 +38,7 @@ const SCHEMA_RFQ = {
 
 const SYSTEM_RFQ = `Preparas una hoja de cotización (RFQ) para proveedores chinos a partir de recomendaciones de un analista de e-commerce.
 
-Para cada ítem entrega nicho y producto en inglés comercial (como se busca en Alibaba/1688) y una especificación LIMPIA: solo los atributos físicos y técnicos que el proveedor necesita para cotizar — potencia, medidas, capacidad, materiales, accesorios incluidos, enchufe 220V Chile si es eléctrico, empaque. NADA de contexto de mercado, precios, marcas de competidores, consejos de validación ni texto en español. Corto, directo, cotizable.
+Para cada ítem entrega nicho y producto en inglés comercial (como se busca en Alibaba/1688) y una especificación LIMPIA: solo los atributos físicos y técnicos que el proveedor necesita para cotizar — potencia, medidas, capacidad, materiales, accesorios incluidos, enchufe 220V Chile si es eléctrico, empaque. NADA de contexto de mercado, precios, marcas de competidores ni consejos de validación. TODO en inglés al 100%: ni una palabra en español en nicho, producto o especificación (el proveedor no lee español). Corto, directo, cotizable.
 
 DETECCIÓN DE COMPRA DUPLICADA: recibes todos los nichos juntos a propósito. Si dos o más nichos se surten con el mismo producto físico de fábrica (distintas keywords de venta en Mercado Libre, un solo ítem que comprar en China), asígnales exactamente la misma productoClave — así el sistema los fusiona en una sola línea de cotización. Sé estricto: misma clave solo si un mismo pedido de fábrica sirve para ambos listings.`
 
