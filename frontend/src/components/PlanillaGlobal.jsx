@@ -4,6 +4,104 @@ import { Planilla } from './Planilla.jsx'
 import { Cargando, IconoExterno } from './ui.jsx'
 import { fmtPrecio, fmtFecha } from '../lib/formato.js'
 
+// ── Planilla de recomendaciones IA: una fila por nicho analizado ─────────
+// Es la hoja de sourcing: qué traer, a cuánto vender, cuánto pagar en China,
+// pedido de prueba, especificación para Alibaba y cómo validar.
+
+const COLUMNAS_IA = [
+  { clave: 'keyword', titulo: 'Nicho', tipo: 'texto', fija: true },
+  {
+    clave: 'veredicto',
+    titulo: 'Veredicto',
+    tipo: 'texto',
+    render: (o) => (
+      <span className={`veredicto veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span>
+    ),
+  },
+  { clave: 'confianza', titulo: 'Confianza', tipo: 'texto' },
+  { clave: 'score', titulo: 'Score', tipo: 'numero' },
+  { clave: 'titular', titulo: 'Producto a traer', tipo: 'texto', ancha: true },
+  {
+    clave: 'precioVentaClp',
+    titulo: 'Vender a',
+    tipo: 'numero',
+    render: (o) => (o.precioVentaClp ? fmtPrecio(o.precioVentaClp) : '—'),
+  },
+  { clave: 'fobMaximoUsd', titulo: 'FOB máx US$', tipo: 'numero' },
+  { clave: 'primeraCompra', titulo: 'Pedido de prueba', tipo: 'texto' },
+  { clave: 'inversionEstimadaUsd', titulo: 'Inversión ~US$', tipo: 'numero' },
+  { clave: 'comisionMlPct', titulo: 'Comisión ML %', tipo: 'numero' },
+  { clave: 'segmento', titulo: 'Segmento', tipo: 'texto', ancha: true },
+  { clave: 'tramites', titulo: 'Trámites', tipo: 'texto' },
+  { clave: 'ventanaImportacion', titulo: 'Ventana compra', tipo: 'texto', ancha: true },
+  { clave: 'ventasDia', titulo: '~Ventas/día', tipo: 'numero' },
+  {
+    clave: 'mediana',
+    titulo: 'Mediana nicho',
+    tipo: 'numero',
+    render: (o) => (o.mediana ? fmtPrecio(o.mediana) : '—'),
+  },
+  { clave: 'especificacionProducto', titulo: 'Especificación (Alibaba/1688)', tipo: 'texto', ancha: true },
+  { clave: 'comoValidar', titulo: 'Cómo validar', tipo: 'texto', ancha: true },
+  { clave: 'estado', titulo: 'Estado', tipo: 'texto' },
+  {
+    clave: 'fechaAnalisis',
+    titulo: 'Análisis',
+    tipo: 'texto',
+    render: (o) => (o.fechaAnalisis ? fmtFecha(o.fechaAnalisis) : '—'),
+    csv: (o) => (o.fechaAnalisis ? String(o.fechaAnalisis).slice(0, 16).replace('T', ' ') : null),
+  },
+]
+
+function PlanillaIA({ onAbrirNicho }) {
+  const [datos, setDatos] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let vigente = true
+    api
+      .oportunidades({ todos: true })
+      .then((d) => {
+        if (!vigente) return
+        // trámites como texto para que la grilla y el CSV lo traten plano
+        setDatos({
+          ...d,
+          oportunidades: d.oportunidades.map((o) => ({
+            ...o,
+            tramites: (o.tramites ?? []).join(', ') || null,
+          })),
+        })
+      })
+      .catch((e) => vigente && setError(e.message))
+    return () => {
+      vigente = false
+    }
+  }, [])
+
+  if (error) return <p className="error-bloque">Error: {error}</p>
+  if (!datos) return <Cargando texto="Cargando recomendaciones…" />
+  if (!datos.oportunidades.length) {
+    return (
+      <p className="vacio">
+        Aún no hay nichos analizados por la IA. Cuando el pipeline analice (o pidas un análisis desde
+        el nicho), cada recomendación aparece aquí como fila.
+      </p>
+    )
+  }
+
+  return (
+    <Planilla
+      columnas={COLUMNAS_IA}
+      filas={datos.oportunidades}
+      nombreArchivo="recomendaciones-ia-meli-intel.csv"
+      filaKey={(o) => o.nichoId}
+      onFilaClick={onAbrirNicho ? (o) => onAbrirNicho(o.nichoId) : undefined}
+    />
+  )
+}
+
+// ── Planilla cruda de productos (todos los nichos) ───────────────────────
+
 export const COLUMNAS_PRODUCTO = [
   { clave: 'posicion', titulo: '#', tipo: 'numero' },
   {
@@ -50,7 +148,7 @@ export const COLUMNAS_PRODUCTO = [
   },
 ]
 
-export function PlanillaGlobal() {
+function PlanillaProductos() {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
 
@@ -65,10 +163,22 @@ export function PlanillaGlobal() {
     }
   }, [])
 
-  if (error) return <main><p className="error-bloque">Error: {error}</p></main>
-  if (!datos) return <main><Cargando texto="Cargando todos los productos…" /></main>
+  if (error) return <p className="error-bloque">Error: {error}</p>
+  if (!datos) return <Cargando texto="Cargando todos los productos…" />
 
   const columnas = [{ clave: 'nicho', titulo: 'Nicho', tipo: 'texto', fija: true }, ...COLUMNAS_PRODUCTO]
+  return (
+    <Planilla
+      columnas={columnas}
+      filas={datos.productos}
+      nombreArchivo="productos-meli-intel.csv"
+      filaKey={(p) => `${p.nicho}:${p.sku}`}
+    />
+  )
+}
+
+export function PlanillaGlobal({ onAbrirNicho }) {
+  const [modo, setModo] = useState('ia')
 
   return (
     <main>
@@ -76,18 +186,30 @@ export function PlanillaGlobal() {
         <div>
           <h2>Planilla</h2>
           <p className="reporte-fecha">
-            Todos los productos del último scan de cada nicho activo. Ordena con click en la columna,
-            filtra bajo el encabezado, y descarga lo que estés viendo.
+            {modo === 'ia'
+              ? 'Lo que la IA entregó por cada nicho analizado: qué traer, a cuánto vender, cuánto pagar en China y cómo validar. Ordena, filtra y descarga.'
+              : 'Todos los productos del último scan de cada nicho activo (materia prima de los análisis).'}
           </p>
+        </div>
+        <div className="chips" role="group" aria-label="Contenido de la planilla">
+          <button
+            className={modo === 'ia' ? 'chip activo' : 'chip'}
+            onClick={() => setModo('ia')}
+            aria-pressed={modo === 'ia'}
+          >
+            Recomendaciones IA
+          </button>
+          <button
+            className={modo === 'productos' ? 'chip activo' : 'chip'}
+            onClick={() => setModo('productos')}
+            aria-pressed={modo === 'productos'}
+          >
+            Todos los productos
+          </button>
         </div>
       </div>
 
-      <Planilla
-        columnas={columnas}
-        filas={datos.productos}
-        nombreArchivo="productos-meli-intel.csv"
-        filaKey={(p) => `${p.nicho}:${p.sku}`}
-      />
+      {modo === 'ia' ? <PlanillaIA onAbrirNicho={onAbrirNicho} /> : <PlanillaProductos />}
     </main>
   )
 }

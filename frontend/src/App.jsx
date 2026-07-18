@@ -434,7 +434,12 @@ export default function App() {
           }}
         />
       ) : vista === 'planilla' ? (
-        <PlanillaGlobal />
+        <PlanillaGlobal
+          onAbrirNicho={(id) => {
+            setSeleccionado(id)
+            setVista('nichos')
+          }}
+        />
       ) : vista === 'propios' ? (
         <MisProductos />
       ) : vista === 'tendencias' ? (

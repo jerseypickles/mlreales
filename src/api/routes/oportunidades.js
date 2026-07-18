@@ -11,11 +11,14 @@ const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).
 
 // Panel de decisión: todos los nichos activos con veredicto de entrada,
 // aplanados a una fila comparable y rankeados por score (empate: demanda).
+// Con ?todos=1 devuelve TODO lo analizado (incluye no_entrar y pausados) —
+// es la fuente de la planilla de recomendaciones IA.
 router.get(
   '/',
-  manejar(async (_req, res) => {
+  manejar(async (req, res) => {
+    const todos = req.query.todos === '1' || req.query.todos === 'true'
     const filas = await Nicho.aggregate([
-      { $match: { estado: 'activo' } },
+      { $match: todos ? {} : { estado: 'activo' } },
       {
         $lookup: {
           from: 'reportes',
@@ -46,6 +49,7 @@ router.get(
         $project: {
           keyword: 1,
           origen: 1,
+          estado: 1,
           frecuenciaScan: 1,
           radarInfo: 1,
           ultimos: 1,
@@ -59,7 +63,8 @@ router.get(
     for (const n of filas) {
       const docAnalisis = n.conAnalisis?.[0]
       const analisis = docAnalisis?.analisis
-      if (!analisis || analisis.veredicto === 'no_entrar') continue
+      if (!analisis) continue
+      if (!todos && analisis.veredicto === 'no_entrar') continue
 
       const ultimo = n.ultimos?.[0]
       const rec = analisis.recomendacion ?? {}
@@ -91,6 +96,12 @@ router.get(
         estacionalidad: n.radarInfo?.estacionalidad ?? null,
         condiciones: analisis.veredicto === 'entrar_con_condiciones' ? (analisis.resumen ?? null) : null,
         listingListo: n.tieneListing,
+        estado: n.estado,
+        resumen: analisis.resumen ?? null,
+        especificacionProducto: rec.especificacionProducto ?? null,
+        comoValidar: rec.comoValidar ?? null,
+        comisionMlPct: rec.comisionMlPct ?? null,
+        fechaAnalisis: analisis.generadoEl ?? docAnalisis.fecha ?? null,
       })
     }
 

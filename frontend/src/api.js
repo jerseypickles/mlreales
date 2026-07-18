@@ -42,7 +42,7 @@ export const api = {
   generarListing: (id) => pedir(`/api/nichos/${id}/listing`, { method: 'POST' }),
   listarPropios: () => pedir('/api/propios'),
   tendencias: (dias) => pedir(`/api/tendencias${dias ? `?dias=${dias}` : ''}`),
-  oportunidades: () => pedir('/api/oportunidades'),
+  oportunidades: (opts) => pedir(`/api/oportunidades${opts?.todos ? '?todos=1' : ''}`),
   productosGlobal: () => pedir('/api/productos'),
   capturarTendencias: () => pedir('/api/tendencias/capturar', { method: 'POST' }),
   crearPropio: (url) => pedir('/api/propios', json({ url })),
