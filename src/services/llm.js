@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { config } from '../config/env.js'
+import { decodificarEscapes } from './texto.js'
 
 let cliente = null
 
@@ -98,5 +99,7 @@ export async function pedirJSON({ system, user, schema, maxTokens = 8000, modelo
   const bloqueTexto = respuesta.content.find((b) => b.type === 'text')
   if (!bloqueTexto) throw new Error('El modelo no devolvió contenido')
 
-  return { datos: JSON.parse(bloqueTexto.text), costoUsd: costoDe(respuesta, modeloUsado), modelo: modeloUsado }
+  // el modelo a veces doble-escapa unicode/saltos de línea dentro del JSON
+  const datos = decodificarEscapes(JSON.parse(bloqueTexto.text))
+  return { datos, costoUsd: costoDe(respuesta, modeloUsado), modelo: modeloUsado }
 }
