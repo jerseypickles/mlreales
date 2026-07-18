@@ -26,6 +26,7 @@ const COLUMNAS_IA = [
     clave: 'nichoIngles',
     titulo: 'Niche',
     tipo: 'texto',
+    anchoXlsx: 24,
     render: (o) => o.nichoIngles ?? <span className="vacio" title="Regenera el análisis para obtener el nombre en inglés">(regenerar análisis)</span>,
   },
   {
@@ -33,6 +34,7 @@ const COLUMNAS_IA = [
     titulo: 'Product',
     tipo: 'texto',
     ancha: true,
+    anchoXlsx: 42,
     render: (o) =>
       o.productoIngles ??
       o.especificacionProducto ?? (
@@ -40,19 +42,20 @@ const COLUMNAS_IA = [
       ),
     csv: (o) => o.productoIngles ?? o.especificacionProducto ?? null,
   },
-  { clave: 'especificacionProducto', titulo: 'Specification', tipo: 'texto', ancha: true },
+  { clave: 'especificacionProducto', titulo: 'Specification', tipo: 'texto', ancha: true, anchoXlsx: 60 },
   {
     clave: 'unidadesPrueba',
     titulo: 'Quantity (units)',
     tipo: 'numero',
+    anchoXlsx: 15,
     render: (o) => (o.unidadesPrueba != null ? o.unidadesPrueba : (o.primeraCompra ?? '—')),
     csv: (o) => o.unidadesPrueba ?? o.primeraCompra ?? null,
   },
-  { clave: 'fobUnitario', titulo: 'FOB unit price (USD)', tipo: 'texto' },
-  { clave: 'moq', titulo: 'MOQ', tipo: 'texto' },
-  { clave: 'tiempoProduccion', titulo: 'Production time (days)', tipo: 'texto' },
-  { clave: 'linkProducto', titulo: 'Product link / photos', tipo: 'texto' },
-  { clave: 'notas', titulo: 'Notes', tipo: 'texto' },
+  { clave: 'fobUnitario', titulo: 'FOB unit price (USD)', tipo: 'texto', anchoXlsx: 18 },
+  { clave: 'moq', titulo: 'MOQ', tipo: 'texto', anchoXlsx: 10 },
+  { clave: 'tiempoProduccion', titulo: 'Production time (days)', tipo: 'texto', anchoXlsx: 18 },
+  { clave: 'linkProducto', titulo: 'Product link / photos', tipo: 'texto', anchoXlsx: 30 },
+  { clave: 'notas', titulo: 'Notes', tipo: 'texto', anchoXlsx: 30 },
 ]
 
 function PlanillaIA({ onAbrirNicho }) {
@@ -97,7 +100,9 @@ function PlanillaIA({ onAbrirNicho }) {
     <Planilla
       columnas={COLUMNAS_IA}
       filas={datos.oportunidades}
-      nombreArchivo="supplier-quote-request.csv"
+      nombreArchivo="supplier-quote-request.xlsx"
+      hojaXlsx="Quote request"
+      formatoDescarga="xlsx"
       filaKey={(o) => o.nichoId}
       onFilaClick={onAbrirNicho ? (o) => onAbrirNicho(o.nichoId) : undefined}
     />

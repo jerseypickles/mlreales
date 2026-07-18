@@ -52,10 +52,13 @@ const SCHEMA_ANALISIS = {
           type: 'number',
           description: 'Comisión típica de Mercado Libre Chile para la categoría de este producto en publicación Clásica (13-19.5). Si no la conoces con certeza, usa 17',
         },
-        especificacionProducto: { type: 'string', description: 'Qué producto exacto buscar en Alibaba/1688 (specs, potencia, accesorios)' },
+        especificacionProducto: {
+          type: 'string',
+          description: 'Specs exactas del producto a cotizar, EN INGLÉS, en frases cortas separadas por "; " (ej: "999,999 flashes; 5 intensity levels; sapphire ice cooling; skin sensor; 220V CL plug; retail box in Spanish")',
+        },
         productoIngles: {
           type: 'string',
-          description: 'El producto recomendado EN INGLÉS comercial con sus specs clave, listo para enviarle a un proveedor chino (ej: "IPL hair removal device, home use, 999,999 flashes, 5 intensity levels, sapphire ice cooling, EU/CL 220V plug")',
+          description: 'Nombre comercial CORTO del producto en inglés, máximo 8 palabras, como título de cotización para un proveedor chino (ej: "IPL hair removal device, home use"). Los detalles van en especificacionProducto, no aquí',
         },
         comoValidar: { type: 'string', description: 'Cómo validar antes de comprar el embarque' },
       },
