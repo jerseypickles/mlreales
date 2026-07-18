@@ -20,6 +20,10 @@ test('cambiosPorEtapa: descartado pausa, salir de descartado reactiva, avanzadas
   assert.equal(cotizar.frecuenciaScan, 'semanal')
   assert.equal(cotizar.estado, undefined) // no toca el estado
 
+  const espera = cambiosPorEtapa('en-espera', { etapaCompra: 'evaluando' })
+  assert.equal(espera.frecuenciaScan, 'semanal') // parqueado con motivo: sigue midiéndose barato
+  assert.equal(espera.estado, undefined)
+
   assert.equal(cambiosPorEtapa('inexistente', {}), null)
 })
 

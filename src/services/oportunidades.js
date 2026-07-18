@@ -1,7 +1,9 @@
 // Helpers puros del panel de oportunidades (testeables sin Mongo).
 
-export const ETAPAS_COMPRA = ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'descartado']
-const ETAPAS_AVANZADAS = new Set(['cotizando', 'muestra', 'pedido', 'vendiendo'])
+export const ETAPAS_COMPRA = ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'en-espera', 'descartado']
+// etapas que liberan cupo del radar y bajan a scan semanal (en-espera incluida:
+// parqueado con motivo, ej. "esperando registro ISP" — se sigue midiendo barato)
+const ETAPAS_AVANZADAS = new Set(['cotizando', 'muestra', 'pedido', 'vendiendo', 'en-espera'])
 
 // Cambios que implica mover un nicho de etapa:
 // - descartado pausa el nicho (deja de gastar); salir de descartado lo reactiva

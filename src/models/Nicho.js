@@ -23,10 +23,13 @@ const nichoSchema = new mongoose.Schema({
   // pedido → vendiendo (o descartado). Solo "evaluando" ocupa cupo del radar.
   etapaCompra: {
     type: String,
-    enum: ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'descartado'],
+    enum: ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'en-espera', 'descartado'],
     default: 'evaluando',
   },
   etapaCompraEl: { type: Date, default: null },
+  // motivo corto de la etapa ("esperando registro ISP", "pensándolo",
+  // "esperando respuesta de 3 proveedores") — visible en planilla y oportunidades
+  notaEtapa: { type: String, default: null },
   creadoEl: { type: Date, default: Date.now },
   ultimoScanEl: { type: Date, default: null },
   // { total, esMinimo } — "+9.999 resultados" del listado; esMinimo indica que ML capea el contador

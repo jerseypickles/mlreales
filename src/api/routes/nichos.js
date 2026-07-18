@@ -272,7 +272,12 @@ router.post(
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {
   const cambios = {}
-  const { estado, frecuenciaScan, contextoUsuario, etapaCompra } = req.body ?? {}
+  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa } = req.body ?? {}
+  if (notaEtapa !== undefined) {
+    const nota = String(notaEtapa ?? '').trim()
+    if (nota.length > 200) return res.status(400).json({ error: 'notaEtapa demasiado larga (máx 200)' })
+    cambios.notaEtapa = nota || null
+  }
   if (etapaCompra !== undefined) {
     if (!ETAPAS_COMPRA.includes(etapaCompra)) {
       return res.status(400).json({ error: `etapaCompra debe ser una de: ${ETAPAS_COMPRA.join(', ')}` })

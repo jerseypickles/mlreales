@@ -57,6 +57,7 @@ router.get(
           estado: 1,
           etapaCompra: 1,
           etapaCompraEl: 1,
+          notaEtapa: 1,
           frecuenciaScan: 1,
           radarInfo: 1,
           rfq: 1,
@@ -109,6 +110,7 @@ router.get(
         estado: n.estado,
         etapaCompra: n.etapaCompra ?? 'evaluando',
         etapaCompraEl: n.etapaCompraEl ?? null,
+        notaEtapa: n.notaEtapa ?? null,
         resumen: analisis.resumen ?? null,
         // los campos del proveedor: el rfq acotado (services/rfq.js) manda;
         // si no existe, lo que traiga el análisis

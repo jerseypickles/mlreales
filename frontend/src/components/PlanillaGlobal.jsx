@@ -90,12 +90,14 @@ export function fusionarCompras(oportunidades) {
   return resultado
 }
 
-export const ETAPAS = ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'descartado']
+export const ETAPAS = ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'en-espera', 'descartado']
+export const etiquetaEtapa = (e) => e.replace(/-/g, ' ')
 
 const TABS_ETAPA = [
   ['por-cotizar', 'Por cotizar', (e) => e === 'evaluando'],
   ['cotizando', 'Cotizando', (e) => e === 'cotizando'],
   ['avanzados', 'Avanzados', (e) => ['muestra', 'pedido', 'vendiendo'].includes(e)],
+  ['en-espera', 'En espera', (e) => e === 'en-espera'],
   ['todos', 'Todos', () => true],
 ]
 
@@ -120,9 +122,45 @@ function SelectorEtapa({ fila, onCambiada }) {
       aria-label="Etapa de compra"
     >
       {ETAPAS.map((e) => (
-        <option key={e} value={e}>{e}</option>
+        <option key={e} value={e}>{etiquetaEtapa(e)}</option>
       ))}
     </select>
+  )
+}
+
+// Nota corta de la etapa ("esperando registro ISP", "pensándolo"): se edita
+// en la misma fila y se guarda al salir del campo o con Enter.
+function NotaEtapa({ fila, onCambiada }) {
+  const [nota, setNota] = useState(fila.notaEtapa ?? '')
+  const [guardando, setGuardando] = useState(false)
+
+  async function guardar() {
+    if ((fila.notaEtapa ?? '') === nota.trim()) return
+    setGuardando(true)
+    try {
+      const ids = fila.nichoIds ?? [fila.nichoId]
+      await Promise.all(ids.map((id) => api.ajustarNicho(id, { notaEtapa: nota })))
+      await onCambiada()
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <input
+      type="text"
+      className="nota-etapa"
+      value={nota}
+      disabled={guardando}
+      placeholder="ej: esperando ISP…"
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => setNota(e.target.value)}
+      onBlur={guardar}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.target.blur()
+      }}
+      aria-label="Nota de la etapa"
+    />
   )
 }
 
@@ -198,6 +236,13 @@ function PlanillaIA({ onAbrirNicho }) {
       tipo: 'texto',
       soloVista: true,
       render: (o) => <SelectorEtapa fila={o} onCambiada={async () => setDatos(await cargar())} />,
+    },
+    {
+      clave: 'notaEtapa',
+      titulo: 'Nota',
+      tipo: 'texto',
+      soloVista: true,
+      render: (o) => <NotaEtapa fila={o} onCambiada={async () => setDatos(await cargar())} />,
     },
     ...COLUMNAS_IA.slice(3),
   ]

@@ -2304,3 +2304,13 @@ section {
   color: var(--tinta);
   cursor: pointer;
 }
+
+.nota-etapa {
+  min-width: 130px;
+  font-size: 11.5px;
+  padding: 3px 6px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--fondo);
+  color: var(--tinta);
+}
