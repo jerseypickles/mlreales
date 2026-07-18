@@ -7,6 +7,7 @@ import { analizarNicho } from '../../services/analista.js'
 import { generarListing } from '../../services/listero.js'
 import { sugerirNichos } from '../../services/sugeridor.js'
 import { llmDisponible } from '../../services/llm.js'
+import { aCsvExcel, COLUMNAS_PRODUCTO_CSV } from '../../services/csv.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -197,6 +198,25 @@ router.get(
     if (!vista) return res.status(404).json({ error: 'aún no hay scans completados para este nicho' })
 
     res.json({ fechaScan: vista.fechaScan, total: vista.productos.length, productos: vista.productos })
+  }),
+)
+
+// Productos del último scan como CSV listo para Excel chileno
+router.get(
+  '/:id/productos.csv',
+  manejar(async (req, res) => {
+    const nicho = await Nicho.findById(req.params.id)
+    if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
+
+    const vista = await obtenerProductosUltimoScan(nicho)
+    if (!vista) return res.status(404).json({ error: 'aún no hay scans completados para este nicho' })
+
+    const filas = vista.productos.map((p) => ({ ...p, fechaScan: vista.fechaScan }))
+    const archivo = `productos-${nicho.keyword.replace(/\s+/g, '-')}.csv`
+    res
+      .set('Content-Type', 'text/csv; charset=utf-8')
+      .set('Content-Disposition', `attachment; filename="${archivo}"`)
+      .send(aCsvExcel(filas, COLUMNAS_PRODUCTO_CSV))
   }),
 )
 

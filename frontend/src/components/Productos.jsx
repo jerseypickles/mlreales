@@ -3,6 +3,8 @@ import { api } from '../api.js'
 import { Badge, IconoExterno, RepSeller, Cargando } from './ui.jsx'
 import { MiniSerie } from './graficos.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
+import { Planilla } from './Planilla.jsx'
+import { COLUMNAS_PRODUCTO } from './PlanillaGlobal.jsx'
 
 const ORDENES = {
   posicion: { etiqueta: 'Posición', fn: (a, b) => (a.posicion ?? Infinity) - (b.posicion ?? Infinity) },
@@ -160,13 +162,14 @@ function PanelHistoria({ producto, onCerrar, onSimular }) {
   )
 }
 
-export function Productos({ nichoId, onSimular }) {
+export function Productos({ nichoId, keyword, onSimular }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [busqueda, setBusqueda] = useState('')
   const [orden, setOrden] = useState('posicion')
   const [filtros, setFiltros] = useState({ full: false, oficial: false, cn: false, catalogo: false })
   const [abierto, setAbierto] = useState(null)
+  const [modo, setModo] = useState('tabla') // 'tabla' | 'planilla'
 
   useEffect(() => {
     let vigente = true
@@ -198,6 +201,29 @@ export function Productos({ nichoId, onSimular }) {
 
   if (error) return <p className="error-bloque">{error}</p>
   if (!datos) return <Cargando texto="Cargando productos…" />
+
+  if (modo === 'planilla') {
+    return (
+      <div>
+        <div className="toolbar">
+          <div className="chips" role="group" aria-label="Modo de vista">
+            <button className="chip" onClick={() => setModo('tabla')}>Tabla</button>
+            <button className="chip activo" aria-pressed="true">Planilla</button>
+          </div>
+        </div>
+        <Planilla
+          columnas={COLUMNAS_PRODUCTO}
+          filas={datos.productos}
+          nombreArchivo={`productos-${(keyword ?? 'nicho').replace(/\s+/g, '-')}.csv`}
+          filaKey={(p) => p.sku}
+          onFilaClick={setAbierto}
+        />
+        {abierto ? (
+          <PanelHistoria producto={abierto} onCerrar={() => setAbierto(null)} onSimular={onSimular} />
+        ) : null}
+      </div>
+    )
+  }
 
   const chip = (clave, etiqueta, title) => (
     <button
@@ -239,6 +265,12 @@ export function Productos({ nichoId, onSimular }) {
         <span className="conteo">
           {visibles.length} de {datos.total}
         </span>
+        <div className="chips" role="group" aria-label="Modo de vista">
+          <button className="chip activo" aria-pressed="true">Tabla</button>
+          <button className="chip" onClick={() => setModo('planilla')} title="Modo hoja de cálculo: ordenar por columna, filtros por columna y descarga CSV">
+            Planilla
+          </button>
+        </div>
       </div>
 
       <div className="tabla-envoltura tabla-productos">

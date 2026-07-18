@@ -43,6 +43,7 @@ export const api = {
   listarPropios: () => pedir('/api/propios'),
   tendencias: (dias) => pedir(`/api/tendencias${dias ? `?dias=${dias}` : ''}`),
   oportunidades: () => pedir('/api/oportunidades'),
+  productosGlobal: () => pedir('/api/productos'),
   capturarTendencias: () => pedir('/api/tendencias/capturar', { method: 'POST' }),
   crearPropio: (url) => pedir('/api/propios', json({ url })),
   medirPropios: () => pedir('/api/propios/scan', { method: 'POST' }),

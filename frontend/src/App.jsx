@@ -8,6 +8,7 @@ import { Listing } from './components/Listing.jsx'
 import { MisProductos } from './components/MisProductos.jsx'
 import { Tendencias } from './components/Tendencias.jsx'
 import { Oportunidades } from './components/Oportunidades.jsx'
+import { PlanillaGlobal } from './components/PlanillaGlobal.jsx'
 import { Radar } from './components/Sugerencias.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
@@ -302,7 +303,9 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
       {pestana === 'resumen' ? (
         <Resumen reporte={reporte} productos={productos?.productos} nichoId={nichoId} nicho={nicho} />
       ) : null}
-      {pestana === 'productos' ? <Productos nichoId={nichoId} onSimular={simularProducto} /> : null}
+      {pestana === 'productos' ? (
+        <Productos nichoId={nichoId} keyword={nicho.keyword} onSimular={simularProducto} />
+      ) : null}
       {pestana === 'analisis' ? <Analisis nichoId={nichoId} analisisInicial={reporte.analisis} /> : null}
       {pestana === 'listing' ? <Listing nichoId={nichoId} listingInicial={nicho.listingDraft} /> : null}
       {pestana === 'simulador' ? (
@@ -403,6 +406,12 @@ export default function App() {
             Nichos
           </button>
           <button
+            className={vista === 'planilla' ? 'seccion activa' : 'seccion'}
+            onClick={() => setVista('planilla')}
+          >
+            Planilla
+          </button>
+          <button
             className={vista === 'propios' ? 'seccion activa' : 'seccion'}
             onClick={() => setVista('propios')}
           >
@@ -424,6 +433,8 @@ export default function App() {
             setVista('nichos')
           }}
         />
+      ) : vista === 'planilla' ? (
+        <PlanillaGlobal />
       ) : vista === 'propios' ? (
         <MisProductos />
       ) : vista === 'tendencias' ? (
