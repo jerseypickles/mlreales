@@ -6,6 +6,8 @@ import {
   inversionEstimadaUsd,
   unidadesPrimeraCompra,
 } from '../../services/oportunidades.js'
+import { generarRfqPendientes } from '../../services/rfq.js'
+import { llmDisponible } from '../../services/llm.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -53,6 +55,7 @@ router.get(
           estado: 1,
           frecuenciaScan: 1,
           radarInfo: 1,
+          rfq: 1,
           ultimos: 1,
           conAnalisis: 1,
           tieneListing: { $cond: [{ $ifNull: ['$listingDraft', false] }, true, false] },
@@ -99,10 +102,12 @@ router.get(
         listingListo: n.tieneListing,
         estado: n.estado,
         resumen: analisis.resumen ?? null,
-        nichoIngles: analisis.nichoIngles ?? null,
-        productoIngles: rec.productoIngles ?? null,
+        // los campos del proveedor: el rfq acotado (services/rfq.js) manda;
+        // si no existe, lo que traiga el análisis
+        nichoIngles: n.rfq?.nichoIngles ?? analisis.nichoIngles ?? null,
+        productoIngles: n.rfq?.productoIngles ?? rec.productoIngles ?? null,
         unidadesPrueba: unidadesPrimeraCompra(rec.primeraCompra),
-        especificacionProducto: rec.especificacionProducto ?? null,
+        especificacionProducto: n.rfq?.especificacion ?? rec.especificacionProducto ?? null,
         comoValidar: rec.comoValidar ?? null,
         comisionMlPct: rec.comisionMlPct ?? null,
         fechaAnalisis: analisis.generadoEl ?? docAnalisis.fecha ?? null,
@@ -113,6 +118,19 @@ router.get(
       (a, b) => (b.score ?? -1) - (a.score ?? -1) || (b.ventasDia ?? 0) - (a.ventasDia ?? 0),
     )
     res.json({ total: oportunidades.length, oportunidades })
+  }),
+)
+
+// Acota con IA los campos del proveedor (inglés, specs limpias) para los nichos
+// que no los tengan al día — una sola llamada barata, sin regenerar análisis
+router.post(
+  '/rfq',
+  manejar(async (_req, res) => {
+    if (!llmDisponible()) {
+      return res.status(503).json({ error: 'IA no configurada: falta ANTHROPIC_API_KEY en el entorno' })
+    }
+    const resultado = await generarRfqPendientes()
+    res.json(resultado)
   }),
 )
 

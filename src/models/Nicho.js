@@ -13,6 +13,9 @@ const nichoSchema = new mongoose.Schema({
   radarInfo: { type: mongoose.Schema.Types.Mixed, default: null },
   // último borrador de listing generado con IA (títulos, ficha, descripción…)
   listingDraft: { type: mongoose.Schema.Types.Mixed, default: null },
+  // campos en inglés para la hoja de cotización al proveedor (rfq.js):
+  // { nichoIngles, productoIngles, especificacion, desdeAnalisis, generadoEl }
+  rfq: { type: mongoose.Schema.Types.Mixed, default: null },
   creadoEl: { type: Date, default: Date.now },
   ultimoScanEl: { type: Date, default: null },
   // { total, esMinimo } — "+9.999 resultados" del listado; esMinimo indica que ML capea el contador

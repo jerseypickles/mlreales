@@ -51,7 +51,7 @@ const COLUMNAS_IA = [
     render: (o) => (o.unidadesPrueba != null ? o.unidadesPrueba : (o.primeraCompra ?? '—')),
     csv: (o) => o.unidadesPrueba ?? o.primeraCompra ?? null,
   },
-  { clave: 'fobUnitario', titulo: 'FOB unit price (USD)', tipo: 'texto', anchoXlsx: 18 },
+  { clave: 'exwUnitario', titulo: 'EXW unit price (USD)', tipo: 'texto', anchoXlsx: 18 },
   { clave: 'moq', titulo: 'MOQ', tipo: 'texto', anchoXlsx: 10 },
   { clave: 'tiempoProduccion', titulo: 'Production time (days)', tipo: 'texto', anchoXlsx: 18 },
   { clave: 'linkProducto', titulo: 'Product link / photos', tipo: 'texto', anchoXlsx: 30 },
@@ -61,29 +61,48 @@ const COLUMNAS_IA = [
 function PlanillaIA({ onAbrirNicho }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
+  const [acotando, setAcotando] = useState(false)
+  const [aviso, setAviso] = useState(null)
+
+  const cargar = () =>
+    // solo entrar / entrar_con_condiciones de nichos activos: esta es la
+    // planilla de compra que se trabaja con proveedores
+    api.oportunidades().then((d) => ({
+      ...d,
+      // trámites como texto para que la grilla y la descarga lo traten plano
+      oportunidades: d.oportunidades.map((o) => ({
+        ...o,
+        tramites: (o.tramites ?? []).join(', ') || null,
+      })),
+    }))
 
   useEffect(() => {
     let vigente = true
-    // solo entrar / entrar_con_condiciones de nichos activos: esta es la
-    // planilla de compra que se trabaja con proveedores
-    api
-      .oportunidades()
-      .then((d) => {
-        if (!vigente) return
-        // trámites como texto para que la grilla y el CSV lo traten plano
-        setDatos({
-          ...d,
-          oportunidades: d.oportunidades.map((o) => ({
-            ...o,
-            tramites: (o.tramites ?? []).join(', ') || null,
-          })),
-        })
-      })
+    cargar()
+      .then((d) => vigente && setDatos(d))
       .catch((e) => vigente && setError(e.message))
     return () => {
       vigente = false
     }
   }, [])
+
+  async function acotarConIA() {
+    setAcotando(true)
+    setAviso(null)
+    try {
+      const r = await api.generarRfq()
+      setDatos(await cargar())
+      setAviso(
+        r.generados
+          ? `${r.generados} nicho(s) acotados en inglés (US$ ${r.costoUsd?.toFixed?.(3) ?? '?'}).`
+          : 'Todos los nichos ya estaban al día.',
+      )
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setAcotando(false)
+    }
+  }
 
   if (error) return <p className="error-bloque">Error: {error}</p>
   if (!datos) return <Cargando texto="Cargando recomendaciones…" />
@@ -96,16 +115,28 @@ function PlanillaIA({ onAbrirNicho }) {
     )
   }
 
+  const pendientes = datos.oportunidades.filter((o) => !o.nichoIngles).length
+
   return (
-    <Planilla
-      columnas={COLUMNAS_IA}
-      filas={datos.oportunidades}
-      nombreArchivo="supplier-quote-request.xlsx"
-      hojaXlsx="Quote request"
-      formatoDescarga="xlsx"
-      filaKey={(o) => o.nichoId}
-      onFilaClick={onAbrirNicho ? (o) => onAbrirNicho(o.nichoId) : undefined}
-    />
+    <div>
+      <div className="toolbar">
+        <button className="boton-secundario" onClick={acotarConIA} disabled={acotando}>
+          {acotando
+            ? 'Acotando con IA…'
+            : `Acotar en inglés con IA${pendientes ? ` (${pendientes} pendientes)` : ''}`}
+        </button>
+        {aviso ? <span className="conteo">{aviso}</span> : null}
+      </div>
+      <Planilla
+        columnas={COLUMNAS_IA}
+        filas={datos.oportunidades}
+        nombreArchivo="supplier-quote-request.xlsx"
+        hojaXlsx="Quote request"
+        formatoDescarga="xlsx"
+        filaKey={(o) => o.nichoId}
+        onFilaClick={onAbrirNicho ? (o) => onAbrirNicho(o.nichoId) : undefined}
+      />
+    </div>
   )
 }
 
