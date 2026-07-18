@@ -91,6 +91,31 @@ const ETAPAS = {
 const esNuevo = (n) => n.creadoEl && Date.now() - new Date(n.creadoEl).getTime() < 72 * 3600e3
 const EN_CARTERA = new Set(['cotizando', 'muestra', 'pedido', 'vendiendo', 'en-espera'])
 
+// Grupo plegable del sidebar: recuerda abierto/cerrado por usuario (localStorage)
+function GrupoNichos({ id, titulo, cantidad, abiertoPorDefecto = false, children }) {
+  const [abierto, setAbierto] = useState(() => {
+    const guardado = localStorage.getItem(`sidebar-grupo-${id}`)
+    return guardado === null ? abiertoPorDefecto : guardado === '1'
+  })
+
+  function alternar(e) {
+    e.preventDefault()
+    setAbierto((a) => {
+      localStorage.setItem(`sidebar-grupo-${id}`, a ? '0' : '1')
+      return !a
+    })
+  }
+
+  return (
+    <details className="grupo-nichos" open={abierto}>
+      <summary className="grupo-titulo grupo-plegable" onClick={alternar}>
+        {titulo} ({cantidad})
+      </summary>
+      {children}
+    </details>
+  )
+}
+
 function NichoItem({ n, seleccionado, onSeleccionar }) {
   const score = n.ultimoReporte?.scoreOportunidad
   const etapa = n.etapaCompra && n.etapaCompra !== 'evaluando' ? n.etapaCompra : null
@@ -174,31 +199,27 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
       ) : null}
 
       {cartera.length ? (
-        <>
-          <p className="grupo-titulo">Cartera ({cartera.length})</p>
+        <GrupoNichos id="cartera" titulo="Cartera" cantidad={cartera.length}>
           <ul className="lista-nichos">{render(cartera)}</ul>
-        </>
+        </GrupoNichos>
       ) : null}
 
       {oportunidades.length ? (
-        <>
-          <p className="grupo-titulo">Oportunidades ({oportunidades.length})</p>
+        <GrupoNichos id="oportunidades" titulo="Oportunidades" cantidad={oportunidades.length}>
           <ul className="lista-nichos">{render(oportunidades)}</ul>
-        </>
+        </GrupoNichos>
       ) : null}
 
       {evaluando.length ? (
-        <>
-          <p className="grupo-titulo">En evaluación ({evaluando.length})</p>
+        <GrupoNichos id="evaluando" titulo="En evaluación" cantidad={evaluando.length} abiertoPorDefecto>
           <ul className="lista-nichos">{render(evaluando)}</ul>
-        </>
+        </GrupoNichos>
       ) : null}
 
       {descartados.length ? (
-        <details className="grupo-descartados">
-          <summary>Descartados ({descartados.length})</summary>
+        <GrupoNichos id="descartados" titulo="Descartados" cantidad={descartados.length}>
           <ul className="lista-nichos">{render(descartados)}</ul>
-        </details>
+        </GrupoNichos>
       ) : null}
     </div>
   )

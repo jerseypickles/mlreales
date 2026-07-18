@@ -2386,3 +2386,30 @@ section {
   color: var(--acento);
   margin-right: 6px;
 }
+
+.grupo-nichos {
+  margin-top: 6px;
+}
+
+.grupo-plegable {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.grupo-plegable::-webkit-details-marker {
+  display: none;
+}
+
+.grupo-plegable::before {
+  content: '▸';
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.grupo-nichos[open] > .grupo-plegable::before {
+  transform: rotate(90deg);
+}
