@@ -7,6 +7,7 @@ import { Analisis } from './components/Analisis.jsx'
 import { Listing } from './components/Listing.jsx'
 import { MisProductos } from './components/MisProductos.jsx'
 import { Tendencias } from './components/Tendencias.jsx'
+import { Oportunidades } from './components/Oportunidades.jsx'
 import { Radar } from './components/Sugerencias.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
@@ -345,7 +346,7 @@ export default function App() {
   const [seleccionado, setSeleccionado] = useState(null)
   const [errorLista, setErrorLista] = useState(null)
   const [bloqueada, setBloqueada] = useState(false)
-  const [vista, setVista] = useState('nichos')
+  const [vista, setVista] = useState('oportunidades')
 
   useEffect(() => {
     const alBloquear = () => {
@@ -390,6 +391,12 @@ export default function App() {
         </div>
         <nav className="secciones" aria-label="Secciones">
           <button
+            className={vista === 'oportunidades' ? 'seccion activa' : 'seccion'}
+            onClick={() => setVista('oportunidades')}
+          >
+            Oportunidades
+          </button>
+          <button
             className={vista === 'nichos' ? 'seccion activa' : 'seccion'}
             onClick={() => setVista('nichos')}
           >
@@ -410,7 +417,14 @@ export default function App() {
         </nav>
         <PresupuestoChip />
       </header>
-      {vista === 'propios' ? (
+      {vista === 'oportunidades' ? (
+        <Oportunidades
+          onAbrirNicho={(id) => {
+            setSeleccionado(id)
+            setVista('nichos')
+          }}
+        />
+      ) : vista === 'propios' ? (
         <MisProductos />
       ) : vista === 'tendencias' ? (
         <Tendencias />
