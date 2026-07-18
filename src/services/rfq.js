@@ -17,7 +17,7 @@ const SCHEMA_RFQ = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['keyword', 'nicho', 'producto', 'especificacion'],
+        required: ['keyword', 'nicho', 'producto', 'especificacion', 'productoClave'],
         properties: {
           keyword: { type: 'string', description: 'La keyword original, tal cual se entregó, para emparejar' },
           nicho: { type: 'string', description: 'Nombre del nicho en inglés comercial de Alibaba, 2-4 palabras (ej: "solar garden fountain")' },
@@ -25,6 +25,10 @@ const SCHEMA_RFQ = {
           especificacion: {
             type: 'string',
             description: 'SOLO los atributos que el proveedor necesita para cotizar, en inglés, 4-8 ítems separados por "; " (ej: "999,999 flashes; 5 intensity levels; ice cooling; 220V CL plug; retail box")',
+          },
+          productoClave: {
+            type: 'string',
+            description: 'Clave canónica del producto físico en inglés, minúsculas y kebab-case (ej: "ipl-hair-removal-device"). Dos nichos que se surten con EL MISMO producto de fábrica llevan EXACTAMENTE la misma clave aunque sus keywords de venta difieran; productos distintos, claves distintas.',
           },
         },
       },
@@ -34,12 +38,17 @@ const SCHEMA_RFQ = {
 
 const SYSTEM_RFQ = `Preparas una hoja de cotización (RFQ) para proveedores chinos a partir de recomendaciones de un analista de e-commerce.
 
-Para cada ítem entrega nicho y producto en inglés comercial (como se busca en Alibaba/1688) y una especificación LIMPIA: solo los atributos físicos y técnicos que el proveedor necesita para cotizar — potencia, medidas, capacidad, materiales, accesorios incluidos, enchufe 220V Chile si es eléctrico, empaque. NADA de contexto de mercado, precios, marcas de competidores, consejos de validación ni texto en español. Corto, directo, cotizable.`
+Para cada ítem entrega nicho y producto en inglés comercial (como se busca en Alibaba/1688) y una especificación LIMPIA: solo los atributos físicos y técnicos que el proveedor necesita para cotizar — potencia, medidas, capacidad, materiales, accesorios incluidos, enchufe 220V Chile si es eléctrico, empaque. NADA de contexto de mercado, precios, marcas de competidores, consejos de validación ni texto en español. Corto, directo, cotizable.
+
+DETECCIÓN DE COMPRA DUPLICADA: recibes todos los nichos juntos a propósito. Si dos o más nichos se surten con el mismo producto físico de fábrica (distintas keywords de venta en Mercado Libre, un solo ítem que comprar en China), asígnales exactamente la misma productoClave — así el sistema los fusiona en una sola línea de cotización. Sé estricto: misma clave solo si un mismo pedido de fábrica sirve para ambos listings.`
 
 export async function generarRfqPendientes() {
   const nichos = await Nicho.find({ estado: 'activo' }).lean()
 
-  const pendientes = []
+  // todos los nichos con veredicto de entrada; pendiente = sin rfq, rfq más
+  // viejo que el análisis, o sin productoClave (feature nueva)
+  const candidatos = []
+  let hayPendientes = false
   for (const n of nichos) {
     const rep = await Reporte.findOne({ nichoId: n._id, analisis: { $ne: null } })
       .sort({ fecha: -1 })
@@ -48,13 +57,19 @@ export async function generarRfqPendientes() {
     const analisis = rep?.analisis
     if (!analisis || analisis.veredicto === 'no_entrar') continue
     const fechaAnalisis = new Date(analisis.generadoEl ?? rep.fecha)
-    const vigente = n.rfq?.desdeAnalisis && new Date(n.rfq.desdeAnalisis).getTime() >= fechaAnalisis.getTime()
-    if (vigente) continue
-    pendientes.push({ nicho: n, analisis, fechaAnalisis })
+    const vigente =
+      n.rfq?.desdeAnalisis &&
+      n.rfq?.productoClave &&
+      new Date(n.rfq.desdeAnalisis).getTime() >= fechaAnalisis.getTime()
+    if (!vigente) hayPendientes = true
+    candidatos.push({ nicho: n, analisis, fechaAnalisis })
   }
-  if (!pendientes.length) return { generados: 0, costoUsd: 0 }
+  if (!hayPendientes || !candidatos.length) return { generados: 0, costoUsd: 0 }
 
-  const user = `Ítems a preparar (uno por nicho):\n${JSON.stringify(
+  // se mandan TODOS juntos (no solo los pendientes): la detección de compra
+  // duplicada necesita ver el tablero completo para asignar claves consistentes
+  const pendientes = candidatos
+  const user = `Ítems a preparar (uno por nicho; detecta compras duplicadas entre ellos):\n${JSON.stringify(
     pendientes.map((p) => ({
       keyword: p.nicho.keyword,
       titular: p.analisis.recomendacion?.titular ?? null,
@@ -80,6 +95,7 @@ export async function generarRfqPendientes() {
             nichoIngles: item.nicho,
             productoIngles: item.producto,
             especificacion: item.especificacion,
+            productoClave: item.productoClave ?? null,
             desdeAnalisis: p.fechaAnalisis,
             generadoEl: new Date(),
           },

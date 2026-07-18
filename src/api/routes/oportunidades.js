@@ -108,6 +108,7 @@ router.get(
         // si no existe, lo que traiga el análisis
         nichoIngles: n.rfq?.nichoIngles ?? analisis.nichoIngles ?? null,
         productoIngles: n.rfq?.productoIngles ?? rec.productoIngles ?? null,
+        productoClave: n.rfq?.productoClave ?? null,
         unidadesPrueba: unidadesPrimeraCompra(rec.primeraCompra),
         especificacionProducto: n.rfq?.especificacion ?? rec.especificacionProducto ?? null,
         comoValidar: rec.comoValidar ?? null,

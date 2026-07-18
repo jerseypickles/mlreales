@@ -14,7 +14,7 @@ function Hecho({ etiqueta, children }) {
   )
 }
 
-function CartaOportunidad({ o, rank, onAbrir }) {
+function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
   const flecha = o.tendenciaVentas ? FLECHA[o.tendenciaVentas] : null
   return (
     <article
@@ -46,6 +46,14 @@ function CartaOportunidad({ o, rank, onAbrir }) {
             </span>
           ))}
           {o.listingListo ? <span className="op-listing" title="Borrador de listing generado">listing ✓</span> : null}
+          {mismaCompraQue ? (
+            <span
+              className="op-listing"
+              title="Mismo producto de fábrica: un solo pedido a China cubre ambos nichos; lo que cambia es la jugada de listing"
+            >
+              🔁 misma compra que "{mismaCompraQue}"
+            </span>
+          ) : null}
         </div>
 
         {o.titular ? <p className="op-titular">{o.titular}</p> : null}
@@ -120,9 +128,27 @@ export function Oportunidades({ onAbrirNicho }) {
         </p>
       ) : (
         <div className="op-lista">
-          {datos.oportunidades.map((o, i) => (
-            <CartaOportunidad key={o.nichoId} o={o} rank={i + 1} onAbrir={onAbrirNicho} />
-          ))}
+          {(() => {
+            // el primer nicho de cada clave de producto (mayor score) es el dueño
+            // de la compra; los siguientes llevan el chip "misma compra que"
+            const dueno = new Map()
+            return datos.oportunidades.map((o, i) => {
+              let mismaCompraQue = null
+              if (o.productoClave) {
+                if (dueno.has(o.productoClave)) mismaCompraQue = dueno.get(o.productoClave)
+                else dueno.set(o.productoClave, o.keyword)
+              }
+              return (
+                <CartaOportunidad
+                  key={o.nichoId}
+                  o={o}
+                  rank={i + 1}
+                  onAbrir={onAbrirNicho}
+                  mismaCompraQue={mismaCompraQue}
+                />
+              )
+            })
+          })()}
         </div>
       )}
 

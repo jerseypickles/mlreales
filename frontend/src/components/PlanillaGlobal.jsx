@@ -58,6 +58,35 @@ const COLUMNAS_IA = [
   { clave: 'notas', titulo: 'Notes', tipo: 'texto', anchoXlsx: 30 },
 ]
 
+// Nichos con la misma productoClave son la MISMA compra (un producto de
+// fábrica, varias jugadas de listing): se fusionan en una fila — cantidad
+// combinada, datos del miembro de mayor score, nichos listados en pantalla.
+export function fusionarCompras(oportunidades) {
+  const porClave = new Map()
+  const resultado = []
+  for (const o of oportunidades) {
+    if (!o.productoClave) {
+      resultado.push(o)
+      continue
+    }
+    const grupo = porClave.get(o.productoClave)
+    if (!grupo) {
+      const fila = { ...o, nichosDelGrupo: [o.keyword] }
+      porClave.set(o.productoClave, fila)
+      resultado.push(fila)
+    } else {
+      grupo.nichosDelGrupo.push(o.keyword)
+      grupo.keyword = grupo.nichosDelGrupo.join(' + ')
+      if (o.unidadesPrueba != null) {
+        grupo.unidadesPrueba = (grupo.unidadesPrueba ?? 0) + o.unidadesPrueba
+      }
+      // el veredicto más fuerte del grupo manda en pantalla
+      if (o.veredicto === 'entrar' && grupo.veredicto !== 'entrar') grupo.veredicto = 'entrar'
+    }
+  }
+  return resultado
+}
+
 function PlanillaIA({ onAbrirNicho }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
@@ -69,11 +98,14 @@ function PlanillaIA({ onAbrirNicho }) {
     // planilla de compra que se trabaja con proveedores
     api.oportunidades().then((d) => ({
       ...d,
-      // trámites como texto para que la grilla y la descarga lo traten plano
-      oportunidades: d.oportunidades.map((o) => ({
-        ...o,
-        tramites: (o.tramites ?? []).join(', ') || null,
-      })),
+      // trámites como texto para que la grilla y la descarga lo traten plano;
+      // nichos que comparten producto de fábrica se fusionan en una fila
+      oportunidades: fusionarCompras(
+        d.oportunidades.map((o) => ({
+          ...o,
+          tramites: (o.tramites ?? []).join(', ') || null,
+        })),
+      ),
     }))
 
   useEffect(() => {
