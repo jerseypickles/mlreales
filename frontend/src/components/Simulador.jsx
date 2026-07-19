@@ -64,6 +64,7 @@ export function Simulador({ nicho, reporte, precioInicial }) {
     comisionPct: rec?.comisionMlPct ?? 17,
     unidadesBulto: 1,
     modoFlete: 'maritimo',
+    fleteM3Usd: 60, // prorrateo de contenedor surtido: costo del contenedor ÷ m³ útiles
     volumenM3: 0.003,
     pesoKg: 0.5,
   })
@@ -97,7 +98,10 @@ export function Simulador({ nicho, reporte, precioInicial }) {
           modoFlete: form.modoFlete,
           volumenM3: Number(form.volumenM3),
           pesoKg: Number(form.pesoKg),
-          parametros: { mercadoLibre: { comisionPct: Number(form.comisionPct) } },
+          parametros: {
+            mercadoLibre: { comisionPct: Number(form.comisionPct) },
+            ...(Number(form.fleteM3Usd) > 0 ? { flete: { maritimoUsdPorM3: Number(form.fleteM3Usd) } } : {}),
+          },
         })
         setResultado(r)
       } catch (err) {
@@ -185,10 +189,19 @@ export function Simulador({ nicho, reporte, precioInicial }) {
               </select>
             </label>
             {form.modoFlete === 'maritimo' ? (
-              <label className="sim-campo">
-                Volumen por unidad (m³)
-                <input type="number" min="0.0001" step="0.0001" {...campo('volumenM3')} />
-              </label>
+              <>
+                <label className="sim-campo">
+                  Volumen por unidad (m³)
+                  <input type="number" min="0.0001" step="0.0001" {...campo('volumenM3')} />
+                </label>
+                <label className="sim-campo">
+                  Tarifa marítima prorrateada (US$/m³)
+                  <input type="number" min="1" step="1" {...campo('fleteM3Usd')} />
+                  <span className="ayuda-campo">
+                    contenedor surtido completo: costo all-in del contenedor ÷ m³ útiles (ej: US$3.600 / 60 m³ = 60) · si va LCL suelto ≈ 180
+                  </span>
+                </label>
+              </>
             ) : (
               <label className="sim-campo">
                 Peso por unidad (kg)

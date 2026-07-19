@@ -5,9 +5,12 @@ export const importacion = {
   tipoCambioUsdClp: 950,
 
   flete: {
-    // tarifa all-in del forwarder comprando EXW: retiro en fábrica +
-    // consolidación + LCL China → San Antonio, aprox
-    maritimoUsdPorM3: 180,
+    // El importador trae CONTENEDOR COMPLETO SURTIDO: el costo del contenedor
+    // es fijo y se prorratea por m³ entre todo lo que viene adentro. Tarifa
+    // efectiva ≈ costo all-in del contenedor ÷ m³ útiles (ej: US$3.600 / 60 m³
+    // = 60). Ajustable sin deploy con FLETE_M3_USD; si algún embarque va LCL
+    // suelto, la tarifa real es ~180.
+    maritimoUsdPorM3: Number(process.env.FLETE_M3_USD) || 60,
     aereoUsdPorKg: 6.5,
     seguroPctExw: 0.5, // % sobre valor EXW
   },

@@ -178,7 +178,7 @@ export async function analizarNicho(nicho) {
     busquedasEnAlza,
     metricas: reporte.metricas,
     tablaExwMaximo: tablaExwMaximo(reporte.metricas),
-    supuestosTabla: 'EXW máximo por unidad (precio ex-fábrica; la tarifa del forwarder cubre retiro y flete marítimo) asumiendo 500 unidades, 0.003 m³/unidad, TLC 0% arancel, comisión ML 16%, tarifa Full incluida',
+    supuestosTabla: 'EXW máximo por unidad (precio ex-fábrica) asumiendo 500 unidades, 0.003 m³/unidad, flete marítimo prorrateado de contenedor surtido completo, TLC 0% arancel, comisión ML 16%, tarifa Full incluida',
     top50: resumirProductosParaLLM(vista.productos),
   }
 

@@ -10,10 +10,10 @@ const base = {
   modoFlete: 'maritimo',
 }
 
-test('calcularMargen: caso marítimo con defaults', () => {
-  const r = calcularMargen(base)
+test('calcularMargen: caso marítimo con tarifa LCL explícita', () => {
+  const r = calcularMargen({ ...base, parametros: { flete: { maritimoUsdPorM3: 180 } } })
 
-  // FOB 3 USD * 950 = 2850; flete 0.002 m3 * 180 USD = 342 CLP; seguro 0.5% FOB
+  // EXW 3 USD * 950 = 2850; flete 0.002 m3 * 180 USD = 342 CLP; seguro 0.5% EXW
   assert.equal(r.porUnidad.exwClp, 2850)
   assert.equal(r.porUnidad.fleteClp, 342)
   assert.equal(r.porUnidad.seguroClp, 14)
