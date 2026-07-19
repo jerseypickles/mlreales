@@ -6,6 +6,7 @@ import { obtenerColas, cerrarColas, registrarProgramados, encolarRfq } from './j
 import { diaChile, prefijosSemilla } from './services/tendencias.js'
 import { TendenciaBusqueda } from './models/TendenciaBusqueda.js'
 import { limpiarEscapesGuardados } from './services/limpiezaEscapes.js'
+import { Nicho } from './models/Nicho.js'
 
 validarEnv()
 
@@ -19,6 +20,10 @@ await registrarProgramados()
 await encolarRfq()
 // reparar textos guardados con escapes doble-codificados (no bloquea el arranque)
 limpiarEscapesGuardados().catch((err) => console.error('[limpieza] falló:', err.message))
+// migración: la etapa "muestra" se eliminó del embudo (la prueba es el pedido mínimo)
+Nicho.updateMany({ etapaCompra: 'muestra' }, { $set: { etapaCompra: 'pedido' } })
+  .then((r) => r.modifiedCount && console.log(`[migración] ${r.modifiedCount} nicho(s): muestra → pedido`))
+  .catch((err) => console.error('[migración] muestra→pedido falló:', err.message))
 // captura de tendencias al arrancar si al día le faltan prefijos (la captura
 // upsertea por prefijo, así que re-correrla solo rellena los huecos que dejó el
 // WAF de ML). jobId por hora: máximo un reintento por hora aunque haya varios

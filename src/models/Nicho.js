@@ -19,11 +19,12 @@ const nichoSchema = new mongoose.Schema({
   // experiencia real del importador con este nicho ("ya vendimos esta paleta,
   // X unidades en Y meses"): el analista la pesa por sobre lo que infiera
   contextoUsuario: { type: String, default: null },
-  // embudo de compra tras el veredicto: evaluando → cotizando → muestra →
-  // pedido → vendiendo (o descartado). Solo "evaluando" ocupa cupo del radar.
+  // embudo de compra tras el veredicto: evaluando → cotizando → pedido (el
+  // mínimo/MOQ que pida el proveedor: esa es la prueba) → vendiendo (o
+  // descartado). Solo "evaluando" ocupa cupo del radar.
   etapaCompra: {
     type: String,
-    enum: ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'en-espera', 'descartado'],
+    enum: ['evaluando', 'cotizando', 'pedido', 'vendiendo', 'en-espera', 'descartado'],
     default: 'evaluando',
   },
   etapaCompraEl: { type: Date, default: null },

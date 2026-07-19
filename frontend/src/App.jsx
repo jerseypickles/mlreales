@@ -89,7 +89,7 @@ const ETAPAS = {
 }
 
 const esNuevo = (n) => n.creadoEl && Date.now() - new Date(n.creadoEl).getTime() < 72 * 3600e3
-const EN_CARTERA = new Set(['cotizando', 'muestra', 'pedido', 'vendiendo', 'en-espera'])
+const EN_CARTERA = new Set(['cotizando', 'pedido', 'vendiendo', 'en-espera'])
 
 // Grupo plegable del sidebar: recuerda abierto/cerrado por usuario (localStorage)
 function GrupoNichos({ id, titulo, cantidad, abiertoPorDefecto = false, children }) {

@@ -273,7 +273,7 @@ export async function procesarRadar() {
   }
 
   // techo de nichos EN EVALUACIÓN: los que avanzaron en el embudo de compra
-  // (cotizando/muestra/pedido/vendiendo) ya son negocio y no ocupan cupo de
+  // (cotizando/pedido/vendiendo) ya son negocio y no ocupan cupo de
   // exploración — avanzar o descartar libera espacio para descubrir
   const enEvaluacion = await Nicho.countDocuments({
     estado: 'activo',

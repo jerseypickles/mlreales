@@ -236,7 +236,7 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
 
       <p className="nota">
         Generado {fmtFecha(analisis.generadoEl)} con Claude sobre el último scan + calculadora de
-        importación. Valida con muestras antes de comprar un embarque.
+        importación. Valida con el pedido mínimo (MOQ) antes de comprar un embarque grande.
       </p>
       {generando ? <Cargando texto="Regenerando…" /> : null}
     </div>

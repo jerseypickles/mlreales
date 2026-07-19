@@ -40,15 +40,17 @@ export function fusionarCompras(oportunidades) {
   return resultado
 }
 
-export const ETAPAS = ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'en-espera', 'descartado']
-export const etiquetaEtapa = (e) => e.replace(/-/g, ' ')
+// sin etapa "muestra": la prueba real es el pedido mínimo (MOQ) que pida el
+// proveedor — cotizando pasa directo a pedido y de ahí a vendiendo
+export const ETAPAS = ['evaluando', 'cotizando', 'pedido', 'vendiendo', 'en-espera', 'descartado']
+export const etiquetaEtapa = (e) => (e === 'pedido' ? 'pedido mínimo' : e.replace(/-/g, ' '))
 
-const SIGUIENTE_ETAPA = { evaluando: 'cotizando', cotizando: 'muestra', muestra: 'pedido', pedido: 'vendiendo' }
+const SIGUIENTE_ETAPA = { evaluando: 'cotizando', cotizando: 'pedido', pedido: 'vendiendo' }
 
 const TABS_ETAPA = [
   ['por-cotizar', 'Por cotizar', (e) => e === 'evaluando'],
   ['cotizando', 'Cotizando', (e) => e === 'cotizando'],
-  ['avanzados', 'Muestra · Pedido · Vendiendo', (e) => ['muestra', 'pedido', 'vendiendo'].includes(e)],
+  ['avanzados', 'Pedido mínimo · Vendiendo', (e) => ['pedido', 'vendiendo'].includes(e)],
   ['en-espera', 'En espera', (e) => e === 'en-espera'],
   ['todos', 'Todos', () => true],
 ]
