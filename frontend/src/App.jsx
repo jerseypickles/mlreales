@@ -329,6 +329,17 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
     }
   }
 
+  async function alternarEstado() {
+    const nuevo = nicho.estado === 'pausado' ? 'activo' : 'pausado'
+    try {
+      await api.ajustarNicho(nichoId, { estado: nuevo })
+      await cargar()
+      alCambiarNichos()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const pestanas = [
     ['resumen', 'Resumen'],
     ['productos', productos ? `Productos (${productos.total})` : 'Productos'],
@@ -348,6 +359,17 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
           </p>
         </div>
         <div className="acciones-nicho">
+          <button
+            onClick={alternarEstado}
+            className={nicho.estado === 'pausado' ? 'boton-primario' : 'chip'}
+            title={
+              nicho.estado === 'pausado'
+                ? 'Nicho pausado: no se escanea ni gasta. Click para reactivarlo (vuelve a evaluación y el programador lo escanea solo).'
+                : 'Nicho activo. Click para pausarlo: deja de escanearse y de gastar (rechazo manual).'
+            }
+          >
+            {nicho.estado === 'pausado' ? '▶ Reactivar nicho' : '⏸ pausar'}
+          </button>
           <button
             onClick={alternarLupa}
             className={nicho.frecuenciaScan === 'diario' ? 'chip activo' : 'chip'}
