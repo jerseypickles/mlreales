@@ -187,6 +187,7 @@ router.get(
         listingDraft: nicho.listingDraft ?? null,
         frecuenciaScan: nicho.frecuenciaScan,
         etapaCompra: nicho.etapaCompra ?? 'evaluando',
+        revisarEl: nicho.revisarEl ?? null,
       },
       reporte,
     })
@@ -275,7 +276,16 @@ router.post(
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {
   const cambios = {}
-  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa } = req.body ?? {}
+  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl } = req.body ?? {}
+  if (revisarEl !== undefined) {
+    if (revisarEl === null || revisarEl === '') {
+      cambios.revisarEl = null
+    } else {
+      const fecha = new Date(revisarEl)
+      if (Number.isNaN(fecha.getTime())) return res.status(400).json({ error: 'revisarEl inválida' })
+      cambios.revisarEl = fecha
+    }
+  }
   if (notaEtapa !== undefined) {
     const nota = String(notaEtapa ?? '').trim()
     if (nota.length > 200) return res.status(400).json({ error: 'notaEtapa demasiado larga (máx 200)' })

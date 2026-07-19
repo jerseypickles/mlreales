@@ -127,6 +127,11 @@ function NichoItem({ n, seleccionado, onSeleccionar }) {
             {n.origen === 'radar' ? <span className="punto-radar" title="descubierto por el radar" /> : null}
             {n.keyword}
             {esNuevo(n) ? <span className="badge-nuevo" title="creado hace menos de 3 días">nuevo</span> : null}
+            {n.vueltaTemporadaEl && Date.now() - new Date(n.vueltaTemporadaEl).getTime() < 7 * 86400e3 ? (
+              <span className="badge-nuevo" title="descartado estacional que volvió a evaluación: su ventana de compra llegó">
+                vuelve por temporada
+              </span>
+            ) : null}
           </span>
           {score != null ? <ScoreRing valor={score} size={30} grosor={3.5} /> : null}
         </span>
@@ -139,6 +144,11 @@ function NichoItem({ n, seleccionado, onSeleccionar }) {
           ) : (
             <>
               {etapa ? <span className="etapa-mini" title={n.notaEtapa ?? ''}>{etapa.replace(/-/g, ' ')}</span> : null}
+              {n.estado === 'pausado' && n.revisarEl ? (
+                <span className="etapa-mini" title="re-evaluación programada: el sistema lo reactiva solo">
+                  vuelve {fmtFecha(n.revisarEl)}
+                </span>
+              ) : null}
               {n.veredicto ? (
                 <span className={`veredicto veredicto-${n.veredicto}`}>{n.veredicto.replace(/_/g, ' ')}</span>
               ) : null}
@@ -380,6 +390,7 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
           nichoId={nichoId}
           analisisInicial={reporte.analisis}
           contextoInicial={nicho.contextoUsuario}
+          revisarElInicial={nicho.revisarEl}
         />
       ) : null}
       {pestana === 'listing' ? <Listing nichoId={nichoId} listingInicial={nicho.listingDraft} /> : null}

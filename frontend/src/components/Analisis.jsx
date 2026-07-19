@@ -53,7 +53,45 @@ function ContextoImportador({ nichoId, contextoInicial }) {
   )
 }
 
-export function Analisis({ nichoId, analisisInicial, contextoInicial }) {
+// Fecha de re-evaluación de un descartado estacional: la agenda el analista al
+// rechazar por ventana; aquí se ve y se ajusta. El programador reactiva el
+// nicho solo cuando llega (siempre a scan semanal — nunca activa la lupa).
+function RevisionTemporada({ nichoId, revisarElInicial }) {
+  const [fecha, setFecha] = useState(revisarElInicial ? String(revisarElInicial).slice(0, 10) : '')
+  const [guardando, setGuardando] = useState(false)
+
+  async function guardar(valor) {
+    setGuardando(true)
+    try {
+      await api.ajustarNicho(nichoId, { revisarEl: valor || null })
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <p className="revision-temporada">
+      <span>Volver a evaluar el</span>
+      <input
+        type="date"
+        value={fecha}
+        disabled={guardando}
+        onChange={(e) => {
+          setFecha(e.target.value)
+          guardar(e.target.value)
+        }}
+        aria-label="Fecha de re-evaluación"
+      />
+      <span className="ayuda-campo">
+        {fecha
+          ? 'el sistema lo reactivará y re-escaneará solo en esa fecha'
+          : 'sin fecha: queda descartado sin re-evaluación programada'}
+      </span>
+    </p>
+  )
+}
+
+export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElInicial }) {
   const [analisis, setAnalisis] = useState(analisisInicial ?? null)
   const [generando, setGenerando] = useState(false)
   const [error, setError] = useState(null)
@@ -125,6 +163,9 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial }) {
           <h2 className="decision-titular">{rec?.titular ?? 'No traigas nada de este nicho.'}</h2>
         )}
         <p className="decision-resumen">{analisis.resumen}</p>
+        {analisis.veredicto === 'no_entrar' ? (
+          <RevisionTemporada nichoId={nichoId} revisarElInicial={revisarElInicial} />
+        ) : null}
         {error ? <p className="error-bloque">{error}</p> : null}
       </div>
 

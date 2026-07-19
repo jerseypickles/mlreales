@@ -116,3 +116,11 @@ test('exwObjetivo: ancla al 80% del máximo con un decimal; nunca el tope real',
   assert.equal(exwObjetivo(null), null)
   assert.equal(exwObjetivo(0), null)
 })
+
+test('parsearRevisarEn: AAAA-MM al día 1, AAAA-MM-DD exacto, basura → null', async () => {
+  const { parsearRevisarEn } = await import('../src/services/analista.js')
+  assert.equal(parsearRevisarEn('2027-01').toISOString().slice(0, 10), '2027-01-01')
+  assert.equal(parsearRevisarEn('2026-11-15').toISOString().slice(0, 10), '2026-11-15')
+  assert.equal(parsearRevisarEn('enero 2027'), null)
+  assert.equal(parsearRevisarEn(null), null)
+})

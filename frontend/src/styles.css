@@ -2419,3 +2419,22 @@ section {
   align-items: center;
   gap: 10px;
 }
+
+.revision-temporada {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0 0;
+  font-size: 12.5px;
+}
+
+.revision-temporada input[type='date'] {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--fondo);
+  color: var(--tinta);
+}

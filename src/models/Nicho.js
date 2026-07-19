@@ -27,6 +27,10 @@ const nichoSchema = new mongoose.Schema({
     default: 'evaluando',
   },
   etapaCompraEl: { type: Date, default: null },
+  // re-evaluación programada: un descartado estacional vuelve solo a evaluación
+  // en esta fecha (la declara el analista al rechazar por ventana, o el usuario)
+  revisarEl: { type: Date, default: null },
+  vueltaTemporadaEl: { type: Date, default: null }, // para el badge "vuelve por temporada"
   // motivo corto de la etapa ("esperando registro ISP", "pensándolo",
   // "esperando respuesta de 3 proveedores") — visible en planilla y oportunidades
   notaEtapa: { type: String, default: null },

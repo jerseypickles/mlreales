@@ -379,6 +379,23 @@ export async function procesarProgramadorScans() {
     encolados++
   }
 
+  // descartados estacionales cuya ventana llegó: vuelven solos a evaluación.
+  // SIEMPRE a scan semanal — el modo lupa (diario) es decisión manual del
+  // usuario y este barrido jamás lo activa ni lo modifica en otros nichos.
+  const porVolver = await Nicho.find({ estado: 'pausado', revisarEl: { $lte: new Date() } })
+  let vueltasTemporada = 0
+  for (const volvedor of porVolver) {
+    volvedor.estado = 'activo'
+    volvedor.etapaCompra = 'evaluando'
+    volvedor.frecuenciaScan = 'semanal'
+    volvedor.revisarEl = null
+    volvedor.vueltaTemporadaEl = new Date()
+    await volvedor.save()
+    await encolarScanNicho(volvedor._id, { motivo: 'temporada' })
+    console.log(`[programador] "${volvedor.keyword}" vuelve por temporada: re-escaneando para la próxima ventana`)
+    vueltasTemporada++
+  }
+
   // productos propios: una medición diaria en batch si alguno está vencido
   const propioVencido = await ProductoPropio.exists({
     estado: 'activo',
@@ -392,7 +409,7 @@ export async function procesarProgramadorScans() {
     )
   }
 
-  return { activos: nichos.length, encolados, propiosEncolados: Boolean(propioVencido) }
+  return { activos: nichos.length, encolados, vueltasTemporada, propiosEncolados: Boolean(propioVencido) }
 }
 
 export async function procesarScanPropios() {
