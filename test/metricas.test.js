@@ -203,3 +203,29 @@ test('calcularMetricas: integra demanda y score cuando hay vendidos', () => {
   assert.ok(m.scoreOportunidad > 0)
   assert.ok(m.oportunidad.componentes.demanda > 70)
 })
+
+test('componente calidad: pocos ratings → neutro 50, no extremos falsos', async () => {
+  const { calcularScoreOportunidad } = await import('../src/services/metricas.js')
+  const base = {
+    demanda: { volumenVentasEstimado: 5000 },
+    competencia: { concentracionTop3Pct: 40, pctFull: 30 },
+  }
+  // 3 productos con rating 4.9: evidencia fina → neutro, no "calidad 0"
+  const finos = calcularScoreOportunidad({
+    ...base,
+    calidad: { ratingPromedio: 4.9, itemsConRating: 3 },
+  })
+  assert.equal(finos.componentes.calidad, 50)
+  // 20 productos con rating 4.9: evidencia real → calidad 0 legítimo
+  const solidos = calcularScoreOportunidad({
+    ...base,
+    calidad: { ratingPromedio: 4.9, itemsConRating: 20 },
+  })
+  assert.equal(solidos.componentes.calidad, 0)
+  // 20 productos con rating 3.6: espacio real para diferenciarse
+  const mediocres = calcularScoreOportunidad({
+    ...base,
+    calidad: { ratingPromedio: 3.6, itemsConRating: 20 },
+  })
+  assert.ok(mediocres.componentes.calidad > 80)
+})

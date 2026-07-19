@@ -137,14 +137,19 @@ export function calcularScoreOportunidad({ demanda, competencia, calidad }) {
     100,
   )
   const componenteCompetencia = clamp(100 - (competencia.concentracionTop3Pct ?? 100), 0, 100)
+  // misma filosofía que minItemsDemanda: con pocos productos calificados el
+  // promedio no prueba nada (dos ratings 5.0 de 3 reseñas marcan "calidad 0"
+  // falso) — mejor neutro que extremo con evidencia fina
   const rating = calidad.ratingPromedio
-  const componenteCalidad = Number.isFinite(rating)
-    ? clamp(
-        ((umbrales.ratingDiferenciacion - rating) / (umbrales.ratingDiferenciacion - umbrales.ratingPiso)) * 100,
-        0,
-        100,
-      )
-    : 50 // sin ratings: neutro
+  const ratingsSuficientes = (calidad.itemsConRating ?? 0) >= (umbrales.minItemsCalidad ?? 0)
+  const componenteCalidad =
+    Number.isFinite(rating) && ratingsSuficientes
+      ? clamp(
+          ((umbrales.ratingDiferenciacion - rating) / (umbrales.ratingDiferenciacion - umbrales.ratingPiso)) * 100,
+          0,
+          100,
+        )
+      : 50 // sin ratings (o muy pocos): neutro
   const componenteFull = clamp(100 - (competencia.pctFull ?? 0), 0, 100)
 
   const score = Math.round(
@@ -230,6 +235,7 @@ export function calcularMetricas({
       ? redondear(ratings.reduce((a, b) => a + b, 0) / ratings.length, 2)
       : null,
     pctConRating: pct(ratings.length),
+    itemsConRating: ratings.length,
   }
 
   const demanda = calcularDemanda(top, snapshotsPrevios)

@@ -14,6 +14,9 @@ export const scoring = {
     // items del top con dato de reseñas para que la demanda sea medible:
     // con menos que esto (detalle bloqueado a medias) mejor no medir que medir mal
     minItemsDemanda: 5,
+    // items con rating para que el componente calidad sea creíble: 6 productos
+    // con 5.0 de 2 reseñas no prueban que "no hay espacio" — bajo esto, neutro
+    minItemsCalidad: 5,
   },
   escalas: {
     // demanda = min(100, factorLog * log10(1 + volumenVentasEstimado))

@@ -4,11 +4,14 @@ import { StatTile, ScoreRing, RepSeller } from './ui.jsx'
 import { HistogramaPrecios, MiniSerie } from './graficos.jsx'
 import { fmtNum, fmtPrecio, fmtPct } from '../lib/formato.js'
 
+// cada componente mide ESPACIO PARA ENTRAR, no bondad del nicho: calidad 0 =
+// ratings altos (no te diferencias por producto), calidad 100 = ratings
+// mediocres con volumen (entra con algo mejor)
 const COMPONENTES_SCORE = [
-  ['demanda', 'Demanda'],
-  ['competencia', 'Competencia'],
-  ['calidad', 'Calidad'],
-  ['full', 'Full'],
+  ['demanda', 'Demanda', 'Volumen de ventas estimado del top (reseñas × factor)'],
+  ['competencia', 'Competencia', 'Espacio fuera del top 3 de sellers: 0 = mercado concentrado'],
+  ['calidad', 'Calidad', 'Espacio para diferenciarte por producto: 0 = todos tienen rating ≥4.4 (se compite por precio/Full), 100 = ratings mediocres con volumen'],
+  ['full', 'Full', 'Espacio sin Mercado Envíos Full: 0 = todos usan Full'],
 ]
 
 function ScoreHero({ score, componentes }) {
@@ -18,8 +21,8 @@ function ScoreHero({ score, componentes }) {
       <div className="score-hero-info">
         <span className="score-hero-label">Score de oportunidad</span>
         <div className="score-barras">
-          {COMPONENTES_SCORE.map(([clave, etiqueta]) => (
-            <div className="score-barra" key={clave}>
+          {COMPONENTES_SCORE.map(([clave, etiqueta, ayuda]) => (
+            <div className="score-barra" key={clave} title={ayuda}>
               <span className="score-barra-label">{etiqueta}</span>
               <span className="score-barra-riel" aria-hidden="true">
                 <span style={{ width: `${componentes[clave] ?? 0}%` }} />
