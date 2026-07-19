@@ -185,6 +185,8 @@ router.get(
         costoUsd: Math.round((nicho.costoUsd ?? 0) * 100) / 100,
         contextoUsuario: nicho.contextoUsuario ?? null,
         listingDraft: nicho.listingDraft ?? null,
+        frecuenciaScan: nicho.frecuenciaScan,
+        etapaCompra: nicho.etapaCompra ?? 'evaluando',
       },
       reporte,
     })

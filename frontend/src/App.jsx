@@ -308,6 +308,17 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
   }
 
   const { nicho, reporte } = datos
+
+  async function alternarLupa() {
+    const nueva = nicho.frecuenciaScan === 'diario' ? 'semanal' : 'diario'
+    try {
+      await api.ajustarNicho(nichoId, { frecuenciaScan: nueva })
+      await cargar()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const pestanas = [
     ['resumen', 'Resumen'],
     ['productos', productos ? `Productos (${productos.total})` : 'Productos'],
@@ -326,9 +337,22 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
             {escaneando ? ' · escaneando…' : ''}
           </p>
         </div>
-        <button onClick={escanear} disabled={escaneando} className="boton-primario">
-          {escaneando ? 'Escaneando…' : 'Re-escanear ahora'}
-        </button>
+        <div className="acciones-nicho">
+          <button
+            onClick={alternarLupa}
+            className={nicho.frecuenciaScan === 'diario' ? 'chip activo' : 'chip'}
+            title={
+              nicho.frecuenciaScan === 'diario'
+                ? 'Modo lupa activo: scan diario (~cada 20 h). Click para volver a semanal.'
+                : 'Scan semanal. Click para modo lupa: scan diario — confirma la demanda en ~3 días en vez de semanas.'
+            }
+          >
+            {nicho.frecuenciaScan === 'diario' ? '🔍 lupa diaria' : 'scan semanal'}
+          </button>
+          <button onClick={escanear} disabled={escaneando} className="boton-primario">
+            {escaneando ? 'Escaneando…' : 'Re-escanear ahora'}
+          </button>
+        </div>
       </div>
 
       <nav className="pestanas" role="tablist">

@@ -2413,3 +2413,9 @@ section {
 .grupo-nichos[open] > .grupo-plegable::before {
   transform: rotate(90deg);
 }
+
+.acciones-nicho {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
