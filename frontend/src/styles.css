@@ -2325,11 +2325,6 @@ section {
   color: var(--tinta);
 }
 
-.margen-cotizacion {
-  white-space: nowrap;
-  font-size: 11.5px;
-}
-
 /* ── Libreta de criterios ───────────────────────────────────────────── */
 
 .criterios-lista {
@@ -2452,4 +2447,490 @@ section {
   border-radius: 6px;
   background: var(--fondo);
   color: var(--tinta);
+}
+
+/* ── Planilla rediseño: embudo, bandas, celdas apiladas y drawer ─────── */
+
+.planilla td {
+  vertical-align: top;
+}
+
+.planilla-buscador {
+  font-size: 12.5px;
+  padding: 6px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--superficie-2);
+  color: var(--tinta);
+  min-width: 210px;
+}
+
+.resumen-tab {
+  display: inline-flex;
+  gap: 14px;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--tinta-2);
+  margin-right: auto;
+}
+
+.resumen-tab .punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.punto.verde { background: var(--exito); }
+.punto.rojo { background: var(--peligro); }
+.punto.gris { background: var(--borde-fuerte); }
+
+/* embudo de compra como flujo */
+.embudo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.etapa-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--tinta-2);
+  box-shadow: var(--sombra-1);
+  cursor: pointer;
+}
+
+.etapa-pill .n {
+  font-family: 'Fira Code', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--superficie-2);
+  border-radius: 999px;
+  padding: 0 7px;
+}
+
+.etapa-pill.activa {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #fff;
+  font-weight: 600;
+}
+
+.etapa-pill.activa .n {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.embudo-flecha { color: var(--borde-fuerte); font-size: 14px; }
+
+.embudo-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--borde-fuerte);
+  margin: 0 4px;
+}
+
+/* bandas de columnas: qué es interno y qué se exporta */
+.planilla thead .planilla-bandas th {
+  top: 0;
+  height: 28px;
+  padding: 0 12px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.planilla thead .planilla-bandas + tr th {
+  top: 28px;
+}
+
+.banda-decision { background: var(--superficie-2); color: var(--tinta-3); }
+.banda-proveedor { background: var(--acento-tenue); color: var(--acento); }
+.banda-cotiza { background: var(--exito-tenue); color: var(--exito-tinta); }
+
+.banda-nota {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.75;
+}
+
+.planilla-corte { border-left: 2px solid var(--borde-fuerte); }
+.planilla-corte-proveedor { border-left-color: var(--acento-borde); }
+.planilla-corte-cotiza { border-left-color: color-mix(in srgb, var(--exito) 35%, transparent); }
+
+/* celdas apiladas */
+.pl-prod,
+.pl-veredicto,
+.pl-etapa,
+.pl-spec {
+  white-space: normal;
+}
+
+.pl-prod { max-width: 270px; }
+
+.pl-prod-en { font-weight: 600; font-size: 12.5px; }
+
+.pl-pend {
+  color: var(--tinta-3);
+  font-weight: 400;
+  font-style: italic;
+  font-size: 11px;
+}
+
+.pl-prod-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.kw-chip {
+  font-size: 10.5px;
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  padding: 0 8px;
+  color: var(--tinta-3);
+}
+
+.kw-grupo {
+  background: var(--avisa-tenue);
+  border-color: transparent;
+  color: var(--avisa-tinta);
+  font-weight: 500;
+}
+
+.valida-linea {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--tinta-3);
+}
+
+.valida-linea.ok { color: var(--exito-tinta); font-weight: 500; }
+
+.tramite-chip {
+  display: inline-block;
+  margin-top: 5px;
+  margin-right: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px dashed var(--borde-fuerte);
+  border-radius: 6px;
+  padding: 0 7px;
+  color: var(--tinta-3);
+}
+
+.pl-etapa .nota-etapa {
+  display: block;
+  width: 100%;
+  min-width: 110px;
+  margin-top: 6px;
+}
+
+.pl-spec {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 320px;
+  color: var(--tinta-2);
+}
+
+.ghost-cell {
+  border: 1px dashed var(--borde-fuerte);
+  border-radius: 8px;
+  padding: 3px 9px;
+  font-size: 10.5px;
+  color: var(--tinta-3);
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.margen-cotizacion {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  white-space: nowrap;
+}
+
+.margen-cifra {
+  font-family: 'Fira Code', monospace;
+  font-size: 11.5px;
+  color: var(--tinta-2);
+}
+
+.margen-cifra.mal { color: var(--peligro); }
+
+.detalle-btn {
+  border: 1px solid var(--borde);
+  background: var(--superficie-2);
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  color: var(--tinta-3);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.detalle-btn:hover {
+  color: var(--acento);
+  border-color: var(--acento-borde);
+}
+
+/* pie de totales */
+.planilla-pie td {
+  position: sticky;
+  bottom: 0;
+  background: var(--superficie-2);
+  padding: 9px 12px;
+  font-size: 12px;
+  color: var(--tinta-2);
+  border-top: 1px solid var(--borde-fuerte);
+}
+
+.planilla-pie .dato {
+  font-family: 'Fira Code', monospace;
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+.planilla-pie .dato.ok { color: var(--exito-tinta); }
+
+.pl-aviso { margin: 0 0 10px; display: block; }
+
+.pl-leyenda {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: var(--tinta-3);
+}
+
+.pl-leyenda .cuadro {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: -1px;
+  border: 1px solid var(--borde-fuerte);
+}
+
+.cuadro.c-decision { background: var(--superficie-2); }
+.cuadro.c-proveedor { background: var(--acento-tenue); border-color: var(--acento-borde); }
+.cuadro.c-cotiza { background: var(--exito-tenue); border-color: color-mix(in srgb, var(--exito) 35%, transparent); }
+
+.pl-leyenda-nota { margin-left: auto; }
+
+.chip-neutro { background: var(--superficie-2); color: var(--tinta-2); }
+
+/* drawer de detalle */
+.velo-detalle {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 60;
+}
+
+.drawer-detalle {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(440px, 92vw);
+  background: var(--superficie);
+  box-shadow: -18px 0 50px rgba(15, 23, 42, 0.28);
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer-cab {
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.drawer-titulo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.drawer-titulo h3 { margin: 0; font-size: 16.5px; }
+
+.drawer-cerrar {
+  border: 0;
+  background: transparent;
+  color: var(--tinta-3);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.drawer-kw {
+  margin: 2px 0 10px;
+  font-size: 12px;
+  color: var(--tinta-3);
+}
+
+.drawer-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.drawer-cuerpo {
+  padding: 16px 22px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.drawer-seccion { margin-bottom: 20px; }
+
+.drawer-seccion h4 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--tinta-3);
+}
+
+.drawer-resumen {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--tinta-2);
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 11px 13px;
+}
+
+.drawer-gemelos {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--exito-tinta);
+}
+
+.drawer-linea {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.drawer-meta {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--tinta-3);
+}
+
+.drawer-pie {
+  padding: 14px 22px;
+  border-top: 1px solid var(--borde);
+  display: flex;
+  gap: 10px;
+}
+
+.drawer-avanzar { flex: 1; }
+
+/* escalera de precios EXW */
+.escalera {
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 12px 14px;
+}
+
+.esc-barra {
+  position: relative;
+  height: 9px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--exito) 0%, var(--exito) 58%, #eab308 78%, var(--peligro) 100%);
+  margin: 30px 6px 34px;
+}
+
+.esc-marca {
+  position: absolute;
+  top: -7px;
+  width: 3px;
+  height: 23px;
+  border-radius: 2px;
+  background: var(--tinta-3);
+}
+
+.esc-marca.cotizado { background: var(--acento); }
+.esc-marca.maximo { background: var(--peligro); }
+
+.esc-tag {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--tinta-2);
+}
+
+.esc-marca.cotizado .esc-tag { color: var(--acento); }
+.esc-marca.maximo .esc-tag { color: var(--peligro); }
+
+.esc-tag b { font-family: 'Fira Code', monospace; }
+.esc-tag.arriba { bottom: 27px; }
+.esc-tag.abajo { top: 27px; }
+
+.esc-nota {
+  margin: 0;
+  font-size: 11px;
+  color: var(--tinta-3);
+}
+
+/* desglose del margen */
+.desglose {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.desglose td {
+  padding: 6px 2px;
+  border-bottom: 1px dashed var(--borde);
+  color: var(--tinta-2);
+}
+
+.desglose td:last-child {
+  text-align: right;
+  font-family: 'Fira Code', monospace;
+  color: var(--tinta);
+  white-space: nowrap;
+}
+
+.desglose tr.total td {
+  border-bottom: 0;
+  font-weight: 700;
+  color: var(--exito-tinta);
+}
+
+.desglose tr.total td:last-child {
+  color: var(--exito-tinta);
+  font-size: 13.5px;
+}
+
+.desglose tr.total.mal td,
+.desglose tr.total.mal td:last-child {
+  color: var(--peligro);
 }

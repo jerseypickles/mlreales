@@ -35,6 +35,9 @@ function margenCotizacion({ exwUsd, rec, unidades }) {
       margenClp: sim.porUnidad.margenClp,
       margenPct: sim.resultado.margenPctSobreVenta,
       viable: sim.resultado.viable,
+      // desglose para el panel de detalle: costo puesto en Chile y comisión+Full
+      landedClp: sim.porUnidad.landedNetoClp,
+      comisionClp: Math.round(sim.porUnidad.comisionMlClp + sim.porUnidad.fullClp),
     }
   } catch {
     return null

@@ -5,84 +5,10 @@ import { Cargando, IconoExterno } from './ui.jsx'
 import { fmtPrecio, fmtFecha } from '../lib/formato.js'
 
 // ── Planilla de cotización para el proveedor (RFQ) ───────────────────────
-// Una fila por nicho con veredicto de entrada. Las columnas del CSV van en
-// inglés y sin datos internos (nunca el EXW máximo: es tu tope de negociación);
-// las columnas de precio/MOQ/tiempos van vacías para que las llene el
-// proveedor. Veredicto/confianza/nicho en español quedan solo en pantalla.
-
-const COLUMNAS_IA = [
-  { clave: 'keyword', titulo: 'Nicho', tipo: 'texto', fija: true, soloVista: true },
-  {
-    clave: 'veredicto',
-    titulo: 'Veredicto',
-    tipo: 'texto',
-    soloVista: true,
-    render: (o) => (
-      <span className={`veredicto veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span>
-    ),
-  },
-  { clave: 'confianza', titulo: 'Confianza', tipo: 'texto', soloVista: true },
-  {
-    clave: 'confirmacion',
-    titulo: 'Validación',
-    tipo: 'texto',
-    soloVista: true,
-    render: (o) =>
-      o.confirmacion ? (
-        <span
-          className={`op-confianza ${o.confirmacion === 'confirmado' ? 'op-confianza-alta' : 'op-confianza-media'}`}
-          title={`${o.scansConDemanda ?? 0} scan(s) con demanda`}
-        >
-          {o.confirmacion}
-        </span>
-      ) : (
-        '—'
-      ),
-  },
-  {
-    clave: 'nichoIngles',
-    titulo: 'Niche',
-    tipo: 'texto',
-    anchoXlsx: 24,
-    render: (o) => o.nichoIngles ?? <span className="vacio" title="El acotador corre solo tras cada análisis; también puedes forzarlo con el botón de arriba">(pendiente)</span>,
-  },
-  {
-    clave: 'productoIngles',
-    titulo: 'Product',
-    tipo: 'texto',
-    ancha: true,
-    anchoXlsx: 42,
-    // nunca volcar la especificación larga aquí: o está acotado o está pendiente
-    render: (o) =>
-      o.productoIngles ?? (
-        <span className="vacio" title="El acotador corre solo tras cada análisis; también puedes forzarlo con el botón de arriba">
-          (pendiente de acotar)
-        </span>
-      ),
-    csv: (o) => o.productoIngles ?? null,
-  },
-  { clave: 'especificacionProducto', titulo: 'Specification', tipo: 'texto', ancha: true, anchoXlsx: 60 },
-  {
-    clave: 'unidadesPrueba',
-    titulo: 'Quantity (units)',
-    tipo: 'numero',
-    anchoXlsx: 15,
-    render: (o) => (o.unidadesPrueba != null ? o.unidadesPrueba : (o.primeraCompra ?? '—')),
-    csv: (o) => o.unidadesPrueba ?? o.primeraCompra ?? null,
-  },
-  {
-    clave: 'exwObjetivoUsd',
-    titulo: 'Target price (USD)',
-    tipo: 'numero',
-    anchoXlsx: 16,
-    render: (o) => (o.exwObjetivoUsd != null ? `US$ ${o.exwObjetivoUsd}` : '—'),
-  },
-  { clave: 'exwUnitario', titulo: 'Your EXW price (USD)', tipo: 'texto', anchoXlsx: 18 },
-  { clave: 'moq', titulo: 'MOQ', tipo: 'texto', anchoXlsx: 10 },
-  { clave: 'tiempoProduccion', titulo: 'Production time (days)', tipo: 'texto', anchoXlsx: 18 },
-  { clave: 'linkProducto', titulo: 'Product link / photos', tipo: 'texto', anchoXlsx: 30 },
-  { clave: 'notas', titulo: 'Notes', tipo: 'texto', anchoXlsx: 30 },
-]
+// Rediseño "mesa de compra": la tabla se agrupa en tres bandas — Tu decisión
+// (interno), Hoja del proveedor (lo único que se exporta) y Cotización
+// recibida (interno). El detalle completo de cada producto vive en un panel
+// lateral (drawer) para que la tabla quede liviana.
 
 // Nichos con la misma productoClave son la MISMA compra (un producto de
 // fábrica, varias jugadas de listing): se fusionan en una fila — cantidad
@@ -117,13 +43,21 @@ export function fusionarCompras(oportunidades) {
 export const ETAPAS = ['evaluando', 'cotizando', 'muestra', 'pedido', 'vendiendo', 'en-espera', 'descartado']
 export const etiquetaEtapa = (e) => e.replace(/-/g, ' ')
 
+const SIGUIENTE_ETAPA = { evaluando: 'cotizando', cotizando: 'muestra', muestra: 'pedido', pedido: 'vendiendo' }
+
 const TABS_ETAPA = [
   ['por-cotizar', 'Por cotizar', (e) => e === 'evaluando'],
   ['cotizando', 'Cotizando', (e) => e === 'cotizando'],
-  ['avanzados', 'Avanzados', (e) => ['muestra', 'pedido', 'vendiendo'].includes(e)],
+  ['avanzados', 'Muestra · Pedido · Vendiendo', (e) => ['muestra', 'pedido', 'vendiendo'].includes(e)],
   ['en-espera', 'En espera', (e) => e === 'en-espera'],
   ['todos', 'Todos', () => true],
 ]
+
+const BANDAS = {
+  decision: { titulo: 'Tu decisión', nota: 'solo en pantalla', clase: 'banda-decision' },
+  proveedor: { titulo: 'Hoja del proveedor', nota: 'esto es lo que se exporta', clase: 'banda-proveedor' },
+  cotiza: { titulo: 'Cotización recibida', nota: 'solo en pantalla', clase: 'banda-cotiza' },
+}
 
 function SelectorEtapa({ fila, onCambiada }) {
   const [cambiando, setCambiando] = useState(false)
@@ -176,7 +110,7 @@ function NotaEtapa({ fila, onCambiada }) {
       className="nota-etapa"
       value={nota}
       disabled={guardando}
-      placeholder="ej: esperando ISP…"
+      placeholder="nota…"
       onClick={(e) => e.stopPropagation()}
       onChange={(e) => setNota(e.target.value)}
       onBlur={guardar}
@@ -194,6 +128,10 @@ function NotaEtapa({ fila, onCambiada }) {
 function CotizacionExw({ fila, onCambiada }) {
   const [valor, setValor] = useState(fila.cotizacion?.exwUsd ?? '')
   const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    setValor(fila.cotizacion?.exwUsd ?? '')
+  }, [fila.nichoId, fila.cotizacion?.exwUsd])
 
   async function guardar() {
     const previo = fila.cotizacion?.exwUsd ?? ''
@@ -232,14 +170,14 @@ function CotizacionExw({ fila, onCambiada }) {
 // unidad al precio recomendado), rojo = el proveedor se pasó del máximo.
 function MargenCotizacion({ fila }) {
   const c = fila.cotizacion
-  if (!c) return <span className="vacio">—</span>
+  if (!c) return <span className="vacio">— esperando</span>
   if (c.cierra === false) {
     return (
       <span className="margen-cotizacion">
         <span className="veredicto veredicto-no_entrar" title={`Tu máximo pagable es US$ ${fila.exwMaximoUsd}`}>
-          no cierra
-        </span>{' '}
-        máx US$ {fila.exwMaximoUsd}
+          ✗ no cierra
+        </span>
+        <span className="margen-cifra mal">máx US$ {fila.exwMaximoUsd}</span>
       </span>
     )
   }
@@ -250,13 +188,238 @@ function MargenCotizacion({ fila }) {
         title={`Al precio recomendado (${fmtPrecio(fila.precioVentaClp)}), con flete de contenedor prorrateado. Afinación fina: simulador.`}
       >
         <span className={`veredicto ${c.viable ? 'veredicto-entrar' : 'veredicto-no_entrar'}`}>
-          {c.viable ? 'cierra' : 'pierde'}
-        </span>{' '}
-        {fmtPrecio(c.margenClp)}/u · {c.margenPct}%
+          {c.viable ? '✓ cierra' : '✗ pierde'}
+        </span>
+        <span className={`margen-cifra ${c.viable ? '' : 'mal'}`}>
+          {fmtPrecio(c.margenClp)}/u · {Math.round(c.margenPct)}%
+        </span>
       </span>
     )
   }
-  return <span className="veredicto veredicto-entrar">cierra</span>
+  return <span className="veredicto veredicto-entrar">✓ cierra</span>
+}
+
+// Primera columna: el producto en inglés como identidad de compra, el o los
+// nichos en chips debajo (con la marca de "misma compra" cuando se fusionan).
+function CeldaProducto({ o }) {
+  const kws = o.nichosDelGrupo ?? [o.keyword]
+  return (
+    <div className="pl-prod">
+      <div className="pl-prod-en">
+        {o.productoIngles ?? o.keyword}
+        {!o.productoIngles ? <span className="pl-pend"> (pendiente de acotar)</span> : null}
+      </div>
+      <div className="pl-prod-chips">
+        {o.nichosDelGrupo ? <span className="kw-chip kw-grupo">🔁 misma compra</span> : null}
+        {(o.productoIngles ? kws : o.nichosDelGrupo ? kws : []).map((k) => (
+          <span key={k} className="kw-chip">{k}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function CeldaVeredicto({ o }) {
+  return (
+    <div className="pl-veredicto">
+      <span className={`veredicto veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span>
+      {o.confirmacion ? (
+        <span className={`valida-linea ${o.confirmacion === 'confirmado' ? 'ok' : ''}`}>
+          {o.confirmacion === 'confirmado' ? '✓ confirmado' : 'preliminar'}
+          {o.scansConDemanda ? ` · ${o.scansConDemanda} scans` : ''}
+          {o.frecuenciaScan === 'diario' ? ' · 🔍 lupa' : ''}
+        </span>
+      ) : null}
+      {(o.tramites ? String(o.tramites).split(', ').filter(Boolean) : []).map((t) => (
+        <span key={t} className="tramite-chip">{t}</span>
+      ))}
+    </div>
+  )
+}
+
+// Embudo de compra como flujo: las tres etapas de avance con flechas, y al
+// costado los estados sin flujo (en espera, todos).
+function Embudo({ tab, setTab, conteoEtapa }) {
+  const pill = (clave, etiqueta, fn) => (
+    <button
+      key={clave}
+      role="tab"
+      aria-selected={tab === clave}
+      className={tab === clave ? 'etapa-pill activa' : 'etapa-pill'}
+      onClick={() => setTab(clave)}
+    >
+      {etiqueta} <span className="n">{conteoEtapa(fn)}</span>
+    </button>
+  )
+  const [porCotizar, cotizando, avanzados, enEspera, todos] = TABS_ETAPA
+  return (
+    <div className="embudo" role="tablist" aria-label="Etapa de compra">
+      {pill(...porCotizar)}
+      <span className="embudo-flecha">→</span>
+      {pill(...cotizando)}
+      <span className="embudo-flecha">→</span>
+      {pill(...avanzados)}
+      <span className="embudo-sep" />
+      {pill(...enEspera)}
+      {pill(...todos)}
+    </div>
+  )
+}
+
+// Escalera de precios EXW: dónde cayó la cotización del proveedor entre tu
+// precio objetivo (ancla de negociación) y tu máximo pagable (nunca se muestra).
+function EscaleraPrecios({ fila }) {
+  const max = fila.exwMaximoUsd
+  const objetivo = fila.exwObjetivoUsd
+  const cotizado = fila.cotizacion?.exwUsd ?? null
+  if (max == null) return null
+  const tope = Math.max(max, cotizado ?? 0) * 1.08
+  const pos = (v) => `${Math.min(96, Math.max(2, (v / tope) * 100))}%`
+  return (
+    <div className="escalera">
+      <div className="esc-barra">
+        {objetivo != null ? (
+          <div className="esc-marca" style={{ left: pos(objetivo) }}>
+            <span className="esc-tag arriba">objetivo <b>{objetivo}</b></span>
+          </div>
+        ) : null}
+        {cotizado != null ? (
+          <div className="esc-marca cotizado" style={{ left: pos(cotizado) }}>
+            <span className="esc-tag abajo">cotizado <b>{cotizado}</b></span>
+          </div>
+        ) : null}
+        <div className="esc-marca maximo" style={{ left: pos(max) }}>
+          <span className="esc-tag arriba">máximo <b>{max}</b></span>
+        </div>
+      </div>
+      <p className="esc-nota">
+        {cotizado == null
+          ? 'Aún sin cotización: negocia hacia tu objetivo. El máximo jamás se le muestra al proveedor.'
+          : cotizado <= objetivo
+            ? 'El proveedor cotizó en o bajo tu objetivo: excelente precio.'
+            : cotizado <= max
+              ? 'Cotizó entre tu objetivo y tu máximo: hay espacio para contraofertar. El máximo jamás se le muestra.'
+              : 'Se pasó de tu máximo: contraoferta con el precio objetivo o descarta.'}
+      </p>
+    </div>
+  )
+}
+
+// Panel lateral con el detalle completo del producto: análisis, escalera de
+// precios, desglose del margen y acciones — lo que antes saturaba la tabla.
+function DetalleProducto({ fila, onCerrar, onCambiada, onAbrirNicho }) {
+  const [avanzando, setAvanzando] = useState(false)
+  if (!fila) return null
+  const c = fila.cotizacion
+  const siguiente = SIGUIENTE_ETAPA[fila.etapaCompra ?? 'evaluando']
+
+  async function avanzar() {
+    setAvanzando(true)
+    try {
+      await api.avanzarNichos(fila.nichoIds ?? [fila.nichoId], siguiente)
+      await onCambiada()
+    } finally {
+      setAvanzando(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="velo-detalle" onClick={onCerrar} />
+      <aside className="drawer-detalle" role="dialog" aria-label="Detalle del producto">
+        <div className="drawer-cab">
+          <div className="drawer-titulo">
+            <h3>{fila.productoIngles ?? fila.keyword}</h3>
+            <button className="drawer-cerrar" onClick={onCerrar} aria-label="Cerrar">✕</button>
+          </div>
+          {fila.nichosDelGrupo ? (
+            <p className="drawer-kw">🔁 misma compra: {fila.nichosDelGrupo.join(' + ')}</p>
+          ) : (
+            <p className="drawer-kw">{fila.keyword}</p>
+          )}
+          <div className="drawer-chips">
+            <span className={`veredicto veredicto-${fila.veredicto}`}>{fila.veredicto.replace(/_/g, ' ')}</span>
+            {fila.confianza ? <span className="veredicto chip-neutro">confianza {fila.confianza}</span> : null}
+            {fila.confirmacion ? (
+              <span className={`veredicto ${fila.confirmacion === 'confirmado' ? 'veredicto-entrar' : 'chip-neutro'}`}>
+                {fila.confirmacion === 'confirmado' ? `✓ confirmado · ${fila.scansConDemanda} scans` : `preliminar · ${fila.scansConDemanda} scans`}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="drawer-cuerpo">
+          {fila.resumen ? (
+            <div className="drawer-seccion">
+              <h4>Análisis</h4>
+              <p className="drawer-resumen">{fila.resumen}</p>
+              {fila.gemelosDetalle ? (
+                <p className="drawer-gemelos">👥 sellers gemelos creciendo: {fila.gemelosDetalle}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {fila.exwMaximoUsd != null ? (
+            <div className="drawer-seccion">
+              <h4>Escalera de precios EXW (US$/unidad)</h4>
+              <EscaleraPrecios fila={fila} />
+            </div>
+          ) : null}
+
+          {c?.margenClp != null ? (
+            <div className="drawer-seccion">
+              <h4>Margen si compras a US$ {c.exwUsd}</h4>
+              <table className="desglose">
+                <tbody>
+                  <tr><td>Precio de venta (ML)</td><td>{fmtPrecio(fila.precioVentaClp)}</td></tr>
+                  {c.landedClp != null ? (
+                    <tr><td>Costo puesto en Chile (EXW + flete contenedor + aduana)</td><td>{fmtPrecio(c.landedClp)}</td></tr>
+                  ) : null}
+                  {c.comisionClp != null ? (
+                    <tr><td>Comisión ML + Full</td><td>{fmtPrecio(c.comisionClp)}</td></tr>
+                  ) : null}
+                  <tr className={c.viable ? 'total' : 'total mal'}>
+                    <td>Margen por unidad · {Math.round(c.margenPct)}% sobre venta</td>
+                    <td>{fmtPrecio(c.margenClp)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          <div className="drawer-seccion">
+            <h4>Cotización del proveedor (EXW US$)</h4>
+            <div className="drawer-linea">
+              <CotizacionExw fila={fila} onCambiada={onCambiada} />
+              <MargenCotizacion fila={fila} />
+            </div>
+            {c?.fecha ? <p className="drawer-meta">anotada el {fmtFecha(c.fecha)}</p> : null}
+          </div>
+
+          <div className="drawer-seccion">
+            <h4>Etapa</h4>
+            <div className="drawer-linea">
+              <SelectorEtapa fila={fila} onCambiada={onCambiada} />
+              <NotaEtapa fila={fila} onCambiada={onCambiada} />
+            </div>
+          </div>
+        </div>
+
+        <div className="drawer-pie">
+          {onAbrirNicho ? (
+            <button className="boton-secundario" onClick={() => onAbrirNicho(fila.nichoId)}>
+              Abrir nicho
+            </button>
+          ) : null}
+          {siguiente ? (
+            <button className="boton-primario drawer-avanzar" onClick={avanzar} disabled={avanzando}>
+              {avanzando ? 'Avanzando…' : `Pasar a ${etiquetaEtapa(siguiente)} →`}
+            </button>
+          ) : null}
+        </div>
+      </aside>
+    </>
+  )
 }
 
 function PlanillaIA({ onAbrirNicho }) {
@@ -265,18 +428,19 @@ function PlanillaIA({ onAbrirNicho }) {
   const [acotando, setAcotando] = useState(false)
   const [aviso, setAviso] = useState(null)
   const [tab, setTab] = useState('por-cotizar')
+  const [detalleId, setDetalleId] = useState(null)
 
   const cargar = () =>
     // solo entrar / entrar_con_condiciones de nichos activos: esta es la
     // planilla de compra que se trabaja con proveedores
     api.oportunidades().then((d) => ({
       ...d,
-      // trámites como texto para que la grilla y la descarga lo traten plano
+      // trámites como texto para que la grilla y la descarga lo traten plano;
+      // cotización aplanada para que ordenar/filtrar la vean
       oportunidades: d.oportunidades.map((o) => ({
         ...o,
         etapaCompra: o.etapaCompra ?? 'evaluando',
         tramites: (o.tramites ?? []).join(', ') || null,
-        // aplanados para que ordenar/filtrar de la grilla los vea
         exwCotizado: o.cotizacion?.exwUsd ?? null,
         margenCotizacion: o.cotizacion?.margenClp ?? null,
       })),
@@ -321,44 +485,139 @@ function PlanillaIA({ onAbrirNicho }) {
     )
   }
 
+  const recargar = async () => setDatos(await cargar())
   const pendientes = datos.oportunidades.filter((o) => !o.nichoIngles).length
   const filtroTab = TABS_ETAPA.find(([clave]) => clave === tab)?.[2] ?? (() => true)
   const filas = fusionarCompras(datos.oportunidades.filter((o) => filtroTab(o.etapaCompra)))
+  const todasLasFilas = fusionarCompras(datos.oportunidades)
   const conteoEtapa = (fn) => datos.oportunidades.filter((o) => fn(o.etapaCompra)).length
+  const filaDetalle = detalleId
+    ? todasLasFilas.find((f) => (f.nichoIds ?? [f.nichoId]).includes(detalleId)) ?? null
+    : null
+
+  const cierran = filas.filter((f) => f.cotizacion && f.cotizacion.cierra !== false && f.cotizacion.viable !== false).length
+  const noCierran = filas.filter((f) => f.cotizacion && (f.cotizacion.cierra === false || f.cotizacion.viable === false)).length
+  const esperando = filas.length - cierran - noCierran
 
   const columnas = [
-    ...COLUMNAS_IA.slice(0, 3),
+    // ── banda: tu decisión (solo pantalla) ──
+    {
+      clave: 'keyword',
+      titulo: 'Producto / nicho',
+      tipo: 'texto',
+      fija: true,
+      soloVista: true,
+      banda: 'decision',
+      render: (o) => <CeldaProducto o={o} />,
+    },
+    {
+      clave: 'veredicto',
+      titulo: 'Veredicto IA',
+      tipo: 'texto',
+      soloVista: true,
+      banda: 'decision',
+      render: (o) => <CeldaVeredicto o={o} />,
+    },
     {
       clave: 'etapaCompra',
       titulo: 'Etapa',
       tipo: 'texto',
       soloVista: true,
-      render: (o) => <SelectorEtapa fila={o} onCambiada={async () => setDatos(await cargar())} />,
+      banda: 'decision',
+      render: (o) => (
+        <div className="pl-etapa">
+          <SelectorEtapa fila={o} onCambiada={recargar} />
+          <NotaEtapa fila={o} onCambiada={recargar} />
+        </div>
+      ),
+    },
+    // ── columnas que viajan solo en la descarga (encabezan la hoja) ──
+    { clave: 'nichoIngles', titulo: 'Niche', tipo: 'texto', soloDescarga: true, anchoXlsx: 24 },
+    {
+      clave: 'productoIngles',
+      titulo: 'Product',
+      tipo: 'texto',
+      soloDescarga: true,
+      anchoXlsx: 42,
+      // nunca volcar la especificación larga aquí: o está acotado o está pendiente
+      csv: (o) => o.productoIngles ?? null,
+    },
+    // ── banda: hoja del proveedor (pantalla + descarga) ──
+    {
+      clave: 'especificacionProducto',
+      titulo: 'Specification',
+      tipo: 'texto',
+      ancha: true,
+      banda: 'proveedor',
+      anchoXlsx: 60,
+      render: (o) => <span className="pl-spec">{o.especificacionProducto ?? '—'}</span>,
     },
     {
-      clave: 'notaEtapa',
-      titulo: 'Nota',
+      clave: 'unidadesPrueba',
+      titulo: 'Qty',
+      tipo: 'numero',
+      banda: 'proveedor',
+      anchoXlsx: 15,
+      render: (o) => (o.unidadesPrueba != null ? o.unidadesPrueba : (o.primeraCompra ?? '—')),
+      csv: (o) => o.unidadesPrueba ?? o.primeraCompra ?? null,
+    },
+    {
+      clave: 'exwObjetivoUsd',
+      titulo: 'Target USD',
+      tipo: 'numero',
+      banda: 'proveedor',
+      anchoXlsx: 16,
+      render: (o) => (o.exwObjetivoUsd != null ? `US$ ${o.exwObjetivoUsd}` : '—'),
+    },
+    {
+      clave: 'proveedorLlena',
+      titulo: 'Llena el proveedor',
       tipo: 'texto',
       soloVista: true,
-      render: (o) => <NotaEtapa fila={o} onCambiada={async () => setDatos(await cargar())} />,
+      banda: 'proveedor',
+      render: () => <span className="ghost-cell">EXW · MOQ · lead time</span>,
     },
-    // cotización recibida: EXW real del proveedor + veredicto de margen.
-    // soloVista: jamás viajan en la hoja que se le manda al proveedor.
+    { clave: 'exwUnitario', titulo: 'Your EXW price (USD)', tipo: 'texto', soloDescarga: true, anchoXlsx: 18 },
+    { clave: 'moq', titulo: 'MOQ', tipo: 'texto', soloDescarga: true, anchoXlsx: 10 },
+    { clave: 'tiempoProduccion', titulo: 'Production time (days)', tipo: 'texto', soloDescarga: true, anchoXlsx: 18 },
+    { clave: 'linkProducto', titulo: 'Product link / photos', tipo: 'texto', soloDescarga: true, anchoXlsx: 30 },
+    { clave: 'notas', titulo: 'Notes', tipo: 'texto', soloDescarga: true, anchoXlsx: 30 },
+    // ── banda: cotización recibida (solo pantalla) ──
     {
       clave: 'exwCotizado',
       titulo: 'EXW cotizado',
       tipo: 'numero',
       soloVista: true,
-      render: (o) => <CotizacionExw fila={o} onCambiada={async () => setDatos(await cargar())} />,
+      banda: 'cotiza',
+      render: (o) => <CotizacionExw fila={o} onCambiada={recargar} />,
     },
     {
       clave: 'margenCotizacion',
       titulo: 'Margen real',
       tipo: 'numero',
       soloVista: true,
+      banda: 'cotiza',
       render: (o) => <MargenCotizacion fila={o} />,
     },
-    ...COLUMNAS_IA.slice(3),
+    {
+      clave: 'detalle',
+      titulo: '',
+      tipo: 'texto',
+      soloVista: true,
+      banda: 'cotiza',
+      render: (o) => (
+        <button
+          className="detalle-btn"
+          aria-label="Ver detalle"
+          onClick={(e) => {
+            e.stopPropagation()
+            setDetalleId(o.nichoId)
+          }}
+        >
+          ›
+        </button>
+      ),
+    },
   ]
 
   // descargar la planilla de "Por cotizar" = esos productos avanzan a cotizando
@@ -367,48 +626,84 @@ function PlanillaIA({ onAbrirNicho }) {
     const ids = visibles.flatMap((f) => f.nichoIds ?? [f.nichoId])
     const r = await api.avanzarNichos(ids, 'cotizando').catch(() => null)
     if (r) {
-      setDatos(await cargar())
+      await recargar()
       setAviso(`${r.avanzados} nicho(s) avanzaron a "cotizando" — la próxima descarga solo trae lo nuevo.`)
     }
   }
 
+  const resumen = (
+    <span className="resumen-tab">
+      <span><span className="punto verde" /> <strong>{cierran}</strong> cierran</span>
+      <span><span className="punto rojo" /> <strong>{noCierran}</strong> no cierran</span>
+      <span><span className="punto gris" /> <strong>{esperando}</strong> esperando</span>
+    </span>
+  )
+
+  const pie = (visibles) => {
+    const unidades = visibles.reduce((s, o) => s + (o.unidadesPrueba ?? 0), 0)
+    const inversion = visibles.reduce((s, o) => s + (o.inversionEstimadaUsd ?? 0), 0)
+    const margenes = visibles.map((o) => o.cotizacion?.margenPct).filter(Number.isFinite)
+    const margenProm = margenes.length
+      ? Math.round(margenes.reduce((a, b) => a + b, 0) / margenes.length)
+      : null
+    return (
+      <tr>
+        <td colSpan={3}>{visibles.length} producto(s) en esta etapa</td>
+        <td colSpan={2} className="num"><span className="dato">{unidades.toLocaleString('es-CL')}</span> unidades</td>
+        <td colSpan={2}>inversión estimada <span className="dato">US$ {Math.round(inversion).toLocaleString('es-CL')}</span></td>
+        <td colSpan={3}>
+          {margenProm != null ? (
+            <>margen promedio de lo cotizado <span className="dato ok">{margenProm}%</span></>
+          ) : (
+            'sin cotizaciones aún'
+          )}
+        </td>
+      </tr>
+    )
+  }
+
   return (
     <div>
-      <div className="toolbar">
-        <div className="chips" role="tablist" aria-label="Etapa de compra">
-          {TABS_ETAPA.map(([clave, etiqueta, fn]) => (
-            <button
-              key={clave}
-              role="tab"
-              aria-selected={tab === clave}
-              className={tab === clave ? 'chip activo' : 'chip'}
-              onClick={() => setTab(clave)}
-            >
-              {etiqueta} ({conteoEtapa(fn)})
-            </button>
-          ))}
-        </div>
-        <button className="boton-secundario" onClick={acotarConIA} disabled={acotando}>
-          {acotando
-            ? 'Acotando con IA…'
-            : `Acotar en inglés con IA${pendientes ? ` (${pendientes} pendientes)` : ''}`}
-        </button>
-        {aviso ? <span className="conteo">{aviso}</span> : null}
-      </div>
+      <Embudo tab={tab} setTab={setTab} conteoEtapa={conteoEtapa} />
+      {aviso ? <p className="conteo pl-aviso">{aviso}</p> : null}
       {!filas.length ? (
         <p className="vacio">Nada en esta etapa por ahora.</p>
       ) : (
         <Planilla
           columnas={columnas}
           filas={filas}
+          bandas={BANDAS}
+          conFiltros={false}
+          buscador
+          resumen={resumen}
+          pie={pie}
+          acciones={
+            <button className="boton-secundario" onClick={acotarConIA} disabled={acotando}>
+              {acotando
+                ? 'Acotando con IA…'
+                : `✨ Acotar en inglés${pendientes ? ` (${pendientes})` : ''}`}
+            </button>
+          }
           nombreArchivo="supplier-quote-request.xlsx"
           hojaXlsx="Quote request"
           formatoDescarga="xlsx"
           onDescarga={alDescargar}
           filaKey={(o) => o.nichoId}
-          onFilaClick={onAbrirNicho ? (o) => onAbrirNicho(o.nichoId) : undefined}
+          onFilaClick={(o) => setDetalleId(o.nichoId)}
         />
       )}
+      <div className="pl-leyenda">
+        <span><span className="cuadro c-decision" />Interno: veredicto, validación y embudo</span>
+        <span><span className="cuadro c-proveedor" />Se exporta al proveedor (inglés, sin precios tuyos)</span>
+        <span><span className="cuadro c-cotiza" />Cotización recibida: EXW real y si el margen cierra</span>
+        <span className="pl-leyenda-nota">⬇ Descargar en "Por cotizar" avanza los productos a "Cotizando"</span>
+      </div>
+      <DetalleProducto
+        fila={filaDetalle}
+        onCerrar={() => setDetalleId(null)}
+        onCambiada={recargar}
+        onAbrirNicho={onAbrirNicho}
+      />
     </div>
   )
 }
@@ -500,7 +795,7 @@ export function PlanillaGlobal({ onAbrirNicho }) {
           <h2>Planilla</h2>
           <p className="reporte-fecha">
             {modo === 'ia'
-              ? 'Hoja de cotización para el proveedor: producto y cantidades en inglés, con columnas en blanco (precio FOB, MOQ, tiempos) para que las llene él. El CSV sale limpio — veredicto y confianza se ven solo aquí.'
+              ? 'Tu mesa de compra: cada fila es un producto recomendado por la IA. Lo azul se exporta al proveedor; lo gris y lo verde es solo tuyo.'
               : 'Todos los productos del último scan de cada nicho activo (materia prima de los análisis).'}
           </p>
         </div>
