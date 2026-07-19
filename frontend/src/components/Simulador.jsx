@@ -64,7 +64,7 @@ export function Simulador({ nicho, reporte, precioInicial }) {
     comisionPct: rec?.comisionMlPct ?? 17,
     unidadesBulto: 1,
     modoFlete: 'maritimo',
-    fleteM3Usd: 60, // prorrateo de contenedor surtido: costo del contenedor ÷ m³ útiles
+    fleteM3Usd: '', // se precarga desde el servidor (FLETE_M3_USD real del importador)
     volumenM3: 0.003,
     pesoKg: 0.5,
   })
@@ -76,6 +76,24 @@ export function Simulador({ nicho, reporte, precioInicial }) {
   useEffect(() => {
     if (precioInicial != null) setForm((f) => ({ ...f, precioVentaClp: precioInicial }))
   }, [precioInicial])
+
+  // la tarifa marítima real vive en el servidor (contenedor del importador):
+  // precargarla en vez de adivinar un default en el frontend
+  useEffect(() => {
+    let vigente = true
+    api
+      .parametrosMargen()
+      .then((p) => {
+        const tarifa = p?.flete?.maritimoUsdPorM3
+        if (vigente && Number.isFinite(tarifa)) {
+          setForm((f) => (f.fleteM3Usd === '' ? { ...f, fleteM3Usd: tarifa } : f))
+        }
+      })
+      .catch(() => {})
+    return () => {
+      vigente = false
+    }
+  }, [])
 
   // cálculo automático: al abrir (si hay datos) y con debounce al editar
   useEffect(() => {
