@@ -31,6 +31,10 @@ const nichoSchema = new mongoose.Schema({
   // en esta fecha (la declara el analista al rechazar por ventana, o el usuario)
   revisarEl: { type: Date, default: null },
   vueltaTemporadaEl: { type: Date, default: null }, // para el badge "vuelve por temporada"
+  // cotización real del proveedor (EXW por unidad de venta): se compara contra
+  // el EXW máximo del análisis y alimenta el margen estimado en la planilla
+  exwCotizadoUsd: { type: Number, default: null },
+  exwCotizadoEl: { type: Date, default: null },
   // motivo corto de la etapa ("esperando registro ISP", "pensándolo",
   // "esperando respuesta de 3 proveedores") — visible en planilla y oportunidades
   notaEtapa: { type: String, default: null },

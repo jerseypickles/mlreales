@@ -188,6 +188,77 @@ function NotaEtapa({ fila, onCambiada }) {
   )
 }
 
+// EXW real que cotizó el proveedor: se anota aquí mismo y el sistema responde
+// al instante si cierra contra el máximo y cuánto deja por unidad (mismo motor
+// del simulador, con el flete real del contenedor). Se guarda al salir del campo.
+function CotizacionExw({ fila, onCambiada }) {
+  const [valor, setValor] = useState(fila.cotizacion?.exwUsd ?? '')
+  const [guardando, setGuardando] = useState(false)
+
+  async function guardar() {
+    const previo = fila.cotizacion?.exwUsd ?? ''
+    if (String(previo) === String(valor).trim()) return
+    setGuardando(true)
+    try {
+      const ids = fila.nichoIds ?? [fila.nichoId]
+      await Promise.all(ids.map((id) => api.ajustarNicho(id, { exwCotizadoUsd: valor === '' ? null : Number(valor) })))
+      await onCambiada()
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <input
+      type="number"
+      className="exw-cotizado"
+      value={valor}
+      min="0"
+      step="0.01"
+      disabled={guardando}
+      placeholder="US$…"
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => setValor(e.target.value)}
+      onBlur={guardar}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.target.blur()
+      }}
+      aria-label="EXW cotizado por el proveedor (USD)"
+    />
+  )
+}
+
+// Semáforo de la cotización: verde = cierra (con la ganancia estimada por
+// unidad al precio recomendado), rojo = el proveedor se pasó del máximo.
+function MargenCotizacion({ fila }) {
+  const c = fila.cotizacion
+  if (!c) return <span className="vacio">—</span>
+  if (c.cierra === false) {
+    return (
+      <span className="margen-cotizacion">
+        <span className="veredicto veredicto-no_entrar" title={`Tu máximo pagable es US$ ${fila.exwMaximoUsd}`}>
+          no cierra
+        </span>{' '}
+        máx US$ {fila.exwMaximoUsd}
+      </span>
+    )
+  }
+  if (c.margenClp != null) {
+    return (
+      <span
+        className="margen-cotizacion"
+        title={`Al precio recomendado (${fmtPrecio(fila.precioVentaClp)}), con flete de contenedor prorrateado. Afinación fina: simulador.`}
+      >
+        <span className={`veredicto ${c.viable ? 'veredicto-entrar' : 'veredicto-no_entrar'}`}>
+          {c.viable ? 'cierra' : 'pierde'}
+        </span>{' '}
+        {fmtPrecio(c.margenClp)}/u · {c.margenPct}%
+      </span>
+    )
+  }
+  return <span className="veredicto veredicto-entrar">cierra</span>
+}
+
 function PlanillaIA({ onAbrirNicho }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
@@ -205,6 +276,9 @@ function PlanillaIA({ onAbrirNicho }) {
         ...o,
         etapaCompra: o.etapaCompra ?? 'evaluando',
         tramites: (o.tramites ?? []).join(', ') || null,
+        // aplanados para que ordenar/filtrar de la grilla los vea
+        exwCotizado: o.cotizacion?.exwUsd ?? null,
+        margenCotizacion: o.cotizacion?.margenClp ?? null,
       })),
     }))
 
@@ -267,6 +341,22 @@ function PlanillaIA({ onAbrirNicho }) {
       tipo: 'texto',
       soloVista: true,
       render: (o) => <NotaEtapa fila={o} onCambiada={async () => setDatos(await cargar())} />,
+    },
+    // cotización recibida: EXW real del proveedor + veredicto de margen.
+    // soloVista: jamás viajan en la hoja que se le manda al proveedor.
+    {
+      clave: 'exwCotizado',
+      titulo: 'EXW cotizado',
+      tipo: 'numero',
+      soloVista: true,
+      render: (o) => <CotizacionExw fila={o} onCambiada={async () => setDatos(await cargar())} />,
+    },
+    {
+      clave: 'margenCotizacion',
+      titulo: 'Margen real',
+      tipo: 'numero',
+      soloVista: true,
+      render: (o) => <MargenCotizacion fila={o} />,
     },
     ...COLUMNAS_IA.slice(3),
   ]

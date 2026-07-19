@@ -276,7 +276,18 @@ router.post(
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {
   const cambios = {}
-  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl } = req.body ?? {}
+  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd } = req.body ?? {}
+  if (exwCotizadoUsd !== undefined) {
+    if (exwCotizadoUsd === null || exwCotizadoUsd === '') {
+      cambios.exwCotizadoUsd = null
+      cambios.exwCotizadoEl = null
+    } else {
+      const n = Number(exwCotizadoUsd)
+      if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'exwCotizadoUsd inválido (> 0)' })
+      cambios.exwCotizadoUsd = n
+      cambios.exwCotizadoEl = new Date()
+    }
+  }
   if (revisarEl !== undefined) {
     if (revisarEl === null || revisarEl === '') {
       cambios.revisarEl = null

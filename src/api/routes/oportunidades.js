@@ -13,6 +13,33 @@ import {
 import { config } from '../../config/env.js'
 import { generarRfqPendientes } from '../../services/rfq.js'
 import { llmDisponible } from '../../services/llm.js'
+import { calcularMargen } from '../../services/margen.js'
+
+// Margen estimado si compras al EXW que cotizó el proveedor, con los mismos
+// supuestos estándar de la tabla del análisis (volumen 0.003 m³/u, marítimo).
+// Es el semáforo de la planilla; la afinación fina se hace en el simulador.
+function margenCotizacion({ exwUsd, rec, unidades }) {
+  if (!Number.isFinite(exwUsd) || !Number.isFinite(rec?.precioVentaClp)) return null
+  try {
+    const sim = calcularMargen({
+      costoExwUsd: exwUsd,
+      precioVentaClp: rec.precioVentaClp,
+      unidades: unidades ?? 500,
+      volumenM3: 0.003,
+      modoFlete: 'maritimo',
+      parametros: Number.isFinite(rec.comisionMlPct)
+        ? { mercadoLibre: { comisionPct: rec.comisionMlPct } }
+        : undefined,
+    })
+    return {
+      margenClp: sim.porUnidad.margenClp,
+      margenPct: sim.resultado.margenPctSobreVenta,
+      viable: sim.resultado.viable,
+    }
+  } catch {
+    return null
+  }
+}
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -80,6 +107,8 @@ router.get(
           etapaCompraEl: 1,
           notaEtapa: 1,
           frecuenciaScan: 1,
+          exwCotizadoUsd: 1,
+          exwCotizadoEl: 1,
           radarInfo: 1,
           rfq: 1,
           ultimos: 1,
@@ -103,6 +132,18 @@ router.get(
       const scansConDemanda = n.conteoDemanda?.[0]?.n ?? 0
       const tendencia = tendenciaVentas(n.ultimos?.[0], n.ultimos?.[1])
       const gemelos = ultimo?.metricas?.competencia?.sellersGemelos ?? null
+      const unidadesPrueba = unidadesPrimeraCompra(rec.primeraCompra)
+      // cotización real del proveedor: se compara contra el máximo y se estima
+      // la ganancia por unidad al precio recomendado del análisis
+      let cotizacion = null
+      if (Number.isFinite(n.exwCotizadoUsd)) {
+        cotizacion = {
+          exwUsd: n.exwCotizadoUsd,
+          fecha: n.exwCotizadoEl ?? null,
+          cierra: exwMax != null ? n.exwCotizadoUsd <= exwMax : null,
+          ...(margenCotizacion({ exwUsd: n.exwCotizadoUsd, rec, unidades: unidadesPrueba }) ?? {}),
+        }
+      }
       oportunidades.push({
         nichoId: n._id,
         keyword: n.keyword,
@@ -128,6 +169,7 @@ router.get(
         precioVentaClp: rec.precioVentaClp ?? null,
         exwMaximoUsd: exwMax,
         exwObjetivoUsd: exwObjetivo(exwMax, config.exwObjetivoPct),
+        cotizacion,
         primeraCompra: rec.primeraCompra ?? null,
         inversionEstimadaUsd: inversionEstimadaUsd(rec.primeraCompra, exwMax),
         // análisis nuevos lo declaran estructurado; los viejos caen al detector de texto
@@ -148,7 +190,7 @@ router.get(
         nichoIngles: n.rfq?.nichoIngles ?? analisis.nichoIngles ?? null,
         productoIngles: n.rfq?.productoIngles ?? rec.productoIngles ?? null,
         productoClave: n.rfq?.productoClave ?? null,
-        unidadesPrueba: unidadesPrimeraCompra(rec.primeraCompra),
+        unidadesPrueba,
         especificacionProducto: n.rfq?.especificacion ?? rec.especificacionProducto ?? null,
         comoValidar: rec.comoValidar ?? null,
         comisionMlPct: rec.comisionMlPct ?? null,
