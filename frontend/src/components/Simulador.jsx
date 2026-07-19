@@ -136,7 +136,9 @@ export function Simulador({ nicho, reporte, precioInicial }) {
             <input type="number" min="1" {...campo('precioVentaClp')} />
           </label>
           <label className="sim-campo">
-            Costo por unidad en China (USD EXW, precio ex-fábrica)
+            {Number(form.unidadesBulto) > 1
+              ? `Costo del BULTO completo en China (USD EXW — las ${form.unidadesBulto} piezas juntas)`
+              : 'Costo por unidad en China (USD EXW, precio ex-fábrica)'}
             <input type="number" min="0.01" step="0.01" placeholder="ej: 3.50" {...campo('costoExwUsd')} />
             {(rec?.exwMaximoUsd ?? rec?.fobMaximoUsd) ? <span className="ayuda-campo">máximo recomendado: US$ {rec.exwMaximoUsd ?? rec.fobMaximoUsd}</span> : null}
           </label>
