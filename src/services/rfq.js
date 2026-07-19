@@ -42,6 +42,17 @@ Para cada ítem entrega nicho y producto en inglés comercial (como se busca en 
 
 DETECCIÓN DE COMPRA DUPLICADA: recibes todos los nichos juntos a propósito. Si dos o más nichos se surten con el mismo producto físico de fábrica (distintas keywords de venta en Mercado Libre, un solo ítem que comprar en China), asígnales exactamente la misma productoClave — así el sistema los fusiona en una sola línea de cotización. Sé estricto: misma clave solo si un mismo pedido de fábrica sirve para ambos listings.`
 
+// Eco robusto: el LLM a veces devuelve la keyword con tildes o mayúsculas
+// distintas. Si el eco no calza, el nicho quedaría "pendiente" para siempre y
+// CADA arranque regeneraría el tablero completo (fuga de plata silenciosa).
+const sinTilde = (t) => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+export const ecoKeyword = (k) => sinTilde(k).trim().toLowerCase()
+export const claveRespaldo = (k) =>
+  sinTilde(k)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
 export async function generarRfqPendientes() {
   const nichos = await Nicho.find({ estado: 'activo' }).lean()
 
@@ -81,32 +92,41 @@ export async function generarRfqPendientes() {
   )}`
 
   const { datos, costoUsd } = await pedirJSON({ system: SYSTEM_RFQ, user, schema: SCHEMA_RFQ, maxTokens: 6000 })
-  const porKeyword = new Map(datos.items.map((i) => [i.keyword.trim().toLowerCase(), i]))
+  const porKeyword = new Map(datos.items.map((i) => [ecoKeyword(i.keyword), i]))
 
   let generados = 0
+  let sinEco = 0
   for (const p of pendientes) {
-    const item = porKeyword.get(p.nicho.keyword)
-    if (!item) continue
-    await Nicho.updateOne(
-      { _id: p.nicho._id },
-      {
-        $set: {
-          rfq: {
-            nichoIngles: item.nicho,
-            productoIngles: item.producto,
-            especificacion: item.especificacion,
-            productoClave: item.productoClave ?? null,
-            desdeAnalisis: p.fechaAnalisis,
-            generadoEl: new Date(),
-          },
-        },
-      },
-    )
+    const item = porKeyword.get(ecoKeyword(p.nicho.keyword))
+    const rec = p.analisis.recomendacion ?? {}
+    // sin eco del LLM: caer a lo que traiga el análisis, con clave de respaldo
+    // — el nicho sale igual del estado pendiente y el bucle no puede ocurrir
+    const rfq = item
+      ? {
+          nichoIngles: item.nicho,
+          productoIngles: item.producto,
+          especificacion: item.especificacion,
+          productoClave: item.productoClave?.trim() || claveRespaldo(p.nicho.keyword),
+          desdeAnalisis: p.fechaAnalisis,
+          generadoEl: new Date(),
+        }
+      : {
+          nichoIngles: p.analisis.nichoIngles ?? null,
+          productoIngles: rec.productoIngles ?? null,
+          especificacion: rec.especificacionProducto ?? null,
+          productoClave: claveRespaldo(p.nicho.keyword),
+          desdeAnalisis: p.fechaAnalisis,
+          generadoEl: new Date(),
+          sinEco: true,
+        }
+    if (!item) sinEco++
+    await Nicho.updateOne({ _id: p.nicho._id }, { $set: { rfq } })
     generados++
   }
+  if (sinEco) console.warn(`[rfq] ${sinEco} nicho(s) sin eco del LLM — guardados con respaldo del análisis`)
 
   const { registrarGasto } = await import('./gastos.js')
   await registrarGasto(pendientes[0].nicho._id, costoUsd)
 
-  return { generados, costoUsd }
+  return { generados, costoUsd, sinEco }
 }
