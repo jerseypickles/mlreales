@@ -229,3 +229,43 @@ test('componente calidad: pocos ratings → neutro 50, no extremos falsos', asyn
   })
   assert.ok(mediocres.componentes.calidad > 80)
 })
+
+test('unidadesDelTitulo: detecta packs reales y evita dimensiones/medidas/promos', async () => {
+  const { unidadesDelTitulo } = await import('../src/services/metricas.js')
+  assert.equal(unidadesDelTitulo('Toallitas Húmedas Pack De 12 Bolsas'), 12)
+  assert.equal(unidadesDelTitulo('Toallitas bebé x60'), 60)
+  assert.equal(unidadesDelTitulo('Pañitos 100 unidades hipoalergénicos'), 100)
+  assert.equal(unidadesDelTitulo('Set de 6 esponjas cocina'), 6)
+  assert.equal(unidadesDelTitulo('Calcetines 5 pares algodón'), 5)
+  // falsos positivos que NO deben contar
+  assert.equal(unidadesDelTitulo('Mantel hule 140x200cm cocina'), null)
+  assert.equal(unidadesDelTitulo('Foco solar 60w exterior'), null)
+  assert.equal(unidadesDelTitulo('Promoción 2x1 esponjas'), null)
+  assert.equal(unidadesDelTitulo('Hervidor eléctrico 1.7 lts'), null)
+  assert.equal(unidadesDelTitulo(null), null)
+})
+
+test('preciosPorUnidad: mediana comparable cuando el nicho mezcla packs', async () => {
+  const { preciosPorUnidad } = await import('../src/services/metricas.js')
+  const snapshots = [
+    { sku: 'A', precio: 6000 },  // pack 12 → 500/u
+    { sku: 'B', precio: 24000 }, // pack 60 → 400/u
+    { sku: 'C', precio: 600 },   // sin pack → 600/u
+  ]
+  const productosPorSku = new Map([
+    ['A', { titulo: 'Toallitas pack de 12' }],
+    ['B', { titulo: 'Toallitas x60 bolsas' }],
+    ['C', { titulo: 'Toallitas viaje' }],
+  ])
+  const r = preciosPorUnidad({ snapshots, productosPorSku })
+  assert.equal(r.mediana, 500) // por unidad: [400, 500, 600]
+  assert.equal(r.listingsConPack, 2)
+  // nicho unitario (nadie declara pack) → null, no aporta
+  assert.equal(
+    preciosPorUnidad({
+      snapshots: [{ sku: 'C', precio: 600 }],
+      productosPorSku: new Map([['C', { titulo: 'Hervidor 1.7 lts' }]]),
+    }),
+    null,
+  )
+})

@@ -330,6 +330,54 @@ export async function obtenerProductosUltimoScan(nicho) {
   }
 }
 
+// Unidades por pack declaradas en el título ("pack de 12", "x60", "60 unidades").
+// null si no declara. Evita falsos positivos de dimensiones (60x40cm), medidas
+// (60cm/ml/gb), potencias (60w) y promos (2x1).
+export function unidadesDelTitulo(titulo) {
+  const t = String(titulo ?? '').toLowerCase()
+  const candidatos = []
+
+  let m = t.match(/\bpack\s*(?:de\s*)?x?\s*(\d{1,4})\b/)
+  if (m) candidatos.push(Number(m[1]))
+
+  m = t.match(/\bset\s*(?:de\s*)?(\d{1,4})\b/)
+  if (m) candidatos.push(Number(m[1]))
+
+  m = t.match(/\b(\d{1,4})\s*(?:unidades|unidad|unid\.?|uds?\.?|und\.?|piezas|pzas\.?|sobres|rollos|pares|sachets?)\b/)
+  if (m) candidatos.push(Number(m[1]))
+
+  // "x60" suelto: no precedido por dígito (60x40) ni seguido de unidad de medida
+  m = t.match(/(?<![\dx])x\s?(\d{2,4})\b(?!\s*(?:cm|mm|mts?|m\b|w\b|v\b|ml|lts?|grs?\b|kg|gb|tb|mah|led|colores|hojas))/)
+  if (m) candidatos.push(Number(m[1]))
+
+  const validos = candidatos.filter((n) => n >= 2 && n <= 1000)
+  return validos.length ? Math.max(...validos) : null
+}
+
+// Distribución de precio POR UNIDAD para nichos que venden en packs: el precio
+// por listing mezcla el pack de 3 con el de 60 y su mediana no compara nada.
+// null si ningún listing declara pack (nicho unitario: no aporta).
+export function preciosPorUnidad({ snapshots, productosPorSku }) {
+  const precios = []
+  let listingsConPack = 0
+  for (const snap of snapshots) {
+    if (!Number.isFinite(snap.precio)) continue
+    const unidades = unidadesDelTitulo(productosPorSku.get(snap.sku)?.titulo)
+    if (unidades) listingsConPack++
+    precios.push(snap.precio / (unidades ?? 1))
+  }
+  if (!listingsConPack || !precios.length) return null
+  precios.sort((a, b) => a - b)
+  const cuantil = (p) => precios[Math.min(precios.length - 1, Math.floor(p * precios.length))]
+  return {
+    mediana: Math.round(cuantil(0.5)),
+    p25: Math.round(cuantil(0.25)),
+    p75: Math.round(cuantil(0.75)),
+    listingsConPack,
+    pctConPack: Math.round((listingsConPack / precios.length) * 100),
+  }
+}
+
 // Sellers "gemelos": vendedores NO oficiales, chicos, que están ganando
 // reseñas AHORA dentro del nicho — la prueba directa de que un entrante
 // genérico (como el importador) puede vender aquí. Requiere dos scans.
@@ -389,6 +437,8 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   })
   const gemelos = detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPrevios })
   if (gemelos) metricas.competencia.sellersGemelos = gemelos
+  const porUnidad = preciosPorUnidad({ snapshots, productosPorSku })
+  if (porUnidad) metricas.precio.porUnidad = porUnidad
 
   const topProductos = [...snapshots]
     .sort((a, b) => (a.posicion ?? Infinity) - (b.posicion ?? Infinity))

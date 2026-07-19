@@ -62,6 +62,7 @@ export function Simulador({ nicho, reporte, precioInicial }) {
     unidades: unidadesPrueba ?? 500,
     // la comisión la estima el análisis según la categoría; 17% conservador si no hay análisis
     comisionPct: rec?.comisionMlPct ?? 17,
+    unidadesBulto: 1,
     modoFlete: 'maritimo',
     volumenM3: 0.003,
     pesoKg: 0.5,
@@ -138,6 +139,15 @@ export function Simulador({ nicho, reporte, precioInicial }) {
             Costo por unidad en China (USD EXW, precio ex-fábrica)
             <input type="number" min="0.01" step="0.01" placeholder="ej: 3.50" {...campo('costoExwUsd')} />
             {(rec?.exwMaximoUsd ?? rec?.fobMaximoUsd) ? <span className="ayuda-campo">máximo recomendado: US$ {rec.exwMaximoUsd ?? rec.fobMaximoUsd}</span> : null}
+          </label>
+          <label className="sim-campo">
+            Unidades por bulto vendido
+            <input type="number" min="1" {...campo('unidadesBulto')} />
+            <span className="ayuda-campo">
+              {Number(form.unidadesBulto) > 1 && Number(form.precioVentaClp) > 0 && Number(form.costoExwUsd) > 0
+                ? `por pieza: vendes a ${fmtPrecio(Number(form.precioVentaClp) / Number(form.unidadesBulto))} · EXW US$ ${(Number(form.costoExwUsd) / Number(form.unidadesBulto)).toFixed(2)}`
+                : 'si vendes packs (ej: 60 toallitas), el precio y el EXW de arriba son del bulto completo'}
+            </span>
           </label>
           <label className="sim-campo">
             Unidades del pedido
