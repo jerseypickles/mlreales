@@ -8,7 +8,9 @@ import {
   cambiosPorEtapa,
   ETAPAS_COMPRA,
   confirmacionVeredicto,
+  exwObjetivo,
 } from '../../services/oportunidades.js'
+import { config } from '../../config/env.js'
 import { generarRfqPendientes } from '../../services/rfq.js'
 import { llmDisponible } from '../../services/llm.js'
 
@@ -125,6 +127,7 @@ router.get(
         segmento: rec.segmento ?? null,
         precioVentaClp: rec.precioVentaClp ?? null,
         exwMaximoUsd: exwMax,
+        exwObjetivoUsd: exwObjetivo(exwMax, config.exwObjetivoPct),
         primeraCompra: rec.primeraCompra ?? null,
         inversionEstimadaUsd: inversionEstimadaUsd(rec.primeraCompra, exwMax),
         // análisis nuevos lo declaran estructurado; los viejos caen al detector de texto

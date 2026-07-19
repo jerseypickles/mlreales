@@ -44,6 +44,14 @@ export function detectarTramites(textos) {
   return tramites
 }
 
+// Precio objetivo para anclar al proveedor en la hoja de cotización: un % del
+// EXW máximo (default 80%). El máximo real es el tope de negociación y NUNCA
+// se le muestra; el target ancla bajo y deja espacio para negociar.
+export function exwObjetivo(exwMaximoUsd, pct = 80) {
+  if (!Number.isFinite(exwMaximoUsd) || exwMaximoUsd <= 0) return null
+  return Math.round(exwMaximoUsd * (pct / 100) * 10) / 10
+}
+
 // Un "entrar" con un solo scan es una foto; confirmado = la demanda se sostuvo
 // en al menos 3 scans y no viene cayendo. Distingue hipótesis de evidencia.
 export function confirmacionVeredicto(scansConDemanda, tendencia) {

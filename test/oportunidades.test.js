@@ -107,3 +107,12 @@ test('detectarSellersGemelos: no-oficiales chicos ganando reseñas; oficiales y 
   // sin scan previo no hay señal (se necesita la película, no la foto)
   assert.equal(detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPrevios: null }), null)
 })
+
+test('exwObjetivo: ancla al 80% del máximo con un decimal; nunca el tope real', async () => {
+  const { exwObjetivo } = await import('../src/services/oportunidades.js')
+  assert.equal(exwObjetivo(18), 14.4)
+  assert.equal(exwObjetivo(2.5), 2)
+  assert.equal(exwObjetivo(18, 70), 12.6)
+  assert.equal(exwObjetivo(null), null)
+  assert.equal(exwObjetivo(0), null)
+})
