@@ -166,7 +166,7 @@ test('calcularScoreOportunidad: composición según pesos', () => {
   const r = calcularScoreOportunidad({
     demanda: { volumenVentasEstimado: 10000 },
     competencia: { concentracionTop3Pct: 40, pctFull: 10 },
-    calidad: { ratingPromedio: 4.0 },
+    calidad: { ratingPromedio: 4.0, itemsConRating: 20 }, // cobertura suficiente para medir
   })
   // demanda 20*log10(10001)≈80 · competencia 60 · calidad (4.4-4)/0.9*100≈44 · full 90
   assert.equal(r.componentes.demanda, 80)
