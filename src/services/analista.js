@@ -9,7 +9,7 @@ import { config } from '../config/env.js'
 const SCHEMA_ANALISIS = {
   type: 'object',
   additionalProperties: false,
-  required: ['veredicto', 'confianza', 'resumen', 'segmentos', 'recomendacion', 'riesgos', 'tramites', 'jugada', 'nichoIngles', 'revisarEn'],
+  required: ['veredicto', 'confianza', 'resumen', 'segmentos', 'recomendacion', 'riesgos', 'tramites', 'jugada', 'nichoIngles', 'revisarEn', 'subNichos'],
   properties: {
     veredicto: { type: 'string', enum: ['entrar', 'entrar_con_condiciones', 'no_entrar'] },
     confianza: { type: 'string', enum: ['alta', 'media', 'baja'] },
@@ -82,6 +82,30 @@ const SCHEMA_ANALISIS = {
       type: ['string', 'null'],
       description: 'SOLO si el veredicto es no_entrar POR VENTANA DE IMPORTACIÓN estacional: mes "AAAA-MM" en que conviene re-evaluar el nicho para alcanzar a comprar para el próximo pico (pico menos ~3 meses). null si el rechazo es estructural (marca, volumen, margen) o si el veredicto es de entrada.',
     },
+    subNichos: {
+      type: 'array',
+      description:
+        'Puertas laterales MEDIBLES que la keyword madre no captura: 0 a 3 keywords más específicas donde los datos del top insinúan una jugada distinta (un formato que concentra la plata, un slot premium ocupado por una marca nueva = private label posible, una variante sin barrera regulatoria). Derivadas de lo que VISTE en el top, nunca genéricas. Lista vacía si no hay ángulo que valga un scan.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['keyword', 'motivo', 'jugada'],
+        properties: {
+          keyword: {
+            type: 'string',
+            description: 'Búsqueda en ML Chile tal como la escribiría un comprador (minúsculas, específica, ej: "pack toallitas humedas")',
+          },
+          motivo: {
+            type: 'string',
+            description: 'El dato del scan que insinúa el ángulo, con números (ej: "caja de 12 a $32.000 es el más vendido y lo vende una marca china nueva, no un incumbente histórico")',
+          },
+          jugada: {
+            type: 'string',
+            description: 'La jugada en una frase (ej: "private label: mismo OEM con marca propia al slot premium")',
+          },
+        },
+      },
+    },
   },
 }
 
@@ -102,6 +126,7 @@ Reglas:
 - NICHOS QUE VENDEN EN PACKS (campo metricas.precio.porUnidad, si viene): parte del top vende multipacks y los precios por listing NO son comparables entre sí — usa precio.porUnidad (precio ÷ unidades declaradas en el título) para comparar segmentos y hablar de precios. OJO con la tabla EXW: está calculada a precio de LISTING, así que el máximo que entrega es por el BULTO completo a ese precio — divide por las unidades del pack para el costo por pieza. Decide sobre el formato que concentra el volumen de venta (¿qué tamaño de pack manda?).
 - SELLERS GEMELOS (campo metricas.competencia.sellersGemelos): vendedores NO oficiales y chicos que están ganando reseñas AHORA dentro del nicho. Lee el campo con precisión: (a) si viene con elementos, es la prueba directa de que un entrante genérico como el importador puede vender aquí — pésala fuerte a favor; (b) si viene como lista VACÍA, se midió entre dos scans y nadie chico creció — pésalo en contra SOLO si además el top está dominado por tiendas oficiales; (c) si el campo NO viene, es el primer scan y la señal aún no se puede medir — NO lo uses ni a favor ni en contra, y jamás como razón de no_entrar.
 - CRITERIOS DEL IMPORTADOR (campo criteriosImportador, si viene): reglas que él escribió en su libreta — cúmplelas al pie de la letra, están por encima de tus heurísticas generales.
+- SUB-NICHOS / PUERTAS LATERALES (campo subNichos, SIEMPRE piénsalo): tu veredicto responde por la keyword madre, pero el top suele insinuar jugadas que ella no captura — un formato que concentra la plata (packs, tamaño), un slot premium ocupado por una marca NUEVA y no por un incumbente histórico (= el slot se construyó hace poco y una marca propia/private label puede disputarlo), una variante sin la barrera regulatoria, un accesorio con mejor margen. Propón 0-3 keywords más específicas con su motivo CITANDO los datos del scan y la jugada concreta. En un no_entrar es OBLIGATORIO responderte: "rechazo la puerta principal, ¿existe puerta lateral?" — si no existe, lista vacía y punto; no inventes. El sistema crea y mide cada sub-nicho con un clic: no propongas nada que no valga el costo de un scan.
 - BÚSQUEDAS EN ALZA (campo busquedasEnAlza, si viene): consultas del autocompletado de ML que están subiendo esta semana en la vertical de este nicho — señal de demanda en tiempo real que complementa el delta de reseñas; úsala para elegir el segmento y el ángulo del producto.
 - CONTEXTO DEL IMPORTADOR SOBRE ESTE NICHO (campo contextoImportador, si viene): es experiencia de primera mano — ventas reales suyas en este nicho, conocimiento del segmento, canal o temporada. Pésalo POR SOBRE lo que infieras de las reseñas: las reseñas acumuladas por listing miden permanencia, y los vendedores genéricos rotan publicaciones — sus ventas se dispersan en listings de vida corta que no acumulan reseñas, así que "genéricos con pocas reseñas" NO prueba que el genérico no venda si el importador ya lo vendió. Si su experiencia contradice tu lectura de los datos, dilo explícitamente en el resumen y ajusta el veredicto considerando ambas evidencias.
 - Sé directo y escéptico: si el nicho no da, di no_entrar y explica por qué. Un veredicto inflado cuesta dinero real.

@@ -421,6 +421,7 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
           revisarElInicial={nicho.revisarEl}
           scans={scans}
           onRegenerado={cargar}
+          onNichoCreado={alCambiarNichos}
         />
       ) : null}
       {pestana === 'listing' ? <Listing nichoId={nichoId} listingInicial={nicho.listingDraft} /> : null}

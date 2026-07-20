@@ -91,7 +91,55 @@ function RevisionTemporada({ nichoId, revisarElInicial }) {
   )
 }
 
-export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElInicial, scans, onRegenerado }) {
+// Puertas laterales que el analista propone cuando la keyword madre no captura
+// la jugada (formato, private label, variante sin barrera): un clic crea el
+// nicho y el sistema lo mide de verdad.
+function SubNichos({ subNichos, onNichoCreado }) {
+  const [estados, setEstados] = useState({})
+  if (!subNichos?.length) return null
+
+  async function medir(kw) {
+    setEstados((e) => ({ ...e, [kw]: 'creando' }))
+    try {
+      await api.crearNicho(kw)
+      setEstados((e) => ({ ...e, [kw]: 'creado' }))
+      onNichoCreado?.()
+    } catch (err) {
+      setEstados((e) => ({ ...e, [kw]: `error: ${err.message}` }))
+    }
+  }
+
+  return (
+    <section className="sub-nichos">
+      <h3>🚪 Puertas laterales que la IA propone medir</h3>
+      {subNichos.map((s) => (
+        <div className="sub-nicho" key={s.keyword}>
+          <div className="sub-nicho-cab">
+            <strong>{s.keyword}</strong>
+            <span className="sub-nicho-jugada">{s.jugada}</span>
+          </div>
+          <p className="sub-nicho-motivo">{s.motivo}</p>
+          {estados[s.keyword] === 'creado' ? (
+            <span className="sub-nicho-ok">✓ midiendo — el nicho aparece en el sidebar y su primer scan toma unos minutos</span>
+          ) : (
+            <button
+              className="boton-secundario"
+              disabled={estados[s.keyword] === 'creando'}
+              onClick={() => medir(s.keyword)}
+            >
+              {estados[s.keyword] === 'creando' ? 'Creando…' : 'Medir este sub-nicho →'}
+            </button>
+          )}
+          {String(estados[s.keyword] ?? '').startsWith('error') ? (
+            <p className="error-bloque">{estados[s.keyword]}</p>
+          ) : null}
+        </div>
+      ))}
+    </section>
+  )
+}
+
+export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElInicial, scans, onRegenerado, onNichoCreado }) {
   const [analisis, setAnalisis] = useState(analisisInicial ?? null)
   const [generando, setGenerando] = useState(false)
   const [error, setError] = useState(null)
@@ -185,6 +233,8 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
         ) : null}
         {error ? <p className="error-bloque">{error}</p> : null}
       </div>
+
+      <SubNichos subNichos={analisis.subNichos} onNichoCreado={onNichoCreado} />
 
       <ContextoImportador nichoId={nichoId} contextoInicial={contextoInicial} />
 
