@@ -317,7 +317,7 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
     )
   }
 
-  const { nicho, reporte } = datos
+  const { nicho, reporte, scans } = datos
 
   async function alternarLupa() {
     const nueva = nicho.frecuenciaScan === 'diario' ? 'semanal' : 'diario'
@@ -343,7 +343,12 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
   const pestanas = [
     ['resumen', 'Resumen'],
     ['productos', productos ? `Productos (${productos.total})` : 'Productos'],
-    ['analisis', reporte.analisis ? `Análisis: ${reporte.analisis.veredicto?.replace(/_/g, ' ')}` : 'Análisis IA'],
+    [
+      'analisis',
+      reporte.analisis
+        ? `Análisis: ${reporte.analisis.veredicto?.replace(/_/g, ' ')}${scans?.trasAnalisis ? ' ⚠' : ''}`
+        : 'Análisis IA',
+    ],
     ['listing', nicho.listingDraft ? 'Listing ✓' : 'Listing'],
     ['simulador', 'Simulador'],
   ]
@@ -355,6 +360,7 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
           <h2>{nicho.keyword}</h2>
           <p className="reporte-fecha">
             Último scan: {fmtFecha(reporte.fecha)}
+            {scans?.total ? ` · scan N°${scans.total}` : ''}
             {escaneando ? ' · escaneando…' : ''}
           </p>
         </div>
@@ -413,6 +419,8 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
           analisisInicial={reporte.analisis}
           contextoInicial={nicho.contextoUsuario}
           revisarElInicial={nicho.revisarEl}
+          scans={scans}
+          onRegenerado={cargar}
         />
       ) : null}
       {pestana === 'listing' ? <Listing nichoId={nichoId} listingInicial={nicho.listingDraft} /> : null}

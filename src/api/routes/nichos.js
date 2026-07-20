@@ -167,15 +167,28 @@ router.get(
     }
 
     // un scan nuevo crea un reporte sin análisis: entregar el último análisis
-    // disponible del nicho mientras no exista uno más fresco
+    // disponible del nicho mientras no exista uno más fresco — y registrar de
+    // QUÉ scan salió, para avisar en la UI cuando quedó desactualizado
+    let analisisDe = reporte.analisis ? reporte.fecha : null
     if (!reporte.analisis) {
       const conAnalisis = await Reporte.findOne({ nichoId: nicho._id, analisis: { $ne: null } })
         .sort({ fecha: -1 })
         .lean()
-      if (conAnalisis) reporte.analisis = conAnalisis.analisis
+      if (conAnalisis) {
+        reporte.analisis = conAnalisis.analisis
+        analisisDe = conAnalisis.fecha
+      }
     }
 
+    // conteo de scans y cuántos llegaron DESPUÉS del análisis mostrado: la señal
+    // de "hay data nueva que el veredicto no vio, regenera"
+    const totalScans = await Reporte.countDocuments({ nichoId: nicho._id })
+    const trasAnalisis = analisisDe
+      ? await Reporte.countDocuments({ nichoId: nicho._id, fecha: { $gt: analisisDe } })
+      : 0
+
     res.json({
+      scans: { total: totalScans, trasAnalisis, analisisDe },
       nicho: {
         id: nicho._id,
         keyword: nicho.keyword,

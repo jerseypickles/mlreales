@@ -91,7 +91,7 @@ function RevisionTemporada({ nichoId, revisarElInicial }) {
   )
 }
 
-export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElInicial }) {
+export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElInicial, scans, onRegenerado }) {
   const [analisis, setAnalisis] = useState(analisisInicial ?? null)
   const [generando, setGenerando] = useState(false)
   const [error, setError] = useState(null)
@@ -102,6 +102,9 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
     try {
       const { analisis: nuevo } = await api.analizarNicho(nichoId)
       setAnalisis(nuevo)
+      // refrescar el conteo de scans en la vista padre: el aviso de "análisis
+      // desactualizado" se apaga recién cuando el servidor confirma
+      onRegenerado?.()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -131,6 +134,20 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
 
   return (
     <div className="analisis">
+      {/* el veredicto que estás leyendo, ¿vio el último scan o quedó atrás? */}
+      {scans?.trasAnalisis > 0 ? (
+        <div className="analisis-desfase">
+          ⚠️ Este veredicto se generó con el scan del <strong>{fmtFecha(scans.analisisDe)}</strong> y no
+          vio {scans.trasAnalisis === 1 ? 'el scan más nuevo' : `los ${scans.trasAnalisis} scans más nuevos`} —
+          hay deltas de reseñas, sellers gemelos y precios frescos que no están reflejados. Dale{' '}
+          <strong>Regenerar</strong> para incorporarlos.
+        </div>
+      ) : scans?.total ? (
+        <p className="analisis-al-dia">
+          ✓ Al día con el último scan · {scans.total} scan{scans.total === 1 ? '' : 's'} acumulado
+          {scans.total === 1 ? '' : 's'}
+        </p>
+      ) : null}
       {/* ---- LA DECISIÓN ---- */}
       <div className={`decision decision-${analisis.veredicto}`}>
         <div className="decision-fila">

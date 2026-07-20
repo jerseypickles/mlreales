@@ -2934,3 +2934,21 @@ section {
 .desglose tr.total.mal td:last-child {
   color: var(--peligro);
 }
+
+/* ── Señal de análisis desactualizado vs scans nuevos ────────────────── */
+
+.analisis-desfase {
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  background: var(--avisa-tenue);
+  color: var(--avisa-tinta);
+  border: 1px solid color-mix(in srgb, var(--avisa-tinta) 30%, transparent);
+  border-radius: var(--radio);
+  font-size: 13px;
+}
+
+.analisis-al-dia {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--exito-tinta);
+}
