@@ -8,6 +8,7 @@ import { normalizarScan } from '../services/normalizador.js'
 import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
 import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
 import { generarReporteNicho } from '../services/metricas.js'
+import { scoring } from '../config/scoring.js'
 import { analizarNicho } from '../services/analista.js'
 import { sugerirNichos, palabrasSaturadas } from '../services/sugeridor.js'
 import { keywordReal, palabrasClave } from '../services/busquedasReales.js'
@@ -151,13 +152,17 @@ export async function procesarScanDetalle(job) {
     void res
   }
 
-  // medir casi nada equivale a no medir: mejor reintentar (el bloqueo de ML es
-  // temporal) que dar por bueno un scan cuya demanda saldría de 1-2 productos
+  // medir casi nada equivale a no medir — y medir MENOS de lo que el score
+  // exige (minItemsDemanda) deja al nicho en un limbo silencioso: score null,
+  // sin análisis, invisible en Oportunidades hasta el próximo scan (caso gua
+  // sha / rodillo facial: 4/10 con match pasaba como "éxito"). El piso es lo
+  // necesario para puntuar; bajo eso se reintentan solo las URLs faltantes.
   const totalConDetalle = yaMedidos.size + aplicados
-  const minimoAplicados = Math.max(1, Math.ceil(objetivos.length * 0.2))
+  const minimoParaPuntuar = Math.min(objetivos.length, scoring.umbrales.minItemsDemanda)
+  const minimoAplicados = Math.max(1, Math.ceil(objetivos.length * 0.2), minimoParaPuntuar)
   if (totalConDetalle < minimoAplicados) {
     throw new Error(
-      `Nivel 2 quedó corto (${totalConDetalle}/${objetivos.length} con detalle, mínimo ${minimoAplicados}; esta pasada aplicó ${aplicados} de ${pendientes.length}; ${fallidos} fallidos, ${sinMatch} sin match de SKU): probable bloqueo de ML`,
+      `Nivel 2 quedó corto (${totalConDetalle}/${objetivos.length} con detalle, mínimo ${minimoAplicados} para poder puntuar; esta pasada aplicó ${aplicados} de ${pendientes.length}; ${fallidos} fallidos, ${sinMatch} sin match de SKU): probable bloqueo de ML o exceso de páginas de catálogo`,
     )
   }
 
