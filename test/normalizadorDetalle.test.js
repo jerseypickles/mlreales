@@ -84,3 +84,23 @@ test('indexarDetallesPorSku sourabhbgp: matchea por ID de variante', () => {
   assert.equal(sinMatch, 0)
   assert.ok(porSku.get('MLC62124281'))
 })
+
+test('indexarDetallesPorSku: página /up/ con sku MLCU casa por la URL pedida (caso gua sha)', () => {
+  // el actor devuelve el user-product id (MLCU…) pero el snapshot conoce el
+  // item id (MLC…): el puente es el código MLCU embebido en la URL que pedimos
+  const crudo = { mode: 'product', sku: 'MLCU717263875', title: 'ice roller gua sha', price: 5990, ratingCount: 120 }
+  const objetivos = [
+    { sku: 'MLC2678282136', url: 'https://www.mercadolibre.cl/ice-roller-gua-sha-rodillo/up/MLCU717263875' },
+  ]
+  const { porSku, sinMatch } = indexarDetallesPorSku([crudo], objetivos)
+  assert.equal(sinMatch, 0)
+  assert.ok(porSku.has('MLC2678282136'))
+  assert.equal(porSku.get('MLC2678282136').numReviews, 120)
+})
+
+test('indexarDetallesPorSku: sigue aceptando lista de skus planos (compat)', () => {
+  const crudo = { mode: 'product', sku: 'MLC111222333', title: 'x', price: 1000, ratingCount: 5 }
+  const { porSku, sinMatch } = indexarDetallesPorSku([crudo], ['MLC111222333'])
+  assert.equal(sinMatch, 0)
+  assert.ok(porSku.has('MLC111222333'))
+})

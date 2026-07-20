@@ -144,7 +144,7 @@ export async function procesarScanDetalle(job) {
       fallidos += batch.length
       continue
     }
-    const { porSku, sinMatch: sm } = indexarDetallesPorSku(crudos, skusPedidos)
+    const { porSku, sinMatch: sm } = indexarDetallesPorSku(crudos, pendientes)
     sinMatch += sm
     // diagnóstico de match bajo (nichos de catálogo tipo gua sha / rodillo
     // facial): dejar en el log los campos identificatorios de un crudo sin

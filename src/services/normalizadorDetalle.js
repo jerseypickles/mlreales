@@ -122,9 +122,27 @@ export function normalizarItemDetalle(raw) {
   }
 }
 
-// Indexa resultados del actor por SKU nuestro (a partir de los candidatos).
-export function indexarDetallesPorSku(rawItems, skusPedidos) {
-  const pedidos = new Set(skusPedidos)
+// Las páginas /up/ ("user products", formato nuevo de ML) devuelven sku=MLCU…
+// mientras nuestro snapshot conoce el producto por su item id MLC…: dos
+// namespaces sin intersección. El puente es la URL que NOSOTROS pedimos — el
+// código MLCU va dentro de ella (caso gua sha / rodillo facial, 7/10 sin match).
+export function idDesdeUrl(url) {
+  const m = String(url ?? '').match(/MLC[A-Z]?-?\d{6,}/)
+  return m ? m[0].replace('-', '') : null
+}
+
+// Indexa resultados del actor por SKU nuestro. Acepta la lista de objetivos
+// {sku, url} (preferido: habilita el match por URL) o solo skus (compat).
+export function indexarDetallesPorSku(rawItems, objetivos) {
+  const lista = (objetivos ?? []).map((o) => (typeof o === 'string' ? { sku: o, url: null } : o))
+  const pedidos = new Set(lista.map((o) => o.sku))
+  // id embebido en la URL pedida → sku nuestro (solo cuando difieren)
+  const porIdDeUrl = new Map()
+  for (const o of lista) {
+    const id = idDesdeUrl(o.url)
+    if (id && !pedidos.has(id)) porIdDeUrl.set(id, o.sku)
+  }
+
   const porSku = new Map()
   let sinMatch = 0
   for (const raw of rawItems ?? []) {
@@ -133,7 +151,14 @@ export function indexarDetallesPorSku(rawItems, skusPedidos) {
       sinMatch++
       continue
     }
-    const sku = det.skusCandidatos.find((c) => pedidos.has(c))
+    const candidatos = [...det.skusCandidatos]
+    const idUrlCrudo = idDesdeUrl(raw?.url ?? raw?.productUrl)
+    if (idUrlCrudo) candidatos.push(idUrlCrudo)
+    let sku = candidatos.find((c) => pedidos.has(c))
+    if (!sku) {
+      const puente = candidatos.find((c) => porIdDeUrl.has(c))
+      if (puente) sku = porIdDeUrl.get(puente)
+    }
     if (!sku) {
       sinMatch++
       continue
