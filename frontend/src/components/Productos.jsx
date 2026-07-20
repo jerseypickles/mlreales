@@ -6,13 +6,39 @@ import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 import { Planilla } from './Planilla.jsx'
 import { COLUMNAS_PRODUCTO } from './PlanillaGlobal.jsx'
 
-const ORDENES = {
-  posicion: { etiqueta: 'Posición', fn: (a, b) => (a.posicion ?? Infinity) - (b.posicion ?? Infinity) },
-  precioAsc: { etiqueta: 'Precio ↑', fn: (a, b) => (a.precio ?? Infinity) - (b.precio ?? Infinity) },
-  precioDesc: { etiqueta: 'Precio ↓', fn: (a, b) => (b.precio ?? -1) - (a.precio ?? -1) },
-  reviews: { etiqueta: 'Reseñas ↓', fn: (a, b) => (b.numReviews ?? -1) - (a.numReviews ?? -1) },
-  rating: { etiqueta: 'Rating ↓', fn: (a, b) => (b.rating ?? -1) - (a.rating ?? -1) },
-  descuento: { etiqueta: 'Descuento ↓', fn: (a, b) => (b.descuentoPct ?? -1) - (a.descuentoPct ?? -1) },
+// orden por columna con clic en el encabezado (nulos siempre al final);
+// posición parte ascendente, el resto parte con "más alto primero"
+function compararCampo(a, b, campo, dir) {
+  const va = a[campo]
+  const vb = b[campo]
+  const nuloA = !Number.isFinite(va)
+  const nuloB = !Number.isFinite(vb)
+  if (nuloA && nuloB) return 0
+  if (nuloA) return 1
+  if (nuloB) return -1
+  return (va - vb) * dir
+}
+
+// encabezado clicable: primer clic ordena (posición ↑, el resto ↓ = "más alto
+// primero"), segundo clic invierte — misma mecánica que la Planilla
+function ThOrden({ campo, orden, setOrden, children }) {
+  const activo = orden.campo === campo
+  return (
+    <th className="num">
+      <button
+        className="planilla-orden"
+        onClick={() =>
+          setOrden((o) =>
+            o.campo === campo ? { campo, dir: -o.dir } : { campo, dir: campo === 'posicion' ? 1 : -1 },
+          )
+        }
+        title="Ordenar por esta columna"
+      >
+        {children}
+        {activo ? (orden.dir === 1 ? ' ▲' : ' ▼') : ''}
+      </button>
+    </th>
+  )
 }
 
 function FilaProducto({ p, onAbrir }) {
@@ -166,7 +192,7 @@ export function Productos({ nichoId, keyword, onSimular }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [busqueda, setBusqueda] = useState('')
-  const [orden, setOrden] = useState('posicion')
+  const [orden, setOrden] = useState({ campo: 'posicion', dir: 1 })
   const [filtros, setFiltros] = useState({ full: false, oficial: false, cn: false, catalogo: false })
   const [abierto, setAbierto] = useState(null)
   const [modo, setModo] = useState('tabla') // 'tabla' | 'planilla'
@@ -196,7 +222,7 @@ export function Productos({ nichoId, keyword, onSimular }) {
         if (filtros.catalogo && p.tipoListing !== 'catalogo') return false
         return true
       })
-      .sort(ORDENES[orden].fn)
+      .sort((a, b) => compararCampo(a, b, orden.campo, orden.dir))
   }, [datos, busqueda, orden, filtros])
 
   if (error) return <p className="error-bloque">{error}</p>
@@ -252,16 +278,6 @@ export function Productos({ nichoId, keyword, onSimular }) {
           {chip('cn', 'Desde China', 'Solo cross-border (competencia directa de importación)')}
           {chip('catalogo', 'Catálogo', 'Solo publicaciones de catálogo')}
         </div>
-        <label className="orden">
-          Ordenar
-          <select value={orden} onChange={(e) => setOrden(e.target.value)}>
-            {Object.entries(ORDENES).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v.etiqueta}
-              </option>
-            ))}
-          </select>
-        </label>
         <span className="conteo">
           {visibles.length} de {datos.total}
         </span>
@@ -277,13 +293,13 @@ export function Productos({ nichoId, keyword, onSimular }) {
         <table>
           <thead>
             <tr>
-              <th className="num">#</th>
+              <ThOrden campo="posicion" orden={orden} setOrden={setOrden}>#</ThOrden>
               <th aria-label="imagen" />
               <th>Producto</th>
-              <th className="num">Precio</th>
-              <th className="num">Desc.</th>
-              <th className="num">Rating</th>
-              <th className="num">Reseñas</th>
+              <ThOrden campo="precio" orden={orden} setOrden={setOrden}>Precio</ThOrden>
+              <ThOrden campo="descuentoPct" orden={orden} setOrden={setOrden}>Desc.</ThOrden>
+              <ThOrden campo="rating" orden={orden} setOrden={setOrden}>Rating</ThOrden>
+              <ThOrden campo="numReviews" orden={orden} setOrden={setOrden}>Reseñas</ThOrden>
               <th>Vendedor</th>
               <th>Flags</th>
               <th aria-label="enlace" />
