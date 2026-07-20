@@ -101,7 +101,9 @@ export async function generarRfqPendientes() {
     1,
   )}`
 
-  const { datos, costoUsd } = await pedirJSON({ system: SYSTEM_RFQ, user, schema: SCHEMA_RFQ, maxTokens: 6000 })
+  // el tablero completo con specs + unidad supera cómodo los 6k tokens de
+  // salida cuando hay ~40 nichos: techo holgado o la respuesta llega truncada
+  const { datos, costoUsd } = await pedirJSON({ system: SYSTEM_RFQ, user, schema: SCHEMA_RFQ, maxTokens: 16000 })
   const porKeyword = new Map(datos.items.map((i) => [ecoKeyword(i.keyword), i]))
 
   let generados = 0

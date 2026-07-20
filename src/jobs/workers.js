@@ -146,6 +146,23 @@ export async function procesarScanDetalle(job) {
     }
     const { porSku, sinMatch: sm } = indexarDetallesPorSku(crudos, skusPedidos)
     sinMatch += sm
+    // diagnóstico de match bajo (nichos de catálogo tipo gua sha / rodillo
+    // facial): dejar en el log los campos identificatorios de un crudo sin
+    // aplicar para poder ver POR QUÉ no calza contra los SKUs pedidos
+    if (sm > batch.length / 2 && crudos?.length) {
+      const c = crudos.find((x) => x) ?? {}
+      console.warn(
+        `[scan-detalle] match bajo (${sm}/${batch.length} sin match) — muestra: ${JSON.stringify({
+          id: c.id ?? null,
+          productId: c.productId ?? null,
+          catalogProductId: c.catalogProductId ?? null,
+          sku: c.sku ?? null,
+          variations: Array.isArray(c.variations) ? c.variations.slice(0, 3).map((v) => v?.id ?? v) : null,
+          url: String(c.url ?? c.productUrl ?? '').slice(0, 110),
+          pedidos: skusPedidos.slice(0, 3),
+        })}`,
+      )
+    }
     const res = await aplicarDetalleScan({ porSku, fecha })
     aplicados += porSku.size
     await job.updateProgress(Math.round(((i + batch.length) / pendientes.length) * 100))
