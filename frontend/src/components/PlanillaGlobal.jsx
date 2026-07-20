@@ -564,7 +564,9 @@ function PlanillaIA({ onAbrirNicho }) {
   const filtroTab = TABS_ETAPA.find(([clave]) => clave === tab)?.[2] ?? (() => true)
   const filas = fusionarCompras(datos.oportunidades.filter((o) => filtroTab(o.etapaCompra)))
   const todasLasFilas = fusionarCompras(datos.oportunidades)
-  const conteoEtapa = (fn) => datos.oportunidades.filter((o) => fn(o.etapaCompra)).length
+  // las pastillas cuentan COMPRAS (filas fusionadas), igual que la tabla:
+  // dos nichos unidos en una compra son 1, no 2
+  const conteoEtapa = (fn) => fusionarCompras(datos.oportunidades.filter((o) => fn(o.etapaCompra))).length
   const filaDetalle = detalleId
     ? todasLasFilas.find((f) => (f.nichoIds ?? [f.nichoId]).includes(detalleId)) ?? null
     : null
