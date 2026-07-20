@@ -193,6 +193,7 @@ router.get(
         nichoIngles: n.rfq?.nichoIngles ?? analisis.nichoIngles ?? null,
         productoIngles: n.rfq?.productoIngles ?? rec.productoIngles ?? null,
         productoClave: n.rfq?.productoClave ?? null,
+        unidadPedido: n.rfq?.unidadPedido ?? null,
         unidadesPrueba,
         especificacionProducto: n.rfq?.especificacion ?? rec.especificacionProducto ?? null,
         comoValidar: rec.comoValidar ?? null,

@@ -17,7 +17,7 @@ const SCHEMA_RFQ = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['keyword', 'nicho', 'producto', 'especificacion', 'productoClave'],
+        required: ['keyword', 'nicho', 'producto', 'especificacion', 'productoClave', 'unidadPedido'],
         properties: {
           keyword: { type: 'string', description: 'La keyword original, tal cual se entregó, para emparejar' },
           nicho: { type: 'string', description: 'Nombre del nicho en inglés comercial de Alibaba, 2-4 palabras (ej: "solar garden fountain")' },
@@ -30,6 +30,11 @@ const SCHEMA_RFQ = {
             type: 'string',
             description: 'Clave canónica del producto físico en inglés, minúsculas y kebab-case (ej: "ipl-hair-removal-device"). Dos nichos que se surten con EL MISMO producto de fábrica llevan EXACTAMENTE la misma clave aunque sus keywords de venta difieran; productos distintos, claves distintas.',
           },
+          unidadPedido: {
+            type: 'string',
+            description:
+              'La unidad física en la que se PIDE y COTIZA, en inglés y explícita con su contenido (ej: "master case (12 packs × 80 wipes)", "set of 2", "unit"). La Qty y el target price de la hoja se expresan en esta unidad — si el análisis recomienda comprar cajas, la unidad es la caja con su contenido detallado, jamás dejar que el proveedor adivine.',
+          },
         },
       },
     },
@@ -39,6 +44,8 @@ const SCHEMA_RFQ = {
 const SYSTEM_RFQ = `Preparas una hoja de cotización (RFQ) para proveedores chinos a partir de recomendaciones de un analista de e-commerce.
 
 Para cada ítem entrega nicho y producto en inglés comercial (como se busca en Alibaba/1688) y una especificación LIMPIA: solo los atributos físicos y técnicos que el proveedor necesita para cotizar — potencia, medidas, capacidad, materiales, accesorios incluidos, enchufe 220V Chile si es eléctrico, empaque. NADA de contexto de mercado, precios, marcas de competidores ni consejos de validación. TODO en inglés al 100%: ni una palabra en español en nicho, producto o especificación (el proveedor no lee español). Corto, directo, cotizable.
+
+UNIDAD DE PEDIDO: cada ítem declara unidadPedido — la unidad física en que se pide y cotiza, con su contenido explícito. En productos que se venden por bulto (cajas, packs, sets) la cantidad y el precio SIEMPRE se malinterpretan si la unidad no está escrita: "650" sin unidad puede ser bolsas, packs o cajas. Sé quirúrgico.
 
 DETECCIÓN DE COMPRA DUPLICADA: recibes todos los nichos juntos a propósito. Si dos o más nichos se surten con el mismo producto físico de fábrica (distintas keywords de venta en Mercado Libre, un solo ítem que comprar en China), asígnales exactamente la misma productoClave — así el sistema los fusiona en una sola línea de cotización. Sé estricto: misma clave solo si un mismo pedido de fábrica sirve para ambos listings.`
 
@@ -71,6 +78,7 @@ export async function generarRfqPendientes() {
     const vigente =
       n.rfq?.desdeAnalisis &&
       n.rfq?.productoClave &&
+      n.rfq?.unidadPedido &&
       new Date(n.rfq.desdeAnalisis).getTime() >= fechaAnalisis.getTime()
     if (!vigente) hayPendientes = true
     candidatos.push({ nicho: n, analisis, fechaAnalisis })
@@ -86,6 +94,8 @@ export async function generarRfqPendientes() {
       titular: p.analisis.recomendacion?.titular ?? null,
       segmento: p.analisis.recomendacion?.segmento ?? null,
       especificacionOriginal: p.analisis.recomendacion?.especificacionProducto ?? null,
+      // el pedido de prueba del análisis nombra la unidad real ("300-500 cajas")
+      pedidoDePrueba: p.analisis.recomendacion?.primeraCompra ?? null,
     })),
     null,
     1,
@@ -112,6 +122,7 @@ export async function generarRfqPendientes() {
           productoIngles: item.producto,
           especificacion: item.especificacion,
           productoClave: clavePropia(item.productoClave),
+          unidadPedido: item.unidadPedido?.trim() || 'unit',
           desdeAnalisis: p.fechaAnalisis,
           generadoEl: new Date(),
           ...(claveManual ? { claveManual: true } : {}),
@@ -121,6 +132,7 @@ export async function generarRfqPendientes() {
           productoIngles: rec.productoIngles ?? null,
           especificacion: rec.especificacionProducto ?? null,
           productoClave: clavePropia(null),
+          unidadPedido: 'unit',
           desdeAnalisis: p.fechaAnalisis,
           generadoEl: new Date(),
           sinEco: true,

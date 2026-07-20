@@ -636,11 +636,22 @@ function PlanillaIA({ onAbrirNicho }) {
       csv: (o) => o.unidadesPrueba ?? o.primeraCompra ?? null,
     },
     {
+      // en productos de bulto, la Qty sin unidad se malinterpreta seguro:
+      // esta columna dice EN QUÉ se pide y cotiza ("master case (12 packs × 80 wipes)")
+      clave: 'unidadPedido',
+      titulo: 'Unit',
+      tipo: 'texto',
+      banda: 'proveedor',
+      anchoXlsx: 26,
+      render: (o) => o.unidadPedido ?? <span className="vacio">unit</span>,
+      csv: (o) => o.unidadPedido ?? 'unit',
+    },
+    {
       clave: 'exwObjetivoUsd',
-      titulo: 'Target USD',
+      titulo: 'Target USD / unit',
       tipo: 'numero',
       banda: 'proveedor',
-      anchoXlsx: 16,
+      anchoXlsx: 17,
       render: (o) => (o.exwObjetivoUsd != null ? `US$ ${o.exwObjetivoUsd}` : '—'),
     },
     {
@@ -651,7 +662,7 @@ function PlanillaIA({ onAbrirNicho }) {
       banda: 'proveedor',
       render: () => <span className="ghost-cell">EXW · MOQ · lead time</span>,
     },
-    { clave: 'exwUnitario', titulo: 'Your EXW price (USD)', tipo: 'texto', soloDescarga: true, anchoXlsx: 18 },
+    { clave: 'exwUnitario', titulo: 'Your EXW price / unit (USD)', tipo: 'texto', soloDescarga: true, anchoXlsx: 20 },
     { clave: 'moq', titulo: 'MOQ', tipo: 'texto', soloDescarga: true, anchoXlsx: 10 },
     { clave: 'tiempoProduccion', titulo: 'Production time (days)', tipo: 'texto', soloDescarga: true, anchoXlsx: 18 },
     { clave: 'linkProducto', titulo: 'Product link / photos', tipo: 'texto', soloDescarga: true, anchoXlsx: 30 },
@@ -724,7 +735,7 @@ function PlanillaIA({ onAbrirNicho }) {
       <tr>
         <td colSpan={3}>{visibles.length} producto(s) en esta etapa</td>
         <td colSpan={2} className="num"><span className="dato">{unidades.toLocaleString('es-CL')}</span> unidades</td>
-        <td colSpan={2}>inversión estimada <span className="dato">US$ {Math.round(inversion).toLocaleString('es-CL')}</span></td>
+        <td colSpan={3}>inversión estimada <span className="dato">US$ {Math.round(inversion).toLocaleString('es-CL')}</span></td>
         <td colSpan={3}>
           {margenProm != null ? (
             <>margen promedio de lo cotizado <span className="dato ok">{margenProm}%</span></>
