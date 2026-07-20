@@ -313,6 +313,7 @@ function DetalleProducto({ fila, otras = [], onCerrar, onCambiada, onAbrirNicho 
   const [avanzando, setAvanzando] = useState(false)
   const [unirCon, setUnirCon] = useState('')
   const [uniendo, setUniendo] = useState(false)
+  const [errorCompra, setErrorCompra] = useState(null)
   if (!fila) return null
   const c = fila.cotizacion
   const siguiente = SIGUIENTE_ETAPA[fila.etapaCompra ?? 'evaluando']
@@ -330,12 +331,18 @@ function DetalleProducto({ fila, otras = [], onCerrar, onCambiada, onAbrirNicho 
   // unir/separar compras: la clave manual manda sobre el juicio del acotador
   async function unir() {
     const otra = otras.find((o) => o.nichoId === unirCon)
-    if (!otra) return
+    if (!otra) {
+      setErrorCompra('Primero elige en el selector con qué compra unir.')
+      return
+    }
     setUniendo(true)
+    setErrorCompra(null)
     try {
       await api.unirCompras([...(fila.nichoIds ?? [fila.nichoId]), ...(otra.nichoIds ?? [otra.nichoId])])
       setUnirCon('')
       await onCambiada()
+    } catch (err) {
+      setErrorCompra(`No se pudo unir: ${err.message}`)
     } finally {
       setUniendo(false)
     }
@@ -343,9 +350,12 @@ function DetalleProducto({ fila, otras = [], onCerrar, onCambiada, onAbrirNicho 
 
   async function separar() {
     setUniendo(true)
+    setErrorCompra(null)
     try {
       await api.separarCompra(fila.nichoIds ?? [fila.nichoId])
       await onCambiada()
+    } catch (err) {
+      setErrorCompra(`No se pudo separar: ${err.message}`)
     } finally {
       setUniendo(false)
     }
@@ -458,13 +468,14 @@ function DetalleProducto({ fila, otras = [], onCerrar, onCambiada, onAbrirNicho 
                     </option>
                   ))}
                 </select>
-                <button className="boton-secundario" onClick={unir} disabled={!unirCon || uniendo}>
+                <button className="boton-secundario" onClick={unir} disabled={uniendo}>
                   {uniendo ? 'Uniendo…' : '🔁 Unir'}
                 </button>
               </div>
             ) : (
               <p className="drawer-meta">No hay otras compras con las que unir.</p>
             )}
+            {errorCompra ? <p className="error-bloque">{errorCompra}</p> : null}
           </div>
         </div>
 
