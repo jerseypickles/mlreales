@@ -46,6 +46,8 @@ export const api = {
   oportunidades: (opts) => pedir(`/api/oportunidades${opts?.todos ? '?todos=1' : ''}`),
   generarRfq: () => pedir('/api/oportunidades/rfq', { method: 'POST' }),
   avanzarNichos: (nichoIds, etapa) => pedir('/api/oportunidades/avanzar', json({ nichoIds, etapa })),
+  unirCompras: (nichoIds) => pedir('/api/oportunidades/unir', json({ nichoIds })),
+  separarCompra: (nichoIds) => pedir('/api/oportunidades/separar', json({ nichoIds })),
   listarCriterios: () => pedir('/api/criterios'),
   crearCriterio: (texto) => pedir('/api/criterios', json({ texto })),
   ajustarCriterio: (id, cambios) => pedir(`/api/criterios/${id}`, { ...json(cambios), method: 'PATCH' }),

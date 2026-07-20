@@ -99,6 +99,11 @@ export async function generarRfqPendientes() {
   for (const p of pendientes) {
     const item = porKeyword.get(ecoKeyword(p.nicho.keyword))
     const rec = p.analisis.recomendacion ?? {}
+    // una clave fijada A MANO (unir/separar compras en la planilla) manda por
+    // sobre el juicio del LLM y sobrevive a cualquier regeneración
+    const claveManual = p.nicho.rfq?.claveManual === true
+    const clavePropia = (sugerida) =>
+      claveManual ? p.nicho.rfq.productoClave : sugerida?.trim() || claveRespaldo(p.nicho.keyword)
     // sin eco del LLM: caer a lo que traiga el análisis, con clave de respaldo
     // — el nicho sale igual del estado pendiente y el bucle no puede ocurrir
     const rfq = item
@@ -106,18 +111,20 @@ export async function generarRfqPendientes() {
           nichoIngles: item.nicho,
           productoIngles: item.producto,
           especificacion: item.especificacion,
-          productoClave: item.productoClave?.trim() || claveRespaldo(p.nicho.keyword),
+          productoClave: clavePropia(item.productoClave),
           desdeAnalisis: p.fechaAnalisis,
           generadoEl: new Date(),
+          ...(claveManual ? { claveManual: true } : {}),
         }
       : {
           nichoIngles: p.analisis.nichoIngles ?? null,
           productoIngles: rec.productoIngles ?? null,
           especificacion: rec.especificacionProducto ?? null,
-          productoClave: claveRespaldo(p.nicho.keyword),
+          productoClave: clavePropia(null),
           desdeAnalisis: p.fechaAnalisis,
           generadoEl: new Date(),
           sinEco: true,
+          ...(claveManual ? { claveManual: true } : {}),
         }
     if (!item) sinEco++
     await Nicho.updateOne({ _id: p.nicho._id }, { $set: { rfq } })

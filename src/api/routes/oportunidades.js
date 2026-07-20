@@ -11,7 +11,7 @@ import {
   exwObjetivo,
 } from '../../services/oportunidades.js'
 import { config } from '../../config/env.js'
-import { generarRfqPendientes } from '../../services/rfq.js'
+import { generarRfqPendientes, claveRespaldo } from '../../services/rfq.js'
 import { llmDisponible } from '../../services/llm.js'
 import { calcularMargen } from '../../services/margen.js'
 
@@ -228,6 +228,48 @@ router.post(
       avanzados++
     }
     res.json({ avanzados, etapa })
+  }),
+)
+
+// Unir compras a mano: nichos que se surten con el MISMO producto de fábrica
+// pero que el acotador dejó con claves distintas. La clave manual sobrevive a
+// cualquier regeneración del acotador (rfq.claveManual).
+router.post(
+  '/unir',
+  manejar(async (req, res) => {
+    const { nichoIds } = req.body ?? {}
+    if (!Array.isArray(nichoIds) || nichoIds.length < 2) {
+      return res.status(400).json({ error: 'se necesitan al menos 2 nichos para unir' })
+    }
+    const nichos = await Nicho.find({ _id: { $in: nichoIds } }).select('keyword rfq').lean()
+    if (nichos.length < 2) return res.status(404).json({ error: 'nichos no encontrados' })
+    const base = nichos.find((n) => n.rfq?.productoClave) ?? nichos[0]
+    const clave = base.rfq?.productoClave ?? claveRespaldo(base.keyword)
+    await Nicho.updateMany(
+      { _id: { $in: nichoIds } },
+      { $set: { 'rfq.productoClave': clave, 'rfq.claveManual': true } },
+    )
+    res.json({ unidos: nichos.length, productoClave: clave })
+  }),
+)
+
+// Separar una compra unida: cada nicho vuelve a su propia clave (derivada de
+// su keyword), también fijada como manual para que el acotador no re-fusione
+router.post(
+  '/separar',
+  manejar(async (req, res) => {
+    const { nichoIds } = req.body ?? {}
+    if (!Array.isArray(nichoIds) || !nichoIds.length) {
+      return res.status(400).json({ error: 'nichoIds requerido (lista no vacía)' })
+    }
+    const nichos = await Nicho.find({ _id: { $in: nichoIds } }).select('keyword').lean()
+    for (const n of nichos) {
+      await Nicho.updateOne(
+        { _id: n._id },
+        { $set: { 'rfq.productoClave': claveRespaldo(n.keyword), 'rfq.claveManual': true } },
+      )
+    }
+    res.json({ separados: nichos.length })
   }),
 )
 

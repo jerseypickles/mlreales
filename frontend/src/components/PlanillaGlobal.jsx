@@ -309,8 +309,10 @@ function EscaleraPrecios({ fila }) {
 
 // Panel lateral con el detalle completo del producto: análisis, escalera de
 // precios, desglose del margen y acciones — lo que antes saturaba la tabla.
-function DetalleProducto({ fila, onCerrar, onCambiada, onAbrirNicho }) {
+function DetalleProducto({ fila, otras = [], onCerrar, onCambiada, onAbrirNicho }) {
   const [avanzando, setAvanzando] = useState(false)
+  const [unirCon, setUnirCon] = useState('')
+  const [uniendo, setUniendo] = useState(false)
   if (!fila) return null
   const c = fila.cotizacion
   const siguiente = SIGUIENTE_ETAPA[fila.etapaCompra ?? 'evaluando']
@@ -322,6 +324,30 @@ function DetalleProducto({ fila, onCerrar, onCambiada, onAbrirNicho }) {
       await onCambiada()
     } finally {
       setAvanzando(false)
+    }
+  }
+
+  // unir/separar compras: la clave manual manda sobre el juicio del acotador
+  async function unir() {
+    const otra = otras.find((o) => o.nichoId === unirCon)
+    if (!otra) return
+    setUniendo(true)
+    try {
+      await api.unirCompras([...(fila.nichoIds ?? [fila.nichoId]), ...(otra.nichoIds ?? [otra.nichoId])])
+      setUnirCon('')
+      await onCambiada()
+    } finally {
+      setUniendo(false)
+    }
+  }
+
+  async function separar() {
+    setUniendo(true)
+    try {
+      await api.separarCompra(fila.nichoIds ?? [fila.nichoId])
+      await onCambiada()
+    } finally {
+      setUniendo(false)
     }
   }
 
@@ -404,6 +430,41 @@ function DetalleProducto({ fila, onCerrar, onCambiada, onAbrirNicho }) {
               <SelectorEtapa fila={fila} onCambiada={onCambiada} />
               <NotaEtapa fila={fila} onCambiada={onCambiada} />
             </div>
+          </div>
+
+          <div className="drawer-seccion">
+            <h4>Compra</h4>
+            {fila.nichosDelGrupo ? (
+              <>
+                <p className="drawer-meta">
+                  🔁 Una sola compra de fábrica para: {fila.nichosDelGrupo.join(' + ')}
+                </p>
+                <button className="boton-secundario" onClick={separar} disabled={uniendo}>
+                  {uniendo ? 'Separando…' : 'Separar en compras distintas'}
+                </button>
+              </>
+            ) : otras.length ? (
+              <div className="drawer-linea">
+                <select
+                  className="selector-etapa"
+                  value={unirCon}
+                  onChange={(e) => setUnirCon(e.target.value)}
+                  aria-label="Unir con otra compra"
+                >
+                  <option value="">Unir con… (misma caja de fábrica)</option>
+                  {otras.map((o) => (
+                    <option key={o.nichoId} value={o.nichoId}>
+                      {o.productoIngles ?? o.keyword}
+                    </option>
+                  ))}
+                </select>
+                <button className="boton-secundario" onClick={unir} disabled={!unirCon || uniendo}>
+                  {uniendo ? 'Uniendo…' : '🔁 Unir'}
+                </button>
+              </div>
+            ) : (
+              <p className="drawer-meta">No hay otras compras con las que unir.</p>
+            )}
           </div>
         </div>
 
@@ -702,6 +763,7 @@ function PlanillaIA({ onAbrirNicho }) {
       </div>
       <DetalleProducto
         fila={filaDetalle}
+        otras={todasLasFilas.filter((f) => f.nichoId !== filaDetalle?.nichoId)}
         onCerrar={() => setDetalleId(null)}
         onCambiada={recargar}
         onAbrirNicho={onAbrirNicho}
