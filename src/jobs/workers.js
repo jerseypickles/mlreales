@@ -403,10 +403,25 @@ export async function procesarProgramadorScans() {
   const umbrales = { diario: 20 * 3600e3, semanal: 6.5 * 86400e3 }
   const nichos = await Nicho.find({ estado: 'activo' }).lean()
 
+  // un nicho cuyo último reporte quedó SIN score no tiene nada que "refrescar":
+  // esperarle la semana lo deja invisible 7 días (caso gua sha / rodillo facial
+  // 2026-07-21: nivel 2 sin reseñas → sin score, y el semanal los citaba para
+  // el 27). Mientras no haya score, corre con el umbral diario.
+  const scores = await Reporte.aggregate([
+    { $match: { nichoId: { $in: nichos.map((n) => n._id) } } },
+    { $sort: { fecha: -1 } },
+    { $group: { _id: '$nichoId', score: { $first: '$scoreOportunidad' } } },
+  ])
+  const ultimoScore = new Map(scores.map((r) => [String(r._id), r.score ?? null]))
+
   let encolados = 0
+  let sinScore = 0
   for (const nicho of nichos) {
     const ultimo = nicho.ultimoScanEl ? new Date(nicho.ultimoScanEl).getTime() : 0
-    if (ahora - ultimo < (umbrales[nicho.frecuenciaScan] ?? umbrales.diario)) continue
+    const nuncaPuntuo = (ultimoScore.get(String(nicho._id)) ?? null) == null
+    const umbral = nuncaPuntuo ? umbrales.diario : (umbrales[nicho.frecuenciaScan] ?? umbrales.diario)
+    if (ahora - ultimo < umbral) continue
+    if (nuncaPuntuo) sinScore++
     await encolarScanNicho(nicho._id, {
       motivo: 'programado',
       jobId: `prog-${nicho._id}-${Math.floor(ahora / (3 * 3600e3))}`,
@@ -444,7 +459,7 @@ export async function procesarProgramadorScans() {
     )
   }
 
-  return { activos: nichos.length, encolados, vueltasTemporada, propiosEncolados: Boolean(propioVencido) }
+  return { activos: nichos.length, encolados, sinScore, vueltasTemporada, propiosEncolados: Boolean(propioVencido) }
 }
 
 export async function procesarScanPropios() {
