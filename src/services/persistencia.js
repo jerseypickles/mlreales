@@ -38,11 +38,15 @@ export async function guardarScan({ items, fecha }) {
 
 // Aplica los resultados del nivel 2 sobre productos, sellers y los snapshots del scan.
 export async function aplicarDetalleScan({ porSku, fecha }) {
-  if (!porSku?.size) return { productosActualizados: 0, snapshotsActualizados: 0, sellersActualizados: 0 }
+  if (!porSku?.size) return { productosActualizados: 0, snapshotsActualizados: 0, sellersActualizados: 0, reviewsAplicadas: 0 }
 
   const opsProducto = []
   const opsSnapshot = []
   const sellersPorId = new Map()
+  // "medido" = con conteo de reseñas: es lo único que el score exige y lo que
+  // el reintento revisa (yaMedidos). Un det con match pero sin ratingCount
+  // (páginas de catálogo) aporta precio/seller pero NO cuenta como medición.
+  let reviewsAplicadas = 0
 
   for (const [sku, det] of porSku) {
     // null = el actor no expone ese dato: conservar lo que dijo el nivel 1 / scan previo
@@ -63,7 +67,10 @@ export async function aplicarDetalleScan({ porSku, fecha }) {
     opsProducto.push({ updateOne: { filter: { sku }, update: { $set: setProd } } })
 
     const setSnap = {}
-    if (det.numReviews !== null) setSnap.numReviews = det.numReviews
+    if (det.numReviews !== null) {
+      setSnap.numReviews = det.numReviews
+      reviewsAplicadas++
+    }
     if (det.rating !== null) setSnap.rating = det.rating
     if (det.precio !== null) setSnap.precio = det.precio
     if (Object.keys(setSnap).length) {
@@ -103,5 +110,6 @@ export async function aplicarDetalleScan({ porSku, fecha }) {
     productosActualizados: resProd?.modifiedCount ?? 0,
     snapshotsActualizados: resSnap?.modifiedCount ?? 0,
     sellersActualizados: opsSeller.length,
+    reviewsAplicadas,
   }
 }

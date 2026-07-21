@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
 import { normalizarScan } from '../src/services/normalizador.js'
-import { guardarScan } from '../src/services/persistencia.js'
+import { guardarScan, aplicarDetalleScan } from '../src/services/persistencia.js'
 import { Producto } from '../src/models/Producto.js'
 import { Snapshot } from '../src/models/Snapshot.js'
 
@@ -61,4 +61,36 @@ test('guardarScan con lista vacía no toca la base', async () => {
   assert.equal(resultado.productosNuevos, 0)
   assert.equal(resultado.snapshotsInsertados, 0)
   assert.equal(await Producto.countDocuments(), antes)
+})
+
+test('aplicarDetalleScan: medido = con conteo de reseñas, no con match de SKU', async () => {
+  const fecha = new Date('2026-07-20T12:00:00Z')
+  await Snapshot.insertMany([
+    { sku: 'MLC111', fecha, keyword: 'gua sha', posicion: 1 },
+    { sku: 'MLC222', fecha, keyword: 'gua sha', posicion: 2 },
+    { sku: 'MLC333', fecha, keyword: 'gua sha', posicion: 3 },
+  ])
+
+  const det = (extra) => ({
+    numReviews: null, rating: null, precio: null, esFull: null, origenCrossBorder: null,
+    categoriaML: null, categoriaRuta: null, preguntas: null, imagen: 'https://http2.mlstatic.com/x.jpg',
+    seller: null,
+    ...extra,
+  })
+  const porSku = new Map([
+    ['MLC111', det({ numReviews: 120, rating: 4.7, precio: 5990 })],
+    // página de catálogo que matcheó pero vino sin ratingCount: aporta precio,
+    // NO cuenta como medición (caso rodillo facial 2026-07-20)
+    ['MLC222', det({ precio: 7990 })],
+    ['MLC333', det({ numReviews: 0 })], // 0 reseñas también es dato medido
+  ])
+
+  const res = await aplicarDetalleScan({ porSku, fecha })
+  assert.equal(res.reviewsAplicadas, 2)
+
+  const snaps = await Snapshot.find({ fecha }).sort({ sku: 1 }).lean()
+  assert.equal(snaps[0].numReviews, 120)
+  assert.equal(snaps[1].numReviews, undefined) // queda pendiente: el reintento pide solo esta URL
+  assert.equal(snaps[1].precio, 7990) // pero el precio sí se aprovecha
+  assert.equal(snaps[2].numReviews, 0)
 })

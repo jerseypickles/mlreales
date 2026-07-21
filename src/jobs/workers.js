@@ -124,6 +124,7 @@ export async function procesarScanDetalle(job) {
   let aplicados = 0
   let sinMatch = 0
   let fallidos = 0
+  let sinReviews = 0
 
   for (let i = 0; i < pendientes.length; i += config.detalleBatch) {
     // pausa entre batches: menos agresivo con ML = menos páginas vacías por bloqueo
@@ -158,15 +159,27 @@ export async function procesarScanDetalle(job) {
           catalogProductId: c.catalogProductId ?? null,
           sku: c.sku ?? null,
           variations: Array.isArray(c.variations) ? c.variations.slice(0, 3).map((v) => v?.id ?? v) : null,
+          ratingCount: c.ratingCount ?? null,
+          reviewCount: c.reviewCount ?? null,
           url: String(c.url ?? c.productUrl ?? '').slice(0, 110),
           pedidos: skusPedidos.slice(0, 3),
         })}`,
       )
     }
     const res = await aplicarDetalleScan({ porSku, fecha })
-    aplicados += porSku.size
+    // medido = con conteo de reseñas escrito, no con match de SKU: el caso
+    // rodillo facial (2026-07-20) matcheó 8/10 pero casi ninguno traía
+    // ratingCount y el scan pasó como éxito dejando el score en null sin reintento
+    aplicados += res.reviewsAplicadas
+    const cojos = porSku.size - res.reviewsAplicadas
+    if (cojos > 0) {
+      sinReviews += cojos
+      const skusCojos = [...porSku].filter(([, d]) => d.numReviews === null).map(([sku]) => sku)
+      console.warn(
+        `[scan-detalle] ${cojos} con match pero sin conteo de reseñas (no cuentan como medidos): ${skusCojos.slice(0, 5).join(', ')}`,
+      )
+    }
     await job.updateProgress(Math.round(((i + batch.length) / pendientes.length) * 100))
-    void res
   }
 
   // medir casi nada equivale a no medir — y medir MENOS de lo que el score
@@ -179,14 +192,14 @@ export async function procesarScanDetalle(job) {
   const minimoAplicados = Math.max(1, Math.ceil(objetivos.length * 0.2), minimoParaPuntuar)
   if (totalConDetalle < minimoAplicados) {
     throw new Error(
-      `Nivel 2 quedó corto (${totalConDetalle}/${objetivos.length} con detalle, mínimo ${minimoAplicados} para poder puntuar; esta pasada aplicó ${aplicados} de ${pendientes.length}; ${fallidos} fallidos, ${sinMatch} sin match de SKU): probable bloqueo de ML o exceso de páginas de catálogo`,
+      `Nivel 2 quedó corto (${totalConDetalle}/${objetivos.length} con reseñas medidas, mínimo ${minimoAplicados} para poder puntuar; esta pasada midió ${aplicados} de ${pendientes.length}; ${fallidos} fallidos, ${sinMatch} sin match de SKU, ${sinReviews} con match pero sin reseñas): probable bloqueo de ML o exceso de páginas de catálogo`,
     )
   }
 
   // recalcular el reporte ahora que hay reviews/seller/Full del nivel 2
   await obtenerColas().calcularMetricas.add('reporte', { nichoId })
 
-  return { objetivos: objetivos.length, aplicados, yaMedidos: yaMedidos.size, sinMatch, fallidos }
+  return { objetivos: objetivos.length, aplicados, yaMedidos: yaMedidos.size, sinMatch, sinReviews, fallidos }
 }
 
 export async function procesarCalcularMetricas(job) {
