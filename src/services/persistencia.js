@@ -64,7 +64,10 @@ export async function aplicarDetalleScan({ porSku, fecha }) {
       setProd.esTiendaOficial = det.seller.esTiendaOficial
       if (det.seller.nombre) setProd.vendedor = det.seller.nombre
     }
-    opsProducto.push({ updateOne: { filter: { sku }, update: { $set: setProd } } })
+    // los dets del rescate de reviews traen solo reseñas: un $set vacío revienta el bulkWrite
+    if (Object.keys(setProd).length) {
+      opsProducto.push({ updateOne: { filter: { sku }, update: { $set: setProd } } })
+    }
 
     const setSnap = {}
     if (det.numReviews !== null) {

@@ -3,9 +3,9 @@ import { config } from '../config/env.js'
 import { Nicho } from '../models/Nicho.js'
 import { Reporte } from '../models/Reporte.js'
 import { Snapshot } from '../models/Snapshot.js'
-import { buscarNivel1, ejecutarActorAsync, construirInputDetalle } from '../services/apify.js'
+import { buscarNivel1, ejecutarActorAsync, construirInputDetalle, construirInputReviews } from '../services/apify.js'
 import { normalizarScan } from '../services/normalizador.js'
-import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
+import { indexarDetallesPorSku, resumenDeReviews } from '../services/normalizadorDetalle.js'
 import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
 import { generarReporteNicho } from '../services/metricas.js'
 import { scoring } from '../config/scoring.js'
@@ -93,6 +93,42 @@ export async function procesarScanNicho(job) {
   }
 }
 
+// Rescate para páginas de catálogo (/up/, /p/) que matchean pero no exponen
+// ratingCount en modo product: el modo reviews del mismo actor entrega el
+// agregado del producto (maxItems 1 = un resultado por URL, centavos). Si el
+// output no calza con lo esperado, la muestra queda en el log para ajustar.
+async function rescatarConModoReviews({ nichoId, skus, urlPorSku, domainCode, fecha }) {
+  const porSku = new Map()
+  await Promise.all(
+    skus.map(async (sku) => {
+      const url = urlPorSku.get(sku)
+      const input = url ? construirInputReviews(config.actorDetails, url, { domainCode }) : null
+      if (!input) return
+      try {
+        const r = await ejecutarActorAsync(config.actorDetails, input, {
+          pollMs: 5_000,
+          timeoutMs: 4 * 60_000,
+          conMeta: true,
+        })
+        await registrarGasto(nichoId, r.costoUsd)
+        const resumen = resumenDeReviews(r.items)
+        if (resumen) {
+          porSku.set(sku, { numReviews: resumen.numReviews, rating: resumen.rating, precio: null })
+        } else {
+          console.warn(
+            `[scan-detalle] rescate sin agregado para ${sku} — muestra: ${JSON.stringify(r.items?.[0] ?? null)?.slice(0, 300)}`,
+          )
+        }
+      } catch (err) {
+        console.warn(`[scan-detalle] rescate reviews falló para ${sku}: ${err.message}`)
+      }
+    }),
+  )
+  if (!porSku.size) return 0
+  const res = await aplicarDetalleScan({ porSku, fecha })
+  return res.reviewsAplicadas
+}
+
 // Nivel 2 en batches con el modo async de Apify (sin el límite de 300s del sync).
 export async function procesarScanDetalle(job) {
   const { nichoId, fechaScan, objetivos } = job.data
@@ -171,13 +207,22 @@ export async function procesarScanDetalle(job) {
     // rodillo facial (2026-07-20) matcheó 8/10 pero casi ninguno traía
     // ratingCount y el scan pasó como éxito dejando el score en null sin reintento
     aplicados += res.reviewsAplicadas
-    const cojos = porSku.size - res.reviewsAplicadas
-    if (cojos > 0) {
-      sinReviews += cojos
-      const skusCojos = [...porSku].filter(([, d]) => d.numReviews === null).map(([sku]) => sku)
+    const skusCojos = [...porSku].filter(([, d]) => d.numReviews === null).map(([sku]) => sku)
+    if (skusCojos.length) {
       console.warn(
-        `[scan-detalle] ${cojos} con match pero sin conteo de reseñas (no cuentan como medidos): ${skusCojos.slice(0, 5).join(', ')}`,
+        `[scan-detalle] ${skusCojos.length} con match pero sin conteo de reseñas: ${skusCojos.slice(0, 5).join(', ')} — rescate en modo reviews`,
       )
+      const urlPorSku = new Map(batch.map((o) => [o.sku, o.url]))
+      const rescatados = await rescatarConModoReviews({
+        nichoId,
+        skus: skusCojos,
+        urlPorSku,
+        domainCode: nicho.domainCode,
+        fecha,
+      })
+      if (rescatados) console.log(`[scan-detalle] rescate modo reviews: ${rescatados}/${skusCojos.length} midieron`)
+      aplicados += rescatados
+      sinReviews += skusCojos.length - rescatados
     }
     await job.updateProgress(Math.round(((i + batch.length) / pendientes.length) * 100))
   }

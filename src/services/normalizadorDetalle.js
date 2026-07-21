@@ -33,6 +33,19 @@ function skusCandidatosSourabh(raw) {
   )
 }
 
+// includeReviews:true anida un bloque de reseñas en la fila del producto; si
+// la página de catálogo no expone ratingCount arriba, el agregado puede venir
+// aquí. Un ARRAY de reseñas sueltas no sirve (su length es una página, no el
+// total) — solo se lee el objeto agregado.
+function agregadoReviews(reviews) {
+  if (!reviews || typeof reviews !== 'object' || Array.isArray(reviews)) return null
+  const numero = (v) => (Number.isFinite(v) ? v : null)
+  const total =
+    numero(reviews.total) ?? numero(reviews.count) ?? numero(reviews.ratingCount) ?? numero(reviews.totalReviews)
+  const rating = numero(reviews.rating) ?? numero(reviews.average) ?? numero(reviews.ratingAverage)
+  return total === null && rating === null ? null : { total, rating }
+}
+
 function normalizarItemSourabh(raw) {
   const candidatos = skusCandidatosSourabh(raw)
   if (!candidatos.length) return null
@@ -40,6 +53,7 @@ function normalizarItemSourabh(raw) {
   const numero = (v) => (Number.isFinite(v) ? v : null)
   const sellerId = raw.sellerId != null ? String(raw.sellerId) : null
   const origen = raw.shipping?.originCountry ?? null
+  const agregado = agregadoReviews(raw.reviews)
 
   return {
     skusCandidatos: candidatos,
@@ -47,10 +61,10 @@ function normalizarItemSourabh(raw) {
     titulo: raw.title ?? null,
     precio: numero(raw.price),
     precioAnterior: numero(raw.originalPrice),
-    rating: numero(raw.rating),
+    rating: numero(raw.rating) ?? agregado?.rating ?? null,
     // ratingCount = total de calificaciones (equivale al reviews.count de ecomscrape);
     // reviewCount son solo las reseñas con texto — fallback si falta el primero
-    numReviews: numero(raw.ratingCount) ?? numero(raw.reviewCount),
+    numReviews: numero(raw.ratingCount) ?? numero(raw.reviewCount) ?? agregado?.total ?? null,
     // este actor no expone el flag de Full: null = no tocar lo que dijo el nivel 1
     esFull: null,
     envioGratis: raw.freeShipping === true,
@@ -129,6 +143,28 @@ export function normalizarItemDetalle(raw) {
 export function idDesdeUrl(url) {
   const m = String(url ?? '').match(/MLC[A-Z]?-?\d{6,}/)
   return m ? m[0].replace('-', '') : null
+}
+
+// Salida del modo reviews (una fila por reseña; el agregado del producto viaja
+// en cada fila). El schema real no está validado contra output en vivo:
+// campos tolerantes, y el worker deja una muestra en el log cuando no calza.
+// OJO: fila.rating / fila.reviewRating es la nota de UNA reseña — jamás usarla
+// como rating del producto.
+export function resumenDeReviews(rawItems) {
+  const fila = (rawItems ?? []).find((r) => r && typeof r === 'object')
+  if (!fila) return null
+  const numero = (v) => (Number.isFinite(v) ? v : null)
+  const anidado = agregadoReviews(fila.reviews) ?? agregadoReviews(fila.product?.reviews)
+  const total =
+    numero(fila.ratingCount) ??
+    numero(fila.reviewCount) ??
+    numero(fila.totalReviews) ??
+    numero(fila.reviewsCount) ??
+    anidado?.total ??
+    null
+  const rating =
+    numero(fila.averageRating) ?? numero(fila.ratingValue) ?? numero(fila.ratingAverage) ?? anidado?.rating ?? null
+  return total === null ? null : { numReviews: total, rating }
 }
 
 // Indexa resultados del actor por SKU nuestro. Acepta la lista de objetivos

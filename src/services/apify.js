@@ -102,7 +102,10 @@ export function construirInputDetalle(actorId, urls, { domainCode = 'CL' } = {})
       country: domainCode,
       productUrls: urls,
       maxItems: 0,
-      includeReviews: false,
+      // true desde 2026-07-21: las páginas de catálogo (/up/, /p/) no exponen
+      // ratingCount arriba y el agregado puede venir en el bloque de reseñas
+      // inline (mismo precio: se cobra por resultado, no por tamaño de fila)
+      includeReviews: true,
       includeQuestions: true, // preguntas de compradores: objeciones reales para listing/análisis
       includeVariations: false,
       maxConcurrency: 8,
@@ -114,6 +117,21 @@ export function construirInputDetalle(actorId, urls, { domainCode = 'CL' } = {})
     max_retries_per_url: 2,
     ignore_url_failures: true,
     proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] },
+  }
+}
+
+// Modo reviews del mismo actor: una fila por reseña, con el agregado del
+// producto viajando en cada fila — maxItems 1 = pagar UN resultado para leer
+// el total. Único uso: rescatar el conteo cuando la página de catálogo no lo
+// trae en modo product (caso gua sha / rodillo facial). Solo sourabhbgp.
+export function construirInputReviews(actorId, url, { domainCode = 'CL' } = {}) {
+  if (!String(actorId).includes('sourabhbgp')) return null
+  return {
+    mode: 'reviews',
+    country: domainCode,
+    productUrls: [url],
+    maxItems: 1,
+    useResidentialProxy: true,
   }
 }
 
