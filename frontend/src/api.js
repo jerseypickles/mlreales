@@ -44,7 +44,9 @@ export const api = {
   listarPropios: () => pedir('/api/propios'),
   tendencias: (dias) => pedir(`/api/tendencias${dias ? `?dias=${dias}` : ''}`),
   oportunidades: (opts) => pedir(`/api/oportunidades${opts?.todos ? '?todos=1' : ''}`),
-  generarRfq: () => pedir('/api/oportunidades/rfq', { method: 'POST' }),
+  // forzar: el clic manual regenera el tablero completo con la evidencia
+  // de títulos, no solo los pendientes (caso traducciones malas al proveedor)
+  generarRfq: (forzar = false) => pedir('/api/oportunidades/rfq', json({ forzar })),
   avanzarNichos: (nichoIds, etapa) => pedir('/api/oportunidades/avanzar', json({ nichoIds, etapa })),
   unirCompras: (nichoIds) => pedir('/api/oportunidades/unir', json({ nichoIds })),
   separarCompra: (nichoIds) => pedir('/api/oportunidades/separar', json({ nichoIds })),

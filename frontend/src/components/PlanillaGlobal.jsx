@@ -534,11 +534,13 @@ function PlanillaIA({ onAbrirNicho }) {
     setAcotando(true)
     setAviso(null)
     try {
-      const r = await api.generarRfq()
+      // el clic manual siempre regenera TODO con la evidencia de títulos: si
+      // el usuario aprieta este botón es porque algo de la hoja está malo
+      const r = await api.generarRfq(true)
       setDatos(await cargar())
       setAviso(
         r.generados
-          ? `${r.generados} nicho(s) acotados en inglés (US$ ${r.costoUsd?.toFixed?.(3) ?? '?'}).`
+          ? `${r.generados} nicho(s) re-acotados en inglés con los títulos del top como evidencia (US$ ${r.costoUsd?.toFixed?.(3) ?? '?'}).`
           : 'Todos los nichos ya estaban al día.',
       )
     } catch (e) {

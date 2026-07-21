@@ -45,6 +45,8 @@ const SYSTEM_RFQ = `Preparas una hoja de cotización (RFQ) para proveedores chin
 
 Para cada ítem entrega nicho y producto en inglés comercial (como se busca en Alibaba/1688) y una especificación LIMPIA: solo los atributos físicos y técnicos que el proveedor necesita para cotizar — potencia, medidas, capacidad, materiales, accesorios incluidos, enchufe 220V Chile si es eléctrico, empaque. NADA de contexto de mercado, precios, marcas de competidores ni consejos de validación. TODO en inglés al 100%: ni una palabra en español en nicho, producto o especificación (el proveedor no lee español). Corto, directo, cotizable.
 
+EVIDENCIA OBLIGATORIA: cada ítem trae titulosTop — los títulos REALES de los productos que dominan esa keyword en Mercado Libre Chile. El nicho y el producto en inglés deben describir EL PRODUCTO FÍSICO QUE ESOS TÍTULOS MUESTRAN, no una interpretación de la keyword. Una keyword chilena suele tener un falso amigo en inglés: "sandwichera" es un electric sandwich maker de placas triangulares, NO un panini grill; "cooler portatil" suele ser una hielera pasiva de playa, NO un mini refrigerador termoeléctrico; "climatizador evaporativo" es un enfriador de pie para piezas, NO un ventilador USB de escritorio. Si los títulos contradicen tu primera interpretación, mandan los títulos. La especificación tampoco puede contradecir el nombre del producto (potencias, medidas y materiales salen de lo que el segmento del análisis y los títulos respaldan).
+
 UNIDAD DE PEDIDO: cada ítem declara unidadPedido — la unidad física en que se pide y cotiza, con su contenido explícito. En productos que se venden por bulto (cajas, packs, sets) la cantidad y el precio SIEMPRE se malinterpretan si la unidad no está escrita: "650" sin unidad puede ser bolsas, packs o cajas. Sé quirúrgico.
 
 DETECCIÓN DE COMPRA DUPLICADA: recibes todos los nichos juntos a propósito. Si dos o más nichos se surten con el mismo producto físico de fábrica (distintas keywords de venta en Mercado Libre, un solo ítem que comprar en China), asígnales exactamente la misma productoClave — así el sistema los fusiona en una sola línea de cotización. Sé estricto: misma clave solo si un mismo pedido de fábrica sirve para ambos listings.`
@@ -60,7 +62,11 @@ export const claveRespaldo = (k) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 
-export async function generarRfqPendientes() {
+// forzar=true regenera el tablero completo aunque los rfq estén vigentes: es
+// lo que espera el botón manual de la planilla cuando una traducción salió
+// mala y hay que rehacerla con mejor evidencia (los flujos automáticos jamás
+// fuerzan — solo acotan pendientes).
+export async function generarRfqPendientes({ forzar = false } = {}) {
   const nichos = await Nicho.find({ estado: 'activo' }).lean()
 
   // todos los nichos con veredicto de entrada; pendiente = sin rfq, rfq más
@@ -70,7 +76,7 @@ export async function generarRfqPendientes() {
   for (const n of nichos) {
     const rep = await Reporte.findOne({ nichoId: n._id, analisis: { $ne: null } })
       .sort({ fecha: -1 })
-      .select('analisis fecha')
+      .select('analisis fecha topProductos')
       .lean()
     const analisis = rep?.analisis
     if (!analisis || analisis.veredicto === 'no_entrar') continue
@@ -81,9 +87,9 @@ export async function generarRfqPendientes() {
       n.rfq?.unidadPedido &&
       new Date(n.rfq.desdeAnalisis).getTime() >= fechaAnalisis.getTime()
     if (!vigente) hayPendientes = true
-    candidatos.push({ nicho: n, analisis, fechaAnalisis })
+    candidatos.push({ nicho: n, analisis, fechaAnalisis, topProductos: rep.topProductos ?? [] })
   }
-  if (!hayPendientes || !candidatos.length) return { generados: 0, costoUsd: 0 }
+  if ((!hayPendientes && !forzar) || !candidatos.length) return { generados: 0, costoUsd: 0 }
 
   // se mandan TODOS juntos (no solo los pendientes): la detección de compra
   // duplicada necesita ver el tablero completo para asignar claves consistentes
@@ -91,6 +97,10 @@ export async function generarRfqPendientes() {
   const user = `Ítems a preparar (uno por nicho; detecta compras duplicadas entre ellos):\n${JSON.stringify(
     pendientes.map((p) => ({
       keyword: p.nicho.keyword,
+      // los títulos reales del top del nicho: la evidencia de QUÉ producto es
+      // (sin esto el LLM traduce la keyword de oído — caso "sandwichera" →
+      // "panini grill" y el proveedor cotiza otra cosa)
+      titulosTop: p.topProductos.slice(0, 6).map((t) => t?.titulo).filter(Boolean),
       titular: p.analisis.recomendacion?.titular ?? null,
       segmento: p.analisis.recomendacion?.segmento ?? null,
       especificacionOriginal: p.analisis.recomendacion?.especificacionProducto ?? null,

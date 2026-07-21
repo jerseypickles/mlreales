@@ -278,11 +278,12 @@ router.post(
 // que no los tengan al día — una sola llamada barata, sin regenerar análisis
 router.post(
   '/rfq',
-  manejar(async (_req, res) => {
+  manejar(async (req, res) => {
     if (!llmDisponible()) {
       return res.status(503).json({ error: 'IA no configurada: falta ANTHROPIC_API_KEY en el entorno' })
     }
-    const resultado = await generarRfqPendientes()
+    // forzar: regenerar todo el tablero (botón manual tras una mala traducción)
+    const resultado = await generarRfqPendientes({ forzar: req.body?.forzar === true })
     res.json(resultado)
   }),
 )
