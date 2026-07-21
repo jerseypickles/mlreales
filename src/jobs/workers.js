@@ -101,7 +101,12 @@ async function rescatarConModoReviews({ nichoId, skus, urlPorSku, domainCode, fe
   const porSku = new Map()
   await Promise.all(
     skus.map(async (sku) => {
-      const url = urlPorSku.get(sku)
+      // el modo reviews acepta URLs /p/ y articulo.*/MLC-…, pero NO las /up/
+      // (probado 21-jul: 14/14 datasets vacíos con /up/). El sku de snapshot
+      // ES el item id → la URL de artículo se construye sola y siempre sirve.
+      const url = /^MLC\d{6,}$/.test(sku)
+        ? `https://articulo.mercadolibre.cl/MLC-${sku.slice(3)}`
+        : urlPorSku.get(sku)
       const input = url ? construirInputReviews(config.actorDetails, url, { domainCode }) : null
       if (!input) return
       try {
@@ -116,7 +121,7 @@ async function rescatarConModoReviews({ nichoId, skus, urlPorSku, domainCode, fe
           porSku.set(sku, { numReviews: resumen.numReviews, rating: resumen.rating, precio: null })
         } else {
           console.warn(
-            `[scan-detalle] rescate sin agregado para ${sku} — muestra: ${JSON.stringify(r.items?.[0] ?? null)?.slice(0, 300)}`,
+            `[scan-detalle] rescate sin agregado para ${sku} (${r.items?.length ?? 0} filas) — muestra: ${JSON.stringify(r.items?.[0] ?? null)?.slice(0, 300)}`,
           )
         }
       } catch (err) {

@@ -130,7 +130,9 @@ export function construirInputReviews(actorId, url, { domainCode = 'CL' } = {}) 
     mode: 'reviews',
     country: domainCode,
     productUrls: [url],
-    maxItems: 1,
+    // 5 y no 1: colchón por si la primera página del bucket de reseñas de ML
+    // viene rara — igual son centavos y el agregado viaja en cada fila
+    maxItems: 5,
     useResidentialProxy: true,
   }
 }
