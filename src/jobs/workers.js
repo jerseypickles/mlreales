@@ -3,6 +3,7 @@ import { config } from '../config/env.js'
 import { Nicho } from '../models/Nicho.js'
 import { Reporte } from '../models/Reporte.js'
 import { Snapshot } from '../models/Snapshot.js'
+import { Producto } from '../models/Producto.js'
 import { buscarNivel1, ejecutarActorAsync, construirInputDetalle, construirInputReviews } from '../services/apify.js'
 import { normalizarScan } from '../services/normalizador.js'
 import { indexarDetallesPorSku, resumenDeReviews } from '../services/normalizadorDetalle.js'
@@ -237,8 +238,52 @@ export async function procesarScanDetalle(job) {
   // sin análisis, invisible en Oportunidades hasta el próximo scan (caso gua
   // sha / rodillo facial: 4/10 con match pasaba como "éxito"). El piso es lo
   // necesario para puntuar; bajo eso se reintentan solo las URLs faltantes.
-  const totalConDetalle = yaMedidos.size + aplicados
+  let totalConDetalle = yaMedidos.size + aplicados
   const minimoParaPuntuar = Math.min(objetivos.length, scoring.umbrales.minItemsDemanda)
+
+  // EXTENSIÓN por páginas de catálogo (gua sha / rodillo facial, 21-jul): si
+  // el top-N está dominado por páginas /up/ que no entregan conteo de reseñas
+  // por NINGUNA vía del actor (modo product, inline y modo reviews probados),
+  // reintentar las mismas URLs jamás va a juntar el mínimo. Se mide más abajo
+  // del MISMO scan (posiciones siguientes, páginas normales) hasta poder
+  // puntuar — el score se calcula sobre el top-50 igual.
+  if (totalConDetalle < minimoParaPuntuar && sinReviews > 0) {
+    const skusVistos = new Set([...objetivos.map((o) => o.sku), ...yaMedidos])
+    const snaps = await Snapshot.find({ keyword: nicho.keyword, fecha })
+      .sort({ posicion: 1 })
+      .select('sku')
+      .lean()
+    const candidatos = snaps.map((s) => s.sku).filter((sku) => !skusVistos.has(sku))
+    for (let tanda = 0; tanda < 2 && totalConDetalle < minimoParaPuntuar && candidatos.length; tanda++) {
+      // pedir el doble de lo que falta: parte de la extensión también puede
+      // ser catálogo sin reseñas
+      const skusTanda = candidatos.splice(0, Math.min(config.detalleBatch, Math.max((minimoParaPuntuar - totalConDetalle) * 2, 6)))
+      const productos = await Producto.find({ sku: { $in: skusTanda } })
+        .select('sku url')
+        .lean()
+      const extra = productos.filter((p) => p.url).map((p) => ({ sku: p.sku, url: p.url }))
+      if (!extra.length) break
+      try {
+        const r = await ejecutarActorAsync(
+          config.actorDetails,
+          construirInputDetalle(config.actorDetails, extra.map((o) => o.url), { domainCode: nicho.domainCode }),
+          { pollMs: 10_000, timeoutMs: 12 * 60_000, conMeta: true },
+        )
+        await registrarGasto(nichoId, r.costoUsd)
+        const { porSku } = indexarDetallesPorSku(r.items, extra)
+        const res = await aplicarDetalleScan({ porSku, fecha })
+        aplicados += res.reviewsAplicadas
+        totalConDetalle += res.reviewsAplicadas
+        console.log(
+          `[scan-detalle] extensión bajo el top por catálogo sin reseñas: ${res.reviewsAplicadas}/${extra.length} medidos (total ${totalConDetalle}/${minimoParaPuntuar} para puntuar)`,
+        )
+      } catch (err) {
+        console.error(`[scan-detalle] extensión falló: ${err.message}`)
+        break
+      }
+    }
+  }
+
   const minimoAplicados = Math.max(1, Math.ceil(objetivos.length * 0.2), minimoParaPuntuar)
   if (totalConDetalle < minimoAplicados) {
     throw new Error(
