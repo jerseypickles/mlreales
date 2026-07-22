@@ -27,6 +27,12 @@ if (process.env.SONDA_REVIEWS_KEYWORD) {
     .then(({ sondaReviewsTop }) => sondaReviewsTop(process.env.SONDA_REVIEWS_KEYWORD))
     .catch((err) => console.error('[sonda-reviews] falló:', err.message))
 }
+// inspector de nicho por logs (diagnóstico de "estos productos no corresponden")
+if (process.env.SONDA_NICHO_KEYWORD) {
+  import('./services/sondaNicho.js')
+    .then(({ sondaNicho }) => sondaNicho(process.env.SONDA_NICHO_KEYWORD))
+    .catch((err) => console.error('[sonda-nicho] falló:', err.message))
+}
 // migración: la etapa "muestra" se eliminó del embudo (la prueba es el pedido mínimo)
 Nicho.updateMany({ etapaCompra: 'muestra' }, { $set: { etapaCompra: 'pedido' } })
   .then((r) => r.modifiedCount && console.log(`[migración] ${r.modifiedCount} nicho(s): muestra → pedido`))
