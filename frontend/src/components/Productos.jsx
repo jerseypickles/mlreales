@@ -56,6 +56,16 @@ function FilaProducto({ p, onAbrir }) {
       <td className="num">{Number.isFinite(p.descuentoPct) ? `-${p.descuentoPct}%` : '—'}</td>
       <td className="num">{p.rating || '—'}</td>
       <td className="num">{fmtNum(p.numReviews)}</td>
+      <td
+        className="num"
+        title={
+          p.ventasDia != null
+            ? `+${fmtNum(p.reviewsDelta)} reseñas en ${p.ventanaDias} día(s) × 25`
+            : 'aparece con la segunda medición de reseñas del producto'
+        }
+      >
+        {p.ventasDia != null ? `~${fmtNum(p.ventasDia)}` : '—'}
+      </td>
       <td>
         <span className="celda-vendedor">
           <span>{p.vendedor ?? '—'}</span>
@@ -300,6 +310,7 @@ export function Productos({ nichoId, keyword, onSimular }) {
               <ThOrden campo="descuentoPct" orden={orden} setOrden={setOrden}>Desc.</ThOrden>
               <ThOrden campo="rating" orden={orden} setOrden={setOrden}>Rating</ThOrden>
               <ThOrden campo="numReviews" orden={orden} setOrden={setOrden}>Reseñas</ThOrden>
+              <ThOrden campo="ventasDia" orden={orden} setOrden={setOrden}>Ventas/día</ThOrden>
               <th>Vendedor</th>
               <th>Flags</th>
               <th aria-label="enlace" />

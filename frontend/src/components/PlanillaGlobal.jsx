@@ -828,6 +828,7 @@ export const COLUMNAS_PRODUCTO = [
   { clave: 'precio', titulo: 'Precio', tipo: 'numero', render: (p) => fmtPrecio(p.precio) },
   { clave: 'descuentoPct', titulo: 'Desc %', tipo: 'numero' },
   { clave: 'numReviews', titulo: 'Reseñas', tipo: 'numero' },
+  { clave: 'ventasDia', titulo: 'Ventas/día', tipo: 'numero' },
   { clave: 'rating', titulo: 'Rating', tipo: 'numero' },
   { clave: 'vendedor', titulo: 'Vendedor', tipo: 'texto' },
   { clave: 'reputacionSeller', titulo: 'Reputación', tipo: 'texto' },

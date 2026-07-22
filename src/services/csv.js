@@ -36,6 +36,7 @@ export const COLUMNAS_PRODUCTO_CSV = [
   { clave: 'precioAnterior', titulo: 'Precio anterior' },
   { clave: 'descuentoPct', titulo: 'Descuento %' },
   { clave: 'numReviews', titulo: 'Reseñas' },
+  { clave: 'ventasDia', titulo: 'Ventas/día est.' },
   { clave: 'rating', titulo: 'Rating' },
   { clave: 'vendedor', titulo: 'Vendedor' },
   { clave: 'reputacionSeller', titulo: 'Reputación seller' },

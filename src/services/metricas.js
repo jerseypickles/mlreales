@@ -297,6 +297,28 @@ export async function obtenerProductosUltimoScan(nicho) {
     }
   }
 
+  // velocidad POR PRODUCTO: delta de reseñas entre las dos últimas mediciones
+  // reales separadas ≥12h, normalizado a ventas/día. Ordenar por reseñas
+  // acumuladas dice quién ganó históricamente; esto dice quién vende AHORA.
+  const historial = await Snapshot.aggregate([
+    { $match: { sku: { $in: snapshots.map((s) => s.sku) }, numReviews: { $ne: null } } },
+    { $sort: { fecha: -1 } },
+    { $group: { _id: '$sku', mediciones: { $push: { fecha: '$fecha', numReviews: '$numReviews' } } } },
+  ])
+  const velocidadPorSku = new Map()
+  for (const h of historial) {
+    const [ultima, ...resto] = h.mediciones
+    const previa = resto.find((m) => ultima.fecha - m.fecha >= 12 * 3600e3)
+    if (!previa) continue
+    const dias = (ultima.fecha - previa.fecha) / 86400e3
+    const delta = Math.max(0, ultima.numReviews - previa.numReviews)
+    velocidadPorSku.set(h._id, {
+      ventasDia: Math.round((delta / dias) * scoring.escalas.reviewsAVentasFactor),
+      reviewsDelta: delta,
+      ventanaDias: Math.round(dias * 10) / 10,
+    })
+  }
+
   return {
     fechaScan: ultimo.fecha,
     productos: snapshots.map((s) => {
@@ -312,6 +334,9 @@ export async function obtenerProductosUltimoScan(nicho) {
         descuentoPct: s.descuentoPct,
         rating: s.rating,
         numReviews: s.numReviews,
+        ventasDia: velocidadPorSku.get(s.sku)?.ventasDia ?? null,
+        reviewsDelta: velocidadPorSku.get(s.sku)?.reviewsDelta ?? null,
+        ventanaDias: velocidadPorSku.get(s.sku)?.ventanaDias ?? null,
         cuotas: s.cuotas,
         vendedor: p.vendedor ?? null,
         sellerId: p.sellerId ?? null,

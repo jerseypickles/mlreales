@@ -141,6 +141,9 @@ function resumirProductosParaLLM(productos) {
     titulo: p.titulo,
     precio: p.precio,
     reviews: p.numReviews ?? null,
+    // velocidad ACTUAL (delta reseñas reciente × factor): quién vende hoy,
+    // no quién acumuló históricamente
+    ventasDia: p.ventasDia ?? undefined,
     rating: p.rating ?? null,
     seller: p.vendedor,
     oficial: p.esTiendaOficial || undefined,
