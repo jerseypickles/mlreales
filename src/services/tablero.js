@@ -9,12 +9,15 @@ import {
 } from './oportunidades.js'
 import { config } from '../config/env.js'
 import { calcularMargen } from './margen.js'
+import { comisionMlExacta, categoriaDominante } from './comisionesMl.js'
 
 // Margen estimado si compras al EXW que cotizó el proveedor, con los mismos
 // supuestos estándar de la tabla del análisis (volumen 0.003 m³/u, marítimo).
 // Es el semáforo de la planilla; la afinación fina se hace en el simulador.
-function margenCotizacion({ exwUsd, rec, unidades }) {
+// comisionPct: la exacta de la API oficial manda sobre la que declaró el LLM.
+function margenCotizacion({ exwUsd, rec, unidades, comisionPct = null }) {
   if (!Number.isFinite(exwUsd) || !Number.isFinite(rec?.precioVentaClp)) return null
+  const pctFinal = comisionPct ?? rec.comisionMlPct
   try {
     const sim = calcularMargen({
       costoExwUsd: exwUsd,
@@ -22,9 +25,7 @@ function margenCotizacion({ exwUsd, rec, unidades }) {
       unidades: unidades ?? 500,
       volumenM3: 0.003,
       modoFlete: 'maritimo',
-      parametros: Number.isFinite(rec.comisionMlPct)
-        ? { mercadoLibre: { comisionPct: rec.comisionMlPct } }
-        : undefined,
+      parametros: Number.isFinite(pctFinal) ? { mercadoLibre: { comisionPct: pctFinal } } : undefined,
     })
     return {
       margenClp: sim.porUnidad.margenClp,
@@ -128,11 +129,20 @@ export async function tableroOportunidades({ todos = false } = {}) {
     // la ganancia por unidad al precio recomendado del análisis
     let cotizacion = null
     if (Number.isFinite(n.exwCotizadoUsd)) {
+      // comisión exacta solo para filas con cotización (pocas): cacheada por
+      // categoría/banda, y ante cualquier fallo el semáforo usa la del LLM
+      let comisionPct = null
+      try {
+        const categoria = await categoriaDominante(n.keyword)
+        comisionPct = (await comisionMlExacta({ precioClp: rec.precioVentaClp, categoriaId: categoria }))?.pct ?? null
+      } catch {
+        // sin comisión exacta: margenCotizacion cae a rec.comisionMlPct
+      }
       cotizacion = {
         exwUsd: n.exwCotizadoUsd,
         fecha: n.exwCotizadoEl ?? null,
         cierra: exwMax != null ? n.exwCotizadoUsd <= exwMax : null,
-        ...(margenCotizacion({ exwUsd: n.exwCotizadoUsd, rec, unidades: unidadesPrueba }) ?? {}),
+        ...(margenCotizacion({ exwUsd: n.exwCotizadoUsd, rec, unidades: unidadesPrueba, comisionPct }) ?? {}),
       }
     }
     oportunidades.push({

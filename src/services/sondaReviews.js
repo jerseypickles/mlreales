@@ -1,4 +1,6 @@
 import { Snapshot } from '../models/Snapshot.js'
+import { Producto } from '../models/Producto.js'
+import { idDesdeUrl } from './normalizadorDetalle.js'
 import { reviewsOficialesSeguro, meliGet } from './meli.js'
 
 // Sonda one-shot ANTES de migrar el conteo de reseñas a la API oficial: mide
@@ -20,28 +22,51 @@ export async function sondaReviewsTop(keyword) {
     .lean()
   console.log(`[sonda-reviews] "${keyword}": ${snaps.length} items del scan ${ultimo.fecha.toISOString()}`)
 
+  // v2 (tras el hallazgo de la v1): /reviews/item con id de ITEM devuelve el
+  // bucket propio (casi vacío en items de catálogo) — la página muestra el
+  // agregado del CATÁLOGO. Acá se prueba además el id embebido en la URL del
+  // producto (/p/MLC… o /up/MLCU…): si ese calza con el scraper, la migración
+  // va por ahí (y habría que persistir catalogProductId del nivel 2).
+  const urlPorSku = new Map(
+    (await Producto.find({ sku: { $in: snaps.map((s) => s.sku) } }).select('sku url').lean()).map((p) => [p.sku, p.url]),
+  )
   const inicio = Date.now()
   let conConteo = 0
-  let sinConteo = 0
-  let coincide = 0
+  let coincideItem = 0
+  let conUrlId = 0
+  let coincideUrlId = 0
   const muestras = []
   for (const s of snaps) {
-    const t0 = Date.now()
-    const r = await reviewsOficialesSeguro(s.sku)
-    const ms = Date.now() - t0
-    if (r) {
+    const rItem = await reviewsOficialesSeguro(s.sku)
+    if (rItem) {
       conConteo++
-      // ¿el conteo oficial calza con lo que midió el scraper? (validación cruzada)
-      if (Number.isFinite(s.numReviews) && Math.abs(r.numReviews - s.numReviews) <= 2) coincide++
-      if (muestras.length < 5) muestras.push({ pos: s.posicion, sku: s.sku, api: r.numReviews, scraper: s.numReviews ?? null, ms })
-    } else {
-      sinConteo++
+      if (Number.isFinite(s.numReviews) && Math.abs(rItem.numReviews - s.numReviews) <= 2) coincideItem++
+    }
+    // id embebido en la URL (código de catálogo en /p/, user product en /up/)
+    const urlId = idDesdeUrl(urlPorSku.get(s.sku))
+    let rUrl = null
+    if (urlId && urlId !== s.sku) {
+      rUrl = await reviewsOficialesSeguro(urlId)
+      if (rUrl) {
+        conUrlId++
+        if (Number.isFinite(s.numReviews) && Math.abs(rUrl.numReviews - s.numReviews) <= 2) coincideUrlId++
+      }
+    }
+    if (muestras.length < 8 && (Number.isFinite(s.numReviews) || rUrl)) {
+      muestras.push({
+        pos: s.posicion,
+        sku: s.sku,
+        urlId: urlId !== s.sku ? urlId : undefined,
+        apiItem: rItem?.numReviews ?? null,
+        apiUrl: rUrl?.numReviews ?? null,
+        scraper: s.numReviews ?? null,
+      })
     }
   }
   const total = Date.now() - inicio
   console.log(
-    `[sonda-reviews] resultado: ${conConteo}/${snaps.length} con conteo oficial, ${sinConteo} sin dato, ` +
-      `${coincide} calzan con el scraper (±2), ${Math.round(total / 1000)}s total (~${Math.round(total / Math.max(1, snaps.length))}ms/item)`,
+    `[sonda-reviews] resultado: por item ${conConteo}/${snaps.length} responden y ${coincideItem} calzan con el scraper (±2); ` +
+      `por id de URL ${conUrlId} responden y ${coincideUrlId} calzan; ${Math.round(total / 1000)}s total`,
   )
   console.log(`[sonda-reviews] muestras: ${JSON.stringify(muestras)}`)
 

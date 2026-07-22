@@ -138,6 +138,10 @@ export async function estadoMeli() {
   }
 }
 
+export async function hayCuentaMeli() {
+  return Boolean(await MeliCuenta.exists({}))
+}
+
 // Agregado de /reviews/item/:id — paging.total es el conteo exacto de reseñas
 // (verificado en vivo 22-jul con MLC2678282136: 49). rating_average tolerante:
 // si ML no lo manda, el rating queda null y el snapshot conserva el previo.

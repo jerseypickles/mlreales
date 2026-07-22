@@ -4,6 +4,7 @@ import { obtenerProductosUltimoScan } from './metricas.js'
 import { Reporte } from '../models/Reporte.js'
 import { criteriosActivos } from './criterios.js'
 import { movimientosRecientes, lineasEnAlza, prefijoDeKeyword } from './tendencias.js'
+import { comisionMlExacta, categoriaDominante } from './comisionesMl.js'
 import { config } from '../config/env.js'
 
 const SCHEMA_ANALISIS = {
@@ -126,6 +127,7 @@ Reglas:
 - NICHOS QUE VENDEN EN PACKS (campo metricas.precio.porUnidad, si viene): parte del top vende multipacks y los precios por listing NO son comparables entre sí — usa precio.porUnidad (precio ÷ unidades declaradas en el título) para comparar segmentos y hablar de precios. OJO con la tabla EXW: está calculada a precio de LISTING, así que el máximo que entrega es por el BULTO completo a ese precio — divide por las unidades del pack para el costo por pieza. Decide sobre el formato que concentra el volumen de venta (¿qué tamaño de pack manda?).
 - SELLERS GEMELOS (campo metricas.competencia.sellersGemelos): vendedores NO oficiales y chicos que están ganando reseñas AHORA dentro del nicho. Lee el campo con precisión: (a) si viene con elementos, es la prueba directa de que un entrante genérico como el importador puede vender aquí — pésala fuerte a favor; (b) si viene como lista VACÍA, se midió entre dos scans y nadie chico creció — pésalo en contra SOLO si además el top está dominado por tiendas oficiales; (c) si el campo NO viene, es el primer scan y la señal aún no se puede medir — NO lo uses ni a favor ni en contra, y jamás como razón de no_entrar.
 - CRITERIOS DEL IMPORTADOR (campo criteriosImportador, si viene): reglas que él escribió en su libreta — cúmplelas al pie de la letra, están por encima de tus heurísticas generales.
+- COMISIÓN REAL (campo comisionMlRealPct, si viene): es la comisión exacta de ML para la categoría de este nicho, obtenida de la API oficial — declárala tal cual en recomendacion.comisionMlPct y NO la estimes; la tabla EXW ya la incorpora.
 - SUB-NICHOS / PUERTAS LATERALES (campo subNichos, SIEMPRE piénsalo): tu veredicto responde por la keyword madre, pero el top suele insinuar jugadas que ella no captura — un formato que concentra la plata (packs, tamaño), un slot premium ocupado por una marca NUEVA y no por un incumbente histórico (= el slot se construyó hace poco y una marca propia/private label puede disputarlo), una variante sin la barrera regulatoria, un accesorio con mejor margen. Propón 0-3 keywords más específicas con su motivo CITANDO los datos del scan y la jugada concreta. En un no_entrar es OBLIGATORIO responderte: "rechazo la puerta principal, ¿existe puerta lateral?" — si no existe, lista vacía y punto; no inventes. El sistema crea y mide cada sub-nicho con un clic: no propongas nada que no valga el costo de un scan.
 - BÚSQUEDAS EN ALZA (campo busquedasEnAlza, si viene): consultas del autocompletado de ML que están subiendo esta semana en la vertical de este nicho — señal de demanda en tiempo real que complementa el delta de reseñas; úsala para elegir el segmento y el ángulo del producto.
 - CONTEXTO DEL IMPORTADOR SOBRE ESTE NICHO (campo contextoImportador, si viene): es experiencia de primera mano — ventas reales suyas en este nicho, conocimiento del segmento, canal o temporada. Pésalo POR SOBRE lo que infieras de las reseñas: las reseñas acumuladas por listing miden permanencia, y los vendedores genéricos rotan publicaciones — sus ventas se dispersan en listings de vida corta que no acumulan reseñas, así que "genéricos con pocas reseñas" NO prueba que el genérico no venda si el importador ya lo vendió. Si su experiencia contradice tu lectura de los datos, dilo explícitamente en el resumen y ajusta el veredicto considerando ambas evidencias.
@@ -149,12 +151,14 @@ function resumirProductosParaLLM(productos) {
 
 // Tabla de EXW máximo precalculada con el modelo de importación: el LLM razona
 // sobre números que salen de nuestra calculadora, no de su imaginación.
-function tablaExwMaximo(metricas) {
+// comisionPct real (API oficial) reemplaza al default del config si viene.
+function tablaExwMaximo(metricas, comisionPct = null) {
   const precios = [metricas.precio.p25, metricas.precio.mediana, metricas.precio.p75].filter(Number.isFinite)
+  const parametros = Number.isFinite(comisionPct) ? { mercadoLibre: { comisionPct } } : undefined
   const filas = []
   for (const precio of precios) {
     for (const margen of [25, 35]) {
-      const exw = exwMaximoUsd({ precioVentaClp: precio, margenObjetivoPct: margen })
+      const exw = exwMaximoUsd({ precioVentaClp: precio, margenObjetivoPct: margen, parametros })
       filas.push({ precioVentaClp: Math.round(precio), margenObjetivoPct: margen, exwMaximoUsd: exw })
     }
   }
@@ -188,6 +192,17 @@ export async function analizarNicho(nicho) {
     // sin datos de tendencias: el campo simplemente no viaja
   }
 
+  // comisión EXACTA de ML para la categoría dominante del nicho (API oficial,
+  // validada 22-jul): la tabla EXW y el veredicto dejan de usar el 16% genérico.
+  // Sin cuenta conectada o sin categoría, todo sigue con los defaults.
+  let comisionReal = null
+  try {
+    const categoria = await categoriaDominante(nicho.keyword)
+    comisionReal = await comisionMlExacta({ precioClp: reporte.metricas.precio?.mediana, categoriaId: categoria })
+  } catch {
+    // sin comisión exacta: la tabla usa el default del config
+  }
+
   const entrada = {
     keyword: nicho.keyword,
     fechaActual: new Date().toLocaleDateString('es-CL', {
@@ -201,9 +216,12 @@ export async function analizarNicho(nicho) {
     contextoImportador: nicho.contextoUsuario ?? undefined,
     criteriosImportador: criterios.length ? criterios : undefined,
     busquedasEnAlza,
+    comisionMlRealPct: comisionReal?.pct ?? undefined,
     metricas: reporte.metricas,
-    tablaExwMaximo: tablaExwMaximo(reporte.metricas),
-    supuestosTabla: 'EXW máximo por unidad (precio ex-fábrica) asumiendo 500 unidades, 0.003 m³/unidad, flete marítimo prorrateado de contenedor surtido completo, TLC 0% arancel, comisión ML 16%, tarifa Full incluida',
+    tablaExwMaximo: tablaExwMaximo(reporte.metricas, comisionReal?.pct ?? null),
+    supuestosTabla: `EXW máximo por unidad (precio ex-fábrica) asumiendo 500 unidades, 0.003 m³/unidad, flete marítimo prorrateado de contenedor surtido completo, TLC 0% arancel, comisión ML ${
+      Number.isFinite(comisionReal?.pct) ? `${comisionReal.pct}% (exacta de la API oficial para la categoría del nicho)` : '16%'
+    }, tarifa Full incluida`,
     top50: resumirProductosParaLLM(vista.productos),
   }
 
