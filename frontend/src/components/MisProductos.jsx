@@ -92,6 +92,7 @@ export function MisProductos() {
   const [url, setUrl] = useState('')
   const [ocupado, setOcupado] = useState(false)
   const [abierto, setAbierto] = useState(null)
+  const [meli, setMeli] = useState(null)
 
   const cargar = useCallback(() => {
     api.listarPropios().then(setDatos).catch((e) => setError(e.message))
@@ -102,6 +103,27 @@ export function MisProductos() {
     const intervalo = setInterval(cargar, 30_000)
     return () => clearInterval(intervalo)
   }, [cargar])
+
+  useEffect(() => {
+    // al volver del callback OAuth el dashboard aterriza con ?meli=…: avisar y limpiar la URL
+    const params = new URLSearchParams(window.location.search)
+    const resultado = params.get('meli')
+    if (resultado === 'error') {
+      setError(`la conexión con Mercado Libre falló: ${params.get('detalle') ?? 'sin detalle'}`)
+    }
+    if (resultado) window.history.replaceState(null, '', window.location.pathname)
+    api.meliEstado().then(setMeli).catch(() => setMeli(null))
+  }, [])
+
+  async function conectarMeli() {
+    setError(null)
+    try {
+      const { url: urlOauth } = await api.meliConectar()
+      window.location = urlOauth
+    } catch (err) {
+      setError(err.message)
+    }
+  }
 
   async function agregar(e) {
     e.preventDefault()
@@ -149,11 +171,22 @@ export function MisProductos() {
             Seguimiento diario de tus publicaciones: precio, reseñas (≈ ventas) y posición orgánica.
           </p>
         </div>
-        {datos?.propios?.length ? (
-          <button className="boton-secundario" onClick={medirAhora} disabled={ocupado}>
-            {ocupado ? 'Encolando…' : 'Medir ahora'}
-          </button>
-        ) : null}
+        <div className="toolbar">
+          {meli?.conectado ? (
+            <span className="badge badge-full" title={`conectado el ${fmtFecha(meli.conectadoEl)}`}>
+              ML: {meli.nickname ?? meli.userId}
+            </span>
+          ) : (
+            <button className="boton-secundario" onClick={conectarMeli}>
+              Conectar Mercado Libre
+            </button>
+          )}
+          {datos?.propios?.length ? (
+            <button className="boton-secundario" onClick={medirAhora} disabled={ocupado}>
+              {ocupado ? 'Encolando…' : 'Medir ahora'}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <form className="form-propio" onSubmit={agregar}>

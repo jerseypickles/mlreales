@@ -8,6 +8,7 @@ import rutasMargen from './routes/margen.js'
 import rutasTendencias from './routes/tendencias.js'
 import rutasOportunidades from './routes/oportunidades.js'
 import rutasCriterios from './routes/criterios.js'
+import rutasMeli from './routes/meli.js'
 import { obtenerColas } from '../jobs/queues.js'
 import { gastoDelMes, mesActual } from '../services/gastos.js'
 import { config } from '../config/env.js'
@@ -26,10 +27,11 @@ export function crearApp() {
   })
 
   // API key: si API_KEY está definida, toda la API la exige salvo /api/salud
-  // (el health check de Render no manda headers)
+  // (el health check de Render no manda headers) y el callback OAuth de ML
+  // (llega desde el navegador redirigido por Mercado Libre, sin headers nuestros)
   app.use('/api', (req, res, next) => {
     const clave = process.env.API_KEY
-    if (!clave || req.path === '/salud') return next()
+    if (!clave || req.path === '/salud' || req.path === '/meli/oauth/callback') return next()
     if (req.get('x-api-key') === clave) return next()
     res.status(401).json({ error: 'no autorizado: falta o no coincide x-api-key' })
   })
@@ -64,6 +66,7 @@ export function crearApp() {
   app.use('/api/tendencias', rutasTendencias)
   app.use('/api/oportunidades', rutasOportunidades)
   app.use('/api/criterios', rutasCriterios)
+  app.use('/api/meli', rutasMeli)
 
   app.use((_req, res) => res.status(404).json({ error: 'ruta no encontrada' }))
 

@@ -46,5 +46,10 @@ export const config = {
   screeningScoreMin: Number(process.env.SCREENING_SCORE_MIN) || 45,
   // techo de gasto mensual (Apify + LLM): al alcanzarlo, programador y radar dejan de encolar
   presupuestoUsdMes: Number(process.env.PRESUPUESTO_USD_MES) || 40,
+  // API oficial de ML (OAuth, cuenta del propio vendedor) — opcionales: sin
+  // ellas el resto del sistema funciona y /api/meli/conectar responde 503
+  meliAppId: process.env.MELI_APP_ID || null,
+  meliAppSecret: process.env.MELI_APP_SECRET || null,
+  meliRedirectUri: process.env.MELI_REDIRECT_URI || null,
   port: Number(process.env.PORT) || 3000,
 }

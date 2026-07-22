@@ -59,4 +59,6 @@ export const api = {
   crearPropio: (url) => pedir('/api/propios', json({ url })),
   medirPropios: () => pedir('/api/propios/scan', { method: 'POST' }),
   eliminarPropio: (id) => pedir(`/api/propios/${id}`, { method: 'DELETE' }),
+  meliEstado: () => pedir('/api/meli/estado'),
+  meliConectar: () => pedir('/api/meli/conectar'),
 }
