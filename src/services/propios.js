@@ -4,6 +4,7 @@ import { Snapshot } from '../models/Snapshot.js'
 import { ejecutarActorAsync, construirInputDetalle } from './apify.js'
 import { indexarDetallesPorSku } from './normalizadorDetalle.js'
 import { registrarGasto } from './gastos.js'
+import { reviewsOficialesSeguro } from './meli.js'
 
 const MAX_MEDICIONES = 180 // ~6 meses de serie diaria
 
@@ -28,13 +29,24 @@ export async function escanearPropios() {
   const { porSku } = indexarDetallesPorSku(items, propios.map((p) => p.sku))
   let medidos = 0
   for (const propio of propios) {
-    const det = porSku.get(propio.sku)
-    if (!det) continue
+    const det = porSku.get(propio.sku) ?? null
+    let numReviews = det?.numReviews ?? null
+    let rating = det?.rating ?? null
+    if (numReviews === null) {
+      // páginas /up/ propias (caso MLCU4383188844): el actor no ve las reseñas
+      // de catálogo — la API oficial sí, y de paso respalda si el actor falló
+      const r = await reviewsOficialesSeguro(propio.sku)
+      if (r) {
+        numReviews = r.numReviews
+        if (rating === null) rating = r.rating
+      }
+    }
+    if (!det && numReviews === null) continue
     medidos++
-    if (det.titulo) propio.titulo = det.titulo
-    if (det.imagen) propio.imagen = det.imagen
+    if (det?.titulo) propio.titulo = det.titulo
+    if (det?.imagen) propio.imagen = det.imagen
     propio.ultimoScanEl = fecha
-    propio.mediciones.push({ fecha, precio: det.precio, numReviews: det.numReviews, rating: det.rating })
+    propio.mediciones.push({ fecha, precio: det?.precio ?? null, numReviews, rating })
     if (propio.mediciones.length > MAX_MEDICIONES) {
       propio.mediciones = propio.mediciones.slice(-MAX_MEDICIONES)
     }

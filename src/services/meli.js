@@ -138,6 +138,29 @@ export async function estadoMeli() {
   }
 }
 
+// Agregado de /reviews/item/:id — paging.total es el conteo exacto de reseñas
+// (verificado en vivo 22-jul con MLC2678282136: 49). rating_average tolerante:
+// si ML no lo manda, el rating queda null y el snapshot conserva el previo.
+export function resumenReviewsOficiales(datos) {
+  const total = datos?.paging?.total
+  if (!Number.isFinite(total)) return null
+  const rating = Number.isFinite(datos?.rating_average) ? datos.rating_average : null
+  return { numReviews: total, rating }
+}
+
+// Conteo de reseñas por la API oficial: las reseñas viven a nivel catálogo y
+// este endpoint SÍ las entrega donde el actor no ve nada (páginas /up/).
+// Nunca rompe un scan: sin cuenta conectada, id desconocido o 403 → null.
+export async function reviewsOficialesSeguro(sku) {
+  try {
+    if (!(await MeliCuenta.exists({}))) return null
+    return resumenReviewsOficiales(await meliGet(`/reviews/item/${sku}`))
+  } catch (err) {
+    console.warn(`[meli] reviews de ${sku} no disponibles: ${err.message}`)
+    return null
+  }
+}
+
 // Sonda post-conexión: deja en el LOG qué puertas abre el token (propias y
 // públicas) — la decisión de qué migrar del scraper sale de estos resultados,
 // jamás de suponer schemas (regla del proyecto).

@@ -8,6 +8,7 @@ import { buscarNivel1, ejecutarActorAsync, construirInputDetalle } from '../serv
 import { normalizarScan } from '../services/normalizador.js'
 import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
 import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
+import { reviewsOficialesSeguro } from '../services/meli.js'
 import { generarReporteNicho } from '../services/metricas.js'
 import { scoring } from '../config/scoring.js'
 import { analizarNicho } from '../services/analista.js'
@@ -94,6 +95,20 @@ export async function procesarScanNicho(job) {
   }
 }
 
+// Rescate por la API oficial para páginas de catálogo que el actor no puede
+// medir. Secuencial a propósito: meliGet refresca el token solo y el refresh
+// de ML es single-use — dos refresh en paralelo invalidarían uno al otro.
+async function rescatarConApiOficial(skus, fecha) {
+  const porSku = new Map()
+  for (const sku of skus) {
+    const r = await reviewsOficialesSeguro(sku)
+    if (r) porSku.set(sku, { numReviews: r.numReviews, rating: r.rating, precio: null })
+  }
+  if (!porSku.size) return 0
+  const res = await aplicarDetalleScan({ porSku, fecha })
+  return res.reviewsAplicadas
+}
+
 // Nivel 2 en batches con el modo async de Apify (sin el límite de 300s del sync).
 export async function procesarScanDetalle(job) {
   const { nichoId, fechaScan, objetivos } = job.data
@@ -173,15 +188,22 @@ export async function procesarScanDetalle(job) {
     // ratingCount y el scan pasó como éxito dejando el score en null sin reintento
     aplicados += res.reviewsAplicadas
     // páginas de catálogo (/up/, /p/) sin conteo de reseñas por ninguna vía del
-    // actor — el rescate en modo reviews se retiró el 22-jul tras dar 0 filas en
-    // el 100% de los intentos (las reseñas viven a nivel catálogo, el item no
-    // tiene bucket propio); lo que sí junta el mínimo es la extensión de abajo
+    // actor (el rescate por modo reviews se retiró el 22-jul: 0 filas siempre):
+    // la API oficial de ML sí entrega el agregado de catálogo, gratis. Lo que
+    // ni ella mida sigue hacia la extensión bajo el top.
     const skusCojos = [...porSku].filter(([, d]) => d.numReviews === null).map(([sku]) => sku)
     if (skusCojos.length) {
-      console.warn(
-        `[scan-detalle] ${skusCojos.length} con match pero sin conteo de reseñas: ${skusCojos.slice(0, 5).join(', ')}`,
-      )
-      sinReviews += skusCojos.length
+      const rescatados = await rescatarConApiOficial(skusCojos, fecha)
+      if (rescatados) {
+        console.log(`[scan-detalle] API oficial midió reseñas de ${rescatados}/${skusCojos.length} de catálogo`)
+      }
+      aplicados += rescatados
+      sinReviews += skusCojos.length - rescatados
+      if (rescatados < skusCojos.length) {
+        console.warn(
+          `[scan-detalle] ${skusCojos.length - rescatados} con match pero sin conteo de reseñas: ${skusCojos.slice(0, 5).join(', ')}`,
+        )
+      }
     }
     await job.updateProgress(Math.round(((i + batch.length) / pendientes.length) * 100))
   }
