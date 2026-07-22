@@ -39,6 +39,10 @@ export const config = {
   tendenciasActivo: process.env.TENDENCIAS_ACTIVO !== 'false',
   tendenciasCron: process.env.TENDENCIAS_CRON || '30 8 * * *',
   analisisAuto: process.env.ANALISIS_AUTO !== 'false',
+  // estratega semanal: pasada LLM del tablero completo con acciones priorizadas.
+  // Lunes 08:45 Chile — después del radar (08:00) y las tendencias (08:30)
+  estrategaActivo: process.env.ESTRATEGA_ACTIVO !== 'false',
+  estrategaCron: process.env.ESTRATEGA_CRON || '45 8 * * 1',
   detalleTopN: Number(process.env.DETALLE_TOP_N) || 50,
   detalleBatch: Number(process.env.DETALLE_BATCH) || 15,
   // embudo del radar: screening barato (top-10) y score mínimo para ganarse el detalle completo

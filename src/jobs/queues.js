@@ -11,6 +11,7 @@ export const COLA_PROGRAMADOR = 'programador-scans'
 export const COLA_PROPIOS = 'scan-propios'
 export const COLA_TENDENCIAS = 'tendencias-busqueda'
 export const COLA_RFQ = 'rfq-proveedor'
+export const COLA_ESTRATEGA = 'estratega'
 
 // Criterio Fase 1: 3 intentos con backoff exponencial (5s, 10s, 20s) y el job
 // queda en `failed` con el mensaje legible de ApifyError como failedReason.
@@ -48,6 +49,9 @@ export function obtenerColas() {
       // la pasada tolera 403 por prefijo internamente; reintentar completa solo repite ráfagas
       tendencias: new Queue(COLA_TENDENCIAS, { connection, defaultJobOptions: { ...opcionesJob, attempts: 1 } }),
       rfq: new Queue(COLA_RFQ, { connection, defaultJobOptions: { ...opcionesJob, attempts: 1 } }),
+      // una llamada LLM cara: sin reintentos automáticos (el cron de la próxima
+      // semana o el botón manual la repiten si falló)
+      estratega: new Queue(COLA_ESTRATEGA, { connection, defaultJobOptions: { ...opcionesJob, attempts: 1 } }),
       connection,
     }
   }
@@ -94,6 +98,15 @@ export async function registrarProgramados() {
   } else {
     await colas.tendencias.removeJobScheduler('tendencias-diarias').catch(() => {})
   }
+  if (config.estrategaActivo) {
+    await colas.estratega.upsertJobScheduler(
+      'estratega-semanal',
+      { pattern: config.estrategaCron, tz: 'America/Santiago' },
+      { name: 'informar', data: { motivo: 'programado' } },
+    )
+  } else {
+    await colas.estratega.removeJobScheduler('estratega-semanal').catch(() => {})
+  }
 }
 
 export async function cerrarColas() {
@@ -110,6 +123,7 @@ export async function cerrarColas() {
       colas.propios.close(),
       colas.tendencias.close(),
       colas.rfq.close(),
+      colas.estratega.close(),
     ]),
     new Promise((resolver) => setTimeout(resolver, 3000)),
   ])

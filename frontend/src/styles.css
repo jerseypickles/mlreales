@@ -3010,3 +3010,92 @@ section {
   color: var(--exito-tinta);
   font-weight: 500;
 }
+
+/* ============ plan de la semana (estratega) ============ */
+
+.plan-semana {
+  border: 1px solid var(--acento-borde);
+  border-radius: 14px;
+  background: var(--superficie);
+  padding: 16px 18px;
+  margin-bottom: 18px;
+}
+
+.plan-encabezado {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.plan-encabezado h3 {
+  margin: 0;
+}
+
+.plan-meta {
+  color: var(--tinta-2);
+  font-size: 12px;
+  margin: 2px 0 0;
+}
+
+.plan-botones {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.plan-resumen {
+  margin: 10px 0 12px;
+}
+
+.plan-focos {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin-bottom: 12px;
+}
+
+.plan-foco {
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--superficie-2);
+}
+
+.plan-foco p {
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.plan-foco-titulo {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.plan-paso {
+  color: var(--tinta-2);
+}
+
+.plan-lista {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.plan-lista li {
+  font-size: 13px;
+}
+
+.plan-motivo {
+  color: var(--tinta-2);
+}
+
+.plan-riesgos {
+  font-size: 13px;
+  color: var(--avisa-tinta);
+  margin: 8px 0 0;
+}

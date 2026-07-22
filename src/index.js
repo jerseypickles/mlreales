@@ -45,7 +45,7 @@ if (config.tendenciasActivo) {
   }
 }
 const workers = iniciarWorkers()
-console.log('[bullmq] workers: scan-nicho, scan-detalle, calcular-metricas, analisis, radar, programador, scan-propios, tendencias-busqueda')
+console.log('[bullmq] workers: scan-nicho, scan-detalle, calcular-metricas, analisis, radar, programador, scan-propios, tendencias-busqueda, estratega')
 
 const servidor = crearApp().listen(config.port, () => {
   console.log(`[api] MELI Intel escuchando en http://localhost:${config.port}`)

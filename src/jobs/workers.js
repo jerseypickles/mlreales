@@ -30,6 +30,7 @@ import {
   COLA_PROPIOS,
   COLA_TENDENCIAS,
   COLA_RFQ,
+  COLA_ESTRATEGA,
   crearConexionRedis,
   obtenerColas,
   encolarScanNicho,
@@ -546,6 +547,19 @@ export async function procesarTendencias() {
   return capturarTendencias()
 }
 
+// Estratega semanal: una llamada LLM sobre el tablero completo con acciones
+// priorizadas. Respeta el techo de presupuesto como todo gasto de IA.
+export async function procesarEstratega() {
+  if (!llmDisponible()) return { omitido: true, motivo: 'IA no configurada (falta ANTHROPIC_API_KEY)' }
+  const gastado = await gastoDelMes()
+  if (gastado >= config.presupuestoUsdMes) {
+    return { omitido: true, motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})` }
+  }
+  const { generarInformeEstratega } = await import('../services/estratega.js')
+  const doc = await generarInformeEstratega()
+  return { generadoEl: doc.generadoEl, modelo: doc.modelo, costoUsd: doc.costoUsd, acciones: doc.informe.acciones?.length ?? 0 }
+}
+
 export function iniciarWorkers() {
   // concurrencia 1 + rate limit: cada scan quema créditos de Apify
   const workerScan = new Worker(COLA_SCAN_NICHO, procesarScanNicho, {
@@ -610,8 +624,13 @@ export function iniciarWorkers() {
     concurrency: 1,
     maxStalledCount: 3,
   })
+  const workerEstratega = new Worker(COLA_ESTRATEGA, procesarEstratega, {
+    connection: crearConexionRedis(),
+    concurrency: 1,
+    maxStalledCount: 3, // una llamada LLM larga; un deploy en medio no debe botarla
+  })
 
-  for (const worker of [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios, workerTendencias, workerRfq]) {
+  for (const worker of [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios, workerTendencias, workerRfq, workerEstratega]) {
     worker.on('failed', (job, err) => {
       console.error(`[${worker.name}] job ${job?.id} (intento ${job?.attemptsMade}) falló: ${err.message}`)
     })
@@ -621,5 +640,5 @@ export function iniciarWorkers() {
     worker.on('error', (err) => console.error(`[${worker.name}] error de worker:`, err.message))
   }
 
-  return [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios, workerTendencias, workerRfq]
+  return [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios, workerTendencias, workerRfq, workerEstratega]
 }
