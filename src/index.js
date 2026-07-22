@@ -20,6 +20,13 @@ await registrarProgramados()
 await encolarRfq()
 // reparar textos guardados con escapes doble-codificados (no bloquea el arranque)
 limpiarEscapesGuardados().catch((err) => console.error('[limpieza] falló:', err.message))
+// sonda one-shot del endpoint oficial de reseñas (ver services/sondaReviews.js):
+// se activa con SONDA_REVIEWS_KEYWORD y se retira la variable tras leer el log
+if (process.env.SONDA_REVIEWS_KEYWORD) {
+  import('./services/sondaReviews.js')
+    .then(({ sondaReviewsTop }) => sondaReviewsTop(process.env.SONDA_REVIEWS_KEYWORD))
+    .catch((err) => console.error('[sonda-reviews] falló:', err.message))
+}
 // migración: la etapa "muestra" se eliminó del embudo (la prueba es el pedido mínimo)
 Nicho.updateMany({ etapaCompra: 'muestra' }, { $set: { etapaCompra: 'pedido' } })
   .then((r) => r.modifiedCount && console.log(`[migración] ${r.modifiedCount} nicho(s): muestra → pedido`))
