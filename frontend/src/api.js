@@ -61,4 +61,5 @@ export const api = {
   eliminarPropio: (id) => pedir(`/api/propios/${id}`, { method: 'DELETE' }),
   meliEstado: () => pedir('/api/meli/estado'),
   meliConectar: () => pedir('/api/meli/conectar'),
+  meliImportar: () => pedir('/api/meli/importar-items', { method: 'POST' }),
 }

@@ -4,9 +4,54 @@ import { Snapshot } from '../models/Snapshot.js'
 import { ejecutarActorAsync, construirInputDetalle } from './apify.js'
 import { indexarDetallesPorSku } from './normalizadorDetalle.js'
 import { registrarGasto } from './gastos.js'
-import { reviewsOficialesSeguro } from './meli.js'
+import { reviewsOficialesSeguro, meliGet } from './meli.js'
 
 const MAX_MEDICIONES = 180 // ~6 meses de serie diaria
+
+// Importa las publicaciones del vendedor conectado como productos propios.
+// /users/:id/items/search entrega solo ids; el detalle /items/:id es tolerante
+// (la sonda mostró 403 para items ajenos — con el propio debería abrir, pero si
+// falla el propio igual nace con la URL de artículo construida y el scan diario
+// completa título/imagen). OJO duplicados: el usuario puede seguir el MISMO
+// producto por su página /up/ (sku MLCU…) — user_product_id del detalle es el
+// puente y si ya está seguido, el item no se duplica.
+export async function importarMisItems() {
+  const me = await meliGet('/users/me')
+  const ids = []
+  for (let offset = 0; ; offset += 50) {
+    const pagina = await meliGet(`/users/${me.id}/items/search?limit=50&offset=${offset}`)
+    const resultados = pagina.results ?? []
+    ids.push(...resultados)
+    if (!resultados.length || ids.length >= (pagina.paging?.total ?? 0)) break
+  }
+  let importados = 0
+  let yaSeguidos = 0
+  for (const sku of ids) {
+    if (await ProductoPropio.exists({ sku })) {
+      yaSeguidos++
+      continue
+    }
+    let det = null
+    try {
+      det = await meliGet(`/items/${sku}`)
+    } catch (err) {
+      console.warn(`[meli] detalle de ${sku} no disponible al importar: ${err.message}`)
+    }
+    const userProductId = det?.user_product_id ?? null
+    if (userProductId && (await ProductoPropio.exists({ sku: userProductId }))) {
+      yaSeguidos++
+      continue
+    }
+    await ProductoPropio.create({
+      sku,
+      url: det?.permalink ?? `https://articulo.mercadolibre.cl/MLC-${sku.slice(3)}`,
+      titulo: det?.title ?? undefined,
+      imagen: det?.thumbnail ?? undefined,
+    })
+    importados++
+  }
+  return { total: ids.length, importados, yaSeguidos }
+}
 
 export function extraerSkuDeUrl(url) {
   const m = String(url ?? '').match(/MLCU?-?\d{6,}/)

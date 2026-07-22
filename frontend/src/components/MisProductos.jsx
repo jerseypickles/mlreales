@@ -93,6 +93,7 @@ export function MisProductos() {
   const [ocupado, setOcupado] = useState(false)
   const [abierto, setAbierto] = useState(null)
   const [meli, setMeli] = useState(null)
+  const [aviso, setAviso] = useState(null)
 
   const cargar = useCallback(() => {
     api.listarPropios().then(setDatos).catch((e) => setError(e.message))
@@ -122,6 +123,24 @@ export function MisProductos() {
       window.location = urlOauth
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  async function importarMeli() {
+    setOcupado(true)
+    setError(null)
+    setAviso(null)
+    try {
+      const r = await api.meliImportar()
+      setAviso(
+        `${r.importados} publicación(es) importada(s), ${r.yaSeguidos} ya seguida(s) de ${r.total} en tu cuenta` +
+          (r.importados ? ' — midiendo ahora, los números aparecen en un par de minutos' : ''),
+      )
+      cargar()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setOcupado(false)
     }
   }
 
@@ -182,6 +201,9 @@ export function MisProductos() {
               <button className="enlace-boton" onClick={conectarMeli}>
                 reconectar
               </button>
+              <button className="boton-secundario" onClick={importarMeli} disabled={ocupado}>
+                {ocupado ? 'Importando…' : 'Importar mis publicaciones'}
+              </button>
             </>
           ) : (
             <button className="boton-secundario" onClick={conectarMeli}>
@@ -210,6 +232,7 @@ export function MisProductos() {
         </button>
       </form>
       {error ? <p className="error-bloque">{error}</p> : null}
+      {aviso ? <p className="nota">{aviso}</p> : null}
 
       {!datos ? (
         <Cargando texto="Cargando tus productos…" />

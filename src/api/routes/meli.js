@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import { urlAutorizacion, canjearCodigo, estadoMeli, meliConfigurado, sondearApi } from '../../services/meli.js'
+import { importarMisItems } from '../../services/propios.js'
+import { obtenerColas } from '../../jobs/queues.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -18,6 +20,21 @@ router.get(
       return res.status(503).json({ error: 'faltan MELI_APP_ID / MELI_APP_SECRET / MELI_REDIRECT_URI en el entorno' })
     }
     res.json({ url: urlAutorizacion() })
+  }),
+)
+
+// Trae todas las publicaciones de la cuenta conectada a Mis productos y
+// las mide al tiro (requiere el scope "Publicación y sincronización").
+router.post(
+  '/importar-items',
+  manejar(async (_req, res) => {
+    const estado = await estadoMeli()
+    if (!estado.conectado) return res.status(409).json({ error: 'sin cuenta de Mercado Libre conectada' })
+    const resultado = await importarMisItems()
+    if (resultado.importados) {
+      await obtenerColas().propios.add('medir', {}, { jobId: `propios-import-${Date.now()}` })
+    }
+    res.json(resultado)
   }),
 )
 
