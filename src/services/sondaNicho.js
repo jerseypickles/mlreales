@@ -18,8 +18,26 @@ export async function sondaNicho(fragmento) {
     console.log(
       `[sonda-nicho] "${n.keyword}" — origen:${n.origen} estado:${n.estado} etapa:${n.etapaCompra ?? '-'} ` +
         `score:${reporte?.scoreOportunidad ?? 'null'} ideada:"${n.radarInfo?.keywordIdeada ?? '-'}" ` +
-        `estacionalidad:"${n.radarInfo?.estacionalidad ?? '-'}"`,
+        `estacionalidad:${JSON.stringify(n.radarInfo?.estacionalidad ?? null)}`,
     )
+    // ¿el analista ya pivoteó la jugada (patrón piscina) o el RFQ traduce otra cosa?
+    const conAnalisis = await Reporte.findOne({ nichoId: n._id, analisis: { $ne: null } })
+      .sort({ fecha: -1 })
+      .select('analisis fecha')
+      .lean()
+    if (conAnalisis?.analisis) {
+      const a = conAnalisis.analisis
+      console.log(
+        `[sonda-nicho]   análisis (${conAnalisis.fecha.toISOString().slice(0, 10)}): ${a.veredicto}/${a.confianza} — titular: "${a.recomendacion?.titular ?? '-'}" · segmento: "${a.recomendacion?.segmento ?? '-'}" · productoIngles: "${a.recomendacion?.productoIngles ?? '-'}"`,
+      )
+      console.log(
+        `[sonda-nicho]   segmentos: ${(a.segmentos ?? []).map((s) => `"${s.nombre}" (${s.shareReviewsPct}% rev, ${s.atractivo})`).join(' · ')}`,
+      )
+      console.log(`[sonda-nicho]   rfq: ${JSON.stringify(n.rfq ?? null)}`)
+      console.log(`[sonda-nicho]   resumen: ${a.resumen ?? '-'}`)
+    } else {
+      console.log(`[sonda-nicho]   (sin análisis)`)
+    }
     const ultimo = await Snapshot.findOne({ keyword: n.keyword }).sort({ fecha: -1 }).select('fecha').lean()
     if (!ultimo) {
       console.log(`[sonda-nicho]   (sin snapshots)`)
