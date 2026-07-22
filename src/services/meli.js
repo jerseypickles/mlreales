@@ -192,6 +192,32 @@ export async function visitasSeguro(idMl, dias = 7) {
   }
 }
 
+// Precio para ganar la caja de compra de un item de catálogo (price_to_win
+// v2). Schema tolerante y muestra al log en formas inesperadas — el output
+// real no está validado en vivo aún: el primer scan lo dirá.
+export async function precioParaGanarSeguro(idMl) {
+  try {
+    if (!(await MeliCuenta.exists({}))) return null
+    const datos = await meliGet(`/items/${idMl}/price_to_win?version=v2`)
+    const numero = (v) => (Number.isFinite(v) ? v : Number.isFinite(v?.amount) ? v.amount : null)
+    const r = {
+      estado: typeof datos?.status === 'string' ? datos.status : null,
+      precioParaGanar: numero(datos?.price_to_win),
+      precioActual: numero(datos?.current_price),
+    }
+    if (r.estado === null && r.precioParaGanar === null) {
+      console.warn(
+        `[meli] price_to_win de ${idMl} con forma inesperada — muestra: ${JSON.stringify(datos).slice(0, 300)}`,
+      )
+      return null
+    }
+    return r
+  } catch (err) {
+    console.warn(`[meli] price_to_win de ${idMl} no disponible: ${err.message}`)
+    return null
+  }
+}
+
 // Sonda post-conexión: deja en el LOG qué puertas abre el token (propias y
 // públicas) — la decisión de qué migrar del scraper sale de estos resultados,
 // jamás de suponer schemas (regla del proyecto).

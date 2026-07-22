@@ -4,7 +4,8 @@ import { Snapshot } from '../models/Snapshot.js'
 import { ejecutarActorAsync, construirInputDetalle } from './apify.js'
 import { indexarDetallesPorSku } from './normalizadorDetalle.js'
 import { registrarGasto } from './gastos.js'
-import { reviewsOficialesSeguro, itemOficialSeguro, visitasSeguro, meliGet } from './meli.js'
+import { reviewsOficialesSeguro, itemOficialSeguro, visitasSeguro, precioParaGanarSeguro, meliGet } from './meli.js'
+import { sincronizarOrdenes } from './ventasMl.js'
 
 const MAX_MEDICIONES = 180 // ~6 meses de serie diaria
 
@@ -115,6 +116,11 @@ export async function escanearPropios() {
     const stock = Number.isFinite(oficial?.available_quantity) ? oficial.available_quantity : null
     const vendidos = Number.isFinite(oficial?.sold_quantity) ? oficial.sold_quantity : null
     const visitas = oficial ? await visitasSeguro(propio.itemIdMl ?? propio.sku) : null
+    // caja de compra: solo tiene sentido en items que compiten en un catálogo
+    if (oficial?.catalog_product_id) {
+      const ptw = await precioParaGanarSeguro(propio.itemIdMl ?? propio.sku)
+      if (ptw) propio.buyBox = { ...ptw, fecha }
+    }
     if (!oficial && !det && numReviews === null) continue
     medidos++
     if (oficial?.title ?? det?.titulo) propio.titulo = oficial?.title ?? det.titulo
@@ -128,7 +134,16 @@ export async function escanearPropios() {
     }
     await propio.save()
   }
-  return { propios: propios.length, medidos, costoUsd }
+
+  // ventas reales de la cuenta (orders): mismas pasadas diarias que el scan
+  let ordenes = null
+  try {
+    ordenes = await sincronizarOrdenes()
+  } catch (err) {
+    console.warn(`[scan-propios] sincronizar órdenes falló: ${err.message}`)
+  }
+
+  return { propios: propios.length, medidos, costoUsd, ordenesNuevas: ordenes?.nuevas ?? null }
 }
 
 // Posición orgánica más reciente del producto en algún listado que el sistema

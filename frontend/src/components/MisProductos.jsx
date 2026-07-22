@@ -39,6 +39,21 @@ function FilaPropio({ p, onEliminar, onAbrir }) {
           </span>
         ) : null}
       </td>
+      <td>
+        {p.buyBox ? (
+          p.buyBox.estado === 'winning' ? (
+            <span className="badge badge-full">ganando</span>
+          ) : (
+            <span className="badge badge-cn" title={p.buyBox.estado ?? ''}>
+              {Number.isFinite(p.buyBox.precioParaGanar)
+                ? `gana con ${fmtPrecio(p.buyBox.precioParaGanar)}`
+                : 'compitiendo'}
+            </span>
+          )
+        ) : (
+          '—'
+        )}
+      </td>
       <td className="num">{fmtNum(d?.ultima?.stock)}</td>
       <td className="num">
         {fmtNum(d?.ultima?.numReviews)}
@@ -56,6 +71,9 @@ function FilaPropio({ p, onEliminar, onAbrir }) {
         ) : (
           '—'
         )}
+      </td>
+      <td className="num">
+        {p.ventas30d ? `${fmtPrecio(p.ventas30d.ingresosClp)} · ${fmtNum(p.ventas30d.unidades)}u` : '—'}
       </td>
       <td className="num">{fmtNum(d?.ultima?.visitas)}</td>
       <td className="num">{d?.ultima?.rating ?? '—'}</td>
@@ -267,9 +285,11 @@ export function MisProductos() {
                 <th aria-label="imagen" />
                 <th>Producto</th>
                 <th className="num">Precio</th>
+                <th>Caja de compra</th>
                 <th className="num">Stock</th>
                 <th className="num">Reseñas</th>
                 <th className="num">Ventas (último período)</th>
+                <th className="num">Ingresos 30d</th>
                 <th className="num">Visitas 7d</th>
                 <th className="num">Rating</th>
                 <th>Posición orgánica</th>
@@ -286,10 +306,11 @@ export function MisProductos() {
       )}
 
       <p className="nota">
-        Con la cuenta de Mercado Libre conectada, stock, ventas y visitas vienen de la API oficial
-        (exactos). La chapa "real" marca ventas del período medidas por ML; sin ella, la cifra con ~
-        es la estimación por reseñas (~{FACTOR_VENTAS} ventas por reseña nueva). El delta de ventas
-        reales aparece a partir de la segunda medición.
+        Con la cuenta de Mercado Libre conectada, stock, ventas, visitas, ingresos y caja de compra
+        vienen de la API oficial (exactos). "Caja de compra" aplica a publicaciones de catálogo: si
+        no estás ganando, muestra el precio que la ganaría. "Ingresos 30d" suma tus órdenes pagadas
+        reales. La chapa "real" marca ventas del período medidas por ML; la cifra con ~ es la
+        estimación por reseñas (~{FACTOR_VENTAS} por reseña nueva).
       </p>
 
       {abierto ? <PanelPropio propio={abierto} onCerrar={() => setAbierto(null)} /> : null}

@@ -13,6 +13,9 @@ const productoPropioSchema = new mongoose.Schema({
   itemIdMl: { type: String, default: null },
   // estado de la publicación en ML según la API oficial (active/paused/closed)
   estadoMl: { type: String, default: null },
+  // caja de compra del catálogo (price_to_win): {estado, precioParaGanar,
+  // precioActual, fecha} — solo items que compiten en un catálogo
+  buyBox: { type: mongoose.Schema.Types.Mixed, default: null },
   ultimoScanEl: { type: Date, default: null },
   // serie embebida (una medición por scan, acotada): suficiente para deltas y gráficos
   mediciones: {

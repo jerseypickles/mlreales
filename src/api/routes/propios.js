@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { ProductoPropio } from '../../models/ProductoPropio.js'
 import { extraerSkuDeUrl, posicionesRecientes } from '../../services/propios.js'
+import { ventasPorItem } from '../../services/ventasMl.js'
 import { obtenerColas } from '../../jobs/queues.js'
 
 const router = Router()
@@ -24,14 +25,19 @@ router.post(
   }),
 )
 
-// Lista con serie de mediciones y posición orgánica en listados trackeados
+// Lista con serie de mediciones, posición orgánica y ventas reales 30d (orders)
 router.get(
   '/',
   manejar(async (_req, res) => {
     const propios = await ProductoPropio.find().sort({ creadoEl: -1 }).lean()
     const posiciones = await posicionesRecientes(propios.map((p) => p.sku))
+    const ventas = await ventasPorItem({ dias: 30 }).catch(() => new Map())
     res.json({
-      propios: propios.map((p) => ({ ...p, posicionReciente: posiciones.get(p.sku) ?? null })),
+      propios: propios.map((p) => ({
+        ...p,
+        posicionReciente: posiciones.get(p.sku) ?? null,
+        ventas30d: ventas.get(p.itemIdMl ?? p.sku) ?? null,
+      })),
     })
   }),
 )
