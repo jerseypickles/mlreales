@@ -411,7 +411,7 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
         <Resumen reporte={reporte} productos={productos?.productos} nichoId={nichoId} nicho={nicho} />
       ) : null}
       {pestana === 'productos' ? (
-        <Productos nichoId={nichoId} keyword={nicho.keyword} onSimular={simularProducto} />
+        <Productos nichoId={nichoId} keyword={nicho.keyword} analisis={reporte.analisis} onSimular={simularProducto} />
       ) : null}
       {pestana === 'analisis' ? (
         <Analisis

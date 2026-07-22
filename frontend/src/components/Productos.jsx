@@ -198,7 +198,7 @@ function PanelHistoria({ producto, onCerrar, onSimular }) {
   )
 }
 
-export function Productos({ nichoId, keyword, onSimular }) {
+export function Productos({ nichoId, keyword, analisis, onSimular }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [busqueda, setBusqueda] = useState('')
@@ -238,9 +238,21 @@ export function Productos({ nichoId, keyword, onSimular }) {
   if (error) return <p className="error-bloque">{error}</p>
   if (!datos) return <Cargando texto="Cargando productos…" />
 
+  // el top de una keyword puede mezclar familias de producto (caso carpa
+  // camping: 55% lonas de toldo) — la apuesta del nicho es la del análisis,
+  // no la keyword literal; sin este banner el listado mixto confunde
+  const bannerJugada = analisis?.recomendacion?.titular ? (
+    <p className="nota banner-jugada">
+      <strong>Jugada de este nicho:</strong> {analisis.recomendacion.titular}
+      {analisis.recomendacion.segmento ? ` · segmento: ${analisis.recomendacion.segmento}` : ''} — el
+      listado de abajo es el top completo de la búsqueda, familias mezcladas incluidas.
+    </p>
+  ) : null
+
   if (modo === 'planilla') {
     return (
       <div>
+        {bannerJugada}
         <div className="toolbar">
           <div className="chips" role="group" aria-label="Modo de vista">
             <button className="chip" onClick={() => setModo('tabla')}>Tabla</button>
@@ -274,6 +286,7 @@ export function Productos({ nichoId, keyword, onSimular }) {
 
   return (
     <div>
+      {bannerJugada}
       <div className="toolbar">
         <input
           type="search"

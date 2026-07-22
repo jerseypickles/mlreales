@@ -3099,3 +3099,12 @@ section {
   color: var(--avisa-tinta);
   margin: 8px 0 0;
 }
+
+/* banner de jugada en la pestaña Productos: la apuesta es la del análisis */
+.banner-jugada {
+  border: 1px solid var(--acento-borde);
+  border-radius: 10px;
+  background: var(--acento-tenue);
+  padding: 10px 14px;
+  margin: 0 0 14px;
+}
