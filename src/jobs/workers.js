@@ -320,7 +320,12 @@ export async function procesarCalcularMetricas(job) {
       !ultimoAnalizado ||
       Math.abs((ultimoAnalizado.metricas?.scoreOportunidad ?? 0) - reporte.metricas.scoreOportunidad) >= 10
     if (debeAnalizar) {
-      await obtenerColas().analisis.add('analizar', { nichoId: String(nicho._id) })
+      // jobId por reporte: dos recálculos seguidos del mismo scan (extensión
+      // plan C, reintentos) no deben pagar el LLM dos veces (caso sabanillas
+      // perro 22-jul: análisis duplicado con 42s de diferencia)
+      await obtenerColas()
+        .analisis.add('analizar', { nichoId: String(nicho._id) }, { jobId: `analisis-${doc._id}` })
+        .catch(() => null)
       analisisEncolado = true
     } else {
       // el análisis anterior sigue vigente: heredarlo para que el reporte nuevo no quede huérfano
