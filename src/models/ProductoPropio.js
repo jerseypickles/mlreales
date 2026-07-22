@@ -8,6 +8,11 @@ const productoPropioSchema = new mongoose.Schema({
   titulo: String,
   imagen: String,
   estado: { type: String, enum: ['activo', 'pausado'], default: 'activo' },
+  // item id MLC… de la publicación cuando el sku seguido es una página /up/
+  // (MLCU…): abre la puerta oficial de item/visitas para el mismo producto
+  itemIdMl: { type: String, default: null },
+  // estado de la publicación en ML según la API oficial (active/paused/closed)
+  estadoMl: { type: String, default: null },
   ultimoScanEl: { type: Date, default: null },
   // serie embebida (una medición por scan, acotada): suficiente para deltas y gráficos
   mediciones: {
@@ -18,6 +23,10 @@ const productoPropioSchema = new mongoose.Schema({
         precio: Number,
         numReviews: Number,
         rating: Number,
+        // solo con cuenta ML conectada: datos oficiales que el scraper no ve
+        stock: Number,
+        vendidos: Number, // acumulado real — su delta entre scans = ventas reales
+        visitas: Number, // últimos 7 días
       },
     ],
     default: [],

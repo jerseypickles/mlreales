@@ -4,7 +4,7 @@ import { Snapshot } from '../models/Snapshot.js'
 import { ejecutarActorAsync, construirInputDetalle } from './apify.js'
 import { indexarDetallesPorSku } from './normalizadorDetalle.js'
 import { registrarGasto } from './gastos.js'
-import { reviewsOficialesSeguro, meliGet } from './meli.js'
+import { reviewsOficialesSeguro, itemOficialSeguro, visitasSeguro, meliGet } from './meli.js'
 
 const MAX_MEDICIONES = 180 // ~6 meses de serie diaria
 
@@ -38,9 +38,18 @@ export async function importarMisItems() {
       console.warn(`[meli] detalle de ${sku} no disponible al importar: ${err.message}`)
     }
     const userProductId = det?.user_product_id ?? null
-    if (userProductId && (await ProductoPropio.exists({ sku: userProductId }))) {
-      yaSeguidos++
-      continue
+    if (userProductId) {
+      const existente = await ProductoPropio.findOne({ sku: userProductId })
+      if (existente) {
+        // mismo producto ya seguido por su página /up/: guardar el item id le
+        // abre la puerta oficial (precio/stock/vendidos/visitas van por MLC…)
+        if (existente.itemIdMl !== sku) {
+          existente.itemIdMl = sku
+          await existente.save()
+        }
+        yaSeguidos++
+        continue
+      }
     }
     await ProductoPropio.create({
       sku,
@@ -58,40 +67,62 @@ export function extraerSkuDeUrl(url) {
   return m ? m[0].replace('-', '') : null
 }
 
-// Mide todos los productos propios activos en un solo batch del actor de detalle.
+// Mide todos los productos propios activos. Con cuenta ML conectada, la API
+// oficial va primero: precio/stock/vendidos reales/visitas/estado, gratis y
+// exactos para lo propio. El actor solo entra por los que la API no cubre con
+// precio (sin cuenta, o página /up/ sin item id vinculado por el importador).
 export async function escanearPropios() {
   const propios = await ProductoPropio.find({ estado: 'activo' })
   if (!propios.length) return { omitido: true, motivo: 'sin productos propios activos' }
 
   const fecha = new Date()
-  const { items, costoUsd } = await ejecutarActorAsync(
-    config.actorDetails,
-    construirInputDetalle(config.actorDetails, propios.map((p) => p.url)),
-    { pollMs: 10_000, timeoutMs: 10 * 60_000, conMeta: true },
-  )
-  await registrarGasto(null, costoUsd)
 
-  const { porSku } = indexarDetallesPorSku(items, propios.map((p) => p.sku))
+  const oficialPorSku = new Map()
+  for (const propio of propios) {
+    const item = await itemOficialSeguro(propio.itemIdMl ?? propio.sku)
+    if (item) oficialPorSku.set(propio.sku, item)
+  }
+
+  const sinOficial = propios.filter((p) => !Number.isFinite(oficialPorSku.get(p.sku)?.price))
+  let porSku = new Map()
+  let costoUsd = 0
+  if (sinOficial.length) {
+    const r = await ejecutarActorAsync(
+      config.actorDetails,
+      construirInputDetalle(config.actorDetails, sinOficial.map((p) => p.url)),
+      { pollMs: 10_000, timeoutMs: 10 * 60_000, conMeta: true },
+    )
+    costoUsd = r.costoUsd
+    await registrarGasto(null, costoUsd)
+    porSku = indexarDetallesPorSku(r.items, sinOficial.map((p) => p.sku)).porSku
+  }
+
   let medidos = 0
   for (const propio of propios) {
+    const oficial = oficialPorSku.get(propio.sku) ?? null
     const det = porSku.get(propio.sku) ?? null
     let numReviews = det?.numReviews ?? null
     let rating = det?.rating ?? null
     if (numReviews === null) {
-      // páginas /up/ propias (caso MLCU4383188844): el actor no ve las reseñas
-      // de catálogo — la API oficial sí, y de paso respalda si el actor falló
+      // reseñas de catálogo (páginas /up/): la API oficial las ve, el actor no
       const r = await reviewsOficialesSeguro(propio.sku)
       if (r) {
         numReviews = r.numReviews
         if (rating === null) rating = r.rating
       }
     }
-    if (!det && numReviews === null) continue
+    const precio = (Number.isFinite(oficial?.price) ? oficial.price : null) ?? det?.precio ?? null
+    const stock = Number.isFinite(oficial?.available_quantity) ? oficial.available_quantity : null
+    const vendidos = Number.isFinite(oficial?.sold_quantity) ? oficial.sold_quantity : null
+    const visitas = oficial ? await visitasSeguro(propio.itemIdMl ?? propio.sku) : null
+    if (!oficial && !det && numReviews === null) continue
     medidos++
-    if (det?.titulo) propio.titulo = det.titulo
-    if (det?.imagen) propio.imagen = det.imagen
+    if (oficial?.title ?? det?.titulo) propio.titulo = oficial?.title ?? det.titulo
+    const imagen = oficial?.pictures?.[0]?.secure_url ?? oficial?.thumbnail ?? det?.imagen
+    if (imagen) propio.imagen = imagen
+    if (oficial?.status) propio.estadoMl = oficial.status
     propio.ultimoScanEl = fecha
-    propio.mediciones.push({ fecha, precio: det?.precio ?? null, numReviews, rating })
+    propio.mediciones.push({ fecha, precio, numReviews, rating, stock, vendidos, visitas })
     if (propio.mediciones.length > MAX_MEDICIONES) {
       propio.mediciones = propio.mediciones.slice(-MAX_MEDICIONES)
     }

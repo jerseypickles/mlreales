@@ -161,6 +161,33 @@ export async function reviewsOficialesSeguro(sku) {
   }
 }
 
+// Detalle oficial de un item PROPIO: precio, stock (available_quantity),
+// vendidos reales (sold_quantity — exacto para el dueño, a diferencia del
+// "+10.000" público), estado y título. Solo abre para items del vendedor
+// conectado; para ajenos ML responde 403 (sonda 22-jul). Nunca rompe: null.
+export async function itemOficialSeguro(idMl) {
+  try {
+    if (!(await MeliCuenta.exists({}))) return null
+    return await meliGet(`/items/${idMl}`)
+  } catch (err) {
+    console.warn(`[meli] item ${idMl} no disponible: ${err.message}`)
+    return null
+  }
+}
+
+// Visitas del item en los últimos N días. Schema tolerante (total_visits no
+// está validado contra output en vivo — si no calza, el warn lo dirá).
+export async function visitasSeguro(idMl, dias = 7) {
+  try {
+    if (!(await MeliCuenta.exists({}))) return null
+    const datos = await meliGet(`/items/${idMl}/visits/time_window?last=${dias}&unit=day`)
+    return Number.isFinite(datos?.total_visits) ? datos.total_visits : null
+  } catch (err) {
+    console.warn(`[meli] visitas de ${idMl} no disponibles: ${err.message}`)
+    return null
+  }
+}
+
 // Sonda post-conexión: deja en el LOG qué puertas abre el token (propias y
 // públicas) — la decisión de qué migrar del scraper sale de estos resultados,
 // jamás de suponer schemas (regla del proyecto).

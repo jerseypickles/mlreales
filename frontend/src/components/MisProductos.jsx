@@ -10,15 +10,11 @@ function deltas(mediciones) {
   if (!mediciones?.length) return null
   const ultima = mediciones[mediciones.length - 1]
   const previa = mediciones.length > 1 ? mediciones[mediciones.length - 2] : null
-  const dReviews =
-    previa && Number.isFinite(ultima.numReviews) && Number.isFinite(previa.numReviews)
-      ? ultima.numReviews - previa.numReviews
+  const delta = (campo) =>
+    previa && Number.isFinite(ultima[campo]) && Number.isFinite(previa[campo])
+      ? ultima[campo] - previa[campo]
       : null
-  const dPrecio =
-    previa && Number.isFinite(ultima.precio) && Number.isFinite(previa.precio)
-      ? ultima.precio - previa.precio
-      : null
-  return { ultima, dReviews, dPrecio }
+  return { ultima, dReviews: delta('numReviews'), dPrecio: delta('precio'), dVendidos: delta('vendidos') }
 }
 
 function FilaPropio({ p, onEliminar, onAbrir }) {
@@ -29,7 +25,12 @@ function FilaPropio({ p, onEliminar, onAbrir }) {
       <td className="celda-imagen">
         {p.imagen ? <img src={p.imagen} alt="" loading="lazy" width="36" height="36" /> : <span className="sin-imagen" />}
       </td>
-      <td className="celda-titulo" title={p.titulo ?? p.sku}>{p.titulo ?? p.sku}</td>
+      <td className="celda-titulo" title={p.titulo ?? p.sku}>
+        {p.titulo ?? p.sku}
+        {p.estadoMl && p.estadoMl !== 'active' ? (
+          <span className="badge badge-neutro">{p.estadoMl === 'paused' ? 'pausada' : p.estadoMl}</span>
+        ) : null}
+      </td>
       <td className="num">
         {fmtPrecio(d?.ultima?.precio)}
         {d?.dPrecio ? (
@@ -38,11 +39,25 @@ function FilaPropio({ p, onEliminar, onAbrir }) {
           </span>
         ) : null}
       </td>
+      <td className="num">{fmtNum(d?.ultima?.stock)}</td>
       <td className="num">
         {fmtNum(d?.ultima?.numReviews)}
         {d?.dReviews > 0 ? <span className="delta delta-sube">+{d.dReviews}</span> : null}
       </td>
-      <td className="num">{d?.dReviews != null ? `~${fmtNum(d.dReviews * FACTOR_VENTAS)}` : '—'}</td>
+      <td className="num">
+        {d?.dVendidos != null ? (
+          <>
+            {fmtNum(d.dVendidos)} <span className="badge badge-full">real</span>
+          </>
+        ) : Number.isFinite(d?.ultima?.vendidos) ? (
+          `${fmtNum(d.ultima.vendidos)} acum.`
+        ) : d?.dReviews != null ? (
+          `~${fmtNum(d.dReviews * FACTOR_VENTAS)}`
+        ) : (
+          '—'
+        )}
+      </td>
+      <td className="num">{fmtNum(d?.ultima?.visitas)}</td>
       <td className="num">{d?.ultima?.rating ?? '—'}</td>
       <td>
         {p.posicionReciente
@@ -79,6 +94,9 @@ function PanelPropio({ propio, onCerrar }) {
           <button className="boton-cerrar" onClick={onCerrar} aria-label="Cerrar panel">✕</button>
         </div>
         <MiniSerie titulo="Precio" puntos={serie('precio')} formato={fmtPrecio} />
+        <MiniSerie titulo="Vendidos acumulados (real)" puntos={serie('vendidos')} />
+        <MiniSerie titulo="Stock" puntos={serie('stock')} />
+        <MiniSerie titulo="Visitas (ventana 7d)" puntos={serie('visitas')} />
         <MiniSerie titulo="Reseñas acumuladas" puntos={serie('numReviews')} />
         <MiniSerie titulo="Rating" puntos={serie('rating')} />
       </aside>
@@ -249,8 +267,10 @@ export function MisProductos() {
                 <th aria-label="imagen" />
                 <th>Producto</th>
                 <th className="num">Precio</th>
+                <th className="num">Stock</th>
                 <th className="num">Reseñas</th>
-                <th className="num">Ventas est. (último período)</th>
+                <th className="num">Ventas (último período)</th>
+                <th className="num">Visitas 7d</th>
                 <th className="num">Rating</th>
                 <th>Posición orgánica</th>
                 <th aria-label="acciones" />
@@ -266,9 +286,10 @@ export function MisProductos() {
       )}
 
       <p className="nota">
-        Las "ventas estimadas" usan la misma heurística del score (~{FACTOR_VENTAS} ventas por
-        reseña nueva). Cuando acumules semanas de datos junto a tus ventas reales, este número se
-        puede calibrar con tu factor verdadero.
+        Con la cuenta de Mercado Libre conectada, stock, ventas y visitas vienen de la API oficial
+        (exactos). La chapa "real" marca ventas del período medidas por ML; sin ella, la cifra con ~
+        es la estimación por reseñas (~{FACTOR_VENTAS} ventas por reseña nueva). El delta de ventas
+        reales aparece a partir de la segunda medición.
       </p>
 
       {abierto ? <PanelPropio propio={abierto} onCerrar={() => setAbierto(null)} /> : null}
