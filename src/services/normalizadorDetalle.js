@@ -145,28 +145,6 @@ export function idDesdeUrl(url) {
   return m ? m[0].replace('-', '') : null
 }
 
-// Salida del modo reviews (una fila por reseña; el agregado del producto viaja
-// en cada fila). El schema real no está validado contra output en vivo:
-// campos tolerantes, y el worker deja una muestra en el log cuando no calza.
-// OJO: fila.rating / fila.reviewRating es la nota de UNA reseña — jamás usarla
-// como rating del producto.
-export function resumenDeReviews(rawItems) {
-  const fila = (rawItems ?? []).find((r) => r && typeof r === 'object')
-  if (!fila) return null
-  const numero = (v) => (Number.isFinite(v) ? v : null)
-  const anidado = agregadoReviews(fila.reviews) ?? agregadoReviews(fila.product?.reviews)
-  const total =
-    numero(fila.ratingCount) ??
-    numero(fila.reviewCount) ??
-    numero(fila.totalReviews) ??
-    numero(fila.reviewsCount) ??
-    anidado?.total ??
-    null
-  const rating =
-    numero(fila.averageRating) ?? numero(fila.ratingValue) ?? numero(fila.ratingAverage) ?? anidado?.rating ?? null
-  return total === null ? null : { numReviews: total, rating }
-}
-
 // Indexa resultados del actor por SKU nuestro. Acepta la lista de objetivos
 // {sku, url} (preferido: habilita el match por URL) o solo skus (compat).
 export function indexarDetallesPorSku(rawItems, objetivos) {

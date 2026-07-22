@@ -120,23 +120,6 @@ export function construirInputDetalle(actorId, urls, { domainCode = 'CL' } = {})
   }
 }
 
-// Modo reviews del mismo actor: una fila por reseña, con el agregado del
-// producto viajando en cada fila — maxItems 1 = pagar UN resultado para leer
-// el total. Único uso: rescatar el conteo cuando la página de catálogo no lo
-// trae en modo product (caso gua sha / rodillo facial). Solo sourabhbgp.
-export function construirInputReviews(actorId, url, { domainCode = 'CL' } = {}) {
-  if (!String(actorId).includes('sourabhbgp')) return null
-  return {
-    mode: 'reviews',
-    country: domainCode,
-    productUrls: [url],
-    // 5 y no 1: colchón por si la primera página del bucket de reseñas de ML
-    // viene rara — igual son centavos y el agregado viaja en cada fila
-    maxItems: 5,
-    useResidentialProxy: true,
-  }
-}
-
 // Para la sonda debug: iniciar un run sin esperarlo (el proxy de Render corta
 // respuestas largas) y consultar estado + items después con el runId.
 export async function iniciarRun(actorId, input) {

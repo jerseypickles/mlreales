@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { normalizarItemDetalle, indexarDetallesPorSku, extraerImagen, resumenDeReviews } from '../src/services/normalizadorDetalle.js'
+import { normalizarItemDetalle, indexarDetallesPorSku, extraerImagen } from '../src/services/normalizadorDetalle.js'
 
 // output real del actor ecomscrape capturado el 2026-07-16
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/nivel2.json', import.meta.url), 'utf8'))
@@ -103,15 +103,6 @@ test('indexarDetallesPorSku: sigue aceptando lista de skus planos (compat)', () 
   const { porSku, sinMatch } = indexarDetallesPorSku([crudo], ['MLC111222333'])
   assert.equal(sinMatch, 0)
   assert.ok(porSku.has('MLC111222333'))
-})
-
-test('resumenDeReviews: toma el agregado del producto, jamás la nota de una reseña', () => {
-  const filas = [{ reviewRating: 5, ratingCount: 87, averageRating: 4.6, reviewText: 'buena' }]
-  assert.deepEqual(resumenDeReviews(filas), { numReviews: 87, rating: 4.6 })
-  assert.equal(resumenDeReviews([]), null)
-  assert.equal(resumenDeReviews(null), null)
-  // una fila con solo la nota individual NO es un agregado
-  assert.equal(resumenDeReviews([{ reviewRating: 5, reviewText: 'ok' }]), null)
 })
 
 test('normalizarItemDetalle: sin ratingCount arriba, lee el agregado anidado de includeReviews', () => {
