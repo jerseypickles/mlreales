@@ -173,9 +173,16 @@ export function MisProductos() {
         </div>
         <div className="toolbar">
           {meli?.conectado ? (
-            <span className="badge badge-full" title={`conectado el ${fmtFecha(meli.conectadoEl)}`}>
-              ML: {meli.nickname ?? meli.userId}
-            </span>
+            <>
+              <span className="badge badge-full" title={`conectado el ${fmtFecha(meli.conectadoEl)}`}>
+                ML: {meli.nickname ?? meli.userId}
+              </span>
+              {/* re-autorizar tras cambiar permisos de la app en DevCenter:
+                  la nueva autorización trae los scopes nuevos al mismo token */}
+              <button className="enlace-boton" onClick={conectarMeli}>
+                reconectar
+              </button>
+            </>
           ) : (
             <button className="boton-secundario" onClick={conectarMeli}>
               Conectar Mercado Libre
