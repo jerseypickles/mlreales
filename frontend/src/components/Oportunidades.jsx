@@ -65,6 +65,14 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
               {o.notaEtapa ? ` · ${o.notaEtapa}` : ''}
             </span>
           ) : null}
+          {Number.isFinite(o.shareJugadaPct) && o.shareJugadaPct < 50 ? (
+            <span
+              className="op-confianza op-confianza-media"
+              title={`El score del nicho mezcla familias de producto; la jugada recomendada concentra el ${o.shareJugadaPct}% de las reseñas del top${o.keywordJugada ? ` — el sistema la mide aparte como "${o.keywordJugada}"` : ''}`}
+            >
+              jugada {o.shareJugadaPct}% del top
+            </span>
+          ) : null}
           {o.listingListo ? <span className="op-listing" title="Borrador de listing generado">listing ✓</span> : null}
           {mismaCompraQue ? (
             <span

@@ -95,6 +95,7 @@ function filaParaLLM(o) {
     gemelos: o.sellersGemelos,
     pctFull: o.pctFull,
     titular: o.titular,
+    shareJugadaPct: o.shareJugadaPct ?? undefined,
     precioVentaClp: o.precioVentaClp,
     exwMaximoUsd: o.exwMaximoUsd,
     exwObjetivoUsd: o.exwObjetivoUsd,

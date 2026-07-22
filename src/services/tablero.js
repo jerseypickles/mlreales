@@ -167,6 +167,9 @@ export async function tableroOportunidades({ todos = false } = {}) {
       sellersUnicos: ultimo?.metricas?.competencia?.sellersUnicos ?? null,
       titular: rec.titular ?? null,
       segmento: rec.segmento ?? null,
+      // cuánto del top mezclado respalda la jugada, y la búsqueda que la aísla
+      shareJugadaPct: analisis.shareJugadaPct ?? null,
+      keywordJugada: analisis.keywordJugada ?? null,
       precioVentaClp: rec.precioVentaClp ?? null,
       exwMaximoUsd: exwMax,
       exwObjetivoUsd: exwObjetivo(exwMax, config.exwObjetivoPct),

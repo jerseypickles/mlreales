@@ -10,7 +10,7 @@ import { config } from '../config/env.js'
 const SCHEMA_ANALISIS = {
   type: 'object',
   additionalProperties: false,
-  required: ['veredicto', 'confianza', 'resumen', 'segmentos', 'recomendacion', 'riesgos', 'tramites', 'jugada', 'nichoIngles', 'revisarEn', 'subNichos'],
+  required: ['veredicto', 'confianza', 'resumen', 'segmentos', 'recomendacion', 'riesgos', 'tramites', 'jugada', 'nichoIngles', 'revisarEn', 'subNichos', 'keywordJugada', 'shareJugadaPct'],
   properties: {
     veredicto: { type: 'string', enum: ['entrar', 'entrar_con_condiciones', 'no_entrar'] },
     confianza: { type: 'string', enum: ['alta', 'media', 'baja'] },
@@ -79,6 +79,16 @@ const SCHEMA_ANALISIS = {
       type: 'string',
       description: 'Nombre del nicho en inglés comercial, como lo entendería un proveedor chino en Alibaba (ej: "solar garden fountain", "IPL hair removal device")',
     },
+    keywordJugada: {
+      type: ['string', 'null'],
+      description:
+        'SOLO si la keyword del nicho mezcla familias de producto y tu recomendación apunta a un segmento que NO domina el top (<50% de las reseñas): la búsqueda en ML Chile que AÍSLA ese segmento, tal como la escribiría un comprador (minúsculas, ej: "carpa baño vestidor"). El sistema la medirá como sub-nicho automático. null si la keyword madre ya representa tu jugada o si el veredicto es no_entrar.',
+    },
+    shareJugadaPct: {
+      type: ['number', 'null'],
+      description:
+        '% de las reseñas del top 50 que concentra el segmento de tu recomendación (copia el shareReviewsPct del segmento elegido). null solo si no hay recomendación aplicable.',
+    },
     revisarEn: {
       type: ['string', 'null'],
       description: 'SOLO si el veredicto es no_entrar POR VENTANA DE IMPORTACIÓN estacional: mes "AAAA-MM" en que conviene re-evaluar el nicho para alcanzar a comprar para el próximo pico (pico menos ~3 meses). null si el rechazo es estructural (marca, volumen, margen) o si el veredicto es de entrada.',
@@ -128,6 +138,7 @@ Reglas:
 - SELLERS GEMELOS (campo metricas.competencia.sellersGemelos): vendedores NO oficiales y chicos que están ganando reseñas AHORA dentro del nicho. Lee el campo con precisión: (a) si viene con elementos, es la prueba directa de que un entrante genérico como el importador puede vender aquí — pésala fuerte a favor; (b) si viene como lista VACÍA, se midió entre dos scans y nadie chico creció — pésalo en contra SOLO si además el top está dominado por tiendas oficiales; (c) si el campo NO viene, es el primer scan y la señal aún no se puede medir — NO lo uses ni a favor ni en contra, y jamás como razón de no_entrar.
 - CRITERIOS DEL IMPORTADOR (campo criteriosImportador, si viene): reglas que él escribió en su libreta — cúmplelas al pie de la letra, están por encima de tus heurísticas generales.
 - COMISIÓN REAL (campo comisionMlRealPct, si viene): es la comisión exacta de ML para la categoría de este nicho, obtenida de la API oficial — declárala tal cual en recomendacion.comisionMlPct y NO la estimes; la tabla EXW ya la incorpora.
+- KEYWORD vs JUGADA (campos keywordJugada y shareJugadaPct, SIEMPRE decláralos): el ranking de ML mezcla familias de producto bajo una misma búsqueda (ej: "carpa camping" en invierno = 55% lonas de repuesto para toldo) y las métricas que recibes vienen de esa MEZCLA. Declara shareJugadaPct (cuánto del top respalda tu recomendación) y, si tu jugada apunta a un segmento que no domina el top, declara keywordJugada: el sistema creará y medirá ese sub-nicho AUTOMÁTICAMENTE para confirmar la apuesta con datos puros. No es lo mismo que subNichos (exploración de puertas laterales): keywordJugada es LA búsqueda de tu recomendación principal.
 - SUB-NICHOS / PUERTAS LATERALES (campo subNichos, SIEMPRE piénsalo): tu veredicto responde por la keyword madre, pero el top suele insinuar jugadas que ella no captura — un formato que concentra la plata (packs, tamaño), un slot premium ocupado por una marca NUEVA y no por un incumbente histórico (= el slot se construyó hace poco y una marca propia/private label puede disputarlo), una variante sin la barrera regulatoria, un accesorio con mejor margen. Propón 0-3 keywords más específicas con su motivo CITANDO los datos del scan y la jugada concreta. En un no_entrar es OBLIGATORIO responderte: "rechazo la puerta principal, ¿existe puerta lateral?" — si no existe, lista vacía y punto; no inventes. El sistema crea y mide cada sub-nicho con un clic: no propongas nada que no valga el costo de un scan.
 - BÚSQUEDAS EN ALZA (campo busquedasEnAlza, si viene): consultas del autocompletado de ML que están subiendo esta semana en la vertical de este nicho — señal de demanda en tiempo real que complementa el delta de reseñas; úsala para elegir el segmento y el ángulo del producto.
 - CONTEXTO DEL IMPORTADOR SOBRE ESTE NICHO (campo contextoImportador, si viene): es experiencia de primera mano — ventas reales suyas en este nicho, conocimiento del segmento, canal o temporada. Pésalo POR SOBRE lo que infieras de las reseñas: las reseñas acumuladas por listing miden permanencia, y los vendedores genéricos rotan publicaciones — sus ventas se dispersan en listings de vida corta que no acumulan reseñas, así que "genéricos con pocas reseñas" NO prueba que el genérico no venda si el importador ya lo vendió. Si su experiencia contradice tu lectura de los datos, dilo explícitamente en el resumen y ajusta el veredicto considerando ambas evidencias.
@@ -249,6 +260,14 @@ export async function analizarNicho(nicho) {
   if (revision && revision.getTime() > Date.now()) {
     nicho.revisarEl = revision
     await nicho.save()
+  }
+
+  // jugada ≠ keyword: la apuesta se mide pura sin esperar el clic del usuario
+  if (analisis.keywordJugada) {
+    const { crearSubNichoDeJugada } = await import('./subnichos.js')
+    crearSubNichoDeJugada(nicho, analisis).catch((err) =>
+      console.warn(`[jugada] no se pudo crear el sub-nicho: ${err.message}`),
+    )
   }
 
   return reporte.analisis

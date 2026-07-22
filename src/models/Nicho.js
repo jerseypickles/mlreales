@@ -8,9 +8,13 @@ const nichoSchema = new mongoose.Schema({
   // screening = detalle barato (top-10) hasta que el score justifique el completo;
   // los nichos del radar nacen en screening, los manuales en completo
   fase: { type: String, enum: ['screening', 'completo'], default: 'completo' },
-  origen: { type: String, enum: ['manual', 'radar'], default: 'manual' },
+  // 'jugada' = sub-nicho automático que aísla la recomendación del analista
+  // cuando la keyword madre mezcla familias de producto (caso carpa camping)
+  origen: { type: String, enum: ['manual', 'radar', 'jugada'], default: 'manual' },
   // metadata del descubrimiento del radar: razon, estacionalidad, ventanaImportacion
   radarInfo: { type: mongoose.Schema.Types.Mixed, default: null },
+  // si origen='jugada': {nichoId, keyword, generadoEl} del nicho padre
+  jugadaDe: { type: mongoose.Schema.Types.Mixed, default: null },
   // último borrador de listing generado con IA (títulos, ficha, descripción…)
   listingDraft: { type: mongoose.Schema.Types.Mixed, default: null },
   // campos en inglés para la hoja de cotización al proveedor (rfq.js):
