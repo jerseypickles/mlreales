@@ -113,6 +113,24 @@ export async function tableroOportunidades({ todos = false } = {}) {
     },
   ])
 
+  // comisión exacta solo para filas con cotización (pocas), EN PARALELO y con
+  // cache 24h en comisionesMl — en serie dentro del loop sumaba ~1-2s al tablero
+  const comisionPorKeyword = new Map()
+  await Promise.all(
+    filas
+      .filter((n) => Number.isFinite(n.exwCotizadoUsd) && n.conAnalisis?.[0]?.analisis)
+      .map(async (n) => {
+        try {
+          const rec = n.conAnalisis[0].analisis.recomendacion ?? {}
+          const categoria = await categoriaDominante(n.keyword)
+          const c = await comisionMlExacta({ precioClp: rec.precioVentaClp, categoriaId: categoria })
+          if (c?.pct != null) comisionPorKeyword.set(n.keyword, c.pct)
+        } catch {
+          // sin comisión exacta: margenCotizacion cae a la del LLM
+        }
+      }),
+  )
+
   const oportunidades = []
   for (const n of filas) {
     const docAnalisis = n.conAnalisis?.[0]
@@ -132,15 +150,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
     // la ganancia por unidad al precio recomendado del análisis
     let cotizacion = null
     if (Number.isFinite(n.exwCotizadoUsd)) {
-      // comisión exacta solo para filas con cotización (pocas): cacheada por
-      // categoría/banda, y ante cualquier fallo el semáforo usa la del LLM
-      let comisionPct = null
-      try {
-        const categoria = await categoriaDominante(n.keyword)
-        comisionPct = (await comisionMlExacta({ precioClp: rec.precioVentaClp, categoriaId: categoria }))?.pct ?? null
-      } catch {
-        // sin comisión exacta: margenCotizacion cae a rec.comisionMlPct
-      }
+      const comisionPct = comisionPorKeyword.get(n.keyword) ?? null
       cotizacion = {
         exwUsd: n.exwCotizadoUsd,
         fecha: n.exwCotizadoEl ?? null,

@@ -14,22 +14,36 @@ export function solape(a, b) {
   return comunes / Math.min(a.size, b.size)
 }
 
-// Set de SKUs del último scan de cada keyword (top N por posición)
+// Set de SKUs del último scan de cada keyword (top N por posición).
+// Consultas index-backed EN PARALELO (una agregación que ordena todos los
+// snapshots tardaba segundos y corría en cada carga del tablero Y del
+// sidebar) + cache 10 min por combinación de keywords: las familias cambian
+// con los scans, no con cada refresco de página.
+const cacheSkus = new Map() // clave → {hasta, mapa}
+const TTL_SKUS_MS = 10 * 60e3
+
 export async function topSkusPorKeyword(keywords, { limite = 30 } = {}) {
   if (!keywords.length) return new Map()
-  const ultimos = await Snapshot.aggregate([
-    { $match: { keyword: { $in: keywords } } },
-    { $sort: { fecha: -1 } },
-    { $group: { _id: '$keyword', fecha: { $first: '$fecha' } } },
-  ])
-  const mapa = new Map()
-  for (const u of ultimos) {
-    const snaps = await Snapshot.find({ keyword: u._id, fecha: u.fecha })
-      .sort({ posicion: 1 })
-      .limit(limite)
-      .select('sku')
-      .lean()
-    mapa.set(u._id, new Set(snaps.map((s) => s.sku)))
+  const clave = `${[...keywords].sort().join('|')}#${limite}`
+  const hit = cacheSkus.get(clave)
+  if (hit && Date.now() < hit.hasta) return hit.mapa
+
+  const pares = await Promise.all(
+    keywords.map(async (kw) => {
+      const ultimo = await Snapshot.findOne({ keyword: kw }).sort({ fecha: -1 }).select('fecha').lean()
+      if (!ultimo) return [kw, new Set()]
+      const snaps = await Snapshot.find({ keyword: kw, fecha: ultimo.fecha })
+        .sort({ posicion: 1 })
+        .limit(limite)
+        .select('sku')
+        .lean()
+      return [kw, new Set(snaps.map((s) => s.sku))]
+    }),
+  )
+  const mapa = new Map(pares)
+  cacheSkus.set(clave, { hasta: Date.now() + TTL_SKUS_MS, mapa })
+  if (cacheSkus.size > 8) {
+    for (const [k, v] of cacheSkus) if (Date.now() >= v.hasta) cacheSkus.delete(k)
   }
   return mapa
 }
