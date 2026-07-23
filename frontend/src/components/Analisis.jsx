@@ -94,6 +94,51 @@ function RevisionTemporada({ nichoId, revisarElInicial }) {
 // Puertas laterales que el analista propone cuando la keyword madre no captura
 // la jugada (formato, private label, variante sin barrera): un clic crea el
 // nicho y el sistema lo mide de verdad.
+// La búsqueda que aísla la jugada del veredicto: medirla es decisión del
+// importador (un click), nunca automática — proponer es de la IA, gastar es de él.
+function MedirJugada({ nichoId, keywordJugada, shareJugadaPct, onNichoCreado }) {
+  const [estado, setEstado] = useState(null)
+  if (!keywordJugada) return null
+
+  async function medir() {
+    setEstado('creando')
+    try {
+      await api.medirJugada(nichoId)
+      setEstado('creado')
+      onNichoCreado?.()
+    } catch (err) {
+      setEstado(`error: ${err.message}`)
+    }
+  }
+
+  return (
+    <section className="sub-nichos">
+      <h3>🎯 La jugada, medible pura</h3>
+      <div className="sub-nicho">
+        <div className="sub-nicho-cab">
+          <strong>{keywordJugada}</strong>
+          {Number.isFinite(shareJugadaPct) ? (
+            <span className="sub-nicho-jugada">hoy respaldada por el {shareJugadaPct}% del top mezclado</span>
+          ) : null}
+        </div>
+        <p className="sub-nicho-motivo">
+          La recomendación de arriba apunta a este segmento, pero el score del nicho viene del top
+          completo mezclado. Medir esta búsqueda aparte entrega su score y demanda puros en 2-3 scans.
+        </p>
+        {estado === 'creado' ? (
+          <span className="sub-nicho-ok">✓ midiendo — aparece en el sidebar y su primer scan toma unos minutos</span>
+        ) : estado?.startsWith('error') ? (
+          <span className="sub-nicho-motivo">{estado}</span>
+        ) : (
+          <button className="boton-secundario" disabled={estado === 'creando'} onClick={medir}>
+            {estado === 'creando' ? 'Creando…' : 'Medir la jugada →'}
+          </button>
+        )}
+      </div>
+    </section>
+  )
+}
+
 function SubNichos({ subNichos, onNichoCreado }) {
   const [estados, setEstados] = useState({})
   if (!subNichos?.length) return null
@@ -234,6 +279,12 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
         {error ? <p className="error-bloque">{error}</p> : null}
       </div>
 
+      <MedirJugada
+        nichoId={nichoId}
+        keywordJugada={analisis.keywordJugada}
+        shareJugadaPct={analisis.shareJugadaPct}
+        onNichoCreado={onNichoCreado}
+      />
       <SubNichos subNichos={analisis.subNichos} onNichoCreado={onNichoCreado} />
 
       <ContextoImportador nichoId={nichoId} contextoInicial={contextoInicial} />

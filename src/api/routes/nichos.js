@@ -390,6 +390,32 @@ const ajustarNicho = manejar(async (req, res) => {
 router.patch('/:id', ajustarNicho)
 router.patch('/:id/estado', ajustarNicho) // compatibilidad con la ruta original
 
+// Medir la jugada del análisis como sub-nicho (botón en la pestaña Análisis):
+// canoniza a búsqueda real, deduplica y respeta presupuesto — proponer es de
+// la IA, gastar es del importador (regla del 23-jul, caso minipimer)
+router.post(
+  '/:id/medir-jugada',
+  manejar(async (req, res) => {
+    const nicho = await Nicho.findById(req.params.id)
+    if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
+    const conAnalisis = await Reporte.findOne({ nichoId: nicho._id, analisis: { $ne: null } })
+      .sort({ fecha: -1 })
+      .lean()
+    const keywordJugada = conAnalisis?.analisis?.keywordJugada
+    if (!keywordJugada) {
+      return res.status(409).json({ error: 'el análisis vigente no declara una keyword de jugada' })
+    }
+    const { crearSubNichoDeJugada } = await import('../../services/subnichos.js')
+    const hijo = await crearSubNichoDeJugada(nicho, { keywordJugada, veredicto: conAnalisis.analisis.veredicto })
+    if (!hijo) {
+      return res
+        .status(409)
+        .json({ error: 'no se creó: ya existe un nicho para esa búsqueda, no es una búsqueda real, o el presupuesto está agotado' })
+    }
+    res.status(201).json({ nicho: hijo })
+  }),
+)
+
 // Forzar una pasada del radar autónomo ahora (normalmente corre solo, ver RADAR_CRON)
 router.post(
   '/radar',

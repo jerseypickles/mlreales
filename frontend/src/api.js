@@ -35,6 +35,7 @@ export const api = {
   ajustarNicho: (id, cambios) => pedir(`/api/nichos/${id}`, { ...json(cambios), method: 'PATCH' }),
   historia: (sku) => pedir(`/api/productos/${sku}/historia`),
   analizarNicho: (id) => pedir(`/api/nichos/${id}/analisis`, { method: 'POST' }),
+  medirJugada: (id) => pedir(`/api/nichos/${id}/medir-jugada`, { method: 'POST' }),
   tendencia: (id) => pedir(`/api/nichos/${id}/tendencia`),
   correrRadar: () => pedir('/api/nichos/radar', { method: 'POST' }),
   simularMargen: (entrada) => pedir('/api/margen', json(entrada)),

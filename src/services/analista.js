@@ -138,7 +138,8 @@ Reglas:
 - SELLERS GEMELOS (campo metricas.competencia.sellersGemelos): vendedores NO oficiales y chicos que están ganando reseñas AHORA dentro del nicho. Lee el campo con precisión: (a) si viene con elementos, es la prueba directa de que un entrante genérico como el importador puede vender aquí — pésala fuerte a favor; (b) si viene como lista VACÍA, se midió entre dos scans y nadie chico creció — pésalo en contra SOLO si además el top está dominado por tiendas oficiales; (c) si el campo NO viene, es el primer scan y la señal aún no se puede medir — NO lo uses ni a favor ni en contra, y jamás como razón de no_entrar.
 - CRITERIOS DEL IMPORTADOR (campo criteriosImportador, si viene): reglas que él escribió en su libreta — cúmplelas al pie de la letra, están por encima de tus heurísticas generales.
 - COMISIÓN REAL (campo comisionMlRealPct, si viene): es la comisión exacta de ML para la categoría de este nicho, obtenida de la API oficial — declárala tal cual en recomendacion.comisionMlPct y NO la estimes; la tabla EXW ya la incorpora.
-- KEYWORD vs JUGADA (campos keywordJugada y shareJugadaPct, SIEMPRE decláralos): el ranking de ML mezcla familias de producto bajo una misma búsqueda (ej: "carpa camping" en invierno = 55% lonas de repuesto para toldo) y las métricas que recibes vienen de esa MEZCLA. Declara shareJugadaPct (cuánto del top respalda tu recomendación) y, si tu jugada apunta a un segmento que no domina el top, declara keywordJugada: el sistema creará y medirá ese sub-nicho AUTOMÁTICAMENTE para confirmar la apuesta con datos puros. No es lo mismo que subNichos (exploración de puertas laterales): keywordJugada es LA búsqueda de tu recomendación principal.
+- KEYWORD vs JUGADA (campos keywordJugada y shareJugadaPct, SIEMPRE decláralos): el ranking de ML mezcla familias de producto bajo una misma búsqueda (ej: "carpa camping" en invierno = 55% lonas de repuesto para toldo) y las métricas que recibes vienen de esa MEZCLA. Declara shareJugadaPct (cuánto del top respalda tu recomendación) y, si tu jugada apunta a un segmento que no domina el top, declara keywordJugada: el importador podrá medirla pura con un botón (proponer es tuyo, gastar es de él). No es lo mismo que subNichos (exploración de puertas laterales): keywordJugada es LA búsqueda de tu recomendación principal.
+- SINÓNIMOS Y NICHOS YA MEDIDOS (campo nichosYaMedidos, regla eliminatoria para keywordJugada y subNichos): en Chile el mismo producto tiene varios nombres — minipimer = batidora de inmersión, cosmetiquero = maleta de maquillaje, sabanilla = pañal de entrenamiento, ice roller ≈ rodillo facial. JAMÁS propongas como keywordJugada o subNicho una búsqueda que sea sinónimo o reformulación de la keyword del propio nicho, ni una que ya esté (o cuyo sinónimo ya esté) en nichosYaMedidos: medirla de nuevo es pagar dos veces el mismo dato. Si la jugada ya se mide en un nicho existente, declara keywordJugada null y dilo en el resumen citando ese nicho por su nombre.
 - SUB-NICHOS / PUERTAS LATERALES (campo subNichos, SIEMPRE piénsalo): tu veredicto responde por la keyword madre, pero el top suele insinuar jugadas que ella no captura — un formato que concentra la plata (packs, tamaño), un slot premium ocupado por una marca NUEVA y no por un incumbente histórico (= el slot se construyó hace poco y una marca propia/private label puede disputarlo), una variante sin la barrera regulatoria, un accesorio con mejor margen. Propón 0-3 keywords más específicas con su motivo CITANDO los datos del scan y la jugada concreta. En un no_entrar es OBLIGATORIO responderte: "rechazo la puerta principal, ¿existe puerta lateral?" — si no existe, lista vacía y punto; no inventes. El sistema crea y mide cada sub-nicho con un clic: no propongas nada que no valga el costo de un scan.
 - BÚSQUEDAS EN ALZA (campo busquedasEnAlza, si viene): consultas del autocompletado de ML que están subiendo esta semana en la vertical de este nicho — señal de demanda en tiempo real que complementa el delta de reseñas; úsala para elegir el segmento y el ángulo del producto.
 - CONTEXTO DEL IMPORTADOR SOBRE ESTE NICHO (campo contextoImportador, si viene): es experiencia de primera mano — ventas reales suyas en este nicho, conocimiento del segmento, canal o temporada. Pésalo POR SOBRE lo que infieras de las reseñas: las reseñas acumuladas por listing miden permanencia, y los vendedores genéricos rotan publicaciones — sus ventas se dispersan en listings de vida corta que no acumulan reseñas, así que "genéricos con pocas reseñas" NO prueba que el genérico no venda si el importador ya lo vendió. Si su experiencia contradice tu lectura de los datos, dilo explícitamente en el resumen y ajusta el veredicto considerando ambas evidencias.
@@ -197,6 +198,10 @@ export async function analizarNicho(nicho) {
   // criterios de la libreta + búsquedas en alza de la vertical (mejores
   // entradas = mejores veredictos; ambas opcionales y a prueba de fallos)
   const criterios = await criteriosActivos().catch(() => [])
+  // el tablero completo: para que keywordJugada/subNichos no propongan medir
+  // lo que ya se mide (ni con sinónimos — caso minipimer/batidora de inmersión)
+  const { Nicho } = await import('../models/Nicho.js')
+  const nichosYaMedidos = await Nicho.find().select('keyword').lean().then((ns) => ns.map((n) => n.keyword)).catch(() => [])
   let busquedasEnAlza
   try {
     const prefijo = prefijoDeKeyword(nicho.keyword)
@@ -229,6 +234,7 @@ export async function analizarNicho(nicho) {
     ventanaImportacionSegunRadar: nicho.radarInfo?.ventanaImportacion ?? undefined,
     contextoImportador: nicho.contextoUsuario ?? undefined,
     criteriosImportador: criterios.length ? criterios : undefined,
+    nichosYaMedidos: nichosYaMedidos.length ? nichosYaMedidos : undefined,
     busquedasEnAlza,
     comisionMlRealPct: comisionReal?.pct ?? undefined,
     metricas: reporte.metricas,
@@ -262,13 +268,10 @@ export async function analizarNicho(nicho) {
     await nicho.save()
   }
 
-  // jugada ≠ keyword: la apuesta se mide pura sin esperar el clic del usuario
-  if (analisis.keywordJugada) {
-    const { crearSubNichoDeJugada } = await import('./subnichos.js')
-    crearSubNichoDeJugada(nicho, analisis).catch((err) =>
-      console.warn(`[jugada] no se pudo crear el sub-nicho: ${err.message}`),
-    )
-  }
+  // la jugada NO se mide sola (decisión del usuario 23-jul tras el caso
+  // minipimer=batidora de inmersión): el análisis PROPONE keywordJugada y el
+  // botón "Medir la jugada" de la UI ejecuta — proponer es de la IA, gastar es
+  // del importador.
 
   return reporte.analisis
 }
