@@ -3131,3 +3131,15 @@ section {
   padding: 2px 10px;
   font-size: 11.5px;
 }
+
+/* nichos anidados bajo su líder de familia en el sidebar */
+.nicho-anidado {
+  margin-left: 14px;
+  border-left: 2px solid var(--borde);
+}
+
+.familia-marca {
+  color: var(--tinta-2);
+  margin-right: 2px;
+  cursor: help;
+}

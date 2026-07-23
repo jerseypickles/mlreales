@@ -116,14 +116,26 @@ function GrupoNichos({ id, titulo, cantidad, abiertoPorDefecto = false, children
   )
 }
 
-function NichoItem({ n, seleccionado, onSeleccionar }) {
+function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
   const score = n.ultimoReporte?.scoreOportunidad
   const etapa = n.etapaCompra && n.etapaCompra !== 'evaluando' ? n.etapaCompra : null
   return (
-    <li>
+    <li className={anidado ? 'nicho-anidado' : undefined}>
       <button className={n._id === seleccionado ? 'nicho activo' : 'nicho'} onClick={() => onSeleccionar(n._id)}>
         <span className="nicho-fila">
           <span className="nicho-keyword">
+            {anidado ? (
+              <span
+                className="familia-marca"
+                title={
+                  n.esJugadaDelLider
+                    ? `sub-nicho de jugada de "${n.familiaLider}" (medición a propósito)`
+                    : `mide el mismo mercado que "${n.familiaLider}" (${n.familiaSolapePct}% del top compartido)`
+                }
+              >
+                ↳
+              </span>
+            ) : null}
             {n.origen === 'radar' ? <span className="punto-radar" title="descubierto por el radar" /> : null}
             {n.keyword}
             {esNuevo(n) ? <span className="badge-nuevo" title="creado hace menos de 3 días">nuevo</span> : null}
@@ -192,8 +204,28 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
     .sort((a, b) => fechaCreado(b) - fechaCreado(a))
   const descartados = visibles.filter(descartado).sort((a, b) => puntaje(b) - puntaje(a))
 
-  const render = (lista) =>
-    lista.map((n) => <NichoItem key={n._id} n={n} seleccionado={seleccionado} onSeleccionar={onSeleccionar} />)
+  // familias: los que miden el mismo mercado se anidan bajo su líder cuando
+  // ambos están en el mismo grupo (si el líder vive en otro grupo, la fila
+  // queda normal — el tooltip de la carta de Oportunidades cuenta el resto)
+  const render = (lista) => {
+    const enGrupo = new Set(lista.map((n) => n.keyword))
+    const hijosDe = new Map()
+    const raices = []
+    for (const n of lista) {
+      if (n.familiaLider && enGrupo.has(n.familiaLider)) {
+        if (!hijosDe.has(n.familiaLider)) hijosDe.set(n.familiaLider, [])
+        hijosDe.get(n.familiaLider).push(n)
+      } else {
+        raices.push(n)
+      }
+    }
+    return raices.flatMap((n) => [
+      <NichoItem key={n._id} n={n} seleccionado={seleccionado} onSeleccionar={onSeleccionar} />,
+      ...(hijosDe.get(n.keyword) ?? []).map((h) => (
+        <NichoItem key={h._id} n={h} seleccionado={seleccionado} onSeleccionar={onSeleccionar} anidado />
+      )),
+    ])
+  }
 
   return (
     <div className="lista-envoltura">

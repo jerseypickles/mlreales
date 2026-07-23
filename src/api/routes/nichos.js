@@ -9,6 +9,7 @@ import { sugerirNichos } from '../../services/sugeridor.js'
 import { llmDisponible } from '../../services/llm.js'
 import { aCsvExcel, COLUMNAS_PRODUCTO_CSV } from '../../services/csv.js'
 import { cambiosPorEtapa, ETAPAS_COMPRA } from '../../services/oportunidades.js'
+import { topSkusPorKeyword, agruparFamilias } from '../../services/familias.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -133,6 +134,29 @@ router.get(
       for (const j of scansAct) if (j?.data?.nichoId) etapas.set(j.data.nichoId, 'escaneando')
     } catch {
       // sin Redis no hay etapas; la lista funciona igual
+    }
+
+    // familias (mismo mercado por solape de SKUs): el sidebar anida las
+    // keywords duplicadas bajo su líder (el de mayor score) en cada grupo
+    try {
+      const porScore = [...nichos].sort(
+        (a, b) => (b.ultimoReporte?.scoreOportunidad ?? -1) - (a.ultimoReporte?.scoreOportunidad ?? -1),
+      )
+      const filas = porScore.map((n) => ({
+        keyword: n.keyword,
+        familiaAparte: n.familiaAparte ?? [],
+        jugadaDeKeyword: n.jugadaDe?.keyword ?? null,
+      }))
+      const skus = await topSkusPorKeyword(filas.map((f) => f.keyword))
+      const { deMiembro } = agruparFamilias(filas, skus)
+      for (const n of nichos) {
+        const m = deMiembro.get(n.keyword)
+        n.familiaLider = m?.lider ?? null
+        n.familiaSolapePct = m?.solapePct ?? null
+        n.esJugadaDelLider = m?.esJugadaDelLider ?? false
+      }
+    } catch (err) {
+      console.warn(`[nichos] familias no calculadas: ${err.message}`)
     }
 
     res.json({
