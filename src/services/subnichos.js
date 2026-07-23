@@ -17,6 +17,13 @@ export async function crearSubNichoDeJugada(nicho, analisis) {
     .toLowerCase()
   if (!candidata || analisis.veredicto === 'no_entrar') return null
   if (candidata === nicho.keyword) return null
+  // tope de UN nivel: un sub-nicho de jugada no engendra otro (la cadena
+  // batidora de mano → inmersion → minipimer 5 en 1 → … quemaría scans sin
+  // fin; el refinamiento extra queda en puertas laterales para clic manual)
+  if (nicho.origen === 'jugada') {
+    console.log(`[jugada] "${nicho.keyword}" ya es sub-nicho: "${candidata}" queda como puerta lateral manual`)
+    return null
+  }
 
   const gastado = await gastoDelMes()
   if (gastado >= config.presupuestoUsdMes) {
