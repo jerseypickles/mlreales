@@ -157,11 +157,16 @@ function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) 
     }
   }
 
+  const etiqueta = (m) =>
+    porKeyword.get(m.keyword)?.esJugadaDelLider
+      ? `${m.keyword} (jugada medida aparte)`
+      : `${m.keyword} (${m.solapePct}% compartido)`
+
   return (
     <div className="familia">
-      <button className="enlace-boton" onClick={() => setAbierta(!abierta)}>
-        {abierta ? '▾' : '▸'} {miembros.length} nicho(s) miden este mismo mercado:{' '}
-        {miembros.map((m) => `${m.keyword} (${m.solapePct}% compartido)`).join(' · ')}
+      <button className="familia-toggle" onClick={() => setAbierta(!abierta)}>
+        {abierta ? '▾' : '▸'} {miembros.length === 1 ? '1 nicho mide' : `${miembros.length} nichos miden`} este
+        mismo mercado: {miembros.map(etiqueta).join(' · ')}
       </button>
       {abierta ? (
         <ul className="familia-lista">

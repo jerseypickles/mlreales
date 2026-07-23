@@ -128,7 +128,8 @@ header {
   gap: 16px;
   margin: 0 -22px 18px;
   padding: 12px 22px;
-  background: color-mix(in srgb, var(--fondo) 82%, transparent);
+  /* 97%: con 82% los botones del contenido se leían a través de la barra */
+  background: color-mix(in srgb, var(--fondo) 97%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--borde);
@@ -3112,19 +3113,34 @@ section {
 /* ============ familias de nicho (mismo mercado, colapsadas) ============ */
 
 .familia {
-  margin: -8px 0 14px 56px;
+  margin: 6px 0 16px;
+  padding: 8px 14px;
+  border: 1px dashed var(--borde);
+  border-radius: 10px;
+  background: var(--superficie);
   font-size: 12.5px;
+}
+
+.familia-toggle {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--tinta-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.familia-toggle:hover {
+  color: var(--acento);
 }
 
 .familia-lista {
   list-style: none;
-  padding: 8px 12px;
-  margin: 6px 0 0;
+  padding: 10px 0 2px;
+  margin: 0;
   display: grid;
   gap: 6px;
-  border: 1px dashed var(--borde);
-  border-radius: 10px;
-  background: var(--superficie-2);
 }
 
 .boton-mini {
