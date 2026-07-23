@@ -182,17 +182,15 @@ function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) 
                   {m.solapePct}% del top compartido · score {o?.score ?? '—'}
                   {esJugada ? ' · sub-nicho de jugada (medición a propósito)' : ''}
                 </span>{' '}
+                <button className="boton-secundario boton-mini" onClick={() => absorber(m)} disabled={ocupado}
+                        title="Pausa este nicho (reversible): libera cupo y deja de pagar scans duplicados">
+                  absorber
+                </button>{' '}
                 {!esJugada ? (
-                  <>
-                    <button className="boton-secundario boton-mini" onClick={() => absorber(m)} disabled={ocupado}
-                            title="Pausa este nicho (reversible): libera cupo y deja de pagar scans duplicados">
-                      absorber
-                    </button>{' '}
-                    <button className="enlace-boton" onClick={() => mantenerAparte(m)} disabled={ocupado}
-                            title="Falso positivo: son mercados distintos, no volver a agruparlos">
-                      mantener aparte
-                    </button>
-                  </>
+                  <button className="enlace-boton" onClick={() => mantenerAparte(m)} disabled={ocupado}
+                          title="Falso positivo: son mercados distintos, no volver a agruparlos">
+                    mantener aparte
+                  </button>
                 ) : null}
               </li>
             )
