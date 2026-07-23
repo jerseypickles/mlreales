@@ -33,6 +33,23 @@ if (process.env.SONDA_NICHO_KEYWORD) {
     .then(({ sondaNicho }) => sondaNicho(process.env.SONDA_NICHO_KEYWORD))
     .catch((err) => console.error('[sonda-nicho] falló:', err.message))
 }
+// siembra one-shot de criterios dictados en conversación (la API exige la
+// x-api-key que solo tiene el usuario). JSON array en SEED_CRITERIOS; dedupe
+// por texto exacto y la env var se retira tras verificar el log [criterios].
+if (process.env.SEED_CRITERIOS) {
+  import('./models/Criterio.js')
+    .then(async ({ Criterio }) => {
+      for (const texto of JSON.parse(process.env.SEED_CRITERIOS)) {
+        const ya = await Criterio.findOne({ texto })
+        if (ya) console.log(`[criterios] ya existía: ${texto.slice(0, 60)}…`)
+        else {
+          await Criterio.create({ texto })
+          console.log(`[criterios] sembrado: ${texto.slice(0, 60)}…`)
+        }
+      }
+    })
+    .catch((err) => console.error('[criterios] siembra falló:', err.message))
+}
 // migración: la etapa "muestra" se eliminó del embudo (la prueba es el pedido mínimo)
 Nicho.updateMany({ etapaCompra: 'muestra' }, { $set: { etapaCompra: 'pedido' } })
   .then((r) => r.modifiedCount && console.log(`[migración] ${r.modifiedCount} nicho(s): muestra → pedido`))
