@@ -15,6 +15,9 @@ const nichoSchema = new mongoose.Schema({
   radarInfo: { type: mongoose.Schema.Types.Mixed, default: null },
   // si origen='jugada': {nichoId, keyword, generadoEl} del nicho padre
   jugadaDe: { type: mongoose.Schema.Types.Mixed, default: null },
+  // keywords con las que el usuario marcó "mantener aparte": el agrupador de
+  // familias (solape de SKUs) no vuelve a unirlas (falso positivo declarado)
+  familiaAparte: { type: [String], default: [] },
   // último borrador de listing generado con IA (títulos, ficha, descripción…)
   listingDraft: { type: mongoose.Schema.Types.Mixed, default: null },
   // campos en inglés para la hoja de cotización al proveedor (rfq.js):

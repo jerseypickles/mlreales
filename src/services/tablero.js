@@ -10,6 +10,7 @@ import {
 import { config } from '../config/env.js'
 import { calcularMargen } from './margen.js'
 import { comisionMlExacta, categoriaDominante } from './comisionesMl.js'
+import { topSkusPorKeyword, agruparFamilias } from './familias.js'
 
 // Margen estimado si compras al EXW que cotizó el proveedor, con los mismos
 // supuestos estándar de la tabla del análisis (volumen 0.003 m³/u, marítimo).
@@ -94,6 +95,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
         keyword: 1,
         conteoDemanda: 1,
         origen: 1,
+        jugadaDe: 1,
+        familiaAparte: 1,
         estado: 1,
         etapaCompra: 1,
         etapaCompraEl: 1,
@@ -149,6 +152,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
       nichoId: n._id,
       keyword: n.keyword,
       origen: n.origen,
+      jugadaDeKeyword: n.jugadaDe?.keyword ?? null,
+      familiaAparte: n.familiaAparte ?? [],
       frecuenciaScan: n.frecuenciaScan,
       veredicto: analisis.veredicto,
       confianza: analisis.confianza ?? null,
@@ -206,5 +211,23 @@ export async function tableroOportunidades({ todos = false } = {}) {
   oportunidades.sort(
     (a, b) => (b.score ?? -1) - (a.score ?? -1) || (b.ventasDia ?? 0) - (a.ventasDia ?? 0),
   )
+
+  // FAMILIAS: nichos que miden el mismo mercado (solape de SKUs del último
+  // scan). El de mayor score lidera; los demás llevan familiaLider para que la
+  // UI los colapse y el estratega reclame el gasto duplicado.
+  try {
+    const skus = await topSkusPorKeyword(oportunidades.map((o) => o.keyword))
+    const { deMiembro, deLider } = agruparFamilias(oportunidades, skus)
+    for (const o of oportunidades) {
+      const m = deMiembro.get(o.keyword)
+      o.familiaLider = m?.lider ?? null
+      o.familiaSolapePct = m?.solapePct ?? null
+      o.esJugadaDelLider = m?.esJugadaDelLider ?? false
+      o.familiaMiembros = deLider.get(o.keyword) ?? null
+    }
+  } catch (err) {
+    console.warn(`[tablero] familias no calculadas: ${err.message}`)
+  }
+
   return oportunidades
 }

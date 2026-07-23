@@ -323,6 +323,14 @@ const ajustarNicho = manejar(async (req, res) => {
     if (!actual) return res.status(404).json({ error: 'nicho no encontrado' })
     Object.assign(cambios, cambiosPorEtapa(etapaCompra, actual))
   }
+  if (req.body?.familiaAparte !== undefined) {
+    // "mantener aparte": marca el par como falso positivo del agrupador de familias
+    const kw = String(req.body.familiaAparte ?? '').trim().toLowerCase()
+    if (!kw) return res.status(400).json({ error: 'familiaAparte requiere la keyword del otro nicho' })
+    const doc = await Nicho.findByIdAndUpdate(req.params.id, { $addToSet: { familiaAparte: kw } }, { new: true })
+    if (!doc) return res.status(404).json({ error: 'nicho no encontrado' })
+    if (Object.keys(req.body).length === 1) return res.json({ nicho: doc })
+  }
   if (contextoUsuario !== undefined) {
     const texto = String(contextoUsuario ?? '').trim()
     if (texto.length > 2000) {

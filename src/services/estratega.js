@@ -73,6 +73,7 @@ Reglas:
 - confianza baja + datos viejos (fechaAnalisis antigua o scans nuevos desde entonces) = regenerar_analisis antes de mover plata.
 - poner_lupa = subir un nicho a scan diario cuando una decisión inminente necesita datos frescos.
 - Los nichos con misma productoClave son UNA compra: trátalos juntos, no dupliques inversión.
+- Los nichos con familiaLider miden el MISMO mercado que su líder (solape de SKUs): son scans duplicados pagándose dos veces — recomienda absorberlos (pausar) salvo que midan un ángulo deliberadamente distinto.
 - Respeta el presupuesto restante del mes que te paso; si una jugada lo excede, dilo.
 - Los criterios del importador (si vienen) están por encima de tus heurísticas.
 - keyword siempre EXACTA como viene en el tablero (es la llave para ejecutar tus acciones con un clic).
@@ -96,6 +97,9 @@ function filaParaLLM(o) {
     pctFull: o.pctFull,
     titular: o.titular,
     shareJugadaPct: o.shareJugadaPct ?? undefined,
+    // duplicado de mercado: mide lo mismo que familiaLider (solape de SKUs)
+    familiaLider: o.familiaLider ?? undefined,
+    familiaSolapePct: o.familiaSolapePct ?? undefined,
     precioVentaClp: o.precioVentaClp,
     exwMaximoUsd: o.exwMaximoUsd,
     exwObjetivoUsd: o.exwObjetivoUsd,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { Cargando, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
@@ -127,20 +127,91 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
   )
 }
 
+// Nichos que miden el MISMO mercado que la carta líder (solape de SKUs):
+// colapsados bajo ella, con absorber (pausar, reversible) o mantener aparte.
+function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) {
+  const [abierta, setAbierta] = useState(false)
+  const [ocupado, setOcupado] = useState(false)
+
+  async function absorber(m) {
+    const o = porKeyword.get(m.keyword)
+    if (!o) return
+    setOcupado(true)
+    try {
+      await api.ajustarNicho(o.nichoId, { estado: 'pausado', notaEtapa: `familia de ${lider.keyword}` })
+      onRecargar()
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  async function mantenerAparte(m) {
+    const o = porKeyword.get(m.keyword)
+    if (!o) return
+    setOcupado(true)
+    try {
+      await api.ajustarNicho(o.nichoId, { familiaAparte: lider.keyword })
+      onRecargar()
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  return (
+    <div className="familia">
+      <button className="enlace-boton" onClick={() => setAbierta(!abierta)}>
+        {abierta ? '▾' : '▸'} {miembros.length} nicho(s) miden este mismo mercado:{' '}
+        {miembros.map((m) => `${m.keyword} (${m.solapePct}% compartido)`).join(' · ')}
+      </button>
+      {abierta ? (
+        <ul className="familia-lista">
+          {miembros.map((m) => {
+            const o = porKeyword.get(m.keyword)
+            const esJugada = o?.esJugadaDelLider
+            return (
+              <li key={m.keyword}>
+                <button className="enlace-boton" onClick={() => o && onAbrir(o.nichoId)}>
+                  {m.keyword}
+                </button>{' '}
+                <span className="plan-motivo">
+                  {m.solapePct}% del top compartido · score {o?.score ?? '—'}
+                  {esJugada ? ' · sub-nicho de jugada (medición a propósito)' : ''}
+                </span>{' '}
+                {!esJugada ? (
+                  <>
+                    <button className="boton-secundario boton-mini" onClick={() => absorber(m)} disabled={ocupado}
+                            title="Pausa este nicho (reversible): libera cupo y deja de pagar scans duplicados">
+                      absorber
+                    </button>{' '}
+                    <button className="enlace-boton" onClick={() => mantenerAparte(m)} disabled={ocupado}
+                            title="Falso positivo: son mercados distintos, no volver a agruparlos">
+                      mantener aparte
+                    </button>
+                  </>
+                ) : null}
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
 export function Oportunidades({ onAbrirNicho }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    let vigente = true
+  const cargar = useCallback(() => {
     api
       .oportunidades()
-      .then((d) => vigente && setDatos(d))
-      .catch((err) => vigente && setError(err.message))
-    return () => {
-      vigente = false
-    }
+      .then(setDatos)
+      .catch((err) => setError(err.message))
   }, [])
+
+  useEffect(() => {
+    cargar()
+  }, [cargar])
 
   if (error) return <main><p className="error-bloque">Error: {error}</p></main>
   if (!datos) return <main><Cargando texto="Cargando oportunidades…" /></main>
@@ -167,22 +238,33 @@ export function Oportunidades({ onAbrirNicho }) {
         <div className="op-lista">
           {(() => {
             // el primer nicho de cada clave de producto (mayor score) es el dueño
-            // de la compra; los siguientes llevan el chip "misma compra que"
+            // de la compra; los siguientes llevan el chip "misma compra que".
+            // Los miembros de una familia (mismo mercado) no ocupan carta propia:
+            // viven colapsados bajo su líder.
             const dueno = new Map()
-            return datos.oportunidades.map((o, i) => {
+            const porKeyword = new Map(datos.oportunidades.map((o) => [o.keyword, o]))
+            let rank = 0
+            return datos.oportunidades.map((o) => {
+              if (o.familiaLider) return null // colapsado bajo el líder
+              rank++
               let mismaCompraQue = null
               if (o.productoClave) {
                 if (dueno.has(o.productoClave)) mismaCompraQue = dueno.get(o.productoClave)
                 else dueno.set(o.productoClave, o.keyword)
               }
               return (
-                <CartaOportunidad
-                  key={o.nichoId}
-                  o={o}
-                  rank={i + 1}
-                  onAbrir={onAbrirNicho}
-                  mismaCompraQue={mismaCompraQue}
-                />
+                <div key={o.nichoId}>
+                  <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} />
+                  {o.familiaMiembros?.length ? (
+                    <FamiliaColapsada
+                      miembros={o.familiaMiembros}
+                      porKeyword={porKeyword}
+                      lider={o}
+                      onAbrir={onAbrirNicho}
+                      onRecargar={cargar}
+                    />
+                  ) : null}
+                </div>
               )
             })
           })()}
