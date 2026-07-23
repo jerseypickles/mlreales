@@ -3159,3 +3159,16 @@ section {
   margin-right: 2px;
   cursor: help;
 }
+
+/* parentesco visible cuando el líder de la familia vive en otro grupo del sidebar */
+.familia-chip {
+  font-size: 10px;
+  color: var(--tinta-2);
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  white-space: nowrap;
+  cursor: help;
+}

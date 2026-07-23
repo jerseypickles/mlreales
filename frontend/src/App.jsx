@@ -138,6 +138,18 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
             ) : null}
             {n.origen === 'radar' ? <span className="punto-radar" title="descubierto por el radar" /> : null}
             {n.keyword}
+            {!anidado && n.familiaLider ? (
+              <span
+                className="familia-chip"
+                title={
+                  n.esJugadaDelLider
+                    ? `sub-nicho de jugada de "${n.familiaLider}": mide la apuesta de ese análisis en forma pura`
+                    : `mide el mismo mercado que "${n.familiaLider}" (${n.familiaSolapePct}% del top compartido)`
+                }
+              >
+                ↳ {n.familiaLider}
+              </span>
+            ) : null}
             {esNuevo(n) ? <span className="badge-nuevo" title="creado hace menos de 3 días">nuevo</span> : null}
             {n.vueltaTemporadaEl && Date.now() - new Date(n.vueltaTemporadaEl).getTime() < 7 * 86400e3 ? (
               <span className="badge-nuevo" title="descartado estacional que volvió a evaluación: su ventana de compra llegó">
