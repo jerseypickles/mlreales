@@ -203,7 +203,7 @@ function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) 
   )
 }
 
-export function Oportunidades({ onAbrirNicho }) {
+export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
 
@@ -212,7 +212,9 @@ export function Oportunidades({ onAbrirNicho }) {
       .oportunidades()
       .then(setDatos)
       .catch((err) => setError(err.message))
-  }, [])
+    // absorber cambia estados de nicho: el sidebar también debe refrescarse
+    alCambiarNichos?.()
+  }, [alCambiarNichos])
 
   useEffect(() => {
     cargar()

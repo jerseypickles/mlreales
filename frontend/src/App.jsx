@@ -593,6 +593,7 @@ export default function App() {
             setSeleccionado(id)
             setVista('nichos')
           }}
+          alCambiarNichos={cargarNichos}
         />
       ) : vista === 'planilla' ? (
         <PlanillaGlobal

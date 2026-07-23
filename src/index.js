@@ -33,6 +33,26 @@ if (process.env.SONDA_NICHO_KEYWORD) {
     .then(({ sondaNicho }) => sondaNicho(process.env.SONDA_NICHO_KEYWORD))
     .catch((err) => console.error('[sonda-nicho] falló:', err.message))
 }
+// barrido one-shot: pausar nichos por keyword (JSON array en SEED_PAUSAR) —
+// para limpiezas dictadas en conversación sin la x-api-key; la env var se
+// retira tras verificar el log [barrido]. Pausar es reversible siempre.
+if (process.env.SEED_PAUSAR) {
+  import('./models/Nicho.js')
+    .then(async ({ Nicho }) => {
+      for (const keyword of JSON.parse(process.env.SEED_PAUSAR)) {
+        const nicho = await Nicho.findOne({ keyword })
+        if (!nicho) console.warn(`[barrido] no existe: "${keyword}"`)
+        else if (nicho.estado === 'pausado') console.log(`[barrido] ya pausado: "${keyword}"`)
+        else {
+          nicho.estado = 'pausado'
+          nicho.notaEtapa = 'barrido: duplicado de jugada'
+          await nicho.save()
+          console.log(`[barrido] pausado: "${keyword}"`)
+        }
+      }
+    })
+    .catch((err) => console.error('[barrido] falló:', err.message))
+}
 // siembra one-shot de criterios dictados en conversación (la API exige la
 // x-api-key que solo tiene el usuario). JSON array en SEED_CRITERIOS; dedupe
 // por texto exacto y la env var se retira tras verificar el log [criterios].
