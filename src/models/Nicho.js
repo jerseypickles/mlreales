@@ -43,6 +43,9 @@ const nichoSchema = new mongoose.Schema({
   // el EXW máximo del análisis y alimenta el margen estimado en la planilla
   exwCotizadoUsd: { type: Number, default: null },
   exwCotizadoEl: { type: Date, default: null },
+  // cantidad del pedido fijada a mano en la planilla (pisa la sugerida por el
+  // análisis en primeraCompra; null = usar la sugerencia)
+  unidadesPedido: { type: Number, default: null },
   // motivo corto de la etapa ("esperando registro ISP", "pensándolo",
   // "esperando respuesta de 3 proveedores") — visible en planilla y oportunidades
   notaEtapa: { type: String, default: null },

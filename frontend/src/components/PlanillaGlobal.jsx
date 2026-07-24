@@ -33,6 +33,13 @@ export function fusionarCompras(oportunidades) {
       if (o.unidadesPrueba != null) {
         grupo.unidadesPrueba = (grupo.unidadesPrueba ?? 0) + o.unidadesPrueba
       }
+      if (o.unidadesEfectivas != null) {
+        grupo.unidadesEfectivas = (grupo.unidadesEfectivas ?? 0) + o.unidadesEfectivas
+      }
+      if (o.gastoPedidoUsd != null) {
+        grupo.gastoPedidoUsd = (grupo.gastoPedidoUsd ?? 0) + o.gastoPedidoUsd
+      }
+      grupo.gastoEsReal = Boolean(grupo.gastoEsReal && o.gastoEsReal)
       // el veredicto más fuerte del grupo manda en pantalla
       if (o.veredicto === 'entrar' && grupo.veredicto !== 'entrar') grupo.veredicto = 'entrar'
     }
@@ -164,6 +171,64 @@ function CotizacionExw({ fila, onCambiada }) {
         if (e.key === 'Enter') e.target.blur()
       }}
       aria-label="EXW cotizado por el proveedor (USD)"
+    />
+  )
+}
+
+// Cantidad del pedido, editable (pisa la sugerida por el análisis): bajar la
+// cantidad de un producto reajusta al instante el gasto y el margen (el flete
+// prorrateado por unidad cambia con el tamaño del pedido).
+function CantidadPedido({ fila, onCambiada }) {
+  const [valor, setValor] = useState(fila.unidadesEfectivas ?? '')
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    setValor(fila.unidadesEfectivas ?? '')
+  }, [fila.nichoId, fila.unidadesEfectivas])
+
+  // compras fusionadas: la cantidad es la suma de varios nichos — se edita por
+  // nicho en el drawer, no acá (escribir el total a todos multiplicaría el pedido)
+  if ((fila.nichoIds ?? []).length > 1) {
+    return (
+      <span title="Compra fusionada: la cantidad es la suma del grupo. Edítala nicho por nicho abriendo el detalle (›).">
+        {fila.unidadesEfectivas ?? fila.primeraCompra ?? '—'}
+      </span>
+    )
+  }
+
+  async function guardar() {
+    const previo = fila.unidadesEfectivas ?? ''
+    if (String(previo) === String(valor).trim()) return
+    setGuardando(true)
+    try {
+      await api.ajustarNicho(fila.nichoId, { unidadesPedido: valor === '' ? null : Number(valor) })
+      await onCambiada()
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <input
+      type="number"
+      className="exw-cotizado"
+      value={valor}
+      min="1"
+      step="10"
+      disabled={guardando}
+      placeholder={fila.unidadesPrueba != null ? String(fila.unidadesPrueba) : 'cant.'}
+      title={
+        fila.unidadesPedido != null
+          ? `Cantidad fijada a mano (el análisis sugería ${fila.unidadesPrueba ?? '—'}); borra el valor para volver a la sugerencia`
+          : `Sugerida por el análisis (${fila.primeraCompra ?? '—'}); edítala si vas a pedir otra cantidad`
+      }
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => setValor(e.target.value)}
+      onBlur={guardar}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.target.blur()
+      }}
+      aria-label="Cantidad del pedido"
     />
   )
 }
@@ -636,8 +701,9 @@ function PlanillaIA({ onAbrirNicho }) {
       tipo: 'numero',
       banda: 'proveedor',
       anchoXlsx: 15,
-      render: (o) => (o.unidadesPrueba != null ? o.unidadesPrueba : (o.primeraCompra ?? '—')),
-      csv: (o) => o.unidadesPrueba ?? o.primeraCompra ?? null,
+      render: (o) => <CantidadPedido fila={o} onCambiada={recargar} />,
+      // la hoja del proveedor viaja con la cantidad EFECTIVA (la editada manda)
+      csv: (o) => o.unidadesEfectivas ?? o.unidadesPrueba ?? o.primeraCompra ?? null,
     },
     {
       // en productos de bulto, la Qty sin unidad se malinterpreta seguro:
@@ -689,6 +755,32 @@ function PlanillaIA({ onAbrirNicho }) {
       render: (o) => <MargenCotizacion fila={o} />,
     },
     {
+      // gasto del pedido: cantidad × EXW cotizado (real) o × EXW máx (estimado)
+      // — JAMÁS viaja al proveedor (soloVista)
+      clave: 'gastoPedido',
+      titulo: 'Gasto pedido',
+      tipo: 'numero',
+      soloVista: true,
+      banda: 'cotiza',
+      render: (o) =>
+        o.gastoPedidoUsd != null ? (
+          <span
+            title={
+              o.gastoEsReal
+                ? 'Cantidad × EXW cotizado por el proveedor'
+                : 'Cantidad × EXW máximo pagable (estimación mientras no llegue la cotización)'
+            }
+          >
+            US$ {o.gastoPedidoUsd.toLocaleString('es-CL')}{' '}
+            <span className={`badge ${o.gastoEsReal ? 'badge-full' : 'badge-neutro'}`}>
+              {o.gastoEsReal ? 'real' : 'est.'}
+            </span>
+          </span>
+        ) : (
+          '—'
+        ),
+    },
+    {
       clave: 'detalle',
       titulo: '',
       tipo: 'texto',
@@ -729,8 +821,9 @@ function PlanillaIA({ onAbrirNicho }) {
   )
 
   const pie = (visibles) => {
-    const unidades = visibles.reduce((s, o) => s + (o.unidadesPrueba ?? 0), 0)
-    const inversion = visibles.reduce((s, o) => s + (o.inversionEstimadaUsd ?? 0), 0)
+    const unidades = visibles.reduce((s, o) => s + (o.unidadesEfectivas ?? 0), 0)
+    const gasto = visibles.reduce((s, o) => s + (o.gastoPedidoUsd ?? 0), 0)
+    const todoReal = visibles.filter((o) => o.gastoPedidoUsd != null).every((o) => o.gastoEsReal)
     const margenes = visibles.map((o) => o.cotizacion?.margenPct).filter(Number.isFinite)
     const margenProm = margenes.length
       ? Math.round(margenes.reduce((a, b) => a + b, 0) / margenes.length)
@@ -739,8 +832,11 @@ function PlanillaIA({ onAbrirNicho }) {
       <tr>
         <td colSpan={3}>{visibles.length} producto(s) en esta etapa</td>
         <td colSpan={2} className="num"><span className="dato">{unidades.toLocaleString('es-CL')}</span> unidades</td>
-        <td colSpan={3}>inversión estimada <span className="dato">US$ {Math.round(inversion).toLocaleString('es-CL')}</span></td>
         <td colSpan={3}>
+          gasto pedido {todoReal ? '' : 'est. '}
+          <span className="dato">US$ {Math.round(gasto).toLocaleString('es-CL')}</span>
+        </td>
+        <td colSpan={4}>
           {margenProm != null ? (
             <>margen promedio de lo cotizado <span className="dato ok">{margenProm}%</span></>
           ) : (

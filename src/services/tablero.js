@@ -104,6 +104,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         frecuenciaScan: 1,
         exwCotizadoUsd: 1,
         exwCotizadoEl: 1,
+        unidadesPedido: 1,
         radarInfo: 1,
         rfq: 1,
         ultimos: 1,
@@ -146,6 +147,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
     const tendencia = tendenciaVentas(n.ultimos?.[0], n.ultimos?.[1])
     const gemelos = ultimo?.metricas?.competencia?.sellersGemelos ?? null
     const unidadesPrueba = unidadesPrimeraCompra(rec.primeraCompra)
+    // la cantidad editada a mano en la planilla pisa la sugerida por el análisis
+    const unidadesEfectivas = Number.isFinite(n.unidadesPedido) ? n.unidadesPedido : unidadesPrueba
     // cotización real del proveedor: se compara contra el máximo y se estima
     // la ganancia por unidad al precio recomendado del análisis
     let cotizacion = null
@@ -155,9 +158,15 @@ export async function tableroOportunidades({ todos = false } = {}) {
         exwUsd: n.exwCotizadoUsd,
         fecha: n.exwCotizadoEl ?? null,
         cierra: exwMax != null ? n.exwCotizadoUsd <= exwMax : null,
-        ...(margenCotizacion({ exwUsd: n.exwCotizadoUsd, rec, unidades: unidadesPrueba, comisionPct }) ?? {}),
+        ...(margenCotizacion({ exwUsd: n.exwCotizadoUsd, rec, unidades: unidadesEfectivas, comisionPct }) ?? {}),
       }
     }
+    // gasto del pedido: cantidad × EXW cotizado (real) o × EXW máx (estimación)
+    const precioGasto = cotizacion?.exwUsd ?? exwMax
+    const gastoPedidoUsd =
+      Number.isFinite(precioGasto) && Number.isFinite(unidadesEfectivas)
+        ? Math.round(precioGasto * unidadesEfectivas)
+        : null
     oportunidades.push({
       nichoId: n._id,
       keyword: n.keyword,
@@ -211,6 +220,10 @@ export async function tableroOportunidades({ todos = false } = {}) {
       productoClave: n.rfq?.productoClave ?? null,
       unidadPedido: n.rfq?.unidadPedido ?? null,
       unidadesPrueba,
+      unidadesPedido: n.unidadesPedido ?? null,
+      unidadesEfectivas,
+      gastoPedidoUsd,
+      gastoEsReal: Boolean(cotizacion && Number.isFinite(cotizacion.exwUsd)),
       especificacionProducto: n.rfq?.especificacion ?? rec.especificacionProducto ?? null,
       comoValidar: rec.comoValidar ?? null,
       comisionMlPct: rec.comisionMlPct ?? null,
