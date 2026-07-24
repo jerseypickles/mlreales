@@ -470,13 +470,28 @@ export async function procesarRadar() {
 // Programador: encola scans de nichos activos cuyo último scan ya venció
 // (diario ≈ 20 h, semanal ≈ 6.5 días). jobId por ventana de 3 h evita duplicados.
 export async function procesarProgramadorScans() {
-  const gastado = await gastoDelMes()
-  if (gastado >= config.presupuestoUsdMes) {
-    return { omitido: true, motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})` }
-  }
-
   const ahora = Date.now()
   const umbrales = { diario: 20 * 3600e3, semanal: 6.5 * 86400e3 }
+
+  // los productos propios se miden por la API oficial ($0): su ciclo diario NO
+  // se congela con el techo de presupuesto (el modo sin-actor lo garantiza el
+  // propio worker de propios)
+  const propioVencidoPre = await ProductoPropio.exists({
+    estado: 'activo',
+    $or: [{ ultimoScanEl: null }, { ultimoScanEl: { $lt: new Date(ahora - umbrales.diario) } }],
+  })
+  if (propioVencidoPre) {
+    await obtenerColas().propios.add('medir', {}, { jobId: `propios-${Math.floor(ahora / (3 * 3600e3))}` })
+  }
+
+  const gastado = await gastoDelMes()
+  if (gastado >= config.presupuestoUsdMes) {
+    return {
+      omitido: true,
+      motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})`,
+      propiosEncolados: Boolean(propioVencidoPre),
+    }
+  }
   const nichos = await Nicho.find({ estado: 'activo' }).lean()
 
   // un nicho cuyo último reporte quedó SIN score no tiene nada que "refrescar":
@@ -522,28 +537,14 @@ export async function procesarProgramadorScans() {
     vueltasTemporada++
   }
 
-  // productos propios: una medición diaria en batch si alguno está vencido
-  const propioVencido = await ProductoPropio.exists({
-    estado: 'activo',
-    $or: [{ ultimoScanEl: null }, { ultimoScanEl: { $lt: new Date(ahora - umbrales.diario) } }],
-  })
-  if (propioVencido) {
-    await obtenerColas().propios.add(
-      'medir',
-      {},
-      { jobId: `propios-${Math.floor(ahora / (3 * 3600e3))}` },
-    )
-  }
-
-  return { activos: nichos.length, encolados, sinScore, vueltasTemporada, propiosEncolados: Boolean(propioVencido) }
+  return { activos: nichos.length, encolados, sinScore, vueltasTemporada, propiosEncolados: Boolean(propioVencidoPre) }
 }
 
 export async function procesarScanPropios() {
   const gastado = await gastoDelMes()
-  if (gastado >= config.presupuestoUsdMes) {
-    return { omitido: true, motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})` }
-  }
-  return escanearPropios()
+  // con el techo alcanzado se mide igual, pero SOLO por la API oficial ($0):
+  // el actor de respaldo (pagado) espera al presupuesto del próximo mes
+  return escanearPropios({ soloOficial: gastado >= config.presupuestoUsdMes })
 }
 
 // Tendencias: snapshot diario del ranking del autocompletado de ML.

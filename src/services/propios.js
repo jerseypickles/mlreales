@@ -72,7 +72,7 @@ export function extraerSkuDeUrl(url) {
 // oficial va primero: precio/stock/vendidos reales/visitas/estado, gratis y
 // exactos para lo propio. El actor solo entra por los que la API no cubre con
 // precio (sin cuenta, o página /up/ sin item id vinculado por el importador).
-export async function escanearPropios() {
+export async function escanearPropios({ soloOficial = false } = {}) {
   const propios = await ProductoPropio.find({ estado: 'activo' })
   if (!propios.length) return { omitido: true, motivo: 'sin productos propios activos' }
 
@@ -87,7 +87,12 @@ export async function escanearPropios() {
   const sinOficial = propios.filter((p) => !Number.isFinite(oficialPorSku.get(p.sku)?.price))
   let porSku = new Map()
   let costoUsd = 0
-  if (sinOficial.length) {
+  if (sinOficial.length && soloOficial) {
+    console.log(
+      `[scan-propios] presupuesto agotado: ${sinOficial.length} propio(s) sin precio oficial quedan sin actor esta pasada`,
+    )
+  }
+  if (sinOficial.length && !soloOficial) {
     const r = await ejecutarActorAsync(
       config.actorDetails,
       construirInputDetalle(config.actorDetails, sinOficial.map((p) => p.url)),
