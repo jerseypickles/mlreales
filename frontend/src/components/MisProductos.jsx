@@ -313,6 +313,24 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando, o
         <section>
           <h4>Título</h4>
           <p className="auditoria-diagnostico">{r.titulo?.diagnostico}</p>
+          {a.busquedasReales && Object.keys(a.busquedasReales).length ? (
+            <>
+              <p className="dato-label">Lo que la gente escribe de verdad (autocompletado ML, por volumen)</p>
+              <div className="chips listing-chips">
+                {[...new Set(Object.values(a.busquedasReales).flat())].slice(0, 14).map((b) => (
+                  <span className="chip" key={b}>
+                    {b}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : null}
+          {a.arranquesSinVolumen?.length ? (
+            <p className="error-bloque">
+              Ojo: {a.arranquesSinVolumen.length} propuesta(s) arrancan con una frase que el autocompletado no
+              registra — prefiere las que parten con una búsqueda real.
+            </p>
+          ) : null}
           <SeccionFallas fallas={r.titulo?.fallas} />
           {a.miPublicacion?.titulo ? (
             <div className="listing-titulo titulo-actual">

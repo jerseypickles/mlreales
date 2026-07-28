@@ -3,7 +3,7 @@ import { Nicho } from '../models/Nicho.js'
 import { Reporte } from '../models/Reporte.js'
 import { pedirJSON } from './llm.js'
 import { obtenerProductosUltimoScan } from './metricas.js'
-import { sugerenciasReales } from './busquedasReales.js'
+import { sugerenciasReales, palabrasClave } from './busquedasReales.js'
 import { ejecutarActorAsync, construirInputDetalle } from './apify.js'
 import { indexarDetallesPorSku } from './normalizadorDetalle.js'
 import { itemOficialSeguro, descripcionOficialSegura } from './meli.js'
@@ -39,6 +39,18 @@ export function elegirGanadores(productos, { excluirSkus = [], max = 4 } = {}) {
 
 const recortar = (texto, max) =>
   typeof texto === 'string' && texto.length > max ? `${texto.slice(0, max)}…` : texto ?? null
+
+// ¿El título ARRANCA con alguna búsqueda real? Por raíces y sin stopwords:
+// "Escopeta Juguete…" valida contra "escopetas juguete"; "Lanzador De Dardos…"
+// NO valida si nadie busca esa frase. El LLM promete obedecer la lista y a
+// veces compone igual una frase que "suena" a keyword — esto lo pilla en código.
+export function arranqueValido(titulo, busquedas) {
+  const primeras = palabrasClave(String(titulo ?? '').split(/\s+/).slice(0, 4).join(' '))
+  return (busquedas ?? []).some((b) => {
+    const claves = [...palabrasClave(b)]
+    return claves.length > 0 && claves.every((c) => primeras.has(c))
+  })
+}
 
 const SCHEMA_AUDITORIA = {
   type: 'object',
@@ -235,6 +247,13 @@ export async function auditarPropio(propio) {
   // ordena por volumen real: es la fuente de verdad para el arranque del
   // título, no lo que "suene" a keyword. Mejor esfuerzo: un 403 no bota nada.
   const semillas = [nicho.keyword]
+  // el autocompletado responde por PREFIJO: "pistola de juguete" no devuelve
+  // la familia "pistola juguete" — la semilla sin stopwords sí la encuentra
+  const sinStopwords = nicho.keyword
+    .replace(/\b(de|del|la|el|los|las|un|una|para|con|y|o)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (sinStopwords && sinStopwords !== nicho.keyword) semillas.push(sinStopwords)
   for (const g of ganadores.slice(0, 3)) {
     const primeras = String(g.titulo ?? '')
       .toLowerCase()
@@ -246,7 +265,7 @@ export async function auditarPropio(propio) {
     if (primeras.length >= 4) semillas.push(primeras)
   }
   const busquedasReales = {}
-  for (const semilla of [...new Set(semillas)].slice(0, 4)) {
+  for (const semilla of [...new Set(semillas)].slice(0, 5)) {
     try {
       const sugerencias = await sugerenciasReales(semilla)
       if (sugerencias.length) busquedasReales[semilla] = sugerencias
@@ -313,12 +332,54 @@ export async function auditarPropio(propio) {
   }
   await registrarGasto(nicho._id, llm.costoUsd)
 
+  // validación mecánica del arranque: si alguna propuesta parte con una frase
+  // que NADIE busca, se rehace UNA vez con la lista en la cara (el prompt solo
+  // no basta — caso "lanzador de dardos", 27-jul)
+  const todasLasBusquedas = Object.values(busquedasReales).flat()
+  let arranquesSinVolumen = []
+  if (todasLasBusquedas.length) {
+    const invalidas = (llm.datos.titulo?.propuestas ?? []).filter((t) => !arranqueValido(t, todasLasBusquedas))
+    if (invalidas.length) {
+      console.warn(`[auditor] ${propio.sku}: ${invalidas.length} título(s) con arranque sin volumen — rehaciendo`)
+      try {
+        const correccion = await pedirJSON({
+          system: SYSTEM_AUDITOR,
+          user: [
+            bloques[0],
+            {
+              type: 'text',
+              text:
+                `Tu respuesta anterior fue:\n${JSON.stringify(llm.datos)}\n\n` +
+                `PROBLEMA: estos títulos ARRANCAN con frases que NADIE busca según el autocompletado: ${JSON.stringify(invalidas)}. ` +
+                `Entrega la MISMA auditoría pero con las 3 propuestas de título rehechas: cada una debe EMPEZAR con una de estas búsquedas reales TAL CUAL (elige la de mayor volumen que calce con el producto): ${JSON.stringify(todasLasBusquedas.slice(0, 25))}`,
+            },
+          ],
+          schema: SCHEMA_AUDITORIA,
+          maxTokens: 12_000,
+          modelo: config.llmModelAnalista,
+        })
+        await registrarGasto(nicho._id, correccion.costoUsd)
+        llm.costoUsd += correccion.costoUsd
+        llm.datos = correccion.datos
+      } catch (err) {
+        console.warn(`[auditor] corrección de arranques falló: ${err.message} — se conserva la primera pasada`)
+      }
+    }
+    // lo que siga inválido queda marcado: el panel puede avisarlo y el log lo dice
+    arranquesSinVolumen = (llm.datos.titulo?.propuestas ?? []).filter((t) => !arranqueValido(t, todasLasBusquedas))
+    if (arranquesSinVolumen.length) {
+      console.warn(`[auditor] ${propio.sku}: arranques aún sin volumen tras corrección: ${JSON.stringify(arranquesSinVolumen)}`)
+    }
+  }
+
   const auditoria = {
     estado: 'ok',
     generadoEl: new Date(),
     keyword: nicho.keyword,
     nichoId: String(nicho._id),
     fotosAnalizadas,
+    busquedasReales,
+    arranquesSinVolumen: arranquesSinVolumen.length ? arranquesSinVolumen : undefined,
     // primeras fotos guardadas: el panel las muestra frente a frente
     miPublicacion: { ...mio, fotos: mio.fotos.slice(0, 4), numFotos: mio.fotos.length },
     // atributos de rivales se conservan: el revisor de ficha los usa de contexto

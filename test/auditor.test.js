@@ -50,3 +50,20 @@ test('elegirGanadores: el más rápido no se duplica si ya está en el top por r
     ['A', 'B', 'C'],
   )
 })
+
+// ---- validación mecánica del arranque del título ----
+import { arranqueValido } from '../src/services/auditor.js'
+
+test('arranqueValido: acepta arranques que son búsquedas reales (raíces, sin stopwords)', () => {
+  const busquedas = ['pistola juguete', 'escopetas juguete', 'brochas maquillaje set']
+  assert.ok(arranqueValido('Pistola Juguete Dardos Tiro Al Blanco', busquedas))
+  assert.ok(arranqueValido('Escopeta Juguete Lanza Dardos Y Balines', busquedas)) // singular vs plural
+  assert.ok(arranqueValido('Brochas Maquillaje Set 10 Profesional', busquedas))
+})
+
+test('arranqueValido: rechaza arranques que nadie busca', () => {
+  const busquedas = ['pistola juguete', 'lanzador nerf']
+  assert.ok(!arranqueValido('Lanzador De Dardos Juguete Niños', busquedas)) // "lanzador de dardos" no existe
+  assert.ok(!arranqueValido('Set Tiro Al Blanco Juguete', busquedas))
+  assert.ok(!arranqueValido('Pistola Juguete X', [])) // sin lista no valida nada
+})
