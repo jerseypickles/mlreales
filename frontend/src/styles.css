@@ -2165,12 +2165,68 @@ section {
   white-space: nowrap;
 }
 
-.propio-cambio-titulo {
+.lupa {
   margin: 0 0 10px;
-  font-size: 12px;
-  color: var(--tinta-2);
   border-left: 2px solid var(--acento);
-  padding-left: 8px;
+  padding-left: 10px;
+}
+
+.lupa-titulo {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tinta-3);
+}
+
+.lupa-lista {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lupa-lista li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.lupa-que {
+  font-weight: 600;
+  min-width: 76px;
+}
+
+.lupa-fecha {
+  color: var(--tinta-3);
+  font-size: 11px;
+}
+
+.lupa-veredicto {
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.lupa-mejoro .lupa-veredicto {
+  color: var(--exito-tinta, #16a34a);
+}
+
+.lupa-empeoro .lupa-veredicto {
+  color: var(--peligro);
+}
+
+.lupa-midiendo .lupa-veredicto,
+.lupa-sin.cambio .lupa-veredicto {
+  color: var(--tinta-3);
+}
+
+.lupa-lectura {
+  color: var(--tinta-2);
 }
 
 .propio-optimizacion {

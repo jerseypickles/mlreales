@@ -140,6 +140,11 @@ FOTOS:
 - Si van imágenes adjuntas, evalúa lo que VES: primera foto (¿producto claro, fondo limpio, se entiende en miniatura de 100px?), variedad (uso/lifestyle, medidas, contenido del pack, detalle), texto sobreimpreso, calidad. Señala qué muestran las fotos ganadoras que las mías no.
 - Si no hay imágenes adjuntas, evalúa por cantidad y por lo que el plan debería cubrir.
 
+MEMORIA (cambiosYaAplicadosYSuResultado): te paso lo que YA se cambió en esta publicación y si movió las visitas. Úsalo:
+- Si un cambio "mejoró", NO lo deshagas: construye sobre esa dirección.
+- Si "empeoró" o quedó "sin cambio", no vuelvas a proponer la misma palanca: cambia de frente (fotos, precio, ficha, Full) y dilo en el veredicto.
+- Si dice "midiendo", el cambio es reciente: respétalo, no lo revuelvas, y concentra las acciones en otra palanca mientras se lee el efecto.
+
 OTRAS BRECHAS: precio vs mediana del nicho, rating, Full/envío, cuotas, ficha técnica incompleta — solo las que muevan la aguja.
 
 Sé directo y específico (nada de "podrías considerar"). Todo en español de Chile.`
@@ -347,8 +352,28 @@ export async function auditarPropio(propio) {
     console.warn(`[auditor] medición de peso no disponible: ${err.message}`)
   }
 
+  // memoria de lo ya intentado y su resultado medido: sin esto el auditor
+  // vuelve a proponer la misma palanca que no movió la aguja
+  let historialDeCambios = null
+  try {
+    const { evaluarImpacto } = await import('./impacto.js')
+    const { intervenciones } = evaluarImpacto(propio)
+    if (intervenciones.length) {
+      historialDeCambios = intervenciones.slice(-6).map((i) => ({
+        que: i.tipo,
+        cuando: i.fecha,
+        resultado: i.veredicto,
+        lectura: i.lectura,
+        tituloAnterior: i.anterior,
+      }))
+    }
+  } catch (err) {
+    console.warn(`[auditor] historial de impacto no disponible: ${err.message}`)
+  }
+
   const entrada = {
     nicho: nicho.keyword,
+    cambiosYaAplicadosYSuResultado: historialDeCambios,
     busquedasRealesPorVolumen: busquedasReales,
     pesoDeCadaKeyword: pesos,
     preguntasRealesDeCompradores: preguntasCompradores,

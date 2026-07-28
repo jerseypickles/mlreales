@@ -38,11 +38,13 @@ router.get(
     const propios = await ProductoPropio.find().sort({ creadoEl: -1 }).lean()
     const posiciones = await posicionesRecientes(propios.map((p) => p.sku))
     const ventas = await ventasPorItem({ dias: 30 }).catch(() => new Map())
+    const { evaluarImpacto } = await import('../../services/impacto.js')
     res.json({
       propios: propios.map((p) => ({
         ...p,
         posicionReciente: posiciones.get(p.sku) ?? null,
         ventas30d: ventas.get(p.itemIdMl ?? p.sku) ?? null,
+        impacto: evaluarImpacto(p),
       })),
     })
   }),

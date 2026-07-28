@@ -97,31 +97,23 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
         <Metrica etiqueta="Stock">{fmtNum(d?.ultima?.stock)}</Metrica>
       </div>
 
-      {(() => {
-        const ultimo = p.historialTitulos?.[p.historialTitulos.length - 1]
-        if (!ultimo) return null
-        // visitas antes vs después del cambio: ¿sirvió?
-        const ms = p.mediciones ?? []
-        const corte = new Date(ultimo.fecha).getTime()
-        const media = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null)
-        const antes = media(ms.filter((m) => new Date(m.fecha).getTime() < corte && Number.isFinite(m.visitas)).slice(-7).map((m) => m.visitas))
-        const despues = media(ms.filter((m) => new Date(m.fecha).getTime() >= corte && Number.isFinite(m.visitas)).map((m) => m.visitas))
-        return (
-          <p className="propio-cambio-titulo">
-            Título cambiado el {fmtFecha(ultimo.fecha)}
-            {antes != null && despues != null ? (
-              <>
-                {' '}· visitas diarias: {fmtNum(antes)} antes →{' '}
-                <strong className={despues > antes ? 'delta-sube' : despues < antes ? 'delta-baja' : ''}>
-                  {fmtNum(despues)} después
-                </strong>
-              </>
-            ) : (
-              ' · midiendo el impacto en visitas'
-            )}
-          </p>
-        )
-      })()}
+      {p.impacto?.intervenciones?.length ? (
+        <div className="lupa">
+          <span className="lupa-titulo">Lupa · qué se cambió y si sirvió</span>
+          <ul className="lupa-lista">
+            {p.impacto.intervenciones.slice(-3).reverse().map((i, idx) => (
+              <li key={idx} className={`lupa-${i.veredicto.replace('ó', 'o')}`}>
+                <span className="lupa-que">
+                  {i.tipo === 'titulo' ? 'título' : i.tipo === 'descripcion' ? 'descripción' : i.tipo}
+                </span>
+                <span className="lupa-fecha">{fmtFecha(i.fecha)}</span>
+                <span className="lupa-veredicto">{i.veredicto}</span>
+                <span className="lupa-lectura">{i.lectura}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="propio-optimizacion">
         <span className="propio-optimizacion-marca">Fable</span>
