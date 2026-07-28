@@ -84,7 +84,9 @@ export async function cablearPropiosAuto() {
     return { resultados: [], omitido: true, motivo: 'todos los productos activos ya tienen nicho cableado' }
   }
 
-  const nichos = await Nicho.find().select('keyword').lean()
+  // solo nichos ACTIVOS para calzar: cablear a un pausado (ej: descartado por
+  // listado mezclado) repite el error que motivó la pausa
+  const nichos = await Nicho.find({ estado: 'activo' }).select('keyword').lean()
   const resultados = []
 
   // 1) señal gratis y fuerte: el producto ya aparece en un listado trackeado
@@ -152,6 +154,8 @@ export async function cablearPropiosAuto() {
       continue
     }
     const keyword = await canonizarConTope(ideada)
+    if (keyword !== ideada) console.log(`[cableador] ${p.sku}: ideada "${ideada}" → búsqueda real "${keyword}"`)
+    else console.log(`[cableador] ${p.sku}: keyword "${keyword}"`)
 
     const existente = nichoQueCalza(nichos, keyword)
     if (existente) {
@@ -166,7 +170,15 @@ export async function cablearPropiosAuto() {
       resultados.push({ sku: p.sku, titulo: p.titulo, accion: 'presupuesto', keyword })
       continue
     }
-    const nicho = await Nicho.create({ keyword, origen: 'manual', frecuenciaScan: 'diario' })
+    // si existe pausado con la misma keyword, el índice único lo protege:
+    // reactivarlo es mejor que fallar (vuelve a medirse para el cableo)
+    let nicho
+    try {
+      nicho = await Nicho.create({ keyword, origen: 'manual', frecuenciaScan: 'diario' })
+    } catch (err) {
+      if (err.code !== 11000) throw err
+      nicho = await Nicho.findOneAndUpdate({ keyword }, { $set: { estado: 'activo' } }, { new: true })
+    }
     nichos.push({ _id: nicho._id, keyword: nicho.keyword }) // dos propios pueden caer al mismo nicho nuevo
     await encolarScanNicho(nicho._id, { motivo: 'auto-cableado-propio' })
     p.nichoId = nicho._id
