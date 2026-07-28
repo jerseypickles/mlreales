@@ -42,18 +42,23 @@ function CeldaAuditoria({ p, nichos, onCablear, onAuditar, onVerAuditoria }) {
       </select>
       {p.nichoId ? (
         generando ? (
-          <span className="badge badge-neutro">auditando…</span>
+          <span className="badge badge-neutro">Fable leyendo a los ganadores…</span>
         ) : a?.estado === 'ok' ? (
           <button className="enlace-boton" onClick={() => onVerAuditoria(p)}>
-            ver auditoría
+            ver optimización
+            {a.resultado?.quickWins?.length ? ` (${a.resultado.quickWins.length} acciones)` : ''}
           </button>
         ) : (
           <button
             className="enlace-boton"
-            title={a?.estado === 'error' ? `la anterior falló: ${a.error}` : undefined}
+            title={
+              a?.estado === 'error'
+                ? `la anterior falló: ${a.error}`
+                : 'Fable lee título, descripción, ficha y fotos reales de los peces gordos del nicho y te dice dónde estás fallando'
+            }
             onClick={() => onAuditar(p)}
           >
-            {a?.estado === 'error' ? 'reintentar' : 'auditar'}
+            {a?.estado === 'error' ? 'reintentar' : 'optimizar con Fable'}
           </button>
         )
       ) : null}
@@ -197,8 +202,9 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
           <div>
             <h3>{propio.titulo ?? propio.sku}</h3>
             <p className="panel-meta">
-              auditado contra “{a.keyword}” · {fmtFecha(a.generadoEl)} ·{' '}
-              {a.fotosAnalizadas ? 'fotos analizadas por IA' : 'fotos evaluadas solo por cantidad'} · US${' '}
+              Fable leyó el título, la descripción, la ficha
+              {a.fotosAnalizadas ? ' y las fotos reales' : ''} de los {a.competidores?.length ?? 0} peces
+              gordos de “{a.keyword}” y los comparó con tu publicación · {fmtFecha(a.generadoEl)} · US${' '}
               {a.costoUsd?.toFixed(2) ?? '—'}
             </p>
           </div>
@@ -224,12 +230,14 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
         ) : null}
 
         <section>
-          <h4>Contra quién compites</h4>
+          <h4>Los peces gordos que Fable leyó</h4>
           <div className="tabla-envoltura">
             <table>
               <thead>
                 <tr>
+                  <th aria-label="imagen" />
                   <th>Publicación</th>
+                  <th className="num">Pos.</th>
                   <th className="num">Precio</th>
                   <th className="num">Reseñas</th>
                   <th className="num">Rating</th>
@@ -239,8 +247,14 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
               </thead>
               <tbody>
                 <tr className="fila-mia">
+                  <td className="celda-imagen">
+                    {propio.imagen ? <img src={propio.imagen} alt="" width="36" height="36" /> : null}
+                  </td>
                   <td className="celda-titulo" title={a.miPublicacion?.titulo ?? ''}>
                     <strong>Tu publicación</strong>
+                  </td>
+                  <td className="num">
+                    {a.miPublicacion?.posicionEnElListado ? `#${a.miPublicacion.posicionEnElListado}` : 'fuera'}
                   </td>
                   <td className="num">{fmtPrecio(a.miPublicacion?.precio)}</td>
                   <td className="num">{fmtNum(a.miPublicacion?.numReviews)}</td>
@@ -250,6 +264,9 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
                 </tr>
                 {(a.competidores ?? []).map((c) => (
                   <tr key={c.sku}>
+                    <td className="celda-imagen">
+                      {c.imagen ? <img src={c.imagen} alt="" loading="lazy" width="36" height="36" /> : null}
+                    </td>
                     <td className="celda-titulo" title={c.titulo}>
                       {c.url ? (
                         <a href={c.url} target="_blank" rel="noreferrer">
@@ -259,6 +276,7 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
                         c.titulo
                       )}
                     </td>
+                    <td className="num">{c.posicion ? `#${c.posicion}` : '—'}</td>
                     <td className="num">{fmtPrecio(c.precio)}</td>
                     <td className="num">{fmtNum(c.numReviews)}</td>
                     <td className="num">{c.rating ?? '—'}</td>
@@ -275,6 +293,12 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
           <h4>Título</h4>
           <p className="auditoria-diagnostico">{r.titulo?.diagnostico}</p>
           <SeccionFallas fallas={r.titulo?.fallas} />
+          {a.miPublicacion?.titulo ? (
+            <div className="listing-titulo titulo-actual">
+              <span className="listing-titulo-texto">{a.miPublicacion.titulo}</span>
+              <span className="contador">{a.miPublicacion.titulo.length}/60 · actual</span>
+            </div>
+          ) : null}
           <div className="listing-titulos">
             {(r.titulo?.propuestas ?? []).map((t, i) => (
               <div className="listing-titulo" key={i}>
@@ -293,6 +317,12 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
           </div>
           <p className="auditoria-diagnostico">{r.descripcion?.diagnostico}</p>
           <SeccionFallas fallas={r.descripcion?.fallas} />
+          {a.miPublicacion?.descripcion ? (
+            <details className="descripcion-actual">
+              <summary>Ver tu descripción actual</summary>
+              <pre className="listing-descripcion">{a.miPublicacion.descripcion}</pre>
+            </details>
+          ) : null}
           {r.descripcion?.propuesta ? <pre className="listing-descripcion">{r.descripcion.propuesta}</pre> : null}
         </section>
 
@@ -495,7 +525,7 @@ export function MisProductos() {
     try {
       await api.auditarPropio(p._id)
       setAviso(
-        'Auditoría en curso: el actor está leyendo las publicaciones ganadoras del nicho — el resultado aparece aquí en 2-5 minutos.',
+        'Fable está leyendo el título, la descripción, la ficha y las fotos de los peces gordos del nicho — la optimización aparece aquí en 2-5 minutos.',
       )
       cargar()
     } catch (err) {
@@ -617,9 +647,9 @@ export function MisProductos() {
         no estás ganando, muestra el precio que la ganaría. "Ingresos 30d" suma tus órdenes pagadas
         reales. La chapa "real" marca ventas del período medidas por ML; la cifra con ~ es la
         estimación por reseñas (~{FACTOR_VENTAS} por reseña nueva). Cablea un nicho del tablero y
-        "auditar" compara tu título, descripción y fotos contra las publicaciones que más han
-        vendido en ese listado (la IA ve las fotos reales) y te dice dónde estás fallando, con
-        arreglos listos para pegar.
+        "optimizar con Fable" lee el título, la descripción, la ficha y las fotos reales de los
+        peces gordos del listado (los que más han vendido) y te dice dónde estás fallando, con
+        títulos, descripción y plan de fotos listos para pegar.
       </p>
 
       {abierto ? <PanelPropio propio={abierto} onCerrar={() => setAbierto(null)} /> : null}

@@ -2046,6 +2046,22 @@ section {
   overflow-y: auto;
 }
 
+.titulo-actual {
+  opacity: 0.75;
+  border-style: dashed;
+  margin-bottom: 8px;
+}
+
+.descripcion-actual {
+  margin: 8px 0;
+}
+
+.descripcion-actual summary {
+  cursor: pointer;
+  color: var(--tinta-2);
+  font-size: 12.5px;
+}
+
 .delta {
   margin-left: 6px;
   font-size: 10.5px;
