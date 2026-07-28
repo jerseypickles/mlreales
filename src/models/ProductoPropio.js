@@ -16,6 +16,11 @@ const productoPropioSchema = new mongoose.Schema({
   // caja de compra del catálogo (price_to_win): {estado, precioParaGanar,
   // precioActual, fecha} — solo items que compiten en un catálogo
   buyBox: { type: mongoose.Schema.Types.Mixed, default: null },
+  // nicho del tablero contra el que se compara este producto (auditoría de listing)
+  nichoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Nicho', default: null },
+  // última auditoría de listing vs los ganadores del nicho: {estado:
+  // 'generando'|'ok'|'error', generadoEl, competidores, resultado, costoUsd…}
+  auditoria: { type: mongoose.Schema.Types.Mixed, default: null },
   ultimoScanEl: { type: Date, default: null },
   // serie embebida (una medición por scan, acotada): suficiente para deltas y gráficos
   mediciones: {

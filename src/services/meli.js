@@ -179,6 +179,19 @@ export async function itemOficialSeguro(idMl) {
   }
 }
 
+// Descripción de un item PROPIO en texto plano (/items/:id/description →
+// plain_text). Para la auditoría de listing. Nunca rompe: null.
+export async function descripcionOficialSegura(idMl) {
+  try {
+    if (!(await MeliCuenta.exists({}))) return null
+    const datos = await meliGet(`/items/${idMl}/description`)
+    return typeof datos?.plain_text === 'string' && datos.plain_text.trim() ? datos.plain_text : null
+  } catch (err) {
+    console.warn(`[meli] descripción de ${idMl} no disponible: ${err.message}`)
+    return null
+  }
+}
+
 // Visitas del item en los últimos N días. Schema tolerante (total_visits no
 // está validado contra output en vivo — si no calza, el warn lo dirá).
 export async function visitasSeguro(idMl, dias = 7) {

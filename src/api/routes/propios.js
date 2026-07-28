@@ -1,7 +1,13 @@
 import { Router } from 'express'
+import mongoose from 'mongoose'
+import { config } from '../../config/env.js'
 import { ProductoPropio } from '../../models/ProductoPropio.js'
+import { Nicho } from '../../models/Nicho.js'
+import { Snapshot } from '../../models/Snapshot.js'
 import { extraerSkuDeUrl, posicionesRecientes } from '../../services/propios.js'
 import { ventasPorItem } from '../../services/ventasMl.js'
+import { llmDisponible } from '../../services/llm.js'
+import { gastoDelMes } from '../../services/gastos.js'
 import { obtenerColas } from '../../jobs/queues.js'
 
 const router = Router()
@@ -48,6 +54,72 @@ router.post(
   manejar(async (_req, res) => {
     const job = await obtenerColas().propios.add('medir', {}, { jobId: `propios-manual-${Date.now()}` })
     res.status(202).json({ scanJobId: job.id })
+  }),
+)
+
+// Cablear (o descablear con null) el nicho contra el que se audita el producto
+router.patch(
+  '/:id',
+  manejar(async (req, res) => {
+    const propio = await ProductoPropio.findById(req.params.id)
+    if (!propio) return res.status(404).json({ error: 'producto propio no encontrado' })
+    if ('nichoId' in (req.body ?? {})) {
+      const nichoId = req.body.nichoId
+      if (nichoId === null || nichoId === '') {
+        propio.nichoId = null
+      } else {
+        if (!mongoose.isValidObjectId(nichoId) || !(await Nicho.exists({ _id: nichoId }))) {
+          return res.status(400).json({ error: 'nichoId inválido: ese nicho no existe' })
+        }
+        propio.nichoId = nichoId
+      }
+      await propio.save()
+    }
+    res.json({ propio })
+  }),
+)
+
+// Auditoría de listing: mi título/descripción/fotos vs los ganadores del nicho
+router.post(
+  '/:id/auditar',
+  manejar(async (req, res) => {
+    const propio = await ProductoPropio.findById(req.params.id)
+    if (!propio) return res.status(404).json({ error: 'producto propio no encontrado' })
+    if (!propio.nichoId) {
+      return res.status(409).json({ error: 'cablea primero un nicho al producto (selector en la fila)' })
+    }
+    if (!llmDisponible()) {
+      return res.status(503).json({ error: 'IA no configurada (falta ANTHROPIC_API_KEY)' })
+    }
+    const nicho = await Nicho.findById(propio.nichoId).lean()
+    if (!nicho) return res.status(409).json({ error: 'el nicho cableado ya no existe; elige otro' })
+    if (!(await Snapshot.exists({ keyword: nicho.keyword }))) {
+      return res.status(409).json({ error: `el nicho "${nicho.keyword}" no tiene scans todavía; corre un scan primero` })
+    }
+    const gastado = await gastoDelMes()
+    if (gastado >= config.presupuestoUsdMes) {
+      return res.status(409).json({
+        error: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes}): la auditoría gasta actor + IA`,
+      })
+    }
+    // una auditoría "generando" por más de 30 min es un job perdido (deploy en
+    // el medio): no debe bloquear el relanzamiento para siempre
+    const enCurso =
+      propio.auditoria?.estado === 'generando' &&
+      propio.auditoria.solicitadaEl &&
+      Date.now() - new Date(propio.auditoria.solicitadaEl).getTime() < 30 * 60e3
+    if (enCurso) {
+      return res.status(409).json({ error: 'ya hay una auditoría en curso para este producto' })
+    }
+    propio.auditoria = { estado: 'generando', solicitadaEl: new Date() }
+    propio.markModified('auditoria')
+    await propio.save()
+    const job = await obtenerColas().propios.add(
+      'auditar',
+      { propioId: String(propio._id) },
+      { jobId: `auditar-${propio._id}-${Date.now()}` },
+    )
+    res.status(202).json({ auditoriaJobId: job.id })
   }),
 )
 

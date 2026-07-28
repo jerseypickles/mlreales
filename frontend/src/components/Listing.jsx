@@ -3,7 +3,7 @@ import { api } from '../api.js'
 import { Badge } from './ui.jsx'
 import { fmtPrecio, fmtFecha } from '../lib/formato.js'
 
-function BotonCopiar({ texto, etiqueta = 'Copiar' }) {
+export function BotonCopiar({ texto, etiqueta = 'Copiar' }) {
   const [copiado, setCopiado] = useState(false)
   async function copiar() {
     try {

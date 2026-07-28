@@ -79,6 +79,14 @@ function normalizarItemSourabh(raw) {
       : null,
     condicion: raw.condition ?? null,
     imagen: raw.thumbnail ?? (Array.isArray(raw.images) ? raw.images[0] : null) ?? null,
+    // para la auditoría de listing: el texto y las fotos reales de la publicación
+    descripcion: typeof raw.description === 'string' && raw.description.trim() ? raw.description : null,
+    imagenes: Array.isArray(raw.images) ? raw.images.filter((u) => typeof u === 'string') : [],
+    atributos: Array.isArray(raw.attributes)
+      ? raw.attributes
+          .map((a) => ({ nombre: a?.name ?? a?.id ?? null, valor: a?.value ?? a?.valueName ?? null }))
+          .filter((a) => a.nombre && a.valor)
+      : [],
     // solo afirmar cross-border cuando el actor entrega el origen; null = desconocido
     origenCrossBorder: origen ? String(origen).toUpperCase().startsWith('CN') : null,
     seller: sellerId
@@ -119,6 +127,10 @@ export function normalizarItemDetalle(raw) {
     categoriaML: raw.category_id ?? null,
     condicion: raw.item_condition ?? null,
     imagen: extraerImagen(raw),
+    // este actor no entrega descripción ni galería completa
+    descripcion: null,
+    imagenes: [],
+    atributos: [],
     // items despachados desde China (CNGD01, etc.) = competencia cross-border directa
     origenCrossBorder: Array.isArray(raw.item_origins)
       ? raw.item_origins.some((o) => String(o).startsWith('CN'))

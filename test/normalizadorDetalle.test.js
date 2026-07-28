@@ -78,6 +78,22 @@ test('normalizarItemDetalle sourabhbgp: mapea calificaciones, seller y variantes
   assert.ok(det.skusCandidatos.includes('MLC62124281')) // el ID pedido viene en variations
 })
 
+test('normalizarItemDetalle sourabhbgp: conserva descripción, galería y ficha para la auditoría', () => {
+  const det = normalizarItemDetalle(fixtureSourabh[0])
+  assert.equal(det.descripcion, fixtureSourabh[0].description)
+  assert.deepEqual(det.imagenes, fixtureSourabh[0].images)
+  assert.equal(det.atributos.length, fixtureSourabh[0].attributes.length)
+  assert.deepEqual(det.atributos[0], {
+    nombre: fixtureSourabh[0].attributes[0].name,
+    valor: fixtureSourabh[0].attributes[0].value,
+  })
+  // el formato legado no los entrega: forma consistente con defaults vacíos
+  const legado = normalizarItemDetalle(fixture[0])
+  assert.equal(legado.descripcion, null)
+  assert.deepEqual(legado.imagenes, [])
+  assert.deepEqual(legado.atributos, [])
+})
+
 test('indexarDetallesPorSku sourabhbgp: matchea por ID de variante', () => {
   const { porSku, sinMatch } = indexarDetallesPorSku([fixtureSourabh[0]], ['MLC62124281'])
   assert.equal(porSku.size, 1)

@@ -26,6 +26,7 @@ before(async () => {
   ;({ cerrarColas } = await import('../src/jobs/queues.js'))
   modelos = {
     Nicho: (await import('../src/models/Nicho.js')).Nicho,
+    ProductoPropio: (await import('../src/models/ProductoPropio.js')).ProductoPropio,
   }
   servicios = {
     normalizarScan: (await import('../src/services/normalizador.js')).normalizarScan,
@@ -143,6 +144,52 @@ test('con API_KEY definida, la API exige x-api-key (salvo /salud)', async () => 
   } finally {
     delete process.env.API_KEY
   }
+})
+
+test('PATCH /api/propios/:id cablea y descablea el nicho de auditoría', async () => {
+  const propio = await modelos.ProductoPropio.create({
+    sku: 'MLC777888999',
+    url: 'https://articulo.mercadolibre.cl/MLC-777888999',
+  })
+  const nicho = await modelos.Nicho.findOne({ keyword: 'foco solares' })
+
+  const invalido = await fetch(`${baseUrl}/api/propios/${propio._id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nichoId: '64b000000000000000000000' }),
+  })
+  assert.equal(invalido.status, 400)
+
+  const cableado = await fetch(`${baseUrl}/api/propios/${propio._id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nichoId: String(nicho._id) }),
+  })
+  assert.equal(cableado.status, 200)
+  assert.equal((await cableado.json()).propio.nichoId, String(nicho._id))
+
+  const descableado = await fetch(`${baseUrl}/api/propios/${propio._id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nichoId: null }),
+  })
+  assert.equal(descableado.status, 200)
+  assert.equal((await descableado.json()).propio.nichoId, null)
+})
+
+test('POST /api/propios/:id/auditar valida nicho cableado e IA configurada', async () => {
+  const propio = await modelos.ProductoPropio.findOne({ sku: 'MLC777888999' })
+
+  // sin nicho cableado: 409 con instrucción clara
+  const sinNicho = await fetch(`${baseUrl}/api/propios/${propio._id}/auditar`, { method: 'POST' })
+  assert.equal(sinNicho.status, 409)
+
+  // con nicho pero sin ANTHROPIC_API_KEY (entorno de test): 503
+  const nicho = await modelos.Nicho.findOne({ keyword: 'foco solares' })
+  propio.nichoId = nicho._id
+  await propio.save()
+  const sinIa = await fetch(`${baseUrl}/api/propios/${propio._id}/auditar`, { method: 'POST' })
+  assert.equal(sinIa.status, 503)
 })
 
 test('ids inválidos e inexistentes', async () => {

@@ -1161,6 +1161,10 @@ h4 {
   overflow-y: auto;
 }
 
+.panel-ancho {
+  width: min(760px, 96vw);
+}
+
 .panel-encabezado {
   display: flex;
   justify-content: space-between;
@@ -2002,6 +2006,44 @@ section {
 
 .form-propio input {
   flex: 1 1 320px;
+}
+
+/* ── Auditoría de listing (Mis productos) ───────────────────────────── */
+
+.celda-auditoria {
+  white-space: nowrap;
+}
+
+.celda-auditoria .selector-nicho {
+  padding: 4px 8px;
+  font-size: 12px;
+  max-width: 150px;
+  margin-right: 8px;
+}
+
+.auditoria-veredicto {
+  margin: 14px 0 4px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--acento);
+  background: color-mix(in srgb, var(--acento) 7%, transparent);
+  border-radius: 0 9px 9px 0;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.auditoria-diagnostico {
+  color: var(--tinta-2);
+  margin: 6px 0 8px;
+  line-height: 1.5;
+}
+
+.panel-ancho .fila-mia td {
+  background: color-mix(in srgb, var(--acento) 6%, transparent);
+}
+
+.panel-ancho .listing-descripcion {
+  max-height: 320px;
+  overflow-y: auto;
 }
 
 .delta {

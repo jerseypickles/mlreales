@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { IconoExterno, Cargando } from './ui.jsx'
 import { MiniSerie } from './graficos.jsx'
+import { BotonCopiar } from './Listing.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 
 const FACTOR_VENTAS = 25 // misma heurística del score: ~1 reseña por cada 25 ventas
@@ -17,7 +18,50 @@ function deltas(mediciones) {
   return { ultima, dReviews: delta('numReviews'), dPrecio: delta('precio'), dVendidos: delta('vendidos') }
 }
 
-function FilaPropio({ p, onEliminar, onAbrir }) {
+// Celda de auditoría: cablear el nicho + lanzar/ver la auditoría de listing
+function CeldaAuditoria({ p, nichos, onCablear, onAuditar, onVerAuditoria }) {
+  const a = p.auditoria
+  // >30 min "generando" = job perdido (deploy en el medio): volver a ofrecer el botón
+  const generando =
+    a?.estado === 'generando' &&
+    (!a.solicitadaEl || Date.now() - new Date(a.solicitadaEl).getTime() < 30 * 60e3)
+  return (
+    <td className="celda-auditoria" onClick={(e) => e.stopPropagation()}>
+      <select
+        className="selector-nicho"
+        value={p.nichoId ?? ''}
+        onChange={(e) => onCablear(p, e.target.value || null)}
+        aria-label="Nicho contra el que se audita"
+      >
+        <option value="">— sin nicho —</option>
+        {nichos.map((n) => (
+          <option key={n._id} value={n._id}>
+            {n.keyword}
+          </option>
+        ))}
+      </select>
+      {p.nichoId ? (
+        generando ? (
+          <span className="badge badge-neutro">auditando…</span>
+        ) : a?.estado === 'ok' ? (
+          <button className="enlace-boton" onClick={() => onVerAuditoria(p)}>
+            ver auditoría
+          </button>
+        ) : (
+          <button
+            className="enlace-boton"
+            title={a?.estado === 'error' ? `la anterior falló: ${a.error}` : undefined}
+            onClick={() => onAuditar(p)}
+          >
+            {a?.estado === 'error' ? 'reintentar' : 'auditar'}
+          </button>
+        )
+      ) : null}
+    </td>
+  )
+}
+
+function FilaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria }) {
   const d = deltas(p.mediciones)
   return (
     <tr className="fila-clickable" onClick={() => onAbrir(p)} tabIndex={0}
@@ -82,6 +126,13 @@ function FilaPropio({ p, onEliminar, onAbrir }) {
           ? `#${p.posicionReciente.posicion} en “${p.posicionReciente.keyword}”`
           : <span className="vacio">fuera de listados trackeados</span>}
       </td>
+      <CeldaAuditoria
+        p={p}
+        nichos={nichos}
+        onCablear={onCablear}
+        onAuditar={onAuditar}
+        onVerAuditoria={onVerAuditoria}
+      />
       <td>
         <a href={p.url} target="_blank" rel="noreferrer" className="enlace-icono"
            aria-label="Abrir en Mercado Libre" onClick={(e) => e.stopPropagation()}>
@@ -122,6 +173,162 @@ function PanelPropio({ propio, onCerrar }) {
   )
 }
 
+function SeccionFallas({ fallas }) {
+  if (!fallas?.length) return null
+  return (
+    <ul className="lista-riesgos">
+      {fallas.map((f, i) => (
+        <li key={i}>{f}</li>
+      ))}
+    </ul>
+  )
+}
+
+// Auditoría de listing: mi título/descripción/fotos vs los ganadores del nicho
+function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
+  const a = propio.auditoria
+  const r = a?.resultado
+  if (!r) return null
+  return (
+    <div className="panel-fondo" onClick={onCerrar}>
+      <aside className="panel panel-ancho" onClick={(e) => e.stopPropagation()} aria-label="Auditoría de listing">
+        <div className="panel-encabezado">
+          {propio.imagen ? <img className="panel-imagen" src={propio.imagen} alt="" width="64" height="64" /> : null}
+          <div>
+            <h3>{propio.titulo ?? propio.sku}</h3>
+            <p className="panel-meta">
+              auditado contra “{a.keyword}” · {fmtFecha(a.generadoEl)} ·{' '}
+              {a.fotosAnalizadas ? 'fotos analizadas por IA' : 'fotos evaluadas solo por cantidad'} · US${' '}
+              {a.costoUsd?.toFixed(2) ?? '—'}
+            </p>
+          </div>
+          <div className="panel-acciones">
+            <button className="boton-secundario" onClick={() => onRegenerar(propio)}>
+              Re-auditar
+            </button>
+            <button className="boton-cerrar" onClick={onCerrar} aria-label="Cerrar panel">✕</button>
+          </div>
+        </div>
+
+        <p className="auditoria-veredicto">{r.veredicto}</p>
+
+        {r.quickWins?.length ? (
+          <section>
+            <h4>Primero lo que más mueve</h4>
+            <ol className="lista-riesgos">
+              {r.quickWins.map((q, i) => (
+                <li key={i}>{q}</li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
+
+        <section>
+          <h4>Contra quién compites</h4>
+          <div className="tabla-envoltura">
+            <table>
+              <thead>
+                <tr>
+                  <th>Publicación</th>
+                  <th className="num">Precio</th>
+                  <th className="num">Reseñas</th>
+                  <th className="num">Rating</th>
+                  <th className="num">Ventas/día</th>
+                  <th className="num">Fotos</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="fila-mia">
+                  <td className="celda-titulo" title={a.miPublicacion?.titulo ?? ''}>
+                    <strong>Tu publicación</strong>
+                  </td>
+                  <td className="num">{fmtPrecio(a.miPublicacion?.precio)}</td>
+                  <td className="num">{fmtNum(a.miPublicacion?.numReviews)}</td>
+                  <td className="num">{a.miPublicacion?.rating ?? '—'}</td>
+                  <td className="num">—</td>
+                  <td className="num">{fmtNum(a.miPublicacion?.numFotos)}</td>
+                </tr>
+                {(a.competidores ?? []).map((c) => (
+                  <tr key={c.sku}>
+                    <td className="celda-titulo" title={c.titulo}>
+                      {c.url ? (
+                        <a href={c.url} target="_blank" rel="noreferrer">
+                          {c.titulo}
+                        </a>
+                      ) : (
+                        c.titulo
+                      )}
+                    </td>
+                    <td className="num">{fmtPrecio(c.precio)}</td>
+                    <td className="num">{fmtNum(c.numReviews)}</td>
+                    <td className="num">{c.rating ?? '—'}</td>
+                    <td className="num">{c.ventasDia != null ? `~${fmtNum(c.ventasDia)}` : '—'}</td>
+                    <td className="num">{c.numFotos ? fmtNum(c.numFotos) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section>
+          <h4>Título</h4>
+          <p className="auditoria-diagnostico">{r.titulo?.diagnostico}</p>
+          <SeccionFallas fallas={r.titulo?.fallas} />
+          <div className="listing-titulos">
+            {(r.titulo?.propuestas ?? []).map((t, i) => (
+              <div className="listing-titulo" key={i}>
+                <span className="listing-titulo-texto">{t}</span>
+                <span className={t.length > 60 ? 'contador excedido' : 'contador'}>{t.length}/60</span>
+                <BotonCopiar texto={t} />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <div className="listing-seccion-encabezado">
+            <h4>Descripción</h4>
+            {r.descripcion?.propuesta ? <BotonCopiar texto={r.descripcion.propuesta} etiqueta="Copiar propuesta" /> : null}
+          </div>
+          <p className="auditoria-diagnostico">{r.descripcion?.diagnostico}</p>
+          <SeccionFallas fallas={r.descripcion?.fallas} />
+          {r.descripcion?.propuesta ? <pre className="listing-descripcion">{r.descripcion.propuesta}</pre> : null}
+        </section>
+
+        <section>
+          <h4>Fotos</h4>
+          <p className="auditoria-diagnostico">{r.fotos?.diagnostico}</p>
+          <SeccionFallas fallas={r.fotos?.fallas} />
+          {r.fotos?.plan?.length ? (
+            <>
+              <p className="dato-label">Plan de fotos (en orden)</p>
+              <ol className="lista-riesgos">
+                {r.fotos.plan.map((f, i) => (
+                  <li key={i}>{f}</li>
+                ))}
+              </ol>
+            </>
+          ) : null}
+        </section>
+
+        {r.otrasBrechas?.length ? (
+          <section>
+            <h4>Otras brechas</h4>
+            <ul className="lista-riesgos">
+              {r.otrasBrechas.map((b, i) => (
+                <li key={i}>
+                  <strong>{b.aspecto}:</strong> {b.detalle}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+      </aside>
+    </div>
+  )
+}
+
 export function MisProductos() {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
@@ -130,6 +337,8 @@ export function MisProductos() {
   const [abierto, setAbierto] = useState(null)
   const [meli, setMeli] = useState(null)
   const [aviso, setAviso] = useState(null)
+  const [nichos, setNichos] = useState([])
+  const [auditoriaDe, setAuditoriaDe] = useState(null) // _id del propio con el panel de auditoría abierto
 
   const cargar = useCallback(() => {
     api.listarPropios().then(setDatos).catch((e) => setError(e.message))
@@ -140,6 +349,25 @@ export function MisProductos() {
     const intervalo = setInterval(cargar, 30_000)
     return () => clearInterval(intervalo)
   }, [cargar])
+
+  useEffect(() => {
+    api
+      .listarNichos()
+      .then(({ nichos: lista }) => setNichos([...lista].sort((a, b) => a.keyword.localeCompare(b.keyword))))
+      .catch(() => setNichos([]))
+  }, [])
+
+  // mientras hay una auditoría generándose, refrescar más seguido que los 30 s de base
+  const hayAuditoriaEnCurso = datos?.propios?.some(
+    (p) =>
+      p.auditoria?.estado === 'generando' &&
+      (!p.auditoria.solicitadaEl || Date.now() - new Date(p.auditoria.solicitadaEl).getTime() < 30 * 60e3),
+  )
+  useEffect(() => {
+    if (!hayAuditoriaEnCurso) return
+    const intervalo = setInterval(cargar, 10_000)
+    return () => clearInterval(intervalo)
+  }, [hayAuditoriaEnCurso, cargar])
 
   useEffect(() => {
     // al volver del callback OAuth el dashboard aterriza con ?meli=…: avisar y limpiar la URL
@@ -214,6 +442,30 @@ export function MisProductos() {
       setError(err.message)
     } finally {
       setOcupado(false)
+    }
+  }
+
+  async function cablearNicho(p, nichoId) {
+    setError(null)
+    try {
+      await api.ajustarPropio(p._id, { nichoId })
+      cargar()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function auditar(p) {
+    setError(null)
+    setAuditoriaDe(null)
+    try {
+      await api.auditarPropio(p._id)
+      setAviso(
+        'Auditoría en curso: el actor está leyendo las publicaciones ganadoras del nicho — el resultado aparece aquí en 2-5 minutos.',
+      )
+      cargar()
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -293,12 +545,22 @@ export function MisProductos() {
                 <th className="num">Visitas 7d</th>
                 <th className="num">Rating</th>
                 <th>Posición orgánica</th>
+                <th>Nicho / auditoría</th>
                 <th aria-label="acciones" />
               </tr>
             </thead>
             <tbody>
               {datos.propios.map((p) => (
-                <FilaPropio key={p._id} p={p} onEliminar={eliminar} onAbrir={setAbierto} />
+                <FilaPropio
+                  key={p._id}
+                  p={p}
+                  nichos={nichos}
+                  onEliminar={eliminar}
+                  onAbrir={setAbierto}
+                  onCablear={cablearNicho}
+                  onAuditar={auditar}
+                  onVerAuditoria={(x) => setAuditoriaDe(x._id)}
+                />
               ))}
             </tbody>
           </table>
@@ -310,10 +572,24 @@ export function MisProductos() {
         vienen de la API oficial (exactos). "Caja de compra" aplica a publicaciones de catálogo: si
         no estás ganando, muestra el precio que la ganaría. "Ingresos 30d" suma tus órdenes pagadas
         reales. La chapa "real" marca ventas del período medidas por ML; la cifra con ~ es la
-        estimación por reseñas (~{FACTOR_VENTAS} por reseña nueva).
+        estimación por reseñas (~{FACTOR_VENTAS} por reseña nueva). Cablea un nicho del tablero y
+        "auditar" compara tu título, descripción y fotos contra las publicaciones que más han
+        vendido en ese listado (la IA ve las fotos reales) y te dice dónde estás fallando, con
+        arreglos listos para pegar.
       </p>
 
       {abierto ? <PanelPropio propio={abierto} onCerrar={() => setAbierto(null)} /> : null}
+      {(() => {
+        // el panel lee del listado fresco: si se re-audita, se actualiza solo
+        const propioAuditado = datos?.propios?.find((x) => x._id === auditoriaDe)
+        return propioAuditado?.auditoria?.estado === 'ok' ? (
+          <PanelAuditoria
+            propio={propioAuditado}
+            onCerrar={() => setAuditoriaDe(null)}
+            onRegenerar={auditar}
+          />
+        ) : null
+      })()}
     </main>
   )
 }

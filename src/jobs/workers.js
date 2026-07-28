@@ -547,6 +547,30 @@ export async function procesarScanPropios() {
   return escanearPropios({ soloOficial: gastado >= config.presupuestoUsdMes })
 }
 
+// Auditoría de listing de un producto propio vs los ganadores de su nicho.
+// El error queda escrito en el documento: el dashboard lo muestra sin tener
+// que mirar la cola.
+export async function procesarAuditoriaPropio(job) {
+  const propio = await ProductoPropio.findById(job.data.propioId)
+  if (!propio) return { omitido: true, motivo: 'producto propio eliminado' }
+  const { auditarPropio } = await import('../services/auditor.js')
+  try {
+    const auditoria = await auditarPropio(propio)
+    return {
+      generadoEl: auditoria.generadoEl,
+      competidores: auditoria.competidores.length,
+      fotosAnalizadas: auditoria.fotosAnalizadas,
+      costoUsd: auditoria.costoUsd,
+      modelo: auditoria.modelo,
+    }
+  } catch (err) {
+    propio.auditoria = { estado: 'error', error: err.message, generadoEl: new Date() }
+    propio.markModified('auditoria')
+    await propio.save()
+    throw err
+  }
+}
+
 // Tendencias: snapshot diario del ranking del autocompletado de ML.
 // No gasta Apify ni LLM, así que no pasa por el techo de presupuesto.
 export async function procesarTendencias() {
@@ -615,11 +639,17 @@ export function iniciarWorkers() {
     connection: crearConexionRedis(),
     concurrency: 1,
   })
-  const workerPropios = new Worker(COLA_PROPIOS, procesarScanPropios, {
-    connection: crearConexionRedis(),
-    concurrency: 1,
-    maxStalledCount: 3,
-  })
+  // la cola de propios lleva dos trabajos: la medición diaria y la auditoría
+  // de listing (job "auditar"), que comparte concurrencia 1 a propósito
+  const workerPropios = new Worker(
+    COLA_PROPIOS,
+    (job) => (job.name === 'auditar' ? procesarAuditoriaPropio(job) : procesarScanPropios(job)),
+    {
+      connection: crearConexionRedis(),
+      concurrency: 1,
+      maxStalledCount: 3,
+    },
+  )
   const workerTendencias = new Worker(COLA_TENDENCIAS, procesarTendencias, {
     connection: crearConexionRedis(),
     concurrency: 1,
