@@ -63,6 +63,7 @@ export const api = {
   ajustarPropio: (id, cambios) => pedir(`/api/propios/${id}`, { ...json(cambios), method: 'PATCH' }),
   auditarPropio: (id) => pedir(`/api/propios/${id}/auditar`, { method: 'POST' }),
   autoCablearPropios: () => pedir('/api/propios/auto-cablear', { method: 'POST' }),
+  aplicarPropio: (id, cambios) => pedir(`/api/propios/${id}/aplicar`, json(cambios)),
   estratega: () => pedir('/api/estratega'),
   generarEstratega: () => pedir('/api/estratega', { method: 'POST' }),
   meliEstado: () => pedir('/api/meli/estado'),

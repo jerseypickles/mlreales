@@ -111,18 +111,42 @@ async function cuentaConTokenFresco() {
   return cuenta
 }
 
-export async function meliGet(ruta) {
+async function meliFetch(ruta, { method = 'GET', body } = {}) {
   let cuenta = await cuentaConTokenFresco()
   const pedir = (token) =>
-    fetch(`${API_BASE}${ruta}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } })
+    fetch(`${API_BASE}${ruta}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    })
   let resp = await pedir(cuenta.accessToken)
   if (resp.status === 401) {
     cuenta = await refrescar(cuenta)
     resp = await pedir(cuenta.accessToken)
   }
   const datos = await resp.json().catch(() => ({}))
-  if (!resp.ok) throw new Error(`${ruta} → ${resp.status}: ${datos.message ?? datos.error ?? 'sin detalle'}`)
+  if (!resp.ok) {
+    const causa = Array.isArray(datos.cause) && datos.cause.length ? ` — ${JSON.stringify(datos.cause).slice(0, 200)}` : ''
+    throw new Error(`${ruta} → ${resp.status}: ${datos.message ?? datos.error ?? 'sin detalle'}${causa}`)
+  }
   return datos
+}
+
+export async function meliGet(ruta) {
+  return meliFetch(ruta)
+}
+
+// Escrituras sobre items PROPIOS (scope Publicación): título, descripción, etc.
+export async function meliPut(ruta, body) {
+  return meliFetch(ruta, { method: 'PUT', body })
+}
+
+export async function meliPost(ruta, body) {
+  return meliFetch(ruta, { method: 'POST', body })
 }
 
 export async function estadoMeli() {

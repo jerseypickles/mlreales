@@ -2062,6 +2062,186 @@ section {
   font-size: 12.5px;
 }
 
+/* tarjetas de Mis productos: qué es / qué mide / qué dice Fable */
+
+.propios-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.propio-card {
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: var(--sombra-1);
+  padding: 14px 16px;
+}
+
+.propio-encabezado {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.propio-foto {
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 2px;
+  background: #fff;
+  cursor: pointer;
+  flex: none;
+}
+
+.propio-foto img {
+  display: block;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.propio-titular {
+  flex: 1;
+  min-width: 0;
+}
+
+.propio-titular h3 {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.propio-titular h3:hover {
+  color: var(--acento);
+}
+
+.propio-sub {
+  margin: 3px 0 0;
+  color: var(--tinta-3);
+  font-size: 12px;
+}
+
+.propio-acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.propio-metricas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+  cursor: pointer;
+}
+
+.propio-metrica {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  padding: 5px 10px;
+  min-width: 76px;
+}
+
+.propio-metrica-alerta {
+  border-color: color-mix(in srgb, var(--peligro) 45%, var(--borde));
+  background: color-mix(in srgb, var(--peligro) 5%, transparent);
+}
+
+.propio-metrica-etiqueta {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--tinta-3);
+}
+
+.propio-metrica-valor {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.propio-optimizacion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px dashed var(--borde);
+  padding-top: 10px;
+}
+
+.propio-optimizacion-marca {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--acento);
+}
+
+.propio-optimizacion .selector-nicho {
+  padding: 4px 8px;
+  font-size: 12px;
+  max-width: 190px;
+}
+
+.propio-quickwin {
+  color: var(--tinta-2);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 460px;
+}
+
+.boton-chico {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+/* primera foto frente a frente en el panel de optimización */
+
+.fotos-cara-a-cara {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.foto-vs {
+  margin: 0;
+  text-align: center;
+}
+
+.foto-vs img {
+  width: 104px;
+  height: 104px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  display: block;
+}
+
+.foto-vs-mia img {
+  border: 2px solid var(--acento);
+}
+
+.foto-vs figcaption {
+  font-size: 11px;
+  color: var(--tinta-3);
+  margin-top: 3px;
+}
+
+.acciones-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .delta {
   margin-left: 6px;
   font-size: 10.5px;

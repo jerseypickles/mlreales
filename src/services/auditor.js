@@ -300,8 +300,9 @@ export async function auditarPropio(propio) {
     keyword: nicho.keyword,
     nichoId: String(nicho._id),
     fotosAnalizadas,
-    miPublicacion: { ...mio, fotos: undefined, numFotos: mio.fotos.length },
-    competidores: rivales.map((r) => ({ ...r, descripcion: undefined, atributos: undefined, fotos: undefined, numFotos: r.fotos.length })),
+    // primeras fotos guardadas: el panel las muestra frente a frente
+    miPublicacion: { ...mio, fotos: mio.fotos.slice(0, 4), numFotos: mio.fotos.length },
+    competidores: rivales.map((r) => ({ ...r, descripcion: undefined, atributos: undefined, fotos: r.fotos.slice(0, 2), numFotos: r.fotos.length })),
     resultado: llm.datos,
     modelo: llm.modelo,
     costoUsd: Math.round((costoActorUsd + llm.costoUsd) * 10000) / 10000,

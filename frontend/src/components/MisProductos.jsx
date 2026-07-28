@@ -18,136 +18,130 @@ function deltas(mediciones) {
   return { ultima, dReviews: delta('numReviews'), dPrecio: delta('precio'), dVendidos: delta('vendidos') }
 }
 
-// Celda de auditoría: cablear el nicho + lanzar/ver la auditoría de listing
-function CeldaAuditoria({ p, nichos, onCablear, onAuditar, onVerAuditoria }) {
-  const a = p.auditoria
-  // >30 min "generando" = job perdido (deploy en el medio): volver a ofrecer el botón
-  const generando =
-    a?.estado === 'generando' &&
-    (!a.solicitadaEl || Date.now() - new Date(a.solicitadaEl).getTime() < 30 * 60e3)
+function Metrica({ etiqueta, children, alerta }) {
   return (
-    <td className="celda-auditoria" onClick={(e) => e.stopPropagation()}>
-      <select
-        className="selector-nicho"
-        value={p.nichoId ?? ''}
-        onChange={(e) => onCablear(p, e.target.value || null)}
-        aria-label="Nicho contra el que se audita"
-      >
-        <option value="">— sin nicho —</option>
-        {nichos.map((n) => (
-          <option key={n._id} value={n._id}>
-            {n.keyword}
-          </option>
-        ))}
-      </select>
-      {p.nichoId ? (
-        generando ? (
-          <span className="badge badge-neutro">Fable leyendo a los ganadores…</span>
-        ) : a?.estado === 'ok' ? (
-          <button className="enlace-boton" onClick={() => onVerAuditoria(p)}>
-            ver optimización
-            {a.resultado?.quickWins?.length ? ` (${a.resultado.quickWins.length} acciones)` : ''}
-          </button>
-        ) : (
-          <button
-            className="enlace-boton"
-            title={
-              a?.estado === 'error'
-                ? `la anterior falló: ${a.error}`
-                : 'Fable lee título, descripción, ficha y fotos reales de los peces gordos del nicho y te dice dónde estás fallando'
-            }
-            onClick={() => onAuditar(p)}
-          >
-            {a?.estado === 'error' ? 'reintentar' : 'optimizar con Fable'}
-          </button>
-        )
-      ) : null}
-    </td>
+    <span className={alerta ? 'propio-metrica propio-metrica-alerta' : 'propio-metrica'}>
+      <span className="propio-metrica-etiqueta">{etiqueta}</span>
+      <span className="propio-metrica-valor">{children}</span>
+    </span>
   )
 }
 
-function FilaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria }) {
+// Tarjeta por producto: arriba lo que ES (foto, título, estado), al medio lo
+// que MIDE (chips), abajo la optimización de Fable (nicho + estado + resumen)
+function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria }) {
   const d = deltas(p.mediciones)
+  const a = p.auditoria
+  const generando =
+    a?.estado === 'generando' &&
+    (!a.solicitadaEl || Date.now() - new Date(a.solicitadaEl).getTime() < 30 * 60e3)
+  const ventas =
+    d?.dVendidos != null
+      ? `${fmtNum(d.dVendidos)} real`
+      : Number.isFinite(d?.ultima?.vendidos)
+        ? `${fmtNum(d.ultima.vendidos)} acum.`
+        : d?.dReviews != null
+          ? `~${fmtNum(d.dReviews * FACTOR_VENTAS)}`
+          : '—'
   return (
-    <tr className="fila-clickable" onClick={() => onAbrir(p)} tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter') onAbrir(p) }}>
-      <td className="celda-imagen">
-        {p.imagen ? <img src={p.imagen} alt="" loading="lazy" width="36" height="36" /> : <span className="sin-imagen" />}
-      </td>
-      <td className="celda-titulo" title={p.titulo ?? p.sku}>
-        {p.titulo ?? p.sku}
-        {p.estadoMl && p.estadoMl !== 'active' ? (
-          <span className="badge badge-neutro">{p.estadoMl === 'paused' ? 'pausada' : p.estadoMl}</span>
-        ) : null}
-      </td>
-      <td className="num">
-        {fmtPrecio(d?.ultima?.precio)}
-        {d?.dPrecio ? (
-          <span className={d.dPrecio > 0 ? 'delta delta-sube' : 'delta delta-baja'}>
-            {d.dPrecio > 0 ? '▲' : '▼'}
-          </span>
-        ) : null}
-      </td>
-      <td>
-        {p.buyBox ? (
-          p.buyBox.estado === 'winning' ? (
-            <span className="badge badge-full">ganando</span>
-          ) : (
-            <span className="badge badge-cn" title={p.buyBox.estado ?? ''}>
-              {Number.isFinite(p.buyBox.precioParaGanar)
-                ? `gana con ${fmtPrecio(p.buyBox.precioParaGanar)}`
-                : 'compitiendo'}
-            </span>
-          )
-        ) : (
-          '—'
-        )}
-      </td>
-      <td className="num">{fmtNum(d?.ultima?.stock)}</td>
-      <td className="num">
-        {fmtNum(d?.ultima?.numReviews)}
-        {d?.dReviews > 0 ? <span className="delta delta-sube">+{d.dReviews}</span> : null}
-      </td>
-      <td className="num">
-        {d?.dVendidos != null ? (
-          <>
-            {fmtNum(d.dVendidos)} <span className="badge badge-full">real</span>
-          </>
-        ) : Number.isFinite(d?.ultima?.vendidos) ? (
-          `${fmtNum(d.ultima.vendidos)} acum.`
-        ) : d?.dReviews != null ? (
-          `~${fmtNum(d.dReviews * FACTOR_VENTAS)}`
-        ) : (
-          '—'
-        )}
-      </td>
-      <td className="num">
-        {p.ventas30d ? `${fmtPrecio(p.ventas30d.ingresosClp)} · ${fmtNum(p.ventas30d.unidades)}u` : '—'}
-      </td>
-      <td className="num">{fmtNum(d?.ultima?.visitas)}</td>
-      <td className="num">{d?.ultima?.rating ?? '—'}</td>
-      <td>
-        {p.posicionReciente
-          ? `#${p.posicionReciente.posicion} en “${p.posicionReciente.keyword}”`
-          : <span className="vacio">fuera de listados trackeados</span>}
-      </td>
-      <CeldaAuditoria
-        p={p}
-        nichos={nichos}
-        onCablear={onCablear}
-        onAuditar={onAuditar}
-        onVerAuditoria={onVerAuditoria}
-      />
-      <td>
-        <a href={p.url} target="_blank" rel="noreferrer" className="enlace-icono"
-           aria-label="Abrir en Mercado Libre" onClick={(e) => e.stopPropagation()}>
-          <IconoExterno />
-        </a>
-        <button className="enlace-boton" onClick={(e) => { e.stopPropagation(); onEliminar(p) }}>
-          quitar
+    <article className="propio-card">
+      <div className="propio-encabezado">
+        <button className="propio-foto" onClick={() => onAbrir(p)} aria-label="Ver series del producto">
+          {p.imagen ? <img src={p.imagen} alt="" loading="lazy" width="56" height="56" /> : <span className="sin-imagen" />}
         </button>
-      </td>
-    </tr>
+        <div className="propio-titular">
+          <h3 onClick={() => onAbrir(p)}>{p.titulo ?? p.sku}</h3>
+          <p className="propio-sub">
+            {p.estadoMl && p.estadoMl !== 'active' ? (
+              <span className="badge badge-neutro">{p.estadoMl === 'paused' ? 'pausada' : p.estadoMl}</span>
+            ) : null}
+            {p.posicionReciente
+              ? `#${p.posicionReciente.posicion} en “${p.posicionReciente.keyword}”`
+              : 'fuera de los listados trackeados'}
+            {p.buyBox
+              ? p.buyBox.estado === 'winning'
+                ? ' · ganando la caja de compra'
+                : Number.isFinite(p.buyBox.precioParaGanar)
+                  ? ` · caja de compra: gana con ${fmtPrecio(p.buyBox.precioParaGanar)}`
+                  : ' · compitiendo por la caja de compra'
+              : ''}
+          </p>
+        </div>
+        <div className="propio-acciones">
+          <a href={p.url} target="_blank" rel="noreferrer" className="enlace-icono" aria-label="Abrir en Mercado Libre">
+            <IconoExterno />
+          </a>
+          <button className="enlace-boton" onClick={() => onEliminar(p)}>
+            quitar
+          </button>
+        </div>
+      </div>
+
+      <div className="propio-metricas" onClick={() => onAbrir(p)}>
+        <Metrica etiqueta="Precio">
+          {fmtPrecio(d?.ultima?.precio)}
+          {d?.dPrecio ? (
+            <span className={d.dPrecio > 0 ? 'delta delta-sube' : 'delta delta-baja'}>{d.dPrecio > 0 ? '▲' : '▼'}</span>
+          ) : null}
+        </Metrica>
+        <Metrica etiqueta="Ventas" alerta={ventas === '—' || ventas === '0 real'}>{ventas}</Metrica>
+        <Metrica etiqueta="Ingresos 30d">
+          {p.ventas30d ? `${fmtPrecio(p.ventas30d.ingresosClp)} · ${fmtNum(p.ventas30d.unidades)}u` : '—'}
+        </Metrica>
+        <Metrica etiqueta="Visitas 7d" alerta={(d?.ultima?.visitas ?? 0) < 10}>{fmtNum(d?.ultima?.visitas)}</Metrica>
+        <Metrica etiqueta="Reseñas" alerta={!d?.ultima?.numReviews}>
+          {fmtNum(d?.ultima?.numReviews)}
+          {d?.dReviews > 0 ? <span className="delta delta-sube">+{d.dReviews}</span> : null}
+          {d?.ultima?.rating ? ` ★${d.ultima.rating}` : ''}
+        </Metrica>
+        <Metrica etiqueta="Stock">{fmtNum(d?.ultima?.stock)}</Metrica>
+      </div>
+
+      <div className="propio-optimizacion">
+        <span className="propio-optimizacion-marca">Fable</span>
+        <select
+          className="selector-nicho"
+          value={p.nichoId ?? ''}
+          onChange={(e) => onCablear(p, e.target.value || null)}
+          aria-label="Nicho contra el que se optimiza"
+        >
+          <option value="">— elegir nicho —</option>
+          {nichos.map((n) => (
+            <option key={n._id} value={n._id}>
+              {n.keyword}
+            </option>
+          ))}
+        </select>
+        {!p.nichoId ? (
+          <span className="vacio">cablea un nicho para comparar contra los peces gordos</span>
+        ) : generando ? (
+          <span className="badge badge-neutro">leyendo a los ganadores del nicho…</span>
+        ) : a?.estado === 'ok' ? (
+          <>
+            <button className="boton-secundario boton-chico" onClick={() => onVerAuditoria(p)}>
+              ver optimización{a.resultado?.quickWins?.length ? ` (${a.resultado.quickWins.length})` : ''}
+            </button>
+            {a.resultado?.quickWins?.[0] ? (
+              <span className="propio-quickwin" title={a.resultado.quickWins[0]}>
+                1º: {a.resultado.quickWins[0]}
+              </span>
+            ) : null}
+          </>
+        ) : (
+          <button
+            className="boton-secundario boton-chico"
+            title={
+              a?.estado === 'error'
+                ? `la anterior falló: ${a.error}`
+                : 'Fable lee título, descripción, ficha y fotos reales de los peces gordos del nicho'
+            }
+            onClick={() => onAuditar(p)}
+          >
+            {a?.estado === 'error' ? 'reintentar optimización' : 'optimizar con Fable'}
+          </button>
+        )}
+      </div>
+    </article>
   )
 }
 
@@ -190,10 +184,13 @@ function SeccionFallas({ fallas }) {
 }
 
 // Auditoría de listing: mi título/descripción/fotos vs los ganadores del nicho
-function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
+function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando }) {
   const a = propio.auditoria
   const r = a?.resultado
   if (!r) return null
+  const aplicadoTitulo = (a.aplicado ?? []).filter((x) => x.campo === 'titulo').map((x) => x.valor)
+  const descripcionAplicada = (a.aplicado ?? []).some((x) => x.campo === 'descripcion')
+  const miPrimeraFoto = a.miPublicacion?.fotos?.[0] ?? propio.imagen ?? null
   return (
     <div className="panel-fondo" onClick={onCerrar}>
       <aside className="panel panel-ancho" onClick={(e) => e.stopPropagation()} aria-label="Auditoría de listing">
@@ -290,6 +287,30 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
         </section>
 
         <section>
+          <h4>Primera foto: tú contra ellos</h4>
+          <p className="auditoria-diagnostico">
+            La primera foto decide el clic en una miniatura de 100 px. Compárala tú también:
+          </p>
+          <div className="fotos-cara-a-cara">
+            <figure className="foto-vs foto-vs-mia">
+              {miPrimeraFoto ? <img src={miPrimeraFoto} alt="Tu primera foto" loading="lazy" /> : <span className="sin-imagen" />}
+              <figcaption>Tú</figcaption>
+            </figure>
+            {(a.competidores ?? []).map((c) => {
+              const foto = c.fotos?.[0] ?? c.imagen
+              return foto ? (
+                <figure className="foto-vs" key={c.sku}>
+                  <a href={c.url ?? undefined} target="_blank" rel="noreferrer">
+                    <img src={foto} alt="" loading="lazy" />
+                  </a>
+                  <figcaption>{fmtNum(c.numReviews)} reseñas</figcaption>
+                </figure>
+              ) : null
+            })}
+          </div>
+        </section>
+
+        <section>
           <h4>Título</h4>
           <p className="auditoria-diagnostico">{r.titulo?.diagnostico}</p>
           <SeccionFallas fallas={r.titulo?.fallas} />
@@ -305,6 +326,21 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
                 <span className="listing-titulo-texto">{t}</span>
                 <span className={t.length > 60 ? 'contador excedido' : 'contador'}>{t.length}/60</span>
                 <BotonCopiar texto={t} />
+                {aplicadoTitulo.includes(t) ? (
+                  <span className="badge badge-full">en ML ✓</span>
+                ) : (
+                  <button
+                    className="copiar"
+                    disabled={aplicando}
+                    onClick={() => {
+                      if (confirm(`¿Cambiar el título de la publicación en Mercado Libre a:\n\n“${t}”?`)) {
+                        onAplicar(propio, { titulo: t })
+                      }
+                    }}
+                  >
+                    {aplicando ? 'Aplicando…' : 'Aplicar en ML'}
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -313,7 +349,26 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar }) {
         <section>
           <div className="listing-seccion-encabezado">
             <h4>Descripción</h4>
-            {r.descripcion?.propuesta ? <BotonCopiar texto={r.descripcion.propuesta} etiqueta="Copiar propuesta" /> : null}
+            {r.descripcion?.propuesta ? (
+              <span className="acciones-inline">
+                <BotonCopiar texto={r.descripcion.propuesta} etiqueta="Copiar propuesta" />
+                {descripcionAplicada ? (
+                  <span className="badge badge-full">en ML ✓</span>
+                ) : (
+                  <button
+                    className="copiar"
+                    disabled={aplicando}
+                    onClick={() => {
+                      if (confirm('¿Reemplazar la descripción de la publicación en Mercado Libre por la propuesta?')) {
+                        onAplicar(propio, { descripcion: r.descripcion.propuesta })
+                      }
+                    }}
+                  >
+                    {aplicando ? 'Aplicando…' : 'Aplicar en ML'}
+                  </button>
+                )}
+              </span>
+            ) : null}
           </div>
           <p className="auditoria-diagnostico">{r.descripcion?.diagnostico}</p>
           <SeccionFallas fallas={r.descripcion?.fallas} />
@@ -369,6 +424,7 @@ export function MisProductos() {
   const [aviso, setAviso] = useState(null)
   const [nichos, setNichos] = useState([])
   const [auditoriaDe, setAuditoriaDe] = useState(null) // _id del propio con el panel de auditoría abierto
+  const [aplicando, setAplicando] = useState(false)
 
   const cargar = useCallback(() => {
     api.listarPropios().then(setDatos).catch((e) => setError(e.message))
@@ -519,6 +575,24 @@ export function MisProductos() {
     }
   }
 
+  async function aplicarEnMl(p, cambios) {
+    setAplicando(true)
+    setError(null)
+    try {
+      const { resultado } = await api.aplicarPropio(p._id, cambios)
+      const fallas = Object.entries(resultado)
+        .filter(([, v]) => !v.ok)
+        .map(([campo, v]) => `${campo}: ${v.error}`)
+      if (fallas.length) setError(`Mercado Libre rechazó ${fallas.join(' · ')}`)
+      else setAviso('Cambio aplicado en Mercado Libre ✓ (puede tardar unos minutos en verse)')
+      cargar()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setAplicando(false)
+    }
+  }
+
   async function auditar(p) {
     setError(null)
     setAuditoriaDe(null)
@@ -604,40 +678,19 @@ export function MisProductos() {
           todos los días: si aparece en los listados de tus nichos, también verás tu posición.
         </p>
       ) : (
-        <div className="tabla-envoltura">
-          <table>
-            <thead>
-              <tr>
-                <th aria-label="imagen" />
-                <th>Producto</th>
-                <th className="num">Precio</th>
-                <th>Caja de compra</th>
-                <th className="num">Stock</th>
-                <th className="num">Reseñas</th>
-                <th className="num">Ventas (último período)</th>
-                <th className="num">Ingresos 30d</th>
-                <th className="num">Visitas 7d</th>
-                <th className="num">Rating</th>
-                <th>Posición orgánica</th>
-                <th>Nicho / auditoría</th>
-                <th aria-label="acciones" />
-              </tr>
-            </thead>
-            <tbody>
-              {datos.propios.map((p) => (
-                <FilaPropio
-                  key={p._id}
-                  p={p}
-                  nichos={nichos}
-                  onEliminar={eliminar}
-                  onAbrir={setAbierto}
-                  onCablear={cablearNicho}
-                  onAuditar={auditar}
-                  onVerAuditoria={(x) => setAuditoriaDe(x._id)}
-                />
-              ))}
-            </tbody>
-          </table>
+        <div className="propios-lista">
+          {datos.propios.map((p) => (
+            <TarjetaPropio
+              key={p._id}
+              p={p}
+              nichos={nichos}
+              onEliminar={eliminar}
+              onAbrir={setAbierto}
+              onCablear={cablearNicho}
+              onAuditar={auditar}
+              onVerAuditoria={(x) => setAuditoriaDe(x._id)}
+            />
+          ))}
         </div>
       )}
 
@@ -661,6 +714,8 @@ export function MisProductos() {
             propio={propioAuditado}
             onCerrar={() => setAuditoriaDe(null)}
             onRegenerar={auditar}
+            onAplicar={aplicarEnMl}
+            aplicando={aplicando}
           />
         ) : null
       })()}

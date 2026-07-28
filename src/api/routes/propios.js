@@ -134,6 +134,21 @@ router.post(
   }),
 )
 
+// Aplicar en ML (API oficial) los arreglos de la auditoría: título y/o descripción
+router.post(
+  '/:id/aplicar',
+  manejar(async (req, res) => {
+    const propio = await ProductoPropio.findById(req.params.id)
+    if (!propio) return res.status(404).json({ error: 'producto propio no encontrado' })
+    const { titulo, descripcion } = req.body ?? {}
+    if (titulo === undefined && descripcion === undefined) {
+      return res.status(400).json({ error: 'nada que aplicar: manda titulo y/o descripcion' })
+    }
+    const { aplicarCambiosPropio } = await import('../../services/aplicador.js')
+    res.json({ resultado: await aplicarCambiosPropio(propio, { titulo, descripcion }) })
+  }),
+)
+
 router.delete(
   '/:id',
   manejar(async (req, res) => {
