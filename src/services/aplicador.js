@@ -49,7 +49,16 @@ export async function aplicarCambiosPropio(propio, { titulo, descripcion }) {
       propio.titulo = nuevoTitulo
       aplicados.push({ campo: 'titulo', valor: propio.titulo, fecha: new Date() })
     } catch (err) {
-      resultado.titulo = { ok: false, error: err.message }
+      // sonda 27-jul: ML rechaza TODA edición de family_name por API en
+      // publicaciones user-products con esta app (error 374 incluso con
+      // cambios mínimos) — el título se cambia a mano en Seller Central
+      const bloqueadoPorMl = /family name is invalid|modify the title/i.test(err.message)
+      resultado.titulo = {
+        ok: false,
+        error: bloqueadoPorMl
+          ? 'ML no permite editar el título de publicaciones nuevas (user products) por API: copia el título y pégalo en Seller Central (Publicaciones → Modificar)'
+          : err.message,
+      }
     }
   }
 
