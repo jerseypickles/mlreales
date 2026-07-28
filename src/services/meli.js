@@ -130,7 +130,7 @@ async function meliFetch(ruta, { method = 'GET', body } = {}) {
   }
   const datos = await resp.json().catch(() => ({}))
   if (!resp.ok) {
-    const causa = Array.isArray(datos.cause) && datos.cause.length ? ` — ${JSON.stringify(datos.cause).slice(0, 200)}` : ''
+    const causa = datos.cause != null ? ` — ${JSON.stringify(datos.cause).slice(0, 300)}` : ''
     throw new Error(`${ruta} → ${resp.status}: ${datos.message ?? datos.error ?? 'sin detalle'}${causa}`)
   }
   return datos

@@ -41,6 +41,22 @@ router.post(
   }),
 )
 
+// Sonda de LECTURA de la API oficial de ML con el token de la cuenta conectada
+// (diagnóstico de escrituras rechazadas: ver el item crudo, tags, catálogo).
+// Solo GET y solo rutas /items|/users|/reviews: jamás escribe.
+router.get(
+  '/meli',
+  autorizado,
+  manejar(async (req, res) => {
+    const ruta = typeof req.query.ruta === 'string' ? req.query.ruta : ''
+    if (!/^\/(items|users|reviews|categories|sites)\//.test(ruta)) {
+      return res.status(400).json({ error: 'ruta inválida: solo /items/…, /users/…, /reviews/…, /categories/…, /sites/…' })
+    }
+    const { meliGet } = await import('../../services/meli.js')
+    res.json(await meliGet(ruta))
+  }),
+)
+
 // Estado + items de un run lanzado con esperar=false
 router.get(
   '/run/:id/items',
