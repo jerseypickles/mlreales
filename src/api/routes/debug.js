@@ -72,6 +72,21 @@ router.get(
   }),
 )
 
+// Peso de búsqueda de frases candidatas: ?q=frase1|frase2|frase3
+router.get(
+  '/peso',
+  autorizado,
+  manejar(async (req, res) => {
+    const frases = String(req.query.q ?? '')
+      .split('|')
+      .map((f) => f.trim())
+      .filter(Boolean)
+    if (!frases.length) return res.status(400).json({ error: 'q requerida (frases separadas por |)' })
+    const { medirPesos } = await import('../../services/pesoKeyword.js')
+    res.json({ pesos: await medirPesos(frases) })
+  }),
+)
+
 // Estado + items de un run lanzado con esperar=false
 router.get(
   '/run/:id/items',
