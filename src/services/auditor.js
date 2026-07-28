@@ -108,11 +108,13 @@ const SCHEMA_AUDITORIA = {
 const SYSTEM_AUDITOR = `Eres auditor de listings de Mercado Libre Chile. Te paso MI publicación y las de los GANADORES del nicho (los que más han vendido — tienen las reseñas — y el que más vende ahora). Tu trabajo NO es dar consejos genéricos: es señalar dónde fallo YO comparado con lo que los ganadores hacen y yo no.
 
 TÍTULO:
-- Las primeras 2-3 palabras deben ser EXACTAMENTE lo que la gente escribe en el buscador (te paso las búsquedas reales del autocompletado, ordenadas por volumen). Compara palabra por palabra: ¿qué keywords tienen los títulos ganadores que el mío no?
+- Te paso BÚSQUEDAS REALES del autocompletado de ML, agrupadas por semilla y ORDENADAS POR VOLUMEN dentro de cada grupo. Esa lista es la única fuente de verdad sobre qué escribe la gente: el arranque de CADA título propuesto debe ser una de esas búsquedas TAL CUAL (la de mayor volumen que calce honestamente con el producto). Si dudas entre dos formas (ej "pistola de dardos" vs "pistola juguete"), gana la que esté más arriba o se repita en más grupos del autocompletado — NUNCA la que suene mejor.
+- Compara palabra por palabra: ¿qué keywords tienen los títulos ganadores que el mío no?
 - Propuestas: MÁXIMO 60 caracteres cada una (cuenta cada letra; si te pasas, ML corta). Prohibido: exclamaciones, MAYÚSCULAS COMPLETAS, "oferta", "envío gratis", precio.
 - Usa SOLO atributos que mi producto realmente tiene (según mi ficha y mi descripción). Jamás inventes especificaciones.
 
 DESCRIPCIÓN:
+- ML también indexa la descripción y LAS PRIMERAS PALABRAS PESAN MÁS: la primera línea debe arrancar con la búsqueda principal y tejer 2-3 búsquedas secundarias reales en las primeras 2 líneas, de forma natural (sin listas de keywords).
 - Compara estructura y contenido: ¿los ganadores responden preguntas que la mía deja abiertas? Te paso PREGUNTAS REALES de compradores del nicho: cada una sin responder es una venta que se cae.
 - La propuesta va en texto plano puro (ML no renderiza HTML/markdown), secciones separadas por línea en blanco: gancho de 2 líneas → QUÉ INCLUYE → ESPECIFICACIONES (guiones) → USOS → DESPACHO Y GARANTÍA. Teje las búsquedas reales que no cupieron en el título.
 - Mantén los datos VERDADEROS de mi descripción actual; mejora estructura, keywords y objeciones respondidas.
@@ -228,12 +230,29 @@ export async function auditarPropio(propio) {
     }
   })
 
-  // búsquedas reales: mejor esfuerzo — un 403 del autocompletado no bota la auditoría
-  let busquedasReales = []
-  try {
-    busquedasReales = await sugerenciasReales(nicho.keyword)
-  } catch {
-    busquedasReales = []
+  // búsquedas reales multi-semilla: la keyword del nicho + el vocabulario de
+  // los ganadores (primeras 2 palabras de sus títulos). El autocompletado
+  // ordena por volumen real: es la fuente de verdad para el arranque del
+  // título, no lo que "suene" a keyword. Mejor esfuerzo: un 403 no bota nada.
+  const semillas = [nicho.keyword]
+  for (const g of ganadores.slice(0, 3)) {
+    const primeras = String(g.titulo ?? '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N} ]/gu, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .join(' ')
+    if (primeras.length >= 4) semillas.push(primeras)
+  }
+  const busquedasReales = {}
+  for (const semilla of [...new Set(semillas)].slice(0, 4)) {
+    try {
+      const sugerencias = await sugerenciasReales(semilla)
+      if (sugerencias.length) busquedasReales[semilla] = sugerencias
+    } catch {
+      /* autocompletado caído para esta semilla: seguimos con las demás */
+    }
   }
   const preguntasCompradores = [
     ...new Set(vista.productos.flatMap((p) => (p.preguntas ?? []).map((q) => q?.texto)).filter(Boolean)),
@@ -242,7 +261,7 @@ export async function auditarPropio(propio) {
 
   const entrada = {
     nicho: nicho.keyword,
-    busquedasReales,
+    busquedasRealesPorVolumen: busquedasReales,
     preguntasRealesDeCompradores: preguntasCompradores,
     medianaPrecioNicho: reporte?.metricas?.precio?.mediana ?? null,
     miPublicacion: { ...mio, fotos: undefined, numFotos: mio.fotos.length },
@@ -308,7 +327,8 @@ export async function auditarPropio(propio) {
     modelo: llm.modelo,
     costoUsd: Math.round((costoActorUsd + llm.costoUsd) * 10000) / 10000,
   }
-  propio.auditoria = auditoria
+  // la revisión de ficha es un trabajo aparte: re-auditar no la borra
+  propio.auditoria = { ...auditoria, ficha: propio.auditoria?.ficha }
   propio.markModified('auditoria')
   await propio.save()
   return auditoria

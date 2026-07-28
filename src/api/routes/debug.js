@@ -59,6 +59,19 @@ router.get(
   }),
 )
 
+// Sonda del autocompletado real de ML (ordenado por volumen): valida qué
+// escribe la gente de verdad antes de decidir keywords de título/nicho
+router.get(
+  '/busquedas',
+  autorizado,
+  manejar(async (req, res) => {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+    if (q.length < 2) return res.status(400).json({ error: 'q requerida (mínimo 2 caracteres)' })
+    const { sugerenciasReales } = await import('../../services/busquedasReales.js')
+    res.json({ q, sugerencias: await sugerenciasReales(q, { limit: Number(req.query.limit) || 8 }) })
+  }),
+)
+
 // Estado + items de un run lanzado con esperar=false
 router.get(
   '/run/:id/items',
