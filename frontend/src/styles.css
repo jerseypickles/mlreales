@@ -2236,6 +2236,17 @@ section {
   margin-top: 3px;
 }
 
+.chip-peso-alto {
+  border-color: var(--exito-tinta, #16a34a);
+  color: var(--exito-tinta, #16a34a);
+  font-weight: 600;
+}
+
+.chip-peso-nulo {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
 .acciones-inline {
   display: inline-flex;
   align-items: center;

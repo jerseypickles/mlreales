@@ -122,6 +122,7 @@ const SYSTEM_AUDITOR = `Eres auditor de listings de Mercado Libre Chile. Te paso
 
 TÍTULO:
 - Te paso BÚSQUEDAS REALES del autocompletado de ML, agrupadas por semilla y ORDENADAS POR VOLUMEN dentro de cada grupo. Esa lista es la única fuente de verdad sobre qué escribe la gente: el arranque de CADA título propuesto debe ser una de esas búsquedas TAL CUAL (la de mayor volumen que calce honestamente con el producto). Si dudas entre dos formas (ej "pistola de dardos" vs "pistola juguete"), gana la que esté más arriba o se repita en más grupos del autocompletado — NUNCA la que suene mejor.
+- Te paso además pesoDeCadaKeyword: "alto" = la frase aparece tecleando solo su primera palabra (mucho volumen), "medio" = necesita más letras, "nulo" = ML no la sugiere (NADIE la escribe así, prohibido usarla). APILA en cada título las de peso ALTO que describan el producto con verdad: cada una es una puerta de entrada distinta y caben varias en 60 caracteres.
 - Compara palabra por palabra: ¿qué keywords tienen los títulos ganadores que el mío no?
 - Propuestas: MÁXIMO 60 caracteres cada una (cuenta cada letra; si te pasas, ML corta). Prohibido: exclamaciones, MAYÚSCULAS COMPLETAS, "oferta", "envío gratis", precio.
 - Usa SOLO atributos que mi producto realmente tiene (según mi ficha y mi descripción). Jamás inventes especificaciones.
@@ -307,9 +308,25 @@ export async function auditarPropio(propio) {
   ].slice(0, 15)
   const reporte = await Reporte.findOne({ nichoId: nicho._id }).sort({ fecha: -1 }).lean()
 
+  // peso medido de las frases candidatas: el LLM ya no elige "la que suene",
+  // elige la de peso alto (aparece con el prefijo de su primera palabra)
+  let pesos = []
+  try {
+    const { medirPesos } = await import('./pesoKeyword.js')
+    const candidatas = [
+      nicho.keyword,
+      sinStopwords,
+      ...Object.values(busquedasReales).flat().slice(0, 8),
+    ].filter(Boolean)
+    pesos = await medirPesos(candidatas)
+  } catch (err) {
+    console.warn(`[auditor] medición de peso no disponible: ${err.message}`)
+  }
+
   const entrada = {
     nicho: nicho.keyword,
     busquedasRealesPorVolumen: busquedasReales,
+    pesoDeCadaKeyword: pesos,
     preguntasRealesDeCompradores: preguntasCompradores,
     medianaPrecioNicho: reporte?.metricas?.precio?.mediana ?? null,
     miPublicacion: { ...mio, fotos: undefined, numFotos: mio.fotos.length },
@@ -408,6 +425,7 @@ export async function auditarPropio(propio) {
     nichoId: String(nicho._id),
     fotosAnalizadas,
     busquedasReales,
+    pesos,
     arranquesSinVolumen: arranquesSinVolumen.length ? arranquesSinVolumen : undefined,
     // primeras fotos guardadas: el panel las muestra frente a frente
     miPublicacion: { ...mio, fotos: mio.fotos.slice(0, 4), numFotos: mio.fotos.length },

@@ -313,7 +313,26 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando, o
         <section>
           <h4>Título</h4>
           <p className="auditoria-diagnostico">{r.titulo?.diagnostico}</p>
-          {a.busquedasReales && Object.keys(a.busquedasReales).length ? (
+          {a.pesos?.length ? (
+            <>
+              <p className="dato-label">Peso de búsqueda medido (autocompletado de ML)</p>
+              <div className="chips listing-chips">
+                {a.pesos.map((p) => (
+                  <span
+                    className={`chip chip-peso-${p.peso}`}
+                    key={p.frase}
+                    title={
+                      p.peso === 'nulo'
+                        ? 'ML no la sugiere: nadie la escribe así'
+                        : `aparece tecleando “${p.prefijo}”${p.posicion ? `, en posición ${p.posicion}` : ''}`
+                    }
+                  >
+                    {p.frase} · {p.peso}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : a.busquedasReales && Object.keys(a.busquedasReales).length ? (
             <>
               <p className="dato-label">Lo que la gente escribe de verdad (autocompletado ML, por volumen)</p>
               <div className="chips listing-chips">
