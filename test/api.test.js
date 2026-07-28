@@ -192,6 +192,34 @@ test('POST /api/propios/:id/auditar valida nicho cableado e IA configurada', asy
   assert.equal(sinIa.status, 503)
 })
 
+test('POST /api/propios/auto-cablear cablea por ranking trackeado sin gastar IA', async () => {
+  // este producto aparece en los snapshots seedeados del nicho "foco solares"
+  const rankeado = await modelos.ProductoPropio.create({
+    sku: 'MLC1465789123',
+    url: 'https://articulo.mercadolibre.cl/MLC-1465789123',
+  })
+  // este no rankea y sin ANTHROPIC_API_KEY la IA no puede derivar su keyword
+  const huerfano = await modelos.ProductoPropio.create({
+    sku: 'MLC555444333',
+    url: 'https://articulo.mercadolibre.cl/MLC-555444333',
+    titulo: 'Ampolleta Solar Recargable Con Panel 100w Exterior',
+  })
+
+  const resp = await fetch(`${baseUrl}/api/propios/auto-cablear`, { method: 'POST' })
+  assert.equal(resp.status, 200)
+  const { resultados } = await resp.json()
+
+  const deRankeado = resultados.find((r) => r.sku === 'MLC1465789123')
+  assert.equal(deRankeado.accion, 'rankea')
+  assert.equal(deRankeado.keyword, 'foco solares')
+  const nicho = await modelos.Nicho.findOne({ keyword: 'foco solares' })
+  assert.equal(String((await modelos.ProductoPropio.findById(rankeado._id)).nichoId), String(nicho._id))
+
+  const deHuerfano = resultados.find((r) => r.sku === 'MLC555444333')
+  assert.equal(deHuerfano.accion, 'sin-ia')
+  assert.equal((await modelos.ProductoPropio.findById(huerfano._id)).nichoId, null)
+})
+
 test('ids inválidos e inexistentes', async () => {
   const invalido = await fetch(`${baseUrl}/api/nichos/no-es-un-id/reporte`)
   assert.equal(invalido.status, 400)

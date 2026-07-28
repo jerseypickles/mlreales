@@ -57,6 +57,17 @@ router.post(
   }),
 )
 
+// Cableado automático de todos los propios sin nicho: por ranking en listados
+// trackeados (gratis) o derivando la búsqueda del título con IA; si el nicho
+// no existe, se crea y se encola su primer scan
+router.post(
+  '/auto-cablear',
+  manejar(async (_req, res) => {
+    const { cablearPropiosAuto } = await import('../../services/cableador.js')
+    res.json(await cablearPropiosAuto())
+  }),
+)
+
 // Cablear (o descablear con null) el nicho contra el que se audita el producto
 router.patch(
   '/:id',

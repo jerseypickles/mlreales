@@ -350,12 +350,16 @@ export function MisProductos() {
     return () => clearInterval(intervalo)
   }, [cargar])
 
-  useEffect(() => {
+  const cargarNichos = useCallback(() => {
     api
       .listarNichos()
       .then(({ nichos: lista }) => setNichos([...lista].sort((a, b) => a.keyword.localeCompare(b.keyword))))
       .catch(() => setNichos([]))
   }, [])
+
+  useEffect(() => {
+    cargarNichos()
+  }, [cargarNichos])
 
   // mientras hay una auditoría generándose, refrescar más seguido que los 30 s de base
   const hayAuditoriaEnCurso = datos?.propios?.some(
@@ -455,6 +459,36 @@ export function MisProductos() {
     }
   }
 
+  async function autoCablear() {
+    setOcupado(true)
+    setError(null)
+    setAviso(null)
+    try {
+      const { resultados = [], omitido, motivo } = await api.autoCablearPropios()
+      if (omitido) {
+        setAviso(motivo)
+        return
+      }
+      const cuenta = (accion) => resultados.filter((r) => r.accion === accion).length
+      const partes = []
+      const rankea = cuenta('rankea') + cuenta('existente')
+      if (rankea) partes.push(`${rankea} cableado(s) a nichos existentes`)
+      if (cuenta('creado'))
+        partes.push(`${cuenta('creado')} nicho(s) nuevo(s) creados y escaneando (primeros datos en ~10-15 min)`)
+      if (cuenta('presupuesto')) partes.push(`${cuenta('presupuesto')} sin crear por presupuesto mensual agotado`)
+      if (cuenta('sin-keyword') + cuenta('sin-titulo'))
+        partes.push(`${cuenta('sin-keyword') + cuenta('sin-titulo')} sin keyword clara (cablea a mano)`)
+      if (cuenta('sin-ia')) partes.push(`${cuenta('sin-ia')} sin IA configurada`)
+      setAviso(partes.length ? `Auto-cableado: ${partes.join(' · ')}.` : 'Auto-cableado sin cambios.')
+      cargar()
+      cargarNichos()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setOcupado(false)
+    }
+  }
+
   async function auditar(p) {
     setError(null)
     setAuditoriaDe(null)
@@ -501,6 +535,16 @@ export function MisProductos() {
           {datos?.propios?.length ? (
             <button className="boton-secundario" onClick={medirAhora} disabled={ocupado}>
               {ocupado ? 'Encolando…' : 'Medir ahora'}
+            </button>
+          ) : null}
+          {datos?.propios?.some((p) => !p.nichoId) ? (
+            <button
+              className="boton-secundario"
+              onClick={autoCablear}
+              disabled={ocupado}
+              title="Detecta el nicho de cada producto (por ranking o por título con IA); si no existe en el tablero, lo crea y lo escanea"
+            >
+              {ocupado ? 'Cableando…' : 'Cablear nichos (auto)'}
             </button>
           ) : null}
         </div>
