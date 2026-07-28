@@ -140,12 +140,25 @@ router.post(
   manejar(async (req, res) => {
     const propio = await ProductoPropio.findById(req.params.id)
     if (!propio) return res.status(404).json({ error: 'producto propio no encontrado' })
-    const { titulo, descripcion } = req.body ?? {}
-    if (titulo === undefined && descripcion === undefined) {
-      return res.status(400).json({ error: 'nada que aplicar: manda titulo y/o descripcion' })
+    const { titulo, descripcion, atributos } = req.body ?? {}
+    if (titulo === undefined && descripcion === undefined && atributos === undefined) {
+      return res.status(400).json({ error: 'nada que aplicar: manda titulo, descripcion y/o atributos' })
     }
     const { aplicarCambiosPropio } = await import('../../services/aplicador.js')
-    res.json({ resultado: await aplicarCambiosPropio(propio, { titulo, descripcion }) })
+    res.json({ resultado: await aplicarCambiosPropio(propio, { titulo, descripcion, atributos }) })
+  }),
+)
+
+// Revisar la ficha técnica (Características) contra la categoría ML y los
+// ganadores: propone correcciones aplicables por API
+router.post(
+  '/:id/ficha',
+  manejar(async (req, res) => {
+    const propio = await ProductoPropio.findById(req.params.id)
+    if (!propio) return res.status(404).json({ error: 'producto propio no encontrado' })
+    if (!llmDisponible()) return res.status(503).json({ error: 'IA no configurada (falta ANTHROPIC_API_KEY)' })
+    const { revisarFicha } = await import('../../services/ficha.js')
+    res.json({ ficha: await revisarFicha(propio) })
   }),
 )
 

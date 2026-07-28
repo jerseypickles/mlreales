@@ -302,7 +302,8 @@ export async function auditarPropio(propio) {
     fotosAnalizadas,
     // primeras fotos guardadas: el panel las muestra frente a frente
     miPublicacion: { ...mio, fotos: mio.fotos.slice(0, 4), numFotos: mio.fotos.length },
-    competidores: rivales.map((r) => ({ ...r, descripcion: undefined, atributos: undefined, fotos: r.fotos.slice(0, 2), numFotos: r.fotos.length })),
+    // atributos de rivales se conservan: el revisor de ficha los usa de contexto
+    competidores: rivales.map((r) => ({ ...r, descripcion: undefined, fotos: r.fotos.slice(0, 2), numFotos: r.fotos.length })),
     resultado: llm.datos,
     modelo: llm.modelo,
     costoUsd: Math.round((costoActorUsd + llm.costoUsd) * 10000) / 10000,

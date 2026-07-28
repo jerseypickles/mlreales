@@ -11,7 +11,7 @@ export function tienePlaceholder(texto) {
   return PLACEHOLDER.test(String(texto ?? ''))
 }
 
-export async function aplicarCambiosPropio(propio, { titulo, descripcion }) {
+export async function aplicarCambiosPropio(propio, { titulo, descripcion, atributos }) {
   if (!(await hayCuentaMeli())) {
     throw Object.assign(new Error('sin cuenta de Mercado Libre conectada'), { status: 503 })
   }
@@ -85,6 +85,26 @@ export async function aplicarCambiosPropio(propio, { titulo, descripcion }) {
       aplicados.push({ campo: 'descripcion', valor: descripcion.slice(0, 200), fecha: new Date() })
     } catch (err) {
       resultado.descripcion = { ok: false, error: err.message }
+    }
+  }
+
+  if (atributos !== undefined) {
+    // ficha técnica: [{id, valor}] → PUT attributes (verificado escribible el
+    // 27-jul incluso en publicaciones user-products donde el título no lo es)
+    const lista = Array.isArray(atributos)
+      ? atributos.filter((a) => a && typeof a.id === 'string' && typeof (a.valor ?? a.value_name) === 'string')
+      : []
+    if (!lista.length) {
+      throw Object.assign(new Error('atributos inválidos: se espera [{id, valor}]'), { status: 400 })
+    }
+    try {
+      await meliPut(`/items/${idMl}`, {
+        attributes: lista.map((a) => ({ id: a.id, value_name: a.valor ?? a.value_name })),
+      })
+      resultado.atributos = { ok: true, cantidad: lista.length }
+      aplicados.push({ campo: 'atributos', valor: lista.map((a) => `${a.id}=${a.valor ?? a.value_name}`).join(' · ').slice(0, 300), fecha: new Date() })
+    } catch (err) {
+      resultado.atributos = { ok: false, error: err.message }
     }
   }
 

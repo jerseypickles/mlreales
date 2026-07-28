@@ -184,7 +184,7 @@ function SeccionFallas({ fallas }) {
 }
 
 // Auditoría de listing: mi título/descripción/fotos vs los ganadores del nicho
-function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando }) {
+function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando, onRevisarFicha, revisandoFicha }) {
   const a = propio.auditoria
   const r = a?.resultado
   if (!r) return null
@@ -397,6 +397,71 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando })
           ) : null}
         </section>
 
+        <section>
+          <div className="listing-seccion-encabezado">
+            <h4>Características (ficha técnica)</h4>
+            <button className="copiar" disabled={revisandoFicha} onClick={() => onRevisarFicha(propio)}>
+              {revisandoFicha ? 'Revisando…' : a.ficha ? 'Revisar de nuevo' : 'Revisar ficha con Fable'}
+            </button>
+          </div>
+          {a.ficha ? (
+            <>
+              <p className="auditoria-diagnostico">{a.ficha.diagnostico}</p>
+              {a.ficha.correcciones?.length ? (
+                <>
+                  <div className="tabla-envoltura">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Atributo</th>
+                          <th>Valor propuesto</th>
+                          <th>Por qué</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {a.ficha.correcciones.map((c) => (
+                          <tr key={c.id}>
+                            <td className="celda-secundaria sin-corte">{c.nombre}</td>
+                            <td><strong>{c.valor}</strong></td>
+                            <td className="celda-secundaria">{c.razon}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {(a.aplicado ?? []).some((x) => x.campo === 'atributos') ? (
+                    <p className="nota">Ficha aplicada en ML ✓</p>
+                  ) : (
+                    <button
+                      className="boton-secundario boton-chico"
+                      disabled={aplicando}
+                      onClick={() => {
+                        if (confirm(`¿Escribir ${a.ficha.correcciones.length} atributo(s) de la ficha en Mercado Libre?`)) {
+                          onAplicar(propio, { atributos: a.ficha.correcciones.map((c) => ({ id: c.id, valor: c.valor })) })
+                        }
+                      }}
+                    >
+                      {aplicando ? 'Aplicando…' : 'Aplicar ficha en ML'}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <p className="nota">La ficha está bien: sin correcciones con evidencia.</p>
+              )}
+              {a.ficha.faltanSinDato?.length ? (
+                <p className="vacio">
+                  Faltan datos que solo tú sabes: {a.ficha.faltanSinDato.join(' · ')}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="vacio">
+              Fable compara tus Características contra lo que la categoría define y lo que los ganadores
+              llenan — y las corrige por API.
+            </p>
+          )}
+        </section>
+
         {r.otrasBrechas?.length ? (
           <section>
             <h4>Otras brechas</h4>
@@ -425,6 +490,7 @@ export function MisProductos() {
   const [nichos, setNichos] = useState([])
   const [auditoriaDe, setAuditoriaDe] = useState(null) // _id del propio con el panel de auditoría abierto
   const [aplicando, setAplicando] = useState(false)
+  const [revisandoFicha, setRevisandoFicha] = useState(false)
 
   const cargar = useCallback(() => {
     api.listarPropios().then(setDatos).catch((e) => setError(e.message))
@@ -593,6 +659,19 @@ export function MisProductos() {
     }
   }
 
+  async function revisarFicha(p) {
+    setRevisandoFicha(true)
+    setError(null)
+    try {
+      await api.revisarFicha(p._id)
+      cargar()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setRevisandoFicha(false)
+    }
+  }
+
   async function auditar(p) {
     setError(null)
     setAuditoriaDe(null)
@@ -716,6 +795,8 @@ export function MisProductos() {
             onRegenerar={auditar}
             onAplicar={aplicarEnMl}
             aplicando={aplicando}
+            onRevisarFicha={revisarFicha}
+            revisandoFicha={revisandoFicha}
           />
         ) : null
       })()}
