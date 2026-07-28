@@ -36,12 +36,14 @@ export async function aplicarCambiosPropio(propio, { titulo, descripcion }) {
         const r = await meliPut(`/items/${idMl}`, { title: titulo.trim() })
         nuevoTitulo = r.title ?? titulo.trim()
       } catch (err) {
-        // formato "user products" (tag user_product_listing, sonda 27-jul): el
-        // título no vive en el item sino en /user-products/:id como `name`
+        // formato "user products" (tag user_product_listing): el título vive en
+        // family_name y ML compone el título final agregando el color de la
+        // variante — por eso conviene mandar el texto SIN el color al final
+        // (la doc: title se mapea a family_name y family_name tiene prioridad)
         const item = await meliGet(`/items/${idMl}`).catch(() => null)
-        if (!item?.user_product_id) throw err
-        const r = await meliPut(`/user-products/${item.user_product_id}`, { name: titulo.trim() })
-        nuevoTitulo = r?.name ?? titulo.trim()
+        if (!item?.user_product_id && !item?.family_name) throw err
+        const r = await meliPut(`/items/${idMl}`, { family_name: titulo.trim() })
+        nuevoTitulo = r.title ?? r.family_name ?? titulo.trim()
       }
       resultado.titulo = { ok: true, valor: nuevoTitulo }
       propio.titulo = nuevoTitulo
