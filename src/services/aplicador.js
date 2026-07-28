@@ -1,4 +1,4 @@
-import { meliPut, meliPost, hayCuentaMeli } from './meli.js'
+import { meliGet, meliPut, meliPost, hayCuentaMeli } from './meli.js'
 
 // Aplica en Mercado Libre (API oficial, scope Publicación) los arreglos que la
 // auditoría propuso: título y/o descripción del item PROPIO. Cada campo se
@@ -31,9 +31,20 @@ export async function aplicarCambiosPropio(propio, { titulo, descripcion }) {
       throw Object.assign(new Error('titulo inválido (1 a 60 caracteres)'), { status: 400 })
     }
     try {
-      const r = await meliPut(`/items/${idMl}`, { title: titulo.trim() })
-      resultado.titulo = { ok: true, valor: r.title ?? titulo.trim() }
-      propio.titulo = r.title ?? titulo.trim()
+      let nuevoTitulo
+      try {
+        const r = await meliPut(`/items/${idMl}`, { title: titulo.trim() })
+        nuevoTitulo = r.title ?? titulo.trim()
+      } catch (err) {
+        // formato "user products" (tag user_product_listing, sonda 27-jul): el
+        // título no vive en el item sino en /user-products/:id como `name`
+        const item = await meliGet(`/items/${idMl}`).catch(() => null)
+        if (!item?.user_product_id) throw err
+        const r = await meliPut(`/user-products/${item.user_product_id}`, { name: titulo.trim() })
+        nuevoTitulo = r?.name ?? titulo.trim()
+      }
+      resultado.titulo = { ok: true, valor: nuevoTitulo }
+      propio.titulo = nuevoTitulo
       aplicados.push({ campo: 'titulo', valor: propio.titulo, fecha: new Date() })
     } catch (err) {
       resultado.titulo = { ok: false, error: err.message }
