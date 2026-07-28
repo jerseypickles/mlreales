@@ -315,10 +315,25 @@ export async function auditarPropio(propio) {
   let pesos = []
   try {
     const { medirPesos } = await import('./pesoKeyword.js')
+    // candidatas = nicho + búsquedas del autocompletado + los sustantivos del
+    // producto (míos y de los ganadores). Sin esto último se pierden keywords
+    // gordas que no derivan de la keyword del nicho: caso pistola, donde
+    // "dardos", "diana" y "tiro blanco" son #1 de su prefijo y no se medían.
+    const STOP = new Set(['de','del','la','el','los','las','un','una','para','con','y','o','en','por','set','kit','pack','juego','color','niños','ninos'])
+    const sustantivos = [mio.titulo, ...rivales.slice(0, 3).map((r) => r.titulo)]
+      .filter(Boolean)
+      .flatMap((t) =>
+        String(t)
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N} ]/gu, ' ')
+          .split(/\s+/)
+          .filter((p) => p.length >= 4 && !STOP.has(p)),
+      )
     const candidatas = [
       nicho.keyword,
       sinStopwords,
-      ...Object.values(busquedasReales).flat().slice(0, 8),
+      ...Object.values(busquedasReales).flat().slice(0, 6),
+      ...sustantivos,
     ].filter(Boolean)
     pesos = await medirPesos(candidatas)
   } catch (err) {

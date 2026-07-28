@@ -80,7 +80,10 @@ export async function medirPeso(frase, { pausaMs = 1200 } = {}) {
 
 export async function medirPesos(frases, opciones) {
   const salida = []
-  for (const frase of [...new Set((frases ?? []).map(normalizar))].filter(Boolean).slice(0, 12)) {
+  // las frases de 1 palabra se miden primero: suelen ser las puertas grandes
+  const unicas = [...new Set((frases ?? []).map(normalizar))].filter(Boolean)
+  unicas.sort((a, b) => a.split(' ').length - b.split(' ').length)
+  for (const frase of unicas.slice(0, 16)) {
     salida.push(await medirPeso(frase, opciones))
   }
   return salida.sort((a, b) => b.nivel - a.nivel || (a.posicion ?? 99) - (b.posicion ?? 99))
