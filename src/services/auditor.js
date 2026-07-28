@@ -1,6 +1,7 @@
 import { config } from '../config/env.js'
 import { Nicho } from '../models/Nicho.js'
 import { Reporte } from '../models/Reporte.js'
+import { TendenciaBusqueda } from '../models/TendenciaBusqueda.js'
 import { pedirJSON } from './llm.js'
 import { obtenerProductosUltimoScan } from './metricas.js'
 import { sugerenciasReales, palabrasClave } from './busquedasReales.js'
@@ -266,11 +267,39 @@ export async function auditarPropio(propio) {
   }
   const busquedasReales = {}
   for (const semilla of [...new Set(semillas)].slice(0, 5)) {
+    let sugerencias = []
     try {
-      const sugerencias = await sugerenciasReales(semilla)
-      if (sugerencias.length) busquedasReales[semilla] = sugerencias
+      sugerencias = await sugerenciasReales(semilla)
     } catch {
-      /* autocompletado caído para esta semilla: seguimos con las demás */
+      // el WAF de ML tumba ráfagas: un reintento tras pausa recupera la mayoría
+      await new Promise((r) => setTimeout(r, 3000))
+      try {
+        sugerencias = await sugerenciasReales(semilla)
+      } catch {
+        sugerencias = []
+      }
+    }
+    if (!sugerencias.length) {
+      // respaldo: la serie diaria del autocompletado ya capturada (tendencias).
+      // Un dato de ayer vale infinitamente más que ninguno — sin lista, el
+      // candado de volumen no valida y salen títulos con keywords muertas.
+      const guardada = await TendenciaBusqueda.findOne({ prefijo: semilla }).sort({ dia: -1 }).lean()
+      if (guardada?.sugerencias?.length) {
+        sugerencias = guardada.sugerencias
+        console.log(`[auditor] "${semilla}": autocompletado caído, usando la captura del ${guardada.dia}`)
+      }
+    }
+    if (sugerencias.length) {
+      busquedasReales[semilla] = sugerencias
+      // alimentar la serie: cada semilla consultada queda disponible como
+      // respaldo la próxima vez que el WAF nos deje afuera
+      const { diaChile } = await import('./tendencias.js')
+      const dia = diaChile()
+      await TendenciaBusqueda.updateOne(
+        { prefijo: semilla, dia },
+        { $set: { fecha: new Date(), sugerencias } },
+        { upsert: true },
+      ).catch(() => {})
     }
   }
   const preguntasCompradores = [

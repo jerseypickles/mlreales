@@ -325,12 +325,21 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando, o
               </div>
             </>
           ) : null}
-          {a.arranquesSinVolumen?.length ? (
+          {!a.busquedasReales || !Object.keys(a.busquedasReales).length ? (
+            <p className="error-bloque">
+              El autocompletado de ML no respondió en esta corrida: estas propuestas NO están validadas por
+              volumen de búsqueda. Vuelve a optimizar antes de usarlas.
+            </p>
+          ) : a.arranquesSinVolumen?.length ? (
             <p className="error-bloque">
               Ojo: {a.arranquesSinVolumen.length} propuesta(s) arrancan con una frase que el autocompletado no
               registra — prefiere las que parten con una búsqueda real.
             </p>
           ) : null}
+          <p className="nota">
+            ML no deja cambiar el título por API en publicaciones nuevas (formato user products): copia el
+            texto y pégalo en tu publicación. El color final ("Negro", "Rosa"…) lo agrega ML solo.
+          </p>
           <SeccionFallas fallas={r.titulo?.fallas} />
           {a.miPublicacion?.titulo ? (
             <div className="listing-titulo titulo-actual">
@@ -343,22 +352,16 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando, o
               <div className="listing-titulo" key={i}>
                 <span className="listing-titulo-texto">{t}</span>
                 <span className={t.length > 60 ? 'contador excedido' : 'contador'}>{t.length}/60</span>
-                <BotonCopiar texto={t} />
-                {aplicadoTitulo.includes(t) ? (
-                  <span className="badge badge-full">en ML ✓</span>
-                ) : (
-                  <button
-                    className="copiar"
-                    disabled={aplicando}
-                    onClick={() => {
-                      if (confirm(`¿Cambiar el título de la publicación en Mercado Libre a:\n\n“${t}”?`)) {
-                        onAplicar(propio, { titulo: t })
-                      }
-                    }}
-                  >
-                    {aplicando ? 'Aplicando…' : 'Aplicar en ML'}
-                  </button>
-                )}
+                <BotonCopiar texto={t} etiqueta="Copiar" />
+                <a
+                  className="copiar"
+                  href={`https://www.mercadolibre.cl/publicaciones/${propio.itemIdMl ?? propio.sku}/modificar`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Abre la publicación en Mercado Libre para pegar el título (ML no permite cambiarlo por API en publicaciones nuevas)"
+                >
+                  Copiar y editar en ML ↗
+                </a>
               </div>
             ))}
           </div>
