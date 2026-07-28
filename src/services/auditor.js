@@ -124,7 +124,8 @@ TÍTULO:
 - Te paso BÚSQUEDAS REALES del autocompletado de ML, agrupadas por semilla y ORDENADAS POR VOLUMEN dentro de cada grupo. Esa lista es la única fuente de verdad sobre qué escribe la gente. Si dudas entre dos formas (ej "pistola de dardos" vs "pistola juguete"), gana la que el autocompletado registre y pese más — NUNCA la que suene mejor.
 - LO QUE MÁS IMPORTA ES CONTENER las frases de búsqueda, no el orden (medido en listados reales de mercadolibre.cl: entre los 10 primeros resultados, el 80% CONTIENE la keyword del nicho y casi ninguno la tiene al inicio). Cabe más de una búsqueda en 60 caracteres: apílalas todas mientras sean verdad.
 - El orden sí importa para el COMPRADOR: en la grilla el título se corta, así que las primeras palabras deben decir QUÉ ES el producto con la frase de búsqueda más específica que calce (no "Set", no la marca, no el color).
-- Te paso además pesoDeCadaKeyword: "alto" = la frase aparece tecleando solo su primera palabra (mucho volumen), "medio" = necesita más letras, "nulo" = ML no la sugiere (NADIE la escribe así, prohibido usarla). APILA en cada título las de peso ALTO que describan el producto con verdad: cada una es una puerta de entrada distinta y caben varias en 60 caracteres.
+- Te paso además pesoDeCadaKeyword: "alto" = la frase aparece tecleando solo su primera palabra (mucho volumen), "medio" = necesita más letras, "nulo" = ML no la sugiere (NADIE la escribe así, prohibido usarla). APILA en cada título las de peso ALTO que describan el producto con verdad: cada una es una puerta de entrada distinta y caben varias en 60 caracteres. OJO: en frases de UNA sola palabra el peso "alto" es poco informativo (casi cualquier palabra encabeza su propio prefijo) — úsalas solo si nombran el producto o su función, jamás para color, marca ajena ni relleno.
+- NUNCA pongas el color en el título: ML lo agrega automáticamente al final (por eso existen los "Blanco Blanco"). Cada carácter gastado en el color es una keyword menos.
 - Compara palabra por palabra: ¿qué keywords tienen los títulos ganadores que el mío no?
 - Propuestas: MÁXIMO 60 caracteres cada una (cuenta cada letra; si te pasas, ML corta). Prohibido: exclamaciones, MAYÚSCULAS COMPLETAS, "oferta", "envío gratis", precio.
 - Usa SOLO atributos que mi producto realmente tiene (según mi ficha y mi descripción). Jamás inventes especificaciones.
@@ -319,7 +320,13 @@ export async function auditarPropio(propio) {
     // producto (míos y de los ganadores). Sin esto último se pierden keywords
     // gordas que no derivan de la keyword del nicho: caso pistola, donde
     // "dardos", "diana" y "tiro blanco" son #1 de su prefijo y no se medían.
-    const STOP = new Set(['de','del','la','el','los','las','un','una','para','con','y','o','en','por','set','kit','pack','juego','color','niños','ninos'])
+    // fuera colores (ML los agrega solo al título: medirlos invita a gastar
+    // caracteres en ellos) y palabras de marca/modelo de los rivales
+    const STOP = new Set([
+      'de','del','la','el','los','las','un','una','para','con','y','o','en','por','set','kit','pack','juego','color','niños','ninos',
+      'negro','negra','blanco','blanca','rojo','roja','azul','verde','amarillo','amarilla','rosa','lila','violeta','morado','naranja','gris','dorado','plateado','celeste','beige','claro','oscuro',
+      'hasbro','nerf','series','elite','commander','agility','pro','max','plus','original','premium',
+    ])
     const sustantivos = [mio.titulo, ...rivales.slice(0, 3).map((r) => r.titulo)]
       .filter(Boolean)
       .flatMap((t) =>
