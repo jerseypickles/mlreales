@@ -49,8 +49,10 @@ router.get(
   autorizado,
   manejar(async (req, res) => {
     const ruta = typeof req.query.ruta === 'string' ? req.query.ruta : ''
-    if (!/^\/(items|users|reviews|categories|sites)\//.test(ruta)) {
-      return res.status(400).json({ error: 'ruta inválida: solo /items/…, /users/…, /reviews/…, /categories/…, /sites/…' })
+    if (!/^\/(items|users|user-products|reviews|categories|sites)\//.test(ruta)) {
+      return res
+        .status(400)
+        .json({ error: 'ruta inválida: solo /items/…, /users/…, /user-products/…, /reviews/…, /categories/…, /sites/…' })
     }
     const { meliGet } = await import('../../services/meli.js')
     res.json(await meliGet(ruta))
