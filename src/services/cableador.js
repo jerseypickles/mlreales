@@ -57,7 +57,9 @@ const SCHEMA_KEYWORDS = {
   },
 }
 
-const SYSTEM_CABLEADOR = `Eres experto en el buscador de Mercado Libre Chile. Para cada producto te paso el título de mi publicación; devuelve la búsqueda EXACTA (2-4 palabras, minúsculas, sin tildes opcional) que un comprador chileno escribiría para encontrarlo — la keyword del NICHO, no el título recortado: sin marca (salvo que la marca sea lo que se busca), sin atributos secundarios (color, pack, modelo).
+const SYSTEM_CABLEADOR = `Eres experto en el buscador de Mercado Libre Chile. Para cada producto te paso el título de mi publicación Y su foto principal; devuelve la búsqueda EXACTA (2-4 palabras, minúsculas, sin tildes opcional) que un comprador chileno escribiría para encontrarlo — la keyword del NICHO, no el título recortado: sin marca (salvo que la marca sea lo que se busca), sin atributos secundarios (color, pack, modelo).
+
+MIRA LA FOTO antes que el título: el título puede estar mal puesto y la foto no miente. Decide qué ES el producto de verdad y cuál es la búsqueda de MAYOR volumen donde compite de igual a igual (ej: una pistola de juguete que trae diana y pinos compite en "pistola juguete" o "pistola dardos", no en "tiro al blanco"; el accesorio no define el nicho, lo define el producto principal que se ve en la foto).
 
 Te paso también los NICHOS EXISTENTES del tablero: si el producto pertenece a uno de ellos, responde EXACTAMENTE esa keyword (para reusarlo en vez de crear uno duplicado).`
 
@@ -112,15 +114,34 @@ export async function cablearPropiosAuto() {
     return { resultados }
   }
 
-  const { datos, costoUsd } = await pedirJSON({
-    system: SYSTEM_CABLEADOR,
-    user: JSON.stringify({
-      nichosExistentes: nichos.map((n) => n.keyword),
-      productos: conTitulo.map((p) => ({ sku: p.sku, titulo: p.titulo })),
-    }),
-    schema: SCHEMA_KEYWORDS,
-    maxTokens: 2000,
-  })
+  // la foto principal de cada producto va como imagen real: el modelo decide
+  // por lo que VE, no por un título que puede estar mal puesto
+  const bloques = [
+    {
+      type: 'text',
+      text: JSON.stringify({
+        nichosExistentes: nichos.map((n) => n.keyword),
+        productos: conTitulo.map((p) => ({ sku: p.sku, titulo: p.titulo })),
+      }),
+    },
+  ]
+  for (const p of conTitulo) {
+    if (typeof p.imagen === 'string' && p.imagen.startsWith('http')) {
+      bloques.push({ type: 'text', text: `FOTO DE ${p.sku}:` })
+      bloques.push({ type: 'image', source: { type: 'url', url: p.imagen } })
+    }
+  }
+
+  let llm
+  try {
+    llm = await pedirJSON({ system: SYSTEM_CABLEADOR, user: bloques, schema: SCHEMA_KEYWORDS, maxTokens: 2000 })
+  } catch (err) {
+    // una URL de imagen rechazada no debe botar el cableado: reintento solo texto
+    if (bloques.length === 1) throw err
+    console.warn(`[cableador] llamada con fotos falló (${err.message}): reintentando solo texto`)
+    llm = await pedirJSON({ system: SYSTEM_CABLEADOR, user: bloques.slice(0, 1), schema: SCHEMA_KEYWORDS, maxTokens: 2000 })
+  }
+  const { datos, costoUsd } = llm
   await registrarGasto(null, costoUsd)
   const keywordPorSku = new Map((datos.keywords ?? []).map((k) => [k.sku, k.keyword]))
 
