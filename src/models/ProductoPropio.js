@@ -22,6 +22,9 @@ const productoPropioSchema = new mongoose.Schema({
   // 'generando'|'ok'|'error', generadoEl, competidores, resultado, costoUsd…}
   auditoria: { type: mongoose.Schema.Types.Mixed, default: null },
   ultimoScanEl: { type: Date, default: null },
+  // cambios de título detectados por el scan diario: [{fecha, anterior, nuevo}].
+  // Con la serie de visitas al lado, dice si el cambio sirvió.
+  historialTitulos: { type: [mongoose.Schema.Types.Mixed], default: [] },
   // serie embebida (una medición por scan, acotada): suficiente para deltas y gráficos
   mediciones: {
     type: [

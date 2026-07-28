@@ -57,6 +57,19 @@ router.post(
   }),
 )
 
+// Pasada completa del optimizador ahora (lo mismo que corre solo cada martes)
+router.post(
+  '/optimizar',
+  manejar(async (_req, res) => {
+    const job = await obtenerColas().propios.add(
+      'optimizar',
+      { motivo: 'manual' },
+      { jobId: `optimizar-${Date.now()}` },
+    )
+    res.status(202).json({ jobId: job.id })
+  }),
+)
+
 // Cableado automático de todos los propios sin nicho: por ranking en listados
 // trackeados (gratis) o derivando la búsqueda del título con IA; si el nicho
 // no existe, se crea y se encola su primer scan

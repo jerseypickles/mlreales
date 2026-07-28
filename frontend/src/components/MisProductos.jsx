@@ -97,6 +97,32 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
         <Metrica etiqueta="Stock">{fmtNum(d?.ultima?.stock)}</Metrica>
       </div>
 
+      {(() => {
+        const ultimo = p.historialTitulos?.[p.historialTitulos.length - 1]
+        if (!ultimo) return null
+        // visitas antes vs después del cambio: ¿sirvió?
+        const ms = p.mediciones ?? []
+        const corte = new Date(ultimo.fecha).getTime()
+        const media = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null)
+        const antes = media(ms.filter((m) => new Date(m.fecha).getTime() < corte && Number.isFinite(m.visitas)).slice(-7).map((m) => m.visitas))
+        const despues = media(ms.filter((m) => new Date(m.fecha).getTime() >= corte && Number.isFinite(m.visitas)).map((m) => m.visitas))
+        return (
+          <p className="propio-cambio-titulo">
+            Título cambiado el {fmtFecha(ultimo.fecha)}
+            {antes != null && despues != null ? (
+              <>
+                {' '}· visitas diarias: {fmtNum(antes)} antes →{' '}
+                <strong className={despues > antes ? 'delta-sube' : despues < antes ? 'delta-baja' : ''}>
+                  {fmtNum(despues)} después
+                </strong>
+              </>
+            ) : (
+              ' · midiendo el impacto en visitas'
+            )}
+          </p>
+        )
+      })()}
+
       <div className="propio-optimizacion">
         <span className="propio-optimizacion-marca">Fable</span>
         <select
@@ -651,6 +677,23 @@ export function MisProductos() {
     }
   }
 
+  async function optimizarTodo() {
+    setOcupado(true)
+    setError(null)
+    setAviso(null)
+    try {
+      await api.optimizarPropios()
+      setAviso(
+        'Pasada de Fable encolada: cablea nichos faltantes, re-audita lo vencido o lo que cambió de título y revisa fichas nuevas. Los resultados aparecen solos en unos minutos.',
+      )
+      cargar()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setOcupado(false)
+    }
+  }
+
   async function autoCablear() {
     setOcupado(true)
     setError(null)
@@ -768,6 +811,16 @@ export function MisProductos() {
               title="Detecta el nicho de cada producto (por ranking o por título con IA); si no existe en el tablero, lo crea y lo escanea"
             >
               {ocupado ? 'Cableando…' : 'Cablear nichos (auto)'}
+            </button>
+          ) : null}
+          {datos?.propios?.length ? (
+            <button
+              className="boton-secundario"
+              onClick={optimizarTodo}
+              disabled={ocupado}
+              title="Lo mismo que corre solo cada martes: cablea nichos faltantes, re-audita lo vencido o lo que cambió de título y revisa fichas nuevas"
+            >
+              {ocupado ? 'Encolando…' : 'Optimizar todo ahora'}
             </button>
           ) : null}
         </div>

@@ -98,6 +98,15 @@ export async function registrarProgramados() {
   } else {
     await colas.tendencias.removeJobScheduler('tendencias-diarias').catch(() => {})
   }
+  if (config.optimizadorActivo) {
+    await colas.propios.upsertJobScheduler(
+      'optimizador-propios',
+      { pattern: config.optimizadorCron, tz: 'America/Santiago' },
+      { name: 'optimizar', data: { motivo: 'programado' } },
+    )
+  } else {
+    await colas.propios.removeJobScheduler('optimizador-propios').catch(() => {})
+  }
   if (config.estrategaActivo) {
     await colas.estratega.upsertJobScheduler(
       'estratega-semanal',

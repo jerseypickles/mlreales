@@ -128,7 +128,17 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     }
     if (!oficial && !det && numReviews === null) continue
     medidos++
-    if (oficial?.title ?? det?.titulo) propio.titulo = oficial?.title ?? det.titulo
+    const tituloNuevo = oficial?.title ?? det?.titulo
+    if (tituloNuevo) {
+      // el usuario edita títulos a mano en Seller Central (ML no deja por API):
+      // registrar el cambio permite medir su impacto y gatilla la re-auditoría
+      if (propio.titulo && propio.titulo !== tituloNuevo) {
+        propio.historialTitulos.push({ fecha, anterior: propio.titulo, nuevo: tituloNuevo })
+        if (propio.historialTitulos.length > 20) propio.historialTitulos = propio.historialTitulos.slice(-20)
+        console.log(`[scan-propios] ${propio.sku} cambió de título: "${propio.titulo}" → "${tituloNuevo}"`)
+      }
+      propio.titulo = tituloNuevo
+    }
     const imagen = oficial?.pictures?.[0]?.secure_url ?? oficial?.thumbnail ?? det?.imagen
     if (imagen) propio.imagen = imagen
     if (oficial?.status) propio.estadoMl = oficial.status

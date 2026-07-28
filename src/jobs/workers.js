@@ -547,6 +547,24 @@ export async function procesarScanPropios() {
   return escanearPropios({ soloOficial: gastado >= config.presupuestoUsdMes })
 }
 
+// Optimizador semanal de Mis productos: cablea nichos faltantes, re-audita lo
+// vencido o lo que cambió de título, y revisa fichas nuevas. Sin apretar nada.
+export async function procesarOptimizadorPropios(job) {
+  const { optimizarPropios, revisarFichasPendientes } = await import('../services/optimizador.js')
+  const r = await optimizarPropios({
+    motivo: job?.data?.motivo ?? 'programado',
+    encolarAuditoria: (propio) =>
+      obtenerColas().propios.add(
+        'auditar',
+        { propioId: String(propio._id) },
+        { jobId: `auditar-${propio._id}-${Date.now()}` },
+      ),
+  })
+  if (r.omitido) return r
+  const fichas = await revisarFichasPendientes().catch((err) => ({ error: err.message }))
+  return { ...r, fichas }
+}
+
 // Auditoría de listing de un producto propio vs los ganadores de su nicho.
 // El error queda escrito en el documento: el dashboard lo muestra sin tener
 // que mirar la cola.
@@ -643,7 +661,11 @@ export function iniciarWorkers() {
   // de listing (job "auditar"), que comparte concurrencia 1 a propósito
   const workerPropios = new Worker(
     COLA_PROPIOS,
-    (job) => (job.name === 'auditar' ? procesarAuditoriaPropio(job) : procesarScanPropios(job)),
+    (job) => {
+      if (job.name === 'auditar') return procesarAuditoriaPropio(job)
+      if (job.name === 'optimizar') return procesarOptimizadorPropios(job)
+      return procesarScanPropios(job)
+    },
     {
       connection: crearConexionRedis(),
       concurrency: 1,

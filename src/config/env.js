@@ -43,6 +43,10 @@ export const config = {
   // Lunes 08:45 Chile — después del radar (08:00) y las tendencias (08:30)
   estrategaActivo: process.env.ESTRATEGA_ACTIVO !== 'false',
   estrategaCron: process.env.ESTRATEGA_CRON || '45 8 * * 1',
+  // optimizador de Mis productos: re-audita listings solo (martes 09:15 Chile,
+  // después del scan diario de propios para comparar contra datos frescos)
+  optimizadorActivo: process.env.OPTIMIZADOR_ACTIVO !== 'false',
+  optimizadorCron: process.env.OPTIMIZADOR_CRON || '15 9 * * 2',
   detalleTopN: Number(process.env.DETALLE_TOP_N) || 50,
   detalleBatch: Number(process.env.DETALLE_BATCH) || 15,
   // embudo del radar: screening barato (top-10) y score mínimo para ganarse el detalle completo
