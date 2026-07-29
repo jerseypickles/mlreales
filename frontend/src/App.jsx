@@ -201,13 +201,22 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
 
   const puntaje = (n) => n.ultimoReporte?.scoreOportunidad ?? -1
   const fechaCreado = (n) => (n.creadoEl ? new Date(n.creadoEl).getTime() : 0)
-  const enCartera = (n) => EN_CARTERA.has(n.etapaCompra)
+  // cartera = negocio VIVO: un pausado o un no_entrar no es apuesta aunque su
+  // etapa diga cotizando (caso partidor batería / aire acondicionado)
+  const enCartera = (n) => EN_CARTERA.has(n.etapaCompra) && n.estado !== 'pausado' && n.veredicto !== 'no_entrar'
+  // cuarentena = pausados con fecha de regreso: el sistema los revive solo
+  const enCuarentena = (n) => n.estado === 'pausado' && n.revisarEl
   const descartado = (n) =>
-    !enCartera(n) && (n.veredicto === 'no_entrar' || n.estado === 'pausado' || n.etapaCompra === 'descartado')
+    !enCartera(n) &&
+    !enCuarentena(n) &&
+    (n.veredicto === 'no_entrar' || n.estado === 'pausado' || n.etapaCompra === 'descartado')
 
   // el sidebar sigue el embudo: cartera (negocio en curso) arriba, luego las
   // oportunidades por decidir, luego lo que aún se mide (nuevos primero)
   const cartera = visibles.filter(enCartera).sort((a, b) => puntaje(b) - puntaje(a))
+  const cuarentena = visibles
+    .filter(enCuarentena)
+    .sort((a, b) => new Date(a.revisarEl) - new Date(b.revisarEl))
   const oportunidades = visibles
     .filter((n) => !enCartera(n) && !descartado(n) && n.veredicto)
     .sort((a, b) => puntaje(b) - puntaje(a))
@@ -267,6 +276,12 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
       {evaluando.length ? (
         <GrupoNichos id="evaluando" titulo="En evaluación" cantidad={evaluando.length} abiertoPorDefecto>
           <ul className="lista-nichos">{render(evaluando)}</ul>
+        </GrupoNichos>
+      ) : null}
+
+      {cuarentena.length ? (
+        <GrupoNichos id="cuarentena" titulo="Cuarentena · vuelven solos" cantidad={cuarentena.length}>
+          <ul className="lista-nichos">{render(cuarentena)}</ul>
         </GrupoNichos>
       ) : null}
 
