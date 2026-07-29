@@ -2300,6 +2300,45 @@ section {
   margin-top: 3px;
 }
 
+/* medidor de maduración: puntos hacia los 5 scans que confirman */
+
+.medidor-scans {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--tinta-2);
+  white-space: nowrap;
+}
+
+.medidor-ok {
+  color: var(--exito-tinta, #16a34a);
+  font-weight: 600;
+}
+
+.medidor-puntos {
+  display: inline-flex;
+  gap: 2.5px;
+}
+
+.medidor-puntos .punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--borde-fuerte);
+  display: inline-block;
+}
+
+.medidor-puntos .punto.lleno {
+  background: var(--acento);
+  border-color: var(--acento);
+}
+
+.medidor-madurando {
+  color: var(--acento);
+  font-weight: 600;
+}
+
 .chip-peso-alto {
   border-color: var(--exito-tinta, #16a34a);
   color: var(--exito-tinta, #16a34a);

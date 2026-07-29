@@ -286,16 +286,52 @@ function CeldaProducto({ o }) {
   )
 }
 
+// Maduración a la vista: puntos de progreso hacia los 5 scans con demanda que
+// confirman un nicho. Serie completa sin confirmar = el motivo es la tendencia,
+// no la falta de datos — y eso también se dice.
+const SCANS_CONFIRMACION = 5
+
+export function MedidorScans({ scans = 0, confirmacion, madurando, tendencia }) {
+  if (confirmacion === 'confirmado') {
+    return (
+      <span className="medidor-scans medidor-ok" title={`Demanda sostenida en ${scans} scans`}>
+        ✓ confirmado · {scans} scans
+      </span>
+    )
+  }
+  const llenos = Math.min(scans, SCANS_CONFIRMACION)
+  const serieCompleta = scans >= SCANS_CONFIRMACION
+  return (
+    <span
+      className="medidor-scans"
+      title={
+        serieCompleta
+          ? `${scans} scans con demanda: la serie alcanza, pero la tendencia ${tendencia === 'baja' ? 'viene cayendo' : 'aún no sostiene'} — decisión, no más datos`
+          : `${scans} de ${SCANS_CONFIRMACION} scans con demanda${madurando ? ' — escaneando a diario solo' : ''}`
+      }
+    >
+      <span className="medidor-puntos" aria-hidden="true">
+        {Array.from({ length: SCANS_CONFIRMACION }, (_, i) => (
+          <i key={i} className={i < llenos ? 'punto lleno' : 'punto'} />
+        ))}
+      </span>
+      {serieCompleta ? `${scans} scans · tendencia ${tendencia === 'baja' ? '↓' : '~'}` : `${scans}/${SCANS_CONFIRMACION} scans`}
+      {madurando ? <span className="medidor-madurando">· madurando a diario</span> : null}
+    </span>
+  )
+}
+
 function CeldaVeredicto({ o }) {
   return (
     <div className="pl-veredicto">
       <span className={`veredicto veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span>
       {o.confirmacion ? (
-        <span className={`valida-linea ${o.confirmacion === 'confirmado' ? 'ok' : ''}`}>
-          {o.confirmacion === 'confirmado' ? '✓ confirmado' : 'preliminar'}
-          {o.scansConDemanda ? ` · ${o.scansConDemanda} scans` : ''}
-          {o.frecuenciaScan === 'diario' ? ' · 🔍 lupa' : ''}
-        </span>
+        <MedidorScans
+          scans={o.scansConDemanda}
+          confirmacion={o.confirmacion}
+          madurando={o.madurando}
+          tendencia={o.tendenciaVentas}
+        />
       ) : null}
       {(o.tramites ? String(o.tramites).split(', ').filter(Boolean) : []).map((t) => (
         <span key={t} className="tramite-chip">{t}</span>
@@ -444,9 +480,12 @@ function DetalleProducto({ fila, otras = [], onCerrar, onCambiada, onAbrirNicho 
             <span className={`veredicto veredicto-${fila.veredicto}`}>{fila.veredicto.replace(/_/g, ' ')}</span>
             {fila.confianza ? <span className="veredicto chip-neutro">confianza {fila.confianza}</span> : null}
             {fila.confirmacion ? (
-              <span className={`veredicto ${fila.confirmacion === 'confirmado' ? 'veredicto-entrar' : 'chip-neutro'}`}>
-                {fila.confirmacion === 'confirmado' ? `✓ confirmado · ${fila.scansConDemanda} scans` : `preliminar · ${fila.scansConDemanda} scans`}
-              </span>
+              <MedidorScans
+                scans={fila.scansConDemanda}
+                confirmacion={fila.confirmacion}
+                madurando={fila.madurando}
+                tendencia={fila.tendenciaVentas}
+              />
             ) : null}
           </div>
         </div>
