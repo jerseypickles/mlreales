@@ -241,10 +241,23 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
           {scans.total === 1 ? '' : 's'}
         </p>
       ) : null}
+      {scans?.madurando ? (
+        <div className="aviso-maduracion" role="status">
+          <strong>⏳ Esperando maduración — {scans.conDemanda}/5 scans con demanda.</strong> Este análisis es
+          preliminar (dictado con los primeros datos): todo indica que este producto se podría comprar, pero el
+          veredicto que vale lo dicta Fable al completar la serie — el sistema lo escanea a diario solo. No
+          cotices ni compres con esta versión.
+        </div>
+      ) : null}
       {/* ---- LA DECISIÓN ---- */}
       <div className={`decision decision-${analisis.veredicto}`}>
         <div className="decision-fila">
           <Badge tipo={v.tipo}>{v.etiqueta}</Badge>
+          {scans?.madurando ? (
+            <span className="analisis-confianza" title="El veredicto definitivo llega al graduar la serie">
+              preliminar · madurando
+            </span>
+          ) : null}
           <span className="analisis-confianza">confianza {analisis.confianza}</span>
           {analisis.esGraduacion ? (
             <span

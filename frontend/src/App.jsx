@@ -407,9 +407,11 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
     ['productos', productos ? `Productos (${productos.total})` : 'Productos'],
     [
       'analisis',
-      reporte.analisis
-        ? `Análisis: ${reporte.analisis.veredicto?.replace(/_/g, ' ')}${scans?.trasAnalisis ? ' ⚠' : ''}`
-        : 'Análisis IA',
+      scans?.madurando
+        ? `Análisis: madurando ${scans.conDemanda}/5`
+        : reporte.analisis
+          ? `Análisis: ${reporte.analisis.veredicto?.replace(/_/g, ' ')}${scans?.trasAnalisis ? ' ⚠' : ''}`
+          : 'Análisis IA',
     ],
     ['listing', nicho.listingDraft ? 'Listing ✓' : 'Listing'],
     ['simulador', 'Simulador'],

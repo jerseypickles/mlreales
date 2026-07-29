@@ -234,8 +234,20 @@ router.get(
       ? await Reporte.countDocuments({ nichoId: nicho._id, fecha: { $gt: analisisDe } })
       : 0
 
+    // maduración: mientras junta la serie, la UI trata el análisis como
+    // preliminar (mismo criterio que el programador y el sidebar)
+    const scansConDemanda = await Reporte.countDocuments({
+      nichoId: nicho._id,
+      'metricas.demanda.ventasEstimadasPorDia': { $ne: null },
+    })
+    const madurando =
+      nicho.estado === 'activo' &&
+      scansConDemanda < config.maduracionScans &&
+      ['entrar', 'entrar_con_condiciones'].includes(reporte.analisis?.veredicto) &&
+      !['descartado', 'en-espera', 'vendiendo'].includes(nicho.etapaCompra ?? 'evaluando')
+
     res.json({
-      scans: { total: totalScans, trasAnalisis, analisisDe },
+      scans: { total: totalScans, trasAnalisis, analisisDe, conDemanda: scansConDemanda, madurando },
       nicho: {
         id: nicho._id,
         keyword: nicho.keyword,

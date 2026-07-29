@@ -2300,6 +2300,18 @@ section {
   margin-top: 3px;
 }
 
+.aviso-maduracion {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--borde-fuerte);
+  border-left: 3px solid var(--acento);
+  border-radius: 0 10px 10px 0;
+  background: color-mix(in srgb, var(--acento) 5%, transparent);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--tinta-2);
+}
+
 /* mini medidor del sidebar y cartas: N/5 mientras madura, sin score */
 
 .mini-madurando {
