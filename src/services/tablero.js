@@ -189,6 +189,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       // con el preliminar por tendencia a la baja, que ya tiene serie y lo que
       // necesita es decisión, no más scans)
       madurando:
+        n.estado === 'activo' &&
         scansConDemanda < config.maduracionScans &&
         ['entrar', 'entrar_con_condiciones'].includes(analisis.veredicto) &&
         !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando'),
