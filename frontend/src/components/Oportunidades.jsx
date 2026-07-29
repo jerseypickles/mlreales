@@ -48,10 +48,14 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
               title={
                 o.confirmacion === 'confirmado'
                   ? `Demanda sostenida en ${o.scansConDemanda} scans`
-                  : `Solo ${o.scansConDemanda} scan(s) con demanda: espera 2-3 antes de apostar`
+                  : o.madurando
+                    ? `Solo ${o.scansConDemanda} scan(s) con demanda: el sistema lo escanea a diario solo hasta confirmar — no comprar todavía`
+                    : `Solo ${o.scansConDemanda} scan(s) con demanda: espera 2-3 antes de apostar`
               }
             >
-              {o.confirmacion === 'confirmado' ? `✓ confirmado (${o.scansConDemanda} scans)` : `preliminar (${o.scansConDemanda} scan${o.scansConDemanda === 1 ? '' : 's'})`}
+              {o.confirmacion === 'confirmado'
+                ? `✓ confirmado (${o.scansConDemanda} scans)`
+                : `preliminar (${o.scansConDemanda} scan${o.scansConDemanda === 1 ? '' : 's'})${o.madurando ? ' · madurando a diario' : ''}`}
             </span>
           ) : null}
           {o.tramites.map((t) => (

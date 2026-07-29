@@ -47,6 +47,12 @@ export const config = {
   // después del scan diario de propios para comparar contra datos frescos)
   optimizadorActivo: process.env.OPTIMIZADOR_ACTIVO !== 'false',
   optimizadorCron: process.env.OPTIMIZADOR_CRON || '15 9 * * 2',
+  // maduración de cartera: un nicho con veredicto de entrada corre a scan
+  // diario hasta juntar N reportes con demanda medida (la película, no la foto)
+  maduracionScans: Number(process.env.MADURACION_SCANS) || 5,
+  // cupo de nichos madurando a diario a la vez (los de mayor score primero):
+  // el resto entra a medida que los confirmados liberan lugar
+  maduracionMax: Number(process.env.MADURACION_MAX) || 12,
   detalleTopN: Number(process.env.DETALLE_TOP_N) || 50,
   detalleBatch: Number(process.env.DETALLE_BATCH) || 15,
   // embudo del radar: screening barato (top-10) y score mínimo para ganarse el detalle completo

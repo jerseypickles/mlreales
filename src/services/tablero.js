@@ -183,6 +183,12 @@ export async function tableroOportunidades({ todos = false } = {}) {
       tendenciaVentas: tendencia,
       scansConDemanda,
       confirmacion: confirmacionVeredicto(scansConDemanda, tendencia),
+      // el programador sube a diario los preliminares con veredicto de entrada
+      // hasta juntar la serie: la carta lo muestra para que se sepa que corre solo
+      madurando:
+        confirmacionVeredicto(scansConDemanda, tendencia) !== 'confirmado' &&
+        ['entrar', 'entrar_con_condiciones'].includes(analisis.veredicto) &&
+        !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando'),
       sellersGemelos: gemelos ? gemelos.length : null,
       gemelosDetalle: gemelos?.length
         ? gemelos.map((g) => `${g.vendedor} (+${g.reviewsNuevas} reseñas)`).join(', ')

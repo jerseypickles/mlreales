@@ -505,20 +505,55 @@ export async function procesarProgramadorScans() {
   ])
   const ultimoScore = new Map(scores.map((r) => [String(r._id), r.score ?? null]))
 
+  // MADURACIÓN DE CARTERA: un "entrar" con 1-2 scans es una foto, no evidencia
+  // para girar plata. Mientras el nicho tenga veredicto de entrada y menos de
+  // maduracionScans reportes con demanda medida, corre con umbral DIARIO —
+  // sin tocar frecuenciaScan (el modo lupa sigue siendo decisión manual):
+  // al confirmar, vuelve solo a su cadencia propia.
+  const veredictos = await Reporte.aggregate([
+    { $match: { nichoId: { $in: nichos.map((n) => n._id) }, analisis: { $ne: null } } },
+    { $sort: { fecha: -1 } },
+    { $group: { _id: '$nichoId', veredicto: { $first: '$analisis.veredicto' } } },
+  ])
+  const veredictoPorNicho = new Map(veredictos.map((r) => [String(r._id), r.veredicto]))
+  const conDemanda = await Reporte.aggregate([
+    { $match: { nichoId: { $in: nichos.map((n) => n._id) }, 'metricas.demanda.ventasEstimadasPorDia': { $ne: null } } },
+    { $group: { _id: '$nichoId', n: { $sum: 1 } } },
+  ])
+  const demandaPorNicho = new Map(conDemanda.map((r) => [String(r._id), r.n]))
+
+  // cupo de maduración: los candidatos de mayor score entran primero; el resto
+  // espera a que un confirmado libere lugar (gasto acotado a ~maduracionMax
+  // scans diarios extra, no toda la cartera de golpe)
+  const candidatosMaduracion = nichos
+    .filter((n) => {
+      const id = String(n._id)
+      return (
+        ['entrar', 'entrar_con_condiciones'].includes(veredictoPorNicho.get(id)) &&
+        (demandaPorNicho.get(id) ?? 0) < config.maduracionScans &&
+        !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando')
+      )
+    })
+    .sort((a, b) => (ultimoScore.get(String(b._id)) ?? 0) - (ultimoScore.get(String(a._id)) ?? 0))
+  const enMaduracion = new Set(candidatosMaduracion.slice(0, config.maduracionMax).map((n) => String(n._id)))
+
   let encolados = 0
   let sinScore = 0
   for (const nicho of nichos) {
+    const id = String(nicho._id)
     const ultimo = nicho.ultimoScanEl ? new Date(nicho.ultimoScanEl).getTime() : 0
-    const nuncaPuntuo = (ultimoScore.get(String(nicho._id)) ?? null) == null
-    const umbral = nuncaPuntuo ? umbrales.diario : (umbrales[nicho.frecuenciaScan] ?? umbrales.diario)
+    const nuncaPuntuo = (ultimoScore.get(id) ?? null) == null
+    const madurando = enMaduracion.has(id)
+    const umbral = nuncaPuntuo || madurando ? umbrales.diario : (umbrales[nicho.frecuenciaScan] ?? umbrales.diario)
     if (ahora - ultimo < umbral) continue
     if (nuncaPuntuo) sinScore++
     await encolarScanNicho(nicho._id, {
-      motivo: 'programado',
+      motivo: madurando ? 'maduracion' : 'programado',
       jobId: `prog-${nicho._id}-${Math.floor(ahora / (3 * 3600e3))}`,
     })
     encolados++
   }
+  const madurandoTotal = enMaduracion.size
 
   // descartados estacionales cuya ventana llegó: vuelven solos a evaluación.
   // SIEMPRE a scan semanal — el modo lupa (diario) es decisión manual del
@@ -537,7 +572,7 @@ export async function procesarProgramadorScans() {
     vueltasTemporada++
   }
 
-  return { activos: nichos.length, encolados, sinScore, vueltasTemporada, propiosEncolados: Boolean(propioVencidoPre) }
+  return { activos: nichos.length, encolados, sinScore, madurando: madurandoTotal, vueltasTemporada, propiosEncolados: Boolean(propioVencidoPre) }
 }
 
 export async function procesarScanPropios() {
