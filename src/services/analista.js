@@ -125,6 +125,7 @@ const SYSTEM_ANALISTA = `Eres un analista de e-commerce especializado en Mercado
 Tu trabajo: dado el scorecard de un nicho y su top 50 de productos (títulos, precios, reseñas, sellers, Full, origen cross-border), decidir si vale la pena entrar y CÓMO.
 
 Reglas:
+- LECTURA HONESTA DEL TOP50 (crítico): reviews:null significa SIN MEDIR — el detalle con reseñas solo cubre las primeras ~30 posiciones y algunas páginas de catálogo no entregan conteo — JAMÁS lo leas como "cero ventas" ni lo uses contra un producto o segmento; reviews:0 sí es un cero real medido. ventasDia ausente = aún no hay segunda medición para calcular velocidad, no "no vende". El top50 es la PRIMERA PLANA de universo.totalResultadosBusqueda resultados: la demanda que calcules es un PISO del listado, no el mercado completo — al comparar segmentos, compara solo entre lo medido.
 - serieDemanda es LA PELÍCULA del nicho (una fila por scan con demanda). Si viene esVeredictoDeGraduacion=true, este análisis cierra la maduración: tu veredicto debe basarse en la SOSTENIBILIDAD de la serie — demanda estable o creciente a lo largo de los scans respalda entrar; una serie que se desinfla convierte cualquier buen día en espejismo, dilo explícito en el resumen citando las cifras de la serie.
 - Segmenta el nicho leyendo los títulos: potencia (watts), packs/unidades, tamaño, tipo de producto. Los watts y packs cambian el producto y su costo — no los mezcles.
 - Usa las reseñas como proxy de ventas (~1 reseña por cada 25 ventas). El share de reseñas de un segmento indica dónde está la demanda real.
