@@ -294,8 +294,20 @@ export async function analizarNicho(nicho) {
   const revision = analisis.veredicto === 'no_entrar' ? parsearRevisarEn(analisis.revisarEn) : null
   if (revision && revision.getTime() > Date.now()) {
     nicho.revisarEl = revision
-    await nicho.save()
   }
+
+  // no_entrar dictado con la SERIE COMPLETA es evidencia, no hipótesis: el
+  // nicho se pausa solo y deja de gastar scraper (regla 29-jul, "gastamos
+  // mucho"). Con revisarEl vuelve solo en su ventana; sin ventana queda
+  // pausado hasta decisión manual. Antes solo los de radar se auto-pausaban.
+  if (analisis.veredicto === 'no_entrar' && reporte.analisis.esGraduacion && nicho.estado === 'activo') {
+    nicho.estado = 'pausado'
+    nicho.notaEtapa = revision
+      ? `no_entrar por ventana — vuelve solo ${analisis.revisarEn}`
+      : 'no_entrar con serie completa'
+    console.log(`[analista] "${nicho.keyword}" pausado solo: ${nicho.notaEtapa}`)
+  }
+  await nicho.save()
 
   // la jugada NO se mide sola (decisión del usuario 23-jul tras el caso
   // minipimer=batidora de inmersión): el análisis PROPONE keywordJugada y el
