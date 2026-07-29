@@ -363,16 +363,6 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
 
   const { nicho, reporte, scans } = datos
 
-  async function alternarLupa() {
-    const nueva = nicho.frecuenciaScan === 'diario' ? 'semanal' : 'diario'
-    try {
-      await api.ajustarNicho(nichoId, { frecuenciaScan: nueva })
-      await cargar()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
   async function alternarEstado() {
     const nuevo = nicho.estado === 'pausado' ? 'activo' : 'pausado'
     try {
@@ -420,17 +410,12 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
           >
             {nicho.estado === 'pausado' ? '▶ Reactivar nicho' : '⏸ pausar'}
           </button>
-          <button
-            onClick={alternarLupa}
-            className={nicho.frecuenciaScan === 'diario' ? 'chip activo' : 'chip'}
-            title={
-              nicho.frecuenciaScan === 'diario'
-                ? 'Modo lupa activo: scan diario (~cada 20 h). Click para volver a semanal.'
-                : 'Scan semanal. Click para modo lupa: scan diario — confirma la demanda en ~3 días en vez de semanas.'
-            }
+          <span
+            className="chip"
+            title="La cadencia es automática: los nichos en cartera (veredicto de entrada) se escanean a diario hasta confirmar la demanda; el resto, semanal."
           >
-            {nicho.frecuenciaScan === 'diario' ? '🔍 lupa diaria' : 'scan semanal'}
-          </button>
+            cadencia automática
+          </span>
           <button onClick={escanear} disabled={escaneando} className="boton-primario">
             {escaneando ? 'Escaneando…' : 'Re-escanear ahora'}
           </button>

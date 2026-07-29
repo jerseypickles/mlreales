@@ -7,6 +7,9 @@ import { InformeEstratega } from '../models/InformeEstratega.js'
 import { Nicho } from '../models/Nicho.js'
 import { config } from '../config/env.js'
 
+// poner_lupa se retiró el 29-jul: la cadencia de scan es automática (los
+// nichos en cartera maduran a diario solos) — se acepta en el schema por
+// compatibilidad con informes guardados, pero el prompt ya no la ofrece
 const ACCIONES = ['avanzar_a_pedido', 'cotizar', 'renegociar', 'descartar', 'poner_lupa', 'regenerar_analisis', 'esperar']
 
 const SCHEMA_ESTRATEGA = {
@@ -71,7 +74,7 @@ Reglas:
 - Un nicho "evaluando" con entrar confirmado y sin cotizar es plata durmiendo: mándalo a cotizar.
 - Tendencia de ventas cayendo en un nicho avanzado (cotizando/pedido) es alerta roja: dilo en riesgos y considera frenar.
 - confianza baja + datos viejos (fechaAnalisis antigua o scans nuevos desde entonces) = regenerar_analisis antes de mover plata.
-- poner_lupa = subir un nicho a scan diario cuando una decisión inminente necesita datos frescos.
+- La cadencia de scan es AUTOMÁTICA: los nichos con veredicto de entrada sin serie suficiente ya se escanean a diario solos (maduración de cartera). NO uses la acción poner_lupa; si un nicho necesita datos frescos, dilo como contexto de otra acción o usa esperar.
 - Los nichos con misma productoClave son UNA compra: trátalos juntos, no dupliques inversión.
 - Los nichos con familiaLider miden el MISMO mercado que su líder (solape de SKUs): son scans duplicados pagándose dos veces — recomienda absorberlos (pausar) salvo que midan un ángulo deliberadamente distinto.
 - Respeta el presupuesto restante del mes que te paso; si una jugada lo excede, dilo.

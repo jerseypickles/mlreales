@@ -544,7 +544,10 @@ export async function procesarProgramadorScans() {
     const ultimo = nicho.ultimoScanEl ? new Date(nicho.ultimoScanEl).getTime() : 0
     const nuncaPuntuo = (ultimoScore.get(id) ?? null) == null
     const madurando = enMaduracion.has(id)
-    const umbral = nuncaPuntuo || madurando ? umbrales.diario : (umbrales[nicho.frecuenciaScan] ?? umbrales.diario)
+    // la cadencia es AUTOMÁTICA desde el 29-jul: diario mientras el nicho está
+    // puntuando o madurando en cartera; semanal el resto. frecuenciaScan quedó
+    // como campo legado y ya no la decide nadie a mano.
+    const umbral = nuncaPuntuo || madurando ? umbrales.diario : umbrales.semanal
     if (ahora - ultimo < umbral) continue
     if (nuncaPuntuo) sinScore++
     await encolarScanNicho(nicho._id, {
@@ -555,9 +558,8 @@ export async function procesarProgramadorScans() {
   }
   const madurandoTotal = enMaduracion.size
 
-  // descartados estacionales cuya ventana llegó: vuelven solos a evaluación.
-  // SIEMPRE a scan semanal — el modo lupa (diario) es decisión manual del
-  // usuario y este barrido jamás lo activa ni lo modifica en otros nichos.
+  // descartados estacionales cuya ventana llegó: vuelven solos a evaluación
+  // (la cadencia la decide la maduración de cartera desde ahí en adelante)
   const porVolver = await Nicho.find({ estado: 'pausado', revisarEl: { $lte: new Date() } })
   let vueltasTemporada = 0
   for (const volvedor of porVolver) {
