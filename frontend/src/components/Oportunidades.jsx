@@ -29,14 +29,29 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
     >
       <div className="op-lateral">
         <span className="op-rank">#{rank}</span>
-        {o.score != null ? <ScoreRing valor={o.score} size={44} grosor={4.5} /> : null}
+        {o.madurando ? (
+          <span
+            className="mini-madurando mini-madurando-carta"
+            title="Midiendo entrabilidad: el score y el veredicto aparecen al graduar la serie (5 scans con demanda)"
+          >
+            {o.scansConDemanda}/5
+          </span>
+        ) : o.score != null ? (
+          <ScoreRing valor={o.score} size={44} grosor={4.5} />
+        ) : null}
       </div>
 
       <div className="op-cuerpo">
         <div className="op-encabezado">
           <h3 className="op-keyword">{o.keyword}</h3>
-          <span className={`veredicto veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span>
-          {o.confianza ? (
+          {o.madurando ? (
+            <span className="op-confianza op-confianza-media" title="Sin veredicto hasta juntar la serie: estamos midiendo entrabilidad, no adivinándola">
+              midiendo entrabilidad
+            </span>
+          ) : (
+            <span className={`veredicto veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span>
+          )}
+          {!o.madurando && o.confianza ? (
             <span className={`op-confianza op-confianza-${o.confianza}`} title="Confianza del análisis">
               confianza {o.confianza}
             </span>

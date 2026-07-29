@@ -157,7 +157,16 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
               </span>
             ) : null}
           </span>
-          {score != null ? <ScoreRing valor={score} size={30} grosor={3.5} /> : null}
+          {n.madurando ? (
+            <span
+              className="mini-madurando"
+              title={`Midiendo entrabilidad: ${n.scansConDemanda} de 5 scans con demanda — el score y el veredicto aparecen al graduar la serie`}
+            >
+              {n.scansConDemanda}/5
+            </span>
+          ) : score != null ? (
+            <ScoreRing valor={score} size={30} grosor={3.5} />
+          ) : null}
         </span>
         <span className="nicho-meta">
           {n.enProceso ? (
@@ -173,7 +182,11 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
                   vuelve {fmtFecha(n.revisarEl)}
                 </span>
               ) : null}
-              {n.veredicto ? (
+              {n.madurando ? (
+                <span className="etapa-mini" title="El sistema lo escanea a diario solo hasta juntar la serie">
+                  madurando
+                </span>
+              ) : n.veredicto ? (
                 <span className={`veredicto veredicto-${n.veredicto}`}>{n.veredicto.replace(/_/g, ' ')}</span>
               ) : null}
               {n.ultimoReporte

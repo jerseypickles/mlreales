@@ -2300,6 +2300,28 @@ section {
   margin-top: 3px;
 }
 
+/* mini medidor del sidebar y cartas: N/5 mientras madura, sin score */
+
+.mini-madurando {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px dashed var(--borde-fuerte);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--tinta-2);
+}
+
+.mini-madurando-carta {
+  width: 44px;
+  height: 44px;
+  font-size: 12px;
+}
+
 /* medidor de maduración: puntos hacia los 5 scans que confirman */
 
 .medidor-scans {

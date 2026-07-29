@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { config } from '../../config/env.js'
 import { Nicho } from '../../models/Nicho.js'
 import { Reporte } from '../../models/Reporte.js'
 import { encolarScanNicho, encolarRfq, obtenerColas } from '../../jobs/queues.js'
@@ -87,14 +88,36 @@ router.get(
         },
       },
       {
+        // scans con demanda medida: el sidebar oculta score/veredicto mientras
+        // el nicho madura (mismo criterio que la maduración del programador)
+        $lookup: {
+          from: 'reportes',
+          let: { nid: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$nichoId', '$$nid'] }, 'metricas.demanda.ventasEstimadasPorDia': { $ne: null } } },
+            { $count: 'n' },
+          ],
+          as: 'conteoDemanda',
+        },
+      },
+      {
         $addFields: {
           ultimoReporte: { $ifNull: [{ $first: '$ultimoReporte' }, null] },
           veredicto: { $first: '$ultimoAnalisis.veredicto' },
+          scansConDemanda: { $ifNull: [{ $first: '$conteoDemanda.n' }, 0] },
         },
       },
       // el sidebar no necesita los blobs pesados
-      { $project: { ultimoAnalisis: 0, listingDraft: 0, rfq: 0, contextoUsuario: 0 } },
+      { $project: { ultimoAnalisis: 0, listingDraft: 0, rfq: 0, contextoUsuario: 0, conteoDemanda: 0 } },
     ])
+
+    for (const n of nichos) {
+      n.madurando =
+        n.estado === 'activo' &&
+        n.scansConDemanda < config.maduracionScans &&
+        ['entrar', 'entrar_con_condiciones'].includes(n.veredicto) &&
+        !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando')
+    }
 
     // etapa en proceso por nicho, leída de las colas reales (para el spinner del dashboard)
     const etapas = new Map()
