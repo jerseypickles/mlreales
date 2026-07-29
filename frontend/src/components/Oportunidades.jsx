@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { Cargando, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
-import { PlanSemana } from './PlanSemana.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 
 const FLECHA = { sube: ['↑', 'delta-sube'], baja: ['↓', 'delta-baja'], estable: ['→', 'delta-neutra'] }
@@ -236,7 +235,6 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
         </div>
       </div>
 
-      <PlanSemana onAbrirNicho={onAbrirNicho} />
 
       {!datos.oportunidades.length ? (
         <p className="vacio">

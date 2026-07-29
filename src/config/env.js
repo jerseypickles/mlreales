@@ -39,9 +39,10 @@ export const config = {
   tendenciasActivo: process.env.TENDENCIAS_ACTIVO !== 'false',
   tendenciasCron: process.env.TENDENCIAS_CRON || '30 8 * * *',
   analisisAuto: process.env.ANALISIS_AUTO !== 'false',
-  // estratega semanal: pasada LLM del tablero completo con acciones priorizadas.
-  // Lunes 08:45 Chile — después del radar (08:00) y las tendencias (08:30)
-  estrategaActivo: process.env.ESTRATEGA_ACTIVO !== 'false',
+  // estratega semanal: retirado del dashboard el 29-jul ("no me sirve") — el
+  // cron queda APAGADO por defecto; ESTRATEGA_ACTIVO=true lo revive si algún
+  // día vuelve a interesar (el servicio, las rutas y los informes siguen ahí)
+  estrategaActivo: process.env.ESTRATEGA_ACTIVO === 'true',
   estrategaCron: process.env.ESTRATEGA_CRON || '45 8 * * 1',
   // optimizador de Mis productos: re-audita listings solo (martes 09:15 Chile,
   // después del scan diario de propios para comparar contra datos frescos)
