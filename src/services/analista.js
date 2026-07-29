@@ -125,6 +125,7 @@ const SYSTEM_ANALISTA = `Eres un analista de e-commerce especializado en Mercado
 Tu trabajo: dado el scorecard de un nicho y su top 50 de productos (títulos, precios, reseñas, sellers, Full, origen cross-border), decidir si vale la pena entrar y CÓMO.
 
 Reglas:
+- serieDemanda es LA PELÍCULA del nicho (una fila por scan con demanda). Si viene esVeredictoDeGraduacion=true, este análisis cierra la maduración: tu veredicto debe basarse en la SOSTENIBILIDAD de la serie — demanda estable o creciente a lo largo de los scans respalda entrar; una serie que se desinfla convierte cualquier buen día en espejismo, dilo explícito en el resumen citando las cifras de la serie.
 - Segmenta el nicho leyendo los títulos: potencia (watts), packs/unidades, tamaño, tipo de producto. Los watts y packs cambian el producto y su costo — no los mezcles.
 - Usa las reseñas como proxy de ventas (~1 reseña por cada 25 ventas). El share de reseñas de un segmento indica dónde está la demanda real.
 - Los items con origenCrossBorder=true son sellers chinos despachando directo: son a la vez señal de que el producto se puede importar barato y competencia difícil de ganar en precio.
@@ -222,8 +223,28 @@ export async function analizarNicho(nicho) {
     // sin comisión exacta: la tabla usa el default del config
   }
 
+  // LA PELÍCULA, no la foto: serie de demanda de todos los scans medidos.
+  // Con ≥maduracionScans mediciones este análisis es el veredicto de
+  // graduación — la sostenibilidad de la serie pesa más que el último día.
+  const serie = await Reporte.find({
+    nichoId: nicho._id,
+    'metricas.demanda.ventasEstimadasPorDia': { $ne: null },
+  })
+    .sort({ fecha: -1 })
+    .limit(12)
+    .select('fecha metricas.demanda.ventasEstimadasPorDia metricas.precio.mediana scoreOportunidad')
+    .lean()
+  const serieDemanda = serie.reverse().map((r) => ({
+    fecha: new Date(r.fecha).toISOString().slice(0, 10),
+    ventasDia: r.metricas?.demanda?.ventasEstimadasPorDia ?? null,
+    medianaClp: r.metricas?.precio?.mediana ?? null,
+    score: r.scoreOportunidad ?? null,
+  }))
+
   const entrada = {
     keyword: nicho.keyword,
+    serieDemanda: serieDemanda.length > 1 ? serieDemanda : undefined,
+    esVeredictoDeGraduacion: serieDemanda.length >= config.maduracionScans || undefined,
     fechaActual: new Date().toLocaleDateString('es-CL', {
       day: 'numeric',
       month: 'long',

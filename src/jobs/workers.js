@@ -310,16 +310,29 @@ export async function procesarCalcularMetricas(job) {
     await nicho.save()
   }
 
-  // análisis IA automático: primer reporte con score, o score que se movió ≥10 puntos
+  // análisis IA automático: primer reporte con score, score que se movió ≥10
+  // puntos, o GRADUACIÓN de maduración — al juntar los scans que confirman,
+  // Fable debe re-dictar el veredicto con la serie completa (un nicho que
+  // madura con el análisis del scan #1 vigente no le sirve a nadie)
   let analisisEncolado = false
+  let motivoAnalisis = null
   if (config.analisisAuto && llmDisponible() && reporte.metricas.scoreOportunidad != null && !doc.analisis) {
     const ultimoAnalizado = await Reporte.findOne({ nichoId: nicho._id, analisis: { $ne: null } })
       .sort({ fecha: -1 })
       .lean()
+    const filtroDemanda = { nichoId: nicho._id, 'metricas.demanda.ventasEstimadasPorDia': { $ne: null } }
+    const demandaAhora = await Reporte.countDocuments(filtroDemanda)
+    const demandaAlAnalizar = ultimoAnalizado
+      ? await Reporte.countDocuments({ ...filtroDemanda, fecha: { $lte: ultimoAnalizado.fecha } })
+      : 0
+    const gradua = demandaAhora >= config.maduracionScans && demandaAlAnalizar < config.maduracionScans
     const debeAnalizar =
       !ultimoAnalizado ||
+      gradua ||
       Math.abs((ultimoAnalizado.metricas?.scoreOportunidad ?? 0) - reporte.metricas.scoreOportunidad) >= 10
     if (debeAnalizar) {
+      motivoAnalisis = !ultimoAnalizado ? 'primer-analisis' : gradua ? 'graduacion' : 'score-movido'
+      if (gradua) console.log(`[metricas] "${nicho.keyword}" graduó la maduración (${demandaAhora} scans con demanda): veredicto fresco con la serie completa`)
       // jobId por reporte: dos recálculos seguidos del mismo scan (extensión
       // plan C, reintentos) no deben pagar el LLM dos veces (caso sabanillas
       // perro 22-jul: análisis duplicado con 42s de diferencia)
@@ -335,7 +348,7 @@ export async function procesarCalcularMetricas(job) {
     }
   }
 
-  return { reporteId: String(doc._id), score: reporte.metricas.scoreOportunidad, analisisEncolado }
+  return { reporteId: String(doc._id), score: reporte.metricas.scoreOportunidad, analisisEncolado, motivoAnalisis }
 }
 
 export async function procesarAnalisisNicho(job) {
