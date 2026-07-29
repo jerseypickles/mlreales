@@ -274,7 +274,15 @@ export async function analizarNicho(nicho) {
     modelo: config.llmModelAnalista, // la decisión cara corre en el modelo más capaz
   })
 
-  reporte.analisis = { ...analisis, generadoEl: new Date(), modelo }
+  reporte.analisis = {
+    ...analisis,
+    generadoEl: new Date(),
+    modelo,
+    // veredicto dictado con la serie de maduración completa (no con la foto
+    // del primer scan): la UI lo marca para que se sepa qué tan sólido es
+    esGraduacion: serieDemanda.length >= config.maduracionScans || undefined,
+    scansDeLaSerie: serieDemanda.length || undefined,
+  }
   reporte.markModified('analisis')
   await reporte.save()
 

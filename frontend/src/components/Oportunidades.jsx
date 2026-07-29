@@ -41,6 +41,11 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
               confianza {o.confianza}
             </span>
           ) : null}
+          {o.veredictoDeSerie ? (
+            <span className="op-confianza op-confianza-alta" title="Veredicto dictado con la serie de maduración completa, no con la foto de un scan">
+              veredicto de serie ✓
+            </span>
+          ) : null}
           {o.confirmacion ? (
             <span
               className={`op-confianza ${o.confirmacion === 'confirmado' ? 'op-confianza-alta' : 'op-confianza-media'}`}

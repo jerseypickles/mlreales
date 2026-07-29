@@ -246,6 +246,14 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
         <div className="decision-fila">
           <Badge tipo={v.tipo}>{v.etiqueta}</Badge>
           <span className="analisis-confianza">confianza {analisis.confianza}</span>
+          {analisis.esGraduacion ? (
+            <span
+              className="badge badge-full"
+              title={`Veredicto dictado con la serie de maduración completa (${analisis.scansDeLaSerie} scans con demanda), no con la foto de un solo scan`}
+            >
+              serie completa · {analisis.scansDeLaSerie} scans
+            </span>
+          ) : null}
           <button className="boton-secundario boton-regenerar" onClick={generar} disabled={generando}>
             {generando ? 'Analizando…' : 'Regenerar'}
           </button>

@@ -176,6 +176,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       frecuenciaScan: n.frecuenciaScan,
       veredicto: analisis.veredicto,
       confianza: analisis.confianza ?? null,
+      veredictoDeSerie: analisis.esGraduacion === true || undefined,
       score: ultimo?.scoreOportunidad ?? docAnalisis.scoreOportunidad ?? null,
       fechaScan: ultimo?.fecha ?? null,
       mediana: ultimo?.metricas?.precio?.mediana ?? null,
