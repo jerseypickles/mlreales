@@ -185,8 +185,11 @@ export async function tableroOportunidades({ todos = false } = {}) {
       confirmacion: confirmacionVeredicto(scansConDemanda, tendencia),
       // el programador sube a diario los preliminares con veredicto de entrada
       // hasta juntar la serie: la carta lo muestra para que se sepa que corre solo
+      // mismo criterio que el programador: le faltan mediciones (no confundir
+      // con el preliminar por tendencia a la baja, que ya tiene serie y lo que
+      // necesita es decisión, no más scans)
       madurando:
-        confirmacionVeredicto(scansConDemanda, tendencia) !== 'confirmado' &&
+        scansConDemanda < config.maduracionScans &&
         ['entrar', 'entrar_con_condiciones'].includes(analisis.veredicto) &&
         !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando'),
       sellersGemelos: gemelos ? gemelos.length : null,
