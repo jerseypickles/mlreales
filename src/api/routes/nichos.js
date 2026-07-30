@@ -119,6 +119,25 @@ router.get(
         !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando')
     }
 
+    // timer del sidebar: cuándo le toca el próximo scan a cada nicho, con el
+    // mismo criterio del programador — incluido el cupo maduracionMax (un
+    // madurando fuera de cupo corre semanal hasta que un confirmado libere lugar)
+    const UMBRAL_SCAN = { diario: 20 * 3600e3, semanal: 6.5 * 86400e3 }
+    const enCupoMaduracion = new Set(
+      nichos
+        .filter((n) => n.madurando)
+        .sort((a, b) => (b.ultimoReporte?.scoreOportunidad ?? 0) - (a.ultimoReporte?.scoreOportunidad ?? 0))
+        .slice(0, config.maduracionMax)
+        .map((n) => String(n._id)),
+    )
+    for (const n of nichos) {
+      if (n.estado !== 'activo' || !n.ultimoScanEl) continue
+      const diario = n.ultimoReporte?.scoreOportunidad == null || enCupoMaduracion.has(String(n._id))
+      n.cadenciaScan = diario ? 'diario' : 'semanal'
+      if (n.madurando) n.enCupoMaduracion = enCupoMaduracion.has(String(n._id))
+      n.proximoScanEl = new Date(new Date(n.ultimoScanEl).getTime() + UMBRAL_SCAN[n.cadenciaScan])
+    }
+
     // etapa en proceso por nicho, leída de las colas reales (para el spinner del dashboard)
     const etapas = new Map()
     try {

@@ -89,6 +89,16 @@ const ETAPAS = {
 }
 
 const esNuevo = (n) => n.creadoEl && Date.now() - new Date(n.creadoEl).getTime() < 72 * 3600e3
+
+// cuenta regresiva del próximo scan programado; "al caer" = ya venció y el
+// programador (pasa cada 30 min) lo encola en su próxima pasada
+function fmtProximoScan(fecha) {
+  const falta = new Date(fecha).getTime() - Date.now()
+  if (falta <= 0) return 'al caer'
+  if (falta < 3600e3) return `en ${Math.max(1, Math.round(falta / 60_000))} min`
+  if (falta < 48 * 3600e3) return `en ${Math.round(falta / 3600e3)} h`
+  return `en ${Math.round(falta / 86400e3)} d`
+}
 const EN_CARTERA = new Set(['cotizando', 'pedido', 'vendiendo', 'en-espera'])
 
 // Grupo plegable del sidebar: recuerda abierto/cerrado por usuario (localStorage)
@@ -183,11 +193,26 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
                 </span>
               ) : null}
               {n.madurando ? (
-                <span className="etapa-mini" title="El sistema lo escanea a diario solo hasta juntar la serie">
+                <span
+                  className="etapa-mini"
+                  title={
+                    n.enCupoMaduracion === false
+                      ? 'En fila de maduración: el cupo diario está lleno — corre semanal hasta que un confirmado libere lugar'
+                      : 'El sistema lo escanea a diario solo hasta juntar la serie'
+                  }
+                >
                   madurando
                 </span>
               ) : n.veredicto ? (
                 <span className={`veredicto veredicto-${n.veredicto}`}>{n.veredicto.replace(/_/g, ' ')}</span>
+              ) : null}
+              {n.madurando && n.proximoScanEl ? (
+                <span
+                  className="etapa-mini timer-scan"
+                  title={`Próximo scan ${n.cadenciaScan}: ${fmtFecha(n.proximoScanEl)} — el programador pasa cada 30 min`}
+                >
+                  ⏱ {fmtProximoScan(n.proximoScanEl)}
+                </span>
               ) : null}
               {n.ultimoReporte
                 ? `mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}`
