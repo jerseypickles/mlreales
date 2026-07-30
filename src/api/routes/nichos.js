@@ -120,15 +120,19 @@ router.get(
     }
 
     // timer del sidebar: cuándo le toca el próximo scan a cada nicho, con el
-    // mismo criterio del programador — incluido el cupo maduracionMax (un
-    // madurando fuera de cupo corre semanal hasta que un confirmado libere lugar)
+    // mismo criterio del programador — la cartera (cotizando/pedido) madura a
+    // diario sin cupo; el cupo maduracionMax solo acota la exploración
+    // (evaluando), que corre semanal mientras espera lugar
     const UMBRAL_SCAN = { diario: 20 * 3600e3, semanal: 6.5 * 86400e3 }
+    const esCarteraMadurando = (n) => ['cotizando', 'pedido'].includes(n.etapaCompra ?? 'evaluando')
     const enCupoMaduracion = new Set(
-      nichos
-        .filter((n) => n.madurando)
-        .sort((a, b) => (b.ultimoReporte?.scoreOportunidad ?? 0) - (a.ultimoReporte?.scoreOportunidad ?? 0))
-        .slice(0, config.maduracionMax)
-        .map((n) => String(n._id)),
+      [
+        ...nichos.filter((n) => n.madurando && esCarteraMadurando(n)),
+        ...nichos
+          .filter((n) => n.madurando && !esCarteraMadurando(n))
+          .sort((a, b) => (b.ultimoReporte?.scoreOportunidad ?? 0) - (a.ultimoReporte?.scoreOportunidad ?? 0))
+          .slice(0, config.maduracionMax),
+      ].map((n) => String(n._id)),
     )
     for (const n of nichos) {
       if (n.estado !== 'activo' || !n.ultimoScanEl) continue

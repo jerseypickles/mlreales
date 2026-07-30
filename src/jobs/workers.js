@@ -535,20 +535,26 @@ export async function procesarProgramadorScans() {
   ])
   const demandaPorNicho = new Map(conDemanda.map((r) => [String(r._id), r.n]))
 
-  // cupo de maduración: los candidatos de mayor score entran primero; el resto
-  // espera a que un confirmado libere lugar (gasto acotado a ~maduracionMax
-  // scans diarios extra, no toda la cartera de golpe)
-  const candidatosMaduracion = nichos
-    .filter((n) => {
-      const id = String(n._id)
-      return (
-        ['entrar', 'entrar_con_condiciones'].includes(veredictoPorNicho.get(id)) &&
-        (demandaPorNicho.get(id) ?? 0) < config.maduracionScans &&
-        !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando')
-      )
-    })
+  const candidatosMaduracion = nichos.filter((n) => {
+    const id = String(n._id)
+    return (
+      ['entrar', 'entrar_con_condiciones'].includes(veredictoPorNicho.get(id)) &&
+      (demandaPorNicho.get(id) ?? 0) < config.maduracionScans &&
+      !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando')
+    )
+  })
+  // la CARTERA (cotizando/pedido: ya hay intención de compra) madura a diario
+  // SIN cupo — regla del usuario 30-jul: un nicho donde se está por girar plata
+  // no espera fila. El cupo maduracionMax solo acota la EXPLORACIÓN (evaluando),
+  // donde los de mayor score entran primero y el resto espera lugar.
+  const esCarteraMadurando = (n) => ['cotizando', 'pedido'].includes(n.etapaCompra ?? 'evaluando')
+  const exploracionEnCupo = candidatosMaduracion
+    .filter((n) => !esCarteraMadurando(n))
     .sort((a, b) => (ultimoScore.get(String(b._id)) ?? 0) - (ultimoScore.get(String(a._id)) ?? 0))
-  const enMaduracion = new Set(candidatosMaduracion.slice(0, config.maduracionMax).map((n) => String(n._id)))
+    .slice(0, config.maduracionMax)
+  const enMaduracion = new Set(
+    [...candidatosMaduracion.filter(esCarteraMadurando), ...exploracionEnCupo].map((n) => String(n._id)),
+  )
 
   let encolados = 0
   let sinScore = 0

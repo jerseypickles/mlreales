@@ -197,7 +197,7 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
                   className="etapa-mini"
                   title={
                     n.enCupoMaduracion === false
-                      ? 'En fila de maduración: el cupo diario está lleno — corre semanal hasta que un confirmado libere lugar'
+                      ? 'En fila de exploración: el cupo diario está lleno — corre semanal hasta que se libere lugar (la cartera madura a diario sin fila)'
                       : 'El sistema lo escanea a diario solo hasta juntar la serie'
                   }
                 >
