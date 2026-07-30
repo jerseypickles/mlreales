@@ -152,6 +152,12 @@ export function MiniSerie({ titulo, puntos, formato = fmtNum, invertirY = false,
             <strong>{formato(activo.valor)}</strong>
             <br />
             {fmtFechaCorta(activo.fecha)}
+            {activo.nota ? (
+              <>
+                <br />
+                <span className="tooltip-nota">{activo.nota}</span>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>

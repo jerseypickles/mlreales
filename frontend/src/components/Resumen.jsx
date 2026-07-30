@@ -62,6 +62,16 @@ export function Resumen({ reporte, productos, nichoId, nicho }) {
 
   const serie = (campo) =>
     (tendencia?.puntos ?? []).map((p) => ({ fecha: p.fecha, valor: p[campo] }))
+  // ventas/día con la canasta de cada punto en el tooltip: dos puntos con
+  // canastas muy distintas no son comparables entre sí (composición ≠ demanda)
+  const serieVentas = (tendencia?.puntos ?? []).map((p) => ({
+    fecha: p.fecha,
+    valor: p.ventasDia,
+    nota:
+      p.canasta != null
+        ? `canasta: ${p.canasta} comparables${p.saltosFiltrados ? ` · ${p.saltosFiltrados} saltos filtrados` : ''}`
+        : null,
+  }))
   const acel = tendencia?.aceleracion ? ACELERACION[tendencia.aceleracion] : null
 
   // categoría real dominante entre los productos medidos (breadcrumbs del nivel 2)
@@ -87,7 +97,11 @@ export function Resumen({ reporte, productos, nichoId, nicho }) {
               m.demanda.ventasEstimadasPorDia == null
                 ? 'el delta requiere 2 scans con detalle'
                 : m.demanda.base === 'reviews'
-                  ? 'proxy: reseñas nuevas × factor'
+                  ? `reseñas nuevas × factor · canasta ${m.demanda.reviews?.itemsComparables ?? '—'}${
+                      (m.demanda.reviews?.saltosFiltrados ?? 0) + (m.demanda.reviews?.duplicadosCatalogo ?? 0) > 0
+                        ? ` · ${(m.demanda.reviews.saltosFiltrados ?? 0) + (m.demanda.reviews.duplicadosCatalogo ?? 0)} saltos de catálogo filtrados`
+                        : ''
+                    }`
                   : 'desde vendidos'
             }
           />
@@ -147,7 +161,7 @@ export function Resumen({ reporte, productos, nichoId, nicho }) {
           </div>
           <div className="fila-3col">
             <MiniSerie titulo="Score de oportunidad" puntos={serie('score')} />
-            <MiniSerie titulo="Demanda (reseñas del top 50)" puntos={serie('reviewsTotal')} />
+            <MiniSerie titulo="Ventas/día estimadas (delta depurado)" puntos={serieVentas} />
             <MiniSerie titulo="Precio mediana" puntos={serie('mediana')} formato={fmtPrecio} />
           </div>
         </section>

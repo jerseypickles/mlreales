@@ -51,7 +51,10 @@ function bandaDominante(preciosOrdenados) {
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n))
 
 // Serie de un campo numérico con delta entre el scan actual y el anterior.
-function extraerSenal(snapshots, snapshotsPrevios, campo) {
+// depurar (solo reseñas): filtra los artefactos de los agregados de catálogo
+// — saltos de nivel imposibles y conteos duplicados entre listings hermanos —
+// que de otro modo se multiplican por el factor 25 (ver scoring.depuracionDelta).
+function extraerSenal(snapshots, snapshotsPrevios, campo, { depurar = false } = {}) {
   const valores = snapshots.map((s) => s[campo]).filter(Number.isFinite)
   if (!valores.length) return null
 
@@ -70,25 +73,51 @@ function extraerSenal(snapshots, snapshotsPrevios, campo) {
     const previosPorSku = new Map(
       snapshotsPrevios.filter((s) => Number.isFinite(s[campo])).map((s) => [s.sku, s]),
     )
-    let delta = 0
-    let comparables = 0
+    const pares = []
     let fechaPrevia = null
     for (const snap of snapshots) {
       const previo = previosPorSku.get(snap.sku)
       if (!previo || !Number.isFinite(snap[campo])) continue
-      comparables++
-      delta += Math.max(0, snap[campo] - previo[campo])
+      pares.push({ antes: previo[campo], ahora: snap[campo] })
       fechaPrevia = previo.fecha
     }
-    if (comparables > 0 && fechaPrevia) {
+    if (pares.length && fechaPrevia) {
       const dias = Math.max(
         (new Date(snapshots[0].fecha) - new Date(fechaPrevia)) / 86_400_000,
         1 / 24, // piso de 1 hora para no dividir por ~0 en re-scans seguidos
       )
+      const dep = depurar ? scoring.depuracionDelta : null
+      const vistos = new Set()
+      let delta = 0
+      let deltaBruto = 0
+      let saltosFiltrados = 0
+      let duplicadosCatalogo = 0
+      for (const { antes, ahora } of pares) {
+        const d = Math.max(0, ahora - antes)
+        deltaBruto += d
+        if (dep && d > 0 && antes >= dep.dedupeMinConteo) {
+          const clave = `${antes}→${ahora}`
+          if (vistos.has(clave)) {
+            duplicadosCatalogo++
+            continue
+          }
+          vistos.add(clave)
+        }
+        if (dep && d > Math.max(dep.pisoPorDia, dep.maxPctDia * antes) * dias) {
+          saltosFiltrados++
+          continue
+        }
+        delta += d
+      }
       senal.delta = delta
       senal.periodoDias = redondear(dias, 1)
       senal.porDia = redondear(delta / dias, 1)
-      senal.itemsComparables = comparables
+      senal.itemsComparables = pares.length
+      if (saltosFiltrados || duplicadosCatalogo) {
+        senal.deltaBruto = deltaBruto
+        senal.saltosFiltrados = saltosFiltrados
+        senal.duplicadosCatalogo = duplicadosCatalogo
+      }
     }
   }
 
@@ -104,7 +133,7 @@ export function calcularDemanda(
   { minItems = scoring.umbrales.minItemsDemanda } = {},
 ) {
   const vendidos = extraerSenal(snapshots, snapshotsPrevios, 'vendidos')
-  const reviews = extraerSenal(snapshots, snapshotsPrevios, 'numReviews')
+  const reviews = extraerSenal(snapshots, snapshotsPrevios, 'numReviews', { depurar: true })
   if (!vendidos && !reviews) return null
 
   // representatividad: si la señal sale de una muestra ínfima (detalle aplicado
@@ -306,16 +335,21 @@ export async function obtenerProductosUltimoScan(nicho) {
     { $group: { _id: '$sku', mediciones: { $push: { fecha: '$fecha', numReviews: '$numReviews' } } } },
   ])
   const velocidadPorSku = new Map()
+  const dep = scoring.depuracionDelta
   for (const h of historial) {
     const [ultima, ...resto] = h.mediciones
     const previa = resto.find((m) => ultima.fecha - m.fecha >= 12 * 3600e3)
     if (!previa) continue
     const dias = (ultima.fecha - previa.fecha) / 86400e3
     const delta = Math.max(0, ultima.numReviews - previa.numReviews)
+    // mismo filtro que el delta del nicho: un agregado de catálogo que saltó de
+    // nivel no es velocidad de venta — mejor "sin medir" que un número absurdo
+    const salto = delta > Math.max(dep.pisoPorDia, dep.maxPctDia * previa.numReviews) * dias
     velocidadPorSku.set(h._id, {
-      ventasDia: Math.round((delta / dias) * scoring.escalas.reviewsAVentasFactor),
+      ventasDia: salto ? null : Math.round((delta / dias) * scoring.escalas.reviewsAVentasFactor),
       reviewsDelta: delta,
       ventanaDias: Math.round(dias * 10) / 10,
+      saltoCatalogo: salto || undefined,
     })
   }
 
@@ -337,6 +371,7 @@ export async function obtenerProductosUltimoScan(nicho) {
         ventasDia: velocidadPorSku.get(s.sku)?.ventasDia ?? null,
         reviewsDelta: velocidadPorSku.get(s.sku)?.reviewsDelta ?? null,
         ventanaDias: velocidadPorSku.get(s.sku)?.ventanaDias ?? null,
+        saltoCatalogo: velocidadPorSku.get(s.sku)?.saltoCatalogo ?? null,
         cuotas: s.cuotas,
         vendedor: p.vendedor ?? null,
         sellerId: p.sellerId ?? null,

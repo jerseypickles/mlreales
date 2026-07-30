@@ -533,15 +533,21 @@ router.get(
       ventasDia: r.metricas?.demanda?.ventasEstimadasPorDia ?? null,
       pctFull: r.metricas?.competencia?.pctFull ?? null,
       sellersUnicos: r.metricas?.competencia?.sellersUnicos ?? null,
+      canasta: r.metricas?.demanda?.reviews?.itemsComparables ?? null,
+      saltosFiltrados:
+        (r.metricas?.demanda?.reviews?.saltosFiltrados ?? 0) +
+          (r.metricas?.demanda?.reviews?.duplicadosCatalogo ?? 0) || null,
     }))
 
-    // señal de aceleración de demanda: compara los dos últimos deltas de reseñas
+    // señal de aceleración: compara las dos últimas velocidades depuradas
+    // (reviews.porDia ya viene normalizada por días y limpia de saltos de
+    // catálogo); el total del top mezcla canastas distintas y mentía
     let aceleracion = null
-    const conReviews = puntos.filter((p) => Number.isFinite(p.reviewsTotal))
-    if (conReviews.length >= 3) {
-      const [a, b, c] = conReviews.slice(-3)
-      const d1 = b.reviewsTotal - a.reviewsTotal
-      const d2 = c.reviewsTotal - b.reviewsTotal
+    const velocidades = reportes
+      .map((r) => r.metricas?.demanda?.reviews?.porDia)
+      .filter(Number.isFinite)
+    if (velocidades.length >= 2) {
+      const [d1, d2] = velocidades.slice(-2)
       if (d1 > 0 || d2 > 0) {
         aceleracion = d2 > d1 * 1.15 ? 'acelerando' : d2 < d1 * 0.85 ? 'frenando' : 'estable'
       }

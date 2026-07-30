@@ -26,4 +26,18 @@ export const scoring = {
     // es el conteo de reseñas: ~1 de cada N compradores reseña. Heurística ajustable.
     reviewsAVentasFactor: 25,
   },
+  // Depuración del delta de reseñas. Los items de catálogo muestran el AGREGADO
+  // de todos los vendedores del producto: cuando ML consolida la familia, el
+  // conteo salta de nivel sin venta alguna (mancuernas 30-jul: +672 en 6 días
+  // sobre 811 acumuladas, +83% — imposible orgánico), y dos listings del mismo
+  // catálogo repiten el mismo conteo (doble conteo). Sin esto, cada salto se
+  // multiplica por el factor 25 y el nicho "vende" miles al día.
+  depuracionDelta: {
+    // delta creíble por item: max(pisoPorDia, maxPctDia × acumulado previo) × días
+    maxPctDia: 0.02,
+    pisoPorDia: 30,
+    // dos SKUs con el mismo conteo antes→después y ≥ este acumulado comparten
+    // el agregado del catálogo: se cuenta una sola vez
+    dedupeMinConteo: 50,
+  },
 }

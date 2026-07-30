@@ -142,6 +142,66 @@ test('calcularDemanda: primer scan sin previos', () => {
   assert.equal(d.ventasEstimadasPorDia, null)
 })
 
+test('calcularDemanda: un salto de catálogo imposible queda fuera del delta', () => {
+  // caso mancuernas 30-jul: un item de catálogo pasó 811→1483 (+672 en 6 días,
+  // +83% del acumulado) porque ML consolidó la familia — eso no son ventas
+  const fechaPrevia = new Date('2026-07-24T12:00:00Z')
+  const fechaActual = new Date('2026-07-30T12:00:00Z') // 6 días
+  const actuales = [
+    { sku: 'SALTO', numReviews: 1483, fecha: fechaActual },
+    { sku: 'B', numReviews: 110, fecha: fechaActual },
+  ]
+  const previos = [
+    { sku: 'SALTO', numReviews: 811, fecha: fechaPrevia },
+    { sku: 'B', numReviews: 100, fecha: fechaPrevia },
+  ]
+  const d = calcularDemanda(actuales, previos, { minItems: 1 })
+  assert.equal(d.reviews.delta, 10) // solo el crecimiento orgánico de B
+  assert.equal(d.reviews.deltaBruto, 682)
+  assert.equal(d.reviews.saltosFiltrados, 1)
+  assert.equal(d.reviews.itemsComparables, 2) // la canasta reporta lo medido
+})
+
+test('calcularDemanda: dos listings con el mismo conteo de catálogo cuentan una vez', () => {
+  // caso Overfit: dos SKUs hermanos muestran el agregado idéntico del catálogo
+  const fechaPrevia = new Date('2026-07-24T12:00:00Z')
+  const fechaActual = new Date('2026-07-30T12:00:00Z')
+  const actuales = [
+    { sku: 'GEMELO-1', numReviews: 5148, fecha: fechaActual },
+    { sku: 'GEMELO-2', numReviews: 5148, fecha: fechaActual },
+    { sku: 'B', numReviews: 110, fecha: fechaActual },
+  ]
+  const previos = [
+    { sku: 'GEMELO-1', numReviews: 5119, fecha: fechaPrevia },
+    { sku: 'GEMELO-2', numReviews: 5119, fecha: fechaPrevia },
+    { sku: 'B', numReviews: 100, fecha: fechaPrevia },
+  ]
+  const d = calcularDemanda(actuales, previos, { minItems: 1 })
+  assert.equal(d.reviews.delta, 39) // 29 (una vez) + 10
+  assert.equal(d.reviews.duplicadosCatalogo, 1)
+  assert.equal(d.reviews.itemsComparables, 3)
+})
+
+test('calcularDemanda: la depuración no toca la señal de vendidos', () => {
+  // los buckets de vendidos son gruesos y coinciden entre items — el dedupe
+  // y el filtro de saltos son exclusivos del conteo de reseñas
+  const fechaPrevia = new Date('2026-07-29T12:00:00Z')
+  const fechaActual = new Date('2026-07-30T12:00:00Z')
+  const d = calcularDemanda(
+    [
+      { sku: 'A', vendidos: 500, fecha: fechaActual },
+      { sku: 'B', vendidos: 500, fecha: fechaActual },
+    ],
+    [
+      { sku: 'A', vendidos: 100, fecha: fechaPrevia },
+      { sku: 'B', vendidos: 100, fecha: fechaPrevia },
+    ],
+    { minItems: 1 },
+  )
+  assert.equal(d.vendidos.delta, 800) // saltos idénticos y enormes, ambos cuentan
+  assert.equal(d.vendidos.saltosFiltrados, undefined)
+})
+
 test('calcularDemanda: sin vendidos usa delta de reseñas como proxy', () => {
   const fechaPrevia = new Date('2026-07-14T12:00:00Z')
   const fechaActual = new Date('2026-07-16T12:00:00Z')
