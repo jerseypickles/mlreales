@@ -15,7 +15,7 @@ import { analizarNicho } from '../services/analista.js'
 import { sugerirNichos, palabrasSaturadas } from '../services/sugeridor.js'
 import { keywordReal, palabrasClave } from '../services/busquedasReales.js'
 import { registrarGasto, gastoDelMes } from '../services/gastos.js'
-import { escanearPropios } from '../services/propios.js'
+import { escanearPropios, importarMisItems } from '../services/propios.js'
 import { capturarTendencias, movimientosRecientes, lineasEnAlza } from '../services/tendencias.js'
 import { generarRfqPendientes } from '../services/rfq.js'
 import { ProductoPropio } from '../models/ProductoPropio.js'
@@ -486,15 +486,28 @@ export async function procesarProgramadorScans() {
   const ahora = Date.now()
   const umbrales = { diario: 20 * 3600e3, semanal: 6.5 * 86400e3 }
 
-  // los productos propios se miden por la API oficial ($0): su ciclo diario NO
-  // se congela con el techo de presupuesto (el modo sin-actor lo garantiza el
-  // propio worker de propios)
-  const propioVencidoPre = await ProductoPropio.exists({
+  // los productos propios se miden por la API oficial ($0), así que corren en
+  // DOS ciclos: uno FRECUENTE solo-oficial (una venta se ve en minutos, no al
+  // día siguiente) y la pasada COMPLETA diaria (actor para lo que la API no
+  // cubre). Ninguno se congela con el techo de presupuesto.
+  const propioVencidoFull = await ProductoPropio.exists({
     estado: 'activo',
     $or: [{ ultimoScanEl: null }, { ultimoScanEl: { $lt: new Date(ahora - umbrales.diario) } }],
   })
+  const propioVencidoPre =
+    propioVencidoFull ||
+    Boolean(
+      await ProductoPropio.exists({
+        estado: 'activo',
+        ultimoScanEl: { $lt: new Date(ahora - config.propiosFrecuenciaMin * 60_000) },
+      }),
+    )
   if (propioVencidoPre) {
-    await obtenerColas().propios.add('medir', {}, { jobId: `propios-${Math.floor(ahora / (3 * 3600e3))}` })
+    await obtenerColas().propios.add(
+      'medir',
+      { soloOficial: !propioVencidoFull },
+      { jobId: `propios-${Math.floor(ahora / (30 * 60_000))}` },
+    )
   }
 
   const gastado = await gastoDelMes()
@@ -596,11 +609,22 @@ export async function procesarProgramadorScans() {
   return { activos: nichos.length, encolados, sinScore, madurando: madurandoTotal, vueltasTemporada, propiosEncolados: Boolean(propioVencidoPre) }
 }
 
-export async function procesarScanPropios() {
+export async function procesarScanPropios(job) {
   const gastado = await gastoDelMes()
   // con el techo alcanzado se mide igual, pero SOLO por la API oficial ($0):
   // el actor de respaldo (pagado) espera al presupuesto del próximo mes
-  return escanearPropios({ soloOficial: gastado >= config.presupuestoUsdMes })
+  const soloOficial = job?.data?.soloOficial === true || gastado >= config.presupuestoUsdMes
+  // la pasada completa diaria además reconoce sola publicaciones nuevas del
+  // vendedor (el botón Importar queda solo para forzarlo a mano)
+  if (!soloOficial) {
+    try {
+      const imp = await importarMisItems()
+      if (imp.importados) console.log(`[scan-propios] auto-import: ${imp.importados} publicación(es) nueva(s)`)
+    } catch (err) {
+      console.warn(`[scan-propios] auto-import omitido: ${err.message}`)
+    }
+  }
+  return escanearPropios({ soloOficial })
 }
 
 // Optimizador semanal de Mis productos: cablea nichos faltantes, re-audita lo

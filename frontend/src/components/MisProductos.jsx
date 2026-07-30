@@ -648,17 +648,6 @@ export function MisProductos() {
     }
   }
 
-  async function medirAhora() {
-    setOcupado(true)
-    try {
-      await api.medirPropios()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setOcupado(false)
-    }
-  }
-
   async function cablearNicho(p, nichoId) {
     setError(null)
     try {
@@ -666,23 +655,6 @@ export function MisProductos() {
       cargar()
     } catch (err) {
       setError(err.message)
-    }
-  }
-
-  async function optimizarTodo() {
-    setOcupado(true)
-    setError(null)
-    setAviso(null)
-    try {
-      await api.optimizarPropios()
-      setAviso(
-        'Pasada de Fable encolada: cablea nichos faltantes, re-audita lo vencido o lo que cambió de título y revisa fichas nuevas. Los resultados aparecen solos en unos minutos.',
-      )
-      cargar()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setOcupado(false)
     }
   }
 
@@ -767,7 +739,8 @@ export function MisProductos() {
         <div>
           <h2>Mis productos</h2>
           <p className="reporte-fecha">
-            Seguimiento diario de tus publicaciones: precio, reseñas (≈ ventas) y posición orgánica.
+            Se actualiza solo: ventas, visitas y stock por API oficial cada ~45 min; detalle completo y
+            publicaciones nuevas a diario; optimización los martes.
           </p>
         </div>
         <div className="toolbar">
@@ -790,11 +763,6 @@ export function MisProductos() {
               Conectar Mercado Libre
             </button>
           )}
-          {datos?.propios?.length ? (
-            <button className="boton-secundario" onClick={medirAhora} disabled={ocupado}>
-              {ocupado ? 'Encolando…' : 'Medir ahora'}
-            </button>
-          ) : null}
           {datos?.propios?.some((p) => !p.nichoId) ? (
             <button
               className="boton-secundario"
@@ -803,16 +771,6 @@ export function MisProductos() {
               title="Detecta el nicho de cada producto (por ranking o por título con IA); si no existe en el tablero, lo crea y lo escanea"
             >
               {ocupado ? 'Cableando…' : 'Cablear nichos (auto)'}
-            </button>
-          ) : null}
-          {datos?.propios?.length ? (
-            <button
-              className="boton-secundario"
-              onClick={optimizarTodo}
-              disabled={ocupado}
-              title="Lo mismo que corre solo cada martes: cablea nichos faltantes, re-audita lo vencido o lo que cambió de título y revisa fichas nuevas"
-            >
-              {ocupado ? 'Encolando…' : 'Optimizar todo ahora'}
             </button>
           ) : null}
         </div>

@@ -54,6 +54,9 @@ export const config = {
   // cupo de nichos madurando a diario a la vez (los de mayor score primero):
   // el resto entra a medida que los confirmados liberan lugar
   maduracionMax: Number(process.env.MADURACION_MAX) || 12,
+  // ciclo frecuente de Mis productos: solo API oficial ($0) — una venta se ve
+  // en minutos, no al día siguiente. La pasada completa (con actor) sigue diaria.
+  propiosFrecuenciaMin: Number(process.env.PROPIOS_FRECUENCIA_MIN) || 45,
   detalleTopN: Number(process.env.DETALLE_TOP_N) || 50,
   detalleBatch: Number(process.env.DETALLE_BATCH) || 15,
   // embudo del radar: screening barato (top-10) y score mínimo para ganarse el detalle completo
