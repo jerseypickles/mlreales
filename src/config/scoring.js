@@ -39,5 +39,10 @@ export const scoring = {
     // dos SKUs con el mismo conteo antes→después y ≥ este acumulado comparten
     // el agregado del catálogo: se cuenta una sola vez
     dedupeMinConteo: 50,
+    // ventana mínima del delta: contra el scan de ayer (cadencia diaria) una
+    // sola reseña ya equivale a ~27 ventas/día — todo lo que venda menos sale
+    // "0" por pura resolución. Comparar contra el scan de hace ≥N días baja el
+    // piso de detección a ~25/N ventas/día y el cero vuelve a significar algo.
+    ventanaMinDias: 3,
   },
 }

@@ -186,6 +186,10 @@ export function calcularDemanda(
     preguntas: extraerSenalPreguntas(snapshots, snapshotsPrevios),
     ventasEstimadasPorDia,
     volumenVentasEstimado,
+    // resolución de la medición: 1 reseña en esta ventana = este número de
+    // ventas/día — un 0 medido significa "bajo este piso", no "nadie compra"
+    pisoDeteccionVentasDia:
+      reviews?.periodoDias != null ? redondear(factor / reviews.periodoDias, 0) : null,
   }
 }
 
@@ -372,7 +376,11 @@ export async function obtenerProductosUltimoScan(nicho) {
   const dep = scoring.depuracionDelta
   for (const h of historial) {
     const [ultima, ...resto] = h.mediciones
-    const previa = resto.find((m) => ultima.fecha - m.fecha >= 12 * 3600e3)
+    // misma ventana mínima que el delta del nicho (resolución); si la serie es
+    // nueva, cae a ≥12h para no quedarse ciego
+    const previa =
+      resto.find((m) => ultima.fecha - m.fecha >= dep.ventanaMinDias * 86_400_000) ??
+      resto.find((m) => ultima.fecha - m.fecha >= 12 * 3600e3)
     if (!previa) continue
     const dias = (ultima.fecha - previa.fecha) / 86400e3
     const delta = Math.max(0, ultima.numReviews - previa.numReviews)
@@ -514,10 +522,19 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   const productos = await Producto.find({ sku: { $in: snapshots.map((s) => s.sku) } }).lean()
   const productosPorSku = new Map(productos.map((p) => [p.sku, p]))
 
-  // scan anterior para el delta de vendidos
-  const snapPrevio = await Snapshot.findOne({ keyword: nicho.keyword, fecha: { $lt: ultimoSnap.fecha } })
-    .sort({ fecha: -1 })
-    .lean()
+  // scan de referencia para el delta: el más reciente con ≥ ventanaMinDias de
+  // distancia (resolución del piso de detección); si la serie es muy nueva,
+  // cae al inmediatamente anterior
+  const corteVentana = new Date(
+    new Date(ultimoSnap.fecha).getTime() - scoring.depuracionDelta.ventanaMinDias * 86_400_000,
+  )
+  const snapPrevio =
+    (await Snapshot.findOne({ keyword: nicho.keyword, fecha: { $lte: corteVentana } })
+      .sort({ fecha: -1 })
+      .lean()) ??
+    (await Snapshot.findOne({ keyword: nicho.keyword, fecha: { $lt: ultimoSnap.fecha } })
+      .sort({ fecha: -1 })
+      .lean())
   const snapshotsPrevios = snapPrevio
     ? await Snapshot.find({ keyword: nicho.keyword, fecha: snapPrevio.fecha }).lean()
     : null

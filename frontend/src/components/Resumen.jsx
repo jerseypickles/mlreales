@@ -92,7 +92,11 @@ export function Resumen({ reporte, productos, nichoId, nicho }) {
         {m.demanda ? (
           <StatTile
             label="Ventas estimadas/día"
-            value={m.demanda.ventasEstimadasPorDia ?? '—'}
+            value={
+              m.demanda.ventasEstimadasPorDia === 0 && m.demanda.pisoDeteccionVentasDia
+                ? `< ${m.demanda.pisoDeteccionVentasDia}`
+                : (m.demanda.ventasEstimadasPorDia ?? '—')
+            }
             detalle={
               m.demanda.ventasEstimadasPorDia == null
                 ? 'el delta requiere 2 scans con detalle'

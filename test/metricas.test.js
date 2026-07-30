@@ -213,6 +213,18 @@ test('calcularDemanda: sin ids de preguntas la señal es null', () => {
   assert.equal(d.reviews.delta, 2) // la señal de reseñas no se ve afectada
 })
 
+test('calcularDemanda: expone el piso de detección de la ventana', () => {
+  // ventana de 1 día con factor 25: una reseña = 25 ventas/día — un 0 medido
+  // significa "bajo 25/día", no "cero ventas"
+  const d = calcularDemanda(
+    [{ sku: 'A', numReviews: 10, fecha: new Date('2026-07-30T12:00:00Z') }],
+    [{ sku: 'A', numReviews: 10, fecha: new Date('2026-07-29T12:00:00Z') }],
+    { minItems: 1 },
+  )
+  assert.equal(d.ventasEstimadasPorDia, 0)
+  assert.equal(d.pisoDeteccionVentasDia, 25)
+})
+
 test('calcularDemanda: la depuración no toca la señal de vendidos', () => {
   // los buckets de vendidos son gruesos y coinciden entre items — el dedupe
   // y el filtro de saltos son exclusivos del conteo de reseñas
