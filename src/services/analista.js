@@ -128,6 +128,7 @@ Reglas:
 - LECTURA HONESTA DEL TOP50 (crítico): reviews:null significa SIN MEDIR — el detalle con reseñas solo cubre las primeras ~30 posiciones y algunas páginas de catálogo no entregan conteo — JAMÁS lo leas como "cero ventas" ni lo uses contra un producto o segmento; reviews:0 sí es un cero real medido. ventasDia ausente = aún no hay segunda medición para calcular velocidad, no "no vende". El top50 es la PRIMERA PLANA de universo.totalResultadosBusqueda resultados: la demanda que calcules es un PISO del listado, no el mercado completo — al comparar segmentos, compara solo entre lo medido.
 - serieDemanda es LA PELÍCULA del nicho (una fila por scan con demanda). Si viene esVeredictoDeGraduacion=true, este análisis cierra la maduración: tu veredicto debe basarse en la SOSTENIBILIDAD de la serie — demanda estable o creciente a lo largo de los scans respalda entrar; una serie que se desinfla convierte cualquier buen día en espejismo, dilo explícito en el resumen citando las cifras de la serie.
 - CANASTA DE LA SERIE (crítico para leer tendencia): canastaComparables es cuántas publicaciones se midieron en AMBOS scans de ese punto. Dos puntos con canastas muy distintas (ej: 4 vs 24) NO son comparables entre sí — el cambio de ventasDia refleja composición del top, no demanda; un punto con canasta chica (<10) es evidencia débil, jamás lo cites como tendencia. saltosCatalogoFiltrados marca conteos de catálogo que saltaron de nivel (consolidación de ML, no ventas) y fueron excluidos del delta: si un punto los tiene, su ventasDia previo a esa fecha pudo estar inflado.
+- SEGUNDO PROXY — PREGUNTAS NUEVAS (metricas.demanda.preguntas y preguntasNuevasDia en la serie, si vienen): conteo de preguntas de compradores NUEVAS entre scans, medido por id (exacto en especie, PISO en magnitud — la página muestra una lista acotada). Es independiente del conteo de reseñas y no sufre agregados de catálogo. Úsalo como CONTRASTE de coherencia, no como magnitud: ventasDia alto con preguntas nuevas moviéndose = demanda creíble; ventasDia alto con CERO preguntas nuevas en ventanas amplias = trata la demanda con escepticismo y dilo; ausente = aún sin segunda medición, no significa nada.
 - Segmenta el nicho leyendo los títulos: potencia (watts), packs/unidades, tamaño, tipo de producto. Los watts y packs cambian el producto y su costo — no los mezcles.
 - Usa las reseñas como proxy de ventas (~1 reseña por cada 25 ventas). El share de reseñas de un segmento indica dónde está la demanda real.
 - Los items con origenCrossBorder=true son sellers chinos despachando directo: son a la vez señal de que el producto se puede importar barato y competencia difícil de ganar en precio.
@@ -245,6 +246,7 @@ export async function analizarNicho(nicho) {
       score: r.scoreOportunidad ?? null,
       canastaComparables: rv.itemsComparables ?? null,
       saltosCatalogoFiltrados: (rv.saltosFiltrados ?? 0) + (rv.duplicadosCatalogo ?? 0) || undefined,
+      preguntasNuevasDia: r.metricas?.demanda?.preguntas?.porDia ?? undefined,
     }
   })
 

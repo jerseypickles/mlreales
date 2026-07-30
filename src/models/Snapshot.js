@@ -16,6 +16,10 @@ const snapshotSchema = new mongoose.Schema({
   stock: Number, // Fase 2 (nivel 2)
   posicion: Number,
   keyword: String,
+  // ids de las preguntas visibles en la página (nivel 2): el diff entre scans
+  // cuenta preguntas NUEVAS reales — segundo proxy de demanda, independiente
+  // del conteo de reseñas y sus agregados de catálogo
+  preguntasIds: { type: [String], default: undefined },
 })
 
 snapshotSchema.index({ sku: 1, fecha: -1 })

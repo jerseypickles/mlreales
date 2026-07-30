@@ -77,6 +77,12 @@ function normalizarItemSourabh(raw) {
           .slice(0, 5)
           .map((q) => ({ texto: q.text, respuesta: q.answer ?? null }))
       : null,
+    // ids de TODAS las preguntas visibles (sin recorte): el diff entre scans
+    // mide preguntas nuevas; ids únicos globales → el set deduplica hermanos
+    // de catálogo solo
+    preguntasIds: Array.isArray(raw.questions)
+      ? raw.questions.map((q) => (q?.id != null ? String(q.id) : null)).filter(Boolean)
+      : null,
     condicion: raw.condition ?? null,
     imagen: raw.thumbnail ?? (Array.isArray(raw.images) ? raw.images[0] : null) ?? null,
     // para la auditoría de listing: el texto y las fotos reales de la publicación

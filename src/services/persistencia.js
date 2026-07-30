@@ -76,6 +76,7 @@ export async function aplicarDetalleScan({ porSku, fecha }) {
     }
     if (det.rating !== null) setSnap.rating = det.rating
     if (det.precio !== null) setSnap.precio = det.precio
+    if (det.preguntasIds?.length) setSnap.preguntasIds = det.preguntasIds
     if (Object.keys(setSnap).length) {
       opsSnapshot.push({ updateOne: { filter: { sku, fecha }, update: { $set: setSnap } } })
     }

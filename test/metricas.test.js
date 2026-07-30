@@ -182,6 +182,37 @@ test('calcularDemanda: dos listings con el mismo conteo de catálogo cuentan una
   assert.equal(d.reviews.itemsComparables, 3)
 })
 
+test('calcularDemanda: preguntas nuevas por id, con dedupe de hermanos de catálogo', () => {
+  const fechaPrevia = new Date('2026-07-29T12:00:00Z')
+  const fechaActual = new Date('2026-07-30T12:00:00Z') // 1 día
+  const actuales = [
+    // gana las preguntas q3 y q4; q4 también aparece en el hermano de catálogo
+    { sku: 'A', numReviews: 10, preguntasIds: ['q1', 'q2', 'q3', 'q4'], fecha: fechaActual },
+    { sku: 'A2', numReviews: 10, preguntasIds: ['q1', 'q2', 'q3', 'q4'], fecha: fechaActual },
+    { sku: 'B', numReviews: 5, preguntasIds: ['z1'], fecha: fechaActual },
+    { sku: 'NUEVO', numReviews: 1, preguntasIds: ['n1'], fecha: fechaActual }, // sin previo: no compara
+  ]
+  const previos = [
+    { sku: 'A', numReviews: 10, preguntasIds: ['q1', 'q2'], fecha: fechaPrevia },
+    { sku: 'A2', numReviews: 10, preguntasIds: ['q1', 'q2'], fecha: fechaPrevia },
+    { sku: 'B', numReviews: 5, preguntasIds: ['z1'], fecha: fechaPrevia },
+  ]
+  const d = calcularDemanda(actuales, previos, { minItems: 1 })
+  assert.equal(d.preguntas.nuevas, 2) // q3 + q4, contadas una vez pese al hermano
+  assert.equal(d.preguntas.itemsComparables, 3)
+  assert.equal(d.preguntas.porDia, 2)
+})
+
+test('calcularDemanda: sin ids de preguntas la señal es null', () => {
+  const d = calcularDemanda(
+    [{ sku: 'A', numReviews: 10, fecha: new Date('2026-07-30') }],
+    [{ sku: 'A', numReviews: 8, fecha: new Date('2026-07-29') }],
+    { minItems: 1 },
+  )
+  assert.equal(d.preguntas, null)
+  assert.equal(d.reviews.delta, 2) // la señal de reseñas no se ve afectada
+})
+
 test('calcularDemanda: la depuración no toca la señal de vendidos', () => {
   // los buckets de vendidos son gruesos y coinciden entre items — el dedupe
   // y el filtro de saltos son exclusivos del conteo de reseñas

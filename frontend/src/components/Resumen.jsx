@@ -113,6 +113,13 @@ export function Resumen({ reporte, productos, nichoId, nicho }) {
             detalle={`mediana ${fmtNum(m.demanda.reviews.mediana)} por producto`}
           />
         ) : null}
+        {m.demanda?.preguntas ? (
+          <StatTile
+            label="Preguntas nuevas/día"
+            value={m.demanda.preguntas.porDia ?? '—'}
+            detalle={`proxy independiente · ${m.demanda.preguntas.itemsComparables} items comparados`}
+          />
+        ) : null}
         <StatTile
           label="Precio mediana"
           value={fmtPrecio(m.precio.mediana)}

@@ -124,6 +124,39 @@ function extraerSenal(snapshots, snapshotsPrevios, campo, { depurar = false } = 
   return senal
 }
 
+// Segundo proxy de demanda: preguntas NUEVAS de compradores entre dos scans.
+// Los ids de pregunta son únicos globales → el set deduplica solo los listings
+// hermanos que comparten catálogo; la lista visible es acotada, así que el
+// resultado es un PISO ("al menos N preguntas nuevas"), inmune a los saltos
+// de agregado que ensucian las reseñas. Sirve de contraste: reseñas volando
+// con cero preguntas nuevas = sospecha.
+function extraerSenalPreguntas(snapshots, snapshotsPrevios) {
+  const conIds = snapshots.filter((s) => Array.isArray(s.preguntasIds) && s.preguntasIds.length)
+  if (!conIds.length || !snapshotsPrevios?.length) return null
+  const previosPorSku = new Map(
+    snapshotsPrevios.filter((s) => Array.isArray(s.preguntasIds)).map((s) => [s.sku, s]),
+  )
+  const nuevas = new Set()
+  let comparables = 0
+  let fechaPrevia = null
+  for (const snap of conIds) {
+    const previo = previosPorSku.get(snap.sku)
+    if (!previo) continue
+    comparables++
+    fechaPrevia = previo.fecha
+    const idsPrevios = new Set(previo.preguntasIds)
+    for (const id of snap.preguntasIds) if (!idsPrevios.has(id)) nuevas.add(id)
+  }
+  if (!comparables || !fechaPrevia) return null
+  const dias = Math.max((new Date(snapshots[0].fecha) - new Date(fechaPrevia)) / 86_400_000, 1 / 24)
+  return {
+    nuevas: nuevas.size,
+    periodoDias: redondear(dias, 1),
+    porDia: redondear(nuevas.size / dias, 1),
+    itemsComparables: comparables,
+  }
+}
+
 // Demanda del nicho. ML no expone vendidos exactos (buckets congelados), así que la
 // señal continua es el conteo de reseñas (exacto, se mueve a diario): delta de
 // reseñas × factor = ventas estimadas del período — la métrica estrella.
@@ -150,6 +183,7 @@ export function calcularDemanda(
     base: vendidos ? 'vendidos' : 'reviews',
     vendidos,
     reviews,
+    preguntas: extraerSenalPreguntas(snapshots, snapshotsPrevios),
     ventasEstimadasPorDia,
     volumenVentasEstimado,
   }
