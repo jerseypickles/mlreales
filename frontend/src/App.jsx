@@ -41,6 +41,35 @@ function PresupuestoChip() {
   )
 }
 
+// Ventas reales de la cuenta ML en el topbar: el ciclo de propios las trae
+// cada ~45 min — la primera alegría del día sin abrir Seller Central
+function VentasChip() {
+  const [resumen, setResumen] = useState(null)
+
+  useEffect(() => {
+    let vigente = true
+    const cargar = () => api.ventasResumen().then((r) => vigente && setResumen(r)).catch(() => {})
+    cargar()
+    const intervalo = setInterval(cargar, 5 * 60_000)
+    return () => {
+      vigente = false
+      clearInterval(intervalo)
+    }
+  }, [])
+
+  if (!resumen || (!resumen.hoy?.unidades && !resumen.semana?.unidades)) return null
+  const conHoy = resumen.hoy.unidades > 0
+  const { unidades, ingresosClp } = conHoy ? resumen.hoy : resumen.semana
+  return (
+    <div className="presupuesto" title="Ventas reales de tu cuenta ML (órdenes pagadas; se refresca cada ~45 min)">
+      <span className="presupuesto-texto">
+        🛒 {unidades} {unidades === 1 ? 'venta' : 'ventas'} {conHoy ? 'hoy' : 'esta semana'} ·{' '}
+        {fmtPrecio(ingresosClp)}
+      </span>
+    </div>
+  )
+}
+
 function FormNuevoNicho({ onCreado }) {
   const [keyword, setKeyword] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -625,6 +654,7 @@ export default function App() {
             Tendencias
           </button>
         </nav>
+        <VentasChip />
         <PresupuestoChip />
       </header>
       {vista === 'oportunidades' ? (

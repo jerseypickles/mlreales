@@ -31,22 +31,74 @@ router.post(
   }),
 )
 
-// Lista con serie de mediciones, posición orgánica y ventas reales 30d (orders)
+// Lista con serie de mediciones, posición orgánica, ventas reales (orders),
+// conversión visitas→ventas, margen real 30d y calibración del factor
 router.get(
   '/',
   manejar(async (_req, res) => {
     const propios = await ProductoPropio.find().sort({ creadoEl: -1 }).lean()
     const posiciones = await posicionesRecientes(propios.map((p) => p.sku))
     const ventas = await ventasPorItem({ dias: 30 }).catch(() => new Map())
+    const ventas7 = await ventasPorItem({ dias: 7 }).catch(() => new Map())
     const { evaluarImpacto } = await import('../../services/impacto.js')
-    res.json({
-      propios: propios.map((p) => ({
+    const { comisionMlExacta } = await import('../../services/comisionesMl.js')
+    const { calibracionFactor } = await import('../../services/calibracion.js')
+    const { VentaMl } = await import('../../models/VentaMl.js')
+
+    const lista = []
+    for (const p of propios) {
+      const v30 = ventas.get(p.itemIdMl ?? p.sku) ?? null
+      const v7 = ventas7.get(p.itemIdMl ?? p.sku) ?? null
+      const ultima = (p.mediciones ?? []).at(-1) ?? null
+      // ambas ventanas son de 7 días: conversión honesta visitas→ventas
+      const visitas7 = Number.isFinite(ultima?.visitas) ? ultima.visitas : null
+      const conversion7d =
+        v7?.unidades && visitas7 > 0 ? Math.min(100, Math.round((v7.unidades / visitas7) * 1000) / 10) : null
+
+      // margen real 30d: ingresos − comisión ML exacta − costo puesto en bodega
+      let margen30d = null
+      if (v30?.unidades > 0 && p.costoUnitarioClp != null && p.categoriaMl) {
+        const com = await comisionMlExacta({
+          precioClp: v30.ingresosClp / v30.unidades,
+          categoriaId: p.categoriaMl,
+        }).catch(() => null)
+        if (Number.isFinite(com?.pct)) {
+          const comisionClp = Math.round((com.pct / 100) * v30.ingresosClp + (com.cargoFijoClp ?? 0) * v30.unidades)
+          const costoClp = Math.round(p.costoUnitarioClp * v30.unidades)
+          margen30d = { margenClp: v30.ingresosClp - comisionClp - costoClp, comisionClp, costoClp }
+        }
+      }
+
+      lista.push({
         ...p,
         posicionReciente: posiciones.get(p.sku) ?? null,
-        ventas30d: ventas.get(p.itemIdMl ?? p.sku) ?? null,
+        ventas30d: v30,
+        ventas7d: v7,
+        conversion7d,
+        margen30d,
         impacto: evaluarImpacto(p),
-      })),
+      })
+    }
+
+    const todasLasVentas = await VentaMl.find().lean().catch(() => [])
+    res.json({ propios: lista, calibracion: calibracionFactor(propios, todasLasVentas) })
+  }),
+)
+
+// Resumen para el chip del topbar: ventas de hoy (hora Chile) y de la semana
+router.get(
+  '/ventas-resumen',
+  manejar(async (_req, res) => {
+    const { VentaMl } = await import('../../models/VentaMl.js')
+    const { diaChile } = await import('../../services/tendencias.js')
+    const desde = new Date(Date.now() - 7 * 86400e3)
+    const ventas = await VentaMl.find({ fecha: { $gte: desde } }).lean()
+    const hoy = diaChile()
+    const sumar = (lista) => ({
+      unidades: lista.reduce((s, v) => s + (v.items ?? []).reduce((a, i) => a + (i.cantidad ?? 0), 0), 0),
+      ingresosClp: lista.reduce((s, v) => s + (v.totalClp ?? 0), 0),
     })
+    res.json({ hoy: sumar(ventas.filter((v) => diaChile(v.fecha) === hoy)), semana: sumar(ventas) })
   }),
 )
 
@@ -99,6 +151,14 @@ router.patch(
         }
         propio.nichoId = nichoId
       }
+      await propio.save()
+    }
+    if ('costoUnitarioClp' in (req.body ?? {})) {
+      const costo = req.body.costoUnitarioClp
+      if (costo !== null && (!Number.isFinite(costo) || costo < 0)) {
+        return res.status(400).json({ error: 'costoUnitarioClp debe ser un número ≥ 0 (o null para borrarlo)' })
+      }
+      propio.costoUnitarioClp = costo
       await propio.save()
     }
     res.json({ propio })

@@ -18,6 +18,12 @@ const productoPropioSchema = new mongoose.Schema({
   buyBox: { type: mongoose.Schema.Types.Mixed, default: null },
   // nicho del tablero contra el que se compara este producto (auditoría de listing)
   nichoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Nicho', default: null },
+  // costo real por unidad puesto en bodega (lo ingresa el usuario): habilita
+  // el margen real por venta — sin esto, ingresos ≠ ganancia
+  costoUnitarioClp: { type: Number, default: null },
+  // categoría ML del item (la trae la API oficial en el scan): permite calcular
+  // la comisión exacta para el margen
+  categoriaMl: { type: String, default: null },
   // última auditoría de listing vs los ganadores del nicho: {estado:
   // 'generando'|'ok'|'error', generadoEl, competidores, resultado, costoUsd…}
   auditoria: { type: mongoose.Schema.Types.Mixed, default: null },

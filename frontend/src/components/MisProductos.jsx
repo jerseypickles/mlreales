@@ -88,6 +88,14 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
         <Metrica etiqueta="Ingresos 30d">
           {p.ventas30d ? `${fmtPrecio(p.ventas30d.ingresosClp)} · ${fmtNum(p.ventas30d.unidades)}u` : '—'}
         </Metrica>
+        <Metrica etiqueta="Margen 30d" alerta={p.margen30d ? p.margen30d.margenClp < 0 : false}>
+          {p.margen30d
+            ? fmtPrecio(p.margen30d.margenClp)
+            : p.ventas30d && p.costoUnitarioClp == null
+              ? 'falta costo'
+              : '—'}
+        </Metrica>
+        <Metrica etiqueta="Conversión 7d">{p.conversion7d != null ? `${p.conversion7d}%` : '—'}</Metrica>
         <Metrica etiqueta="Visitas 7d" alerta={(d?.ultima?.visitas ?? 0) < 10}>{fmtNum(d?.ultima?.visitas)}</Metrica>
         <Metrica etiqueta="Reseñas" alerta={!d?.ultima?.numReviews}>
           {fmtNum(d?.ultima?.numReviews)}
@@ -163,8 +171,19 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
   )
 }
 
-function PanelPropio({ propio, onCerrar }) {
+function PanelPropio({ propio, onCerrar, onGuardarCosto }) {
   const serie = (campo) => (propio.mediciones ?? []).map((m) => ({ fecha: m.fecha, valor: m[campo] }))
+  const [costo, setCosto] = useState(propio.costoUnitarioClp ?? '')
+  const [guardando, setGuardando] = useState(false)
+  async function guardarCosto(e) {
+    e.preventDefault()
+    setGuardando(true)
+    try {
+      await onGuardarCosto(propio, costo === '' ? null : Number(costo))
+    } finally {
+      setGuardando(false)
+    }
+  }
   return (
     <div className="panel-fondo" onClick={onCerrar}>
       <aside className="panel" onClick={(e) => e.stopPropagation()} aria-label="Serie del producto propio">
@@ -179,6 +198,23 @@ function PanelPropio({ propio, onCerrar }) {
           </div>
           <button className="boton-cerrar" onClick={onCerrar} aria-label="Cerrar panel">✕</button>
         </div>
+        <form className="form-nicho" onSubmit={guardarCosto}>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            placeholder="Costo por unidad en bodega (CLP)"
+            value={costo}
+            onChange={(e) => setCosto(e.target.value)}
+            aria-label="Costo unitario en CLP"
+          />
+          <button type="submit" className="boton-secundario" disabled={guardando}>
+            {guardando ? 'Guardando…' : 'Guardar costo'}
+          </button>
+        </form>
+        <p className="panel-meta">
+          Con el costo real por unidad, cada venta calcula su margen: precio − comisión ML exacta − costo.
+        </p>
         <MiniSerie titulo="Precio" puntos={serie('precio')} formato={fmtPrecio} />
         <MiniSerie titulo="Vendidos acumulados (real)" puntos={serie('vendidos')} />
         <MiniSerie titulo="Stock" puntos={serie('stock')} />
@@ -742,6 +778,18 @@ export function MisProductos() {
             Se actualiza solo: ventas, visitas y stock por API oficial cada ~45 min; detalle completo y
             publicaciones nuevas a diario; optimización los martes.
           </p>
+          {datos?.calibracion ? (
+            <p
+              className="reporte-fecha"
+              title="Ventas reales de tu cuenta vs reseñas nuevas de tus publicaciones desde la primera venta: el ancla que convierte el factor teórico 25 en dato. Converge a medida que vendes."
+            >
+              Calibración reseñas→ventas: {fmtNum(datos.calibracion.ventas)} venta(s) real(es) ·{' '}
+              {fmtNum(datos.calibracion.resenasNuevas)} reseña(s) nueva(s) →{' '}
+              {datos.calibracion.factorObservado != null
+                ? `factor observado ${datos.calibracion.factorObservado} (teórico 25)`
+                : 'factor aún sin datos: falta la primera reseña propia (teórico 25)'}
+            </p>
+          ) : null}
         </div>
         <div className="toolbar">
           {meli?.conectado ? (
@@ -827,7 +875,20 @@ export function MisProductos() {
         títulos, descripción y plan de fotos listos para pegar.
       </p>
 
-      {abierto ? <PanelPropio propio={abierto} onCerrar={() => setAbierto(null)} /> : null}
+      {abierto ? (
+        <PanelPropio
+          propio={abierto}
+          onCerrar={() => setAbierto(null)}
+          onGuardarCosto={async (p, costo) => {
+            try {
+              await api.ajustarPropio(p._id, { costoUnitarioClp: costo })
+              cargar()
+            } catch (err) {
+              setError(err.message)
+            }
+          }}
+        />
+      ) : null}
       {(() => {
         // el panel lee del listado fresco: si se re-audita, se actualiza solo
         const propioAuditado = datos?.propios?.find((x) => x._id === auditoriaDe)

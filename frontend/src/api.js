@@ -59,6 +59,7 @@ export const api = {
   capturarTendencias: () => pedir('/api/tendencias/capturar', { method: 'POST' }),
   crearPropio: (url) => pedir('/api/propios', json({ url })),
   medirPropios: () => pedir('/api/propios/scan', { method: 'POST' }),
+  ventasResumen: () => pedir('/api/propios/ventas-resumen'),
   eliminarPropio: (id) => pedir(`/api/propios/${id}`, { method: 'DELETE' }),
   ajustarPropio: (id, cambios) => pedir(`/api/propios/${id}`, { ...json(cambios), method: 'PATCH' }),
   auditarPropio: (id) => pedir(`/api/propios/${id}/auditar`, { method: 'POST' }),

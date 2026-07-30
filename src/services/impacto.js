@@ -80,6 +80,18 @@ export function evaluarImpacto(propio, { ahora = new Date(), diasVentana = DIAS_
       else if (delta / base <= -0.2) veredicto = 'empeoró'
       else veredicto = 'sin cambio'
     }
+    // ventas reales mandan sobre visitas cuando las hay: el objetivo del cambio
+    // es vender, no traer clicks — visitas planas con ventas subiendo es mejora
+    const conVentasReales =
+      veredicto !== 'midiendo' &&
+      ventasAntes.fuente === 'ventas reales' &&
+      ventasDespues.fuente === 'ventas reales' &&
+      ventasAntes.valor !== null &&
+      ventasDespues.valor !== null &&
+      (ventasAntes.valor > 0 || ventasDespues.valor > 0)
+    if (conVentasReales && ventasDespues.valor !== ventasAntes.valor) {
+      veredicto = ventasDespues.valor > ventasAntes.valor ? 'mejoró' : 'empeoró'
+    }
     return {
       tipo: it.tipo,
       fecha: it.fecha,
@@ -97,7 +109,9 @@ export function evaluarImpacto(propio, { ahora = new Date(), diasVentana = DIAS_
       lectura:
         veredicto === 'midiendo'
           ? `aplicado hace ${diasTranscurridos} día(s): faltan ${Math.max(0, diasVentana - diasTranscurridos)} para leer el efecto`
-          : `visitas ${visitasAntes} → ${visitasDespues} (${delta > 0 ? '+' : ''}${delta})`,
+          : conVentasReales
+            ? `ventas ${ventasAntes.valor} → ${ventasDespues.valor} · visitas ${visitasAntes} → ${visitasDespues}`
+            : `visitas ${visitasAntes} → ${visitasDespues} (${delta > 0 ? '+' : ''}${delta})`,
     }
   })
 

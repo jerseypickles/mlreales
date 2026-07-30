@@ -142,6 +142,7 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     const imagen = oficial?.pictures?.[0]?.secure_url ?? oficial?.thumbnail ?? det?.imagen
     if (imagen) propio.imagen = imagen
     if (oficial?.status) propio.estadoMl = oficial.status
+    if (oficial?.category_id) propio.categoriaMl = oficial.category_id
     propio.ultimoScanEl = fecha
     propio.mediciones.push({ fecha, precio, numReviews, rating, stock, vendidos, visitas })
     if (propio.mediciones.length > MAX_MEDICIONES) {
