@@ -58,3 +58,13 @@ test('evaluarImpacto: caída de visitas se reporta como empeoró', () => {
 test('evaluarImpacto: sin intervenciones no hay nada que leer', () => {
   assert.deepEqual(evaluarImpacto({ mediciones: [] }), { intervenciones: [], resumen: null })
 })
+
+test('intervencionesDe: el cambio de logística (colecta → Full) es intervención medible', () => {
+  const its = intervencionesDe({
+    historialTitulos: [],
+    historialLogistica: [{ fecha: dia(12), anterior: 'xd_drop_off', nuevo: 'fulfillment' }],
+  })
+  assert.equal(its.length, 1)
+  assert.equal(its[0].tipo, 'logistica')
+  assert.equal(its[0].nuevo, 'fulfillment')
+})

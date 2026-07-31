@@ -55,6 +55,14 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
             {p.estadoMl && p.estadoMl !== 'active' ? (
               <span className="badge badge-neutro">{p.estadoMl === 'paused' ? 'pausada' : p.estadoMl}</span>
             ) : null}
+            {p.envioMl?.logistica ? (
+              <span
+                className={p.envioMl.logistica === 'fulfillment' ? 'badge badge-full' : 'badge badge-neutro'}
+                title={`Logística según ML: ${p.envioMl.logistica}${p.envioMl.envioGratis ? ' · envío gratis' : ''}`}
+              >
+                {p.envioMl.logistica === 'fulfillment' ? 'Full' : p.envioMl.flex ? 'Flex' : 'colecta'}
+              </span>
+            ) : null}{' '}
             {p.posicionReciente
               ? `#${p.posicionReciente.posicion} en “${p.posicionReciente.keyword}”`
               : 'fuera de los listados trackeados'}
@@ -112,7 +120,13 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
             {p.impacto.intervenciones.slice(-3).reverse().map((i, idx) => (
               <li key={idx} className={`lupa-${i.veredicto.replace('ó', 'o')}`}>
                 <span className="lupa-que">
-                  {i.tipo === 'titulo' ? 'título' : i.tipo === 'descripcion' ? 'descripción' : i.tipo}
+                  {i.tipo === 'titulo'
+                    ? 'título'
+                    : i.tipo === 'descripcion'
+                      ? 'descripción'
+                      : i.tipo === 'logistica'
+                        ? 'logística'
+                        : i.tipo}
                 </span>
                 <span className="lupa-fecha">{fmtFecha(i.fecha)}</span>
                 <span className="lupa-veredicto">{i.veredicto}</span>

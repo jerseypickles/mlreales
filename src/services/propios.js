@@ -143,6 +143,22 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     if (imagen) propio.imagen = imagen
     if (oficial?.status) propio.estadoMl = oficial.status
     if (oficial?.category_id) propio.categoriaMl = oficial.category_id
+    if (oficial?.shipping) {
+      // logística de la publicación: colecta/Flex/Full. El cambio (ej: ML activa
+      // el stock de bodega y pasa a fulfillment) es una intervención medible
+      const logistica = oficial.shipping.logistic_type ?? null
+      if (propio.envioMl?.logistica && logistica && propio.envioMl.logistica !== logistica) {
+        propio.historialLogistica.push({ fecha, anterior: propio.envioMl.logistica, nuevo: logistica })
+        if (propio.historialLogistica.length > 10) propio.historialLogistica = propio.historialLogistica.slice(-10)
+        console.log(`[scan-propios] ${propio.sku} cambió logística: ${propio.envioMl.logistica} → ${logistica}`)
+      }
+      propio.envioMl = {
+        logistica,
+        flex: (oficial.tags ?? []).includes('self_service_in') || logistica === 'self_service',
+        envioGratis: oficial.shipping.free_shipping === true,
+        fecha,
+      }
+    }
     propio.ultimoScanEl = fecha
     propio.mediciones.push({ fecha, precio, numReviews, rating, stock, vendidos, visitas })
     if (propio.mediciones.length > MAX_MEDICIONES) {

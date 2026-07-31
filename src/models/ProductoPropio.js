@@ -31,6 +31,12 @@ const productoPropioSchema = new mongoose.Schema({
   // cambios de título detectados por el scan diario: [{fecha, anterior, nuevo}].
   // Con la serie de visitas al lado, dice si el cambio sirvió.
   historialTitulos: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  // logística actual de la publicación según la API oficial:
+  // {logistica: fulfillment|self_service|xd_drop_off|…, flex, envioGratis, fecha}
+  envioMl: { type: mongoose.Schema.Types.Mixed, default: null },
+  // cambios de logística detectados por el scan (ej: colecta → Full cuando ML
+  // activa el stock en bodega): intervención medible por la lupa
+  historialLogistica: { type: [mongoose.Schema.Types.Mixed], default: [] },
   // serie embebida (una medición por scan, acotada): suficiente para deltas y gráficos
   mediciones: {
     type: [
