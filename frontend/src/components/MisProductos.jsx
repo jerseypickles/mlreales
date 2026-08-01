@@ -35,14 +35,19 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
   const generando =
     a?.estado === 'generando' &&
     (!a.solicitadaEl || Date.now() - new Date(a.solicitadaEl).getTime() < 30 * 60e3)
-  const ventas =
-    d?.dVendidos != null
-      ? `${fmtNum(d.dVendidos)} real`
-      : Number.isFinite(d?.ultima?.vendidos)
-        ? `${fmtNum(d.ultima.vendidos)} acum.`
-        : d?.dReviews != null
-          ? `~${fmtNum(d.dReviews * FACTOR_VENTAS)}`
-          : '—'
+  // ventas reales de órdenes en ventana de 7 días (igual que visitas y
+  // conversión) — el delta de mediciones quedó obsoleto con el ciclo de 45 min
+  const ventas = p.ventas7d
+    ? `${fmtNum(p.ventas7d.unidades)} · 7d real`
+    : p.ventas30d
+      ? '0 · 7d real'
+      : d?.dVendidos != null
+        ? `${fmtNum(d.dVendidos)} real`
+        : Number.isFinite(d?.ultima?.vendidos)
+          ? `${fmtNum(d.ultima.vendidos)} acum.`
+          : d?.dReviews != null
+            ? `~${fmtNum(d.dReviews * FACTOR_VENTAS)}`
+            : '—'
   return (
     <article className="propio-card">
       <div className="propio-encabezado">
@@ -92,7 +97,9 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
             <span className={d.dPrecio > 0 ? 'delta delta-sube' : 'delta delta-baja'}>{d.dPrecio > 0 ? '▲' : '▼'}</span>
           ) : null}
         </Metrica>
-        <Metrica etiqueta="Ventas" alerta={ventas === '—' || ventas === '0 real'}>{ventas}</Metrica>
+        <Metrica etiqueta="Ventas" alerta={ventas === '—' || ventas === '0 real' || ventas === '0 · 7d real'}>
+          {ventas}
+        </Metrica>
         <Metrica etiqueta="Ingresos 30d">
           {p.ventas30d ? `${fmtPrecio(p.ventas30d.ingresosClp)} · ${fmtNum(p.ventas30d.unidades)}u` : '—'}
         </Metrica>
