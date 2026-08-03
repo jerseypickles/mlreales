@@ -2,6 +2,9 @@ import { pedirJSON } from './llm.js'
 import { palabrasClave } from './busquedasReales.js'
 import { Nicho } from '../models/Nicho.js'
 import { Reporte } from '../models/Reporte.js'
+import { Producto } from '../models/Producto.js'
+import { ProductoPropio } from '../models/ProductoPropio.js'
+import { ventasPorItem } from './ventasMl.js'
 import { criteriosActivos } from './criterios.js'
 
 // Palabras que dominan el tablero: si una raíz aparece en 3+ keywords activas
@@ -62,6 +65,7 @@ APRENDE DEL HISTORIAL del importador (te lo paso con resultados):
 - Los nichos que él creó a mano revelan sus intereses generales.
 - Los ganadores (entrar/score alto) enseñan el MÉTODO, no la categoría: si lo solar funcionó, NO propongas más solar — busca la misma estructura (producto liviano, demanda medible, poco Full, ticket medio) en OTRA categoría.
 - Los descartados (no_entrar) enseñan qué evitar: no propongas variaciones triviales de esos.
+- EXCEPCIÓN — PASILLOS PROBADOS CON PLATA REAL: cuando te paso pasillos donde el importador YA VENDE con su propia cuenta, esa categoría SÍ se profundiza (la venta real invierte la regla del método). Propón VECINOS del pasillo: qué más compra el mismo comprador (complementos, accesorios, el resto del ritual de uso) o qué más sale del mismo tipo de fábrica china. Vecino ≠ sinónimo: jamás reformulaciones del nicho probado; piensa en el pasillo completo (ej: brochas probadas → esponjas de maquillaje, organizador de cosméticos, espejo con luz, pestañas postizas, limpiador de brochas).
 
 PORTAFOLIO DIVERSIFICADO (regla dura):
 - El tablero es un portafolio de apuestas, no un embudo: de tus keywords, máximo 2 pueden ser vecinas de nichos ya existentes; todas las demás deben abrir categorías que el tablero NO cubre todavía.
@@ -69,6 +73,36 @@ PORTAFOLIO DIVERSIFICADO (regla dura):
 - Recorre verticales distintas en cada pasada: cocina/electrohogar (hornos eléctricos, hervidores, sandwicheras), clima de la temporada próxima (ventilador, enfriador portátil para el verano que viene), aparatos de belleza y cuidado personal, deporte/outdoor, mascotas, bebé/niños, organización del hogar, viaje, herramientas.
 
 Entrega 8-12 keywords variadas: prioriza adyacencias al historial, y completa con temporada próxima (comprable ya) y tendencias emergentes. Keywords cortas y naturales (2-4 palabras), tal como las tipearía un comprador chileno en el buscador — el sistema las valida contra el autocompletado real de ML y descarta las que nadie escribe, así que no inventes frases descriptivas largas.`
+
+// Pasillos donde el importador ya vende con su cuenta: la evidencia más dura
+// que existe — el radar profundiza estos en vez de solo diversificar lejos.
+async function pasillosProbados() {
+  const propios = await ProductoPropio.find({ nichoId: { $ne: null } }).lean()
+  if (!propios.length) return []
+  const v30 = await ventasPorItem({ dias: 30 }).catch(() => new Map())
+  const unidadesPorNicho = new Map()
+  for (const p of propios) {
+    const unidades = v30.get(p.itemIdMl ?? p.sku)?.unidades ?? 0
+    if (!unidades) continue
+    const clave = String(p.nichoId)
+    unidadesPorNicho.set(clave, (unidadesPorNicho.get(clave) ?? 0) + unidades)
+  }
+  const lineas = []
+  for (const [nichoId, unidades] of unidadesPorNicho) {
+    const nicho = await Nicho.findById(nichoId).select('keyword').lean()
+    if (!nicho) continue
+    const rutas = await Producto.aggregate([
+      { $match: { keywordOrigen: nicho.keyword, categoriaRuta: { $ne: null } } },
+      { $group: { _id: '$categoriaRuta', n: { $sum: 1 } } },
+      { $sort: { n: -1 } },
+      { $limit: 1 },
+    ])
+    lineas.push(
+      `"${nicho.keyword}"${rutas[0] ? ` (pasillo: ${rutas[0]._id})` : ''}: ${unidades} unidad(es) vendidas por el importador en 30 días`,
+    )
+  }
+  return lineas
+}
 
 // Historial con resultados para que el sugeridor aprenda qué busca el usuario y qué funcionó.
 async function armarHistorial() {
@@ -102,6 +136,7 @@ async function armarHistorial() {
 
 export async function sugerirNichos({ contexto, tendencias } = {}) {
   const historial = await armarHistorial()
+  const pasillos = await pasillosProbados().catch(() => [])
   const criterios = await criteriosActivos().catch(() => [])
   const fecha = new Date().toLocaleDateString('es-CL', { month: 'long', year: 'numeric', timeZone: 'America/Santiago' })
 
@@ -116,11 +151,16 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
     historial.saturadas?.size
       ? `Verticales SATURADAS del tablero — ninguna keyword puede contener estas palabras: ${[...historial.saturadas].join(', ')}`
       : '',
+    pasillos.length
+      ? `PASILLOS PROBADOS CON PLATA REAL (el importador YA VENDE aquí con su cuenta):\n${pasillos.map((p) => `- ${p}`).join('\n')}`
+      : '',
     tendencias?.length
       ? `Búsquedas EN ALZA esta semana según el autocompletado real de ML (gente escribiéndolas más que antes — priorízalas como candidatas si cumplen las demás reglas):\n${tendencias.join('\n')}`
       : '',
     contexto ? `Contexto del importador: ${contexto}` : '',
-    'Propón los nichos a investigar ahora: abre categorías nuevas para diversificar el portafolio (máximo 2 vecinas de lo existente).',
+    pasillos.length
+      ? 'Propón los nichos a investigar ahora: primero 2-3 VECINOS de los pasillos probados (mismo comprador o mismo proveedor, jamás sinónimos), y completa abriendo categorías nuevas para diversificar (máximo 2 vecinas del resto de lo existente).'
+      : 'Propón los nichos a investigar ahora: abre categorías nuevas para diversificar el portafolio (máximo 2 vecinas de lo existente).',
   ]
     .filter(Boolean)
     .join('\n\n')
