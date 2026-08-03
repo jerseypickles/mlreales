@@ -37,8 +37,10 @@ export async function publicarEnMl({
     throw new Error(`categoría "${rutaCategoria}" no contiene "${categoriaDebeContener}" — revisa o pasa categoriaId explícita`)
   }
 
+  // cuentas en flujo user-products (como CAMBSTORE) exigen family_name en vez
+  // de title al crear (error 369 body.required_fields si falta)
   const item = await meliPost('/items', {
-    title: titulo.trim(),
+    family_name: titulo.trim(),
     category_id: categoria,
     price: Math.round(precioClp),
     currency_id: 'CLP',
