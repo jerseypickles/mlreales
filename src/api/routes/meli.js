@@ -38,6 +38,21 @@ router.post(
   }),
 )
 
+// Crea una publicación nueva en ML desde un borrador de listing (pausada por
+// defecto: se activa cuando llega el stock). El título nace libre — el bloqueo
+// 374 de family_name solo aplica a EDITAR user products existentes.
+router.post(
+  '/publicar',
+  manejar(async (req, res) => {
+    const { publicarEnMl } = await import('../../services/publicador.js')
+    try {
+      res.status(201).json(await publicarEnMl(req.body ?? {}))
+    } catch (err) {
+      res.status(400).json({ error: err.message })
+    }
+  }),
+)
+
 // PÚBLICO (exento de x-api-key en app.js): ML redirige el NAVEGADOR del
 // usuario acá con ?code&state — no viene con headers nuestros.
 router.get(
