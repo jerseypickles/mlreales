@@ -1,5 +1,6 @@
 import { config } from '../config/env.js'
 import { Nicho } from '../models/Nicho.js'
+import { ProductoPropio } from '../models/ProductoPropio.js'
 import { Reporte } from '../models/Reporte.js'
 import { TendenciaBusqueda } from '../models/TendenciaBusqueda.js'
 import { pedirJSON } from './llm.js'
@@ -115,10 +116,17 @@ const SCHEMA_AUDITORIA = {
       description: '3-5 acciones ordenadas por impacto, empezando por la que más ventas destraba',
       items: { type: 'string' },
     },
+    expansionSurtido: {
+      type: ['string', 'null'],
+      description:
+        'Solo si entre los ganadores hay FORMATOS/variantes (packs, cantidades de piezas, tamaños, modelos) que el catálogo propio NO cubre y que venden fuerte: una frase concreta con cifras, ej "El top mueve sets de 24 pcs a $8.990 (1.200 reseñas) y 32 pcs a $12.990 — te faltan esos formatos". null si el surtido propio ya cubre lo que vende.',
+    },
   },
 }
 
 const SYSTEM_AUDITOR = `Eres auditor de listings de Mercado Libre Chile. Te paso MI publicación y las de los GANADORES del nicho (los que más han vendido — tienen las reseñas — y el que más vende ahora). Tu trabajo NO es dar consejos genéricos: es señalar dónde fallo YO comparado con lo que los ganadores hacen y yo no.
+
+EXPANSIÓN DE SURTIDO (campo expansionSurtido): si te paso "otros productos propios en este nicho", compara los FORMATOS del top (cantidad de piezas, packs, tamaños, modelos) contra el catálogo propio completo: cuando un formato que vende fuerte entre los ganadores NO exista en el catálogo propio, dilo con cifras (formato, precio del ganador, reseñas). El que ya vende en el nicho expande con menos riesgo que el que entra de cero. Si el surtido propio ya cubre lo que vende, expansionSurtido = null.
 
 TÍTULO:
 - Te paso BÚSQUEDAS REALES del autocompletado de ML, agrupadas por semilla y ORDENADAS POR VOLUMEN dentro de cada grupo. Esa lista es la única fuente de verdad sobre qué escribe la gente. Si dudas entre dos formas (ej "pistola de dardos" vs "pistola juguete"), gana la que el autocompletado registre y pese más — NUNCA la que suene mejor.
@@ -371,8 +379,18 @@ export async function auditarPropio(propio) {
     console.warn(`[auditor] historial de impacto no disponible: ${err.message}`)
   }
 
+  // catálogo propio completo del nicho: base para la expansión de surtido
+  const hermanos = await ProductoPropio.find({ nichoId: nicho._id, sku: { $ne: propio.sku } })
+    .select('titulo mediciones')
+    .lean()
+    .catch(() => [])
+
   const entrada = {
     nicho: nicho.keyword,
+    otrosProductosPropiosEnEsteNicho: hermanos.map((h) => ({
+      titulo: h.titulo,
+      precioClp: (h.mediciones ?? []).at(-1)?.precio ?? null,
+    })),
     cambiosYaAplicadosYSuResultado: historialDeCambios,
     busquedasRealesPorVolumen: busquedasReales,
     pesoDeCadaKeyword: pesos,

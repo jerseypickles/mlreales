@@ -173,6 +173,11 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
                 1º: {a.resultado.quickWins[0]}
               </span>
             ) : null}
+            {a.resultado?.expansionSurtido ? (
+              <span className="propio-quickwin" title={a.resultado.expansionSurtido}>
+                🧺 Surtido: {a.resultado.expansionSurtido}
+              </span>
+            ) : null}
           </>
         ) : (
           <button
