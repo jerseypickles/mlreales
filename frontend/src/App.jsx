@@ -268,9 +268,13 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
 
   const puntaje = (n) => n.ultimoReporte?.scoreOportunidad ?? -1
   const fechaCreado = (n) => (n.creadoEl ? new Date(n.creadoEl).getTime() : 0)
+  // vendiendo = nichos con productos propios cableados: ya no son una
+  // oportunidad por decidir — son operación. Salen del embudo a su grupo.
+  const esMio = (n) => (n.misProductos ?? 0) > 0
   // cartera = negocio VIVO: un pausado o un no_entrar no es apuesta aunque su
   // etapa diga cotizando (caso partidor batería / aire acondicionado)
-  const enCartera = (n) => EN_CARTERA.has(n.etapaCompra) && n.estado !== 'pausado' && n.veredicto !== 'no_entrar'
+  const enCartera = (n) =>
+    !esMio(n) && EN_CARTERA.has(n.etapaCompra) && n.estado !== 'pausado' && n.veredicto !== 'no_entrar'
   // cuarentena = pausados con fecha de regreso: el sistema los revive solo
   const enCuarentena = (n) => n.estado === 'pausado' && n.revisarEl
   const descartado = (n) =>
@@ -278,19 +282,20 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
     !enCuarentena(n) &&
     (n.veredicto === 'no_entrar' || n.estado === 'pausado' || n.etapaCompra === 'descartado')
 
-  // el sidebar sigue el embudo: cartera (negocio en curso) arriba, luego las
-  // oportunidades por decidir, luego lo que aún se mide (nuevos primero)
+  // el sidebar sigue el embudo: vendiendo (operación real) arriba de todo,
+  // luego cartera, oportunidades por decidir y lo que aún se mide
+  const vendiendo = visibles.filter(esMio).sort((a, b) => (b.misVentas30d ?? 0) - (a.misVentas30d ?? 0))
   const cartera = visibles.filter(enCartera).sort((a, b) => puntaje(b) - puntaje(a))
   const cuarentena = visibles
-    .filter(enCuarentena)
+    .filter((n) => !esMio(n) && enCuarentena(n))
     .sort((a, b) => new Date(a.revisarEl) - new Date(b.revisarEl))
   const oportunidades = visibles
-    .filter((n) => !enCartera(n) && !descartado(n) && n.veredicto)
+    .filter((n) => !esMio(n) && !enCartera(n) && !descartado(n) && n.veredicto)
     .sort((a, b) => puntaje(b) - puntaje(a))
   const evaluando = visibles
-    .filter((n) => !enCartera(n) && !descartado(n) && !n.veredicto)
+    .filter((n) => !esMio(n) && !enCartera(n) && !descartado(n) && !n.veredicto)
     .sort((a, b) => fechaCreado(b) - fechaCreado(a))
-  const descartados = visibles.filter(descartado).sort((a, b) => puntaje(b) - puntaje(a))
+  const descartados = visibles.filter((n) => !esMio(n) && descartado(n)).sort((a, b) => puntaje(b) - puntaje(a))
 
   // familias: los que miden el mismo mercado se anidan bajo su líder cuando
   // ambos están en el mismo grupo (si el líder vive en otro grupo, la fila
@@ -326,6 +331,12 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
           onChange={(e) => setFiltro(e.target.value)}
           aria-label="Filtrar nichos"
         />
+      ) : null}
+
+      {vendiendo.length ? (
+        <GrupoNichos id="vendiendo" titulo="🛒 Vendiendo · mis nichos" cantidad={vendiendo.length} abiertoPorDefecto>
+          <ul className="lista-nichos">{render(vendiendo)}</ul>
+        </GrupoNichos>
       ) : null}
 
       {cartera.length ? (

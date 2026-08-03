@@ -142,6 +142,32 @@ router.get(
       n.proximoScanEl = new Date(new Date(n.ultimoScanEl).getTime() + UMBRAL_SCAN[n.cadenciaScan])
     }
 
+    // nichos donde el importador YA VENDE (propios cableados): el sidebar los
+    // saca del embudo de oportunidades y los agrupa en "Vendiendo"
+    try {
+      const { ProductoPropio } = await import('../../models/ProductoPropio.js')
+      const { ventasPorItem } = await import('../../services/ventasMl.js')
+      const propios = await ProductoPropio.find({ nichoId: { $ne: null } }).lean()
+      const v30 = await ventasPorItem({ dias: 30 }).catch(() => new Map())
+      const porNicho = new Map()
+      for (const p of propios) {
+        const clave = String(p.nichoId)
+        const acc = porNicho.get(clave) ?? { productos: 0, ventas30d: 0 }
+        acc.productos++
+        acc.ventas30d += v30.get(p.itemIdMl ?? p.sku)?.unidades ?? 0
+        porNicho.set(clave, acc)
+      }
+      for (const n of nichos) {
+        const mio = porNicho.get(String(n._id))
+        if (mio) {
+          n.misProductos = mio.productos
+          n.misVentas30d = mio.ventas30d
+        }
+      }
+    } catch {
+      // sin datos de propios el sidebar funciona igual
+    }
+
     // etapa en proceso por nicho, leída de las colas reales (para el spinner del dashboard)
     const etapas = new Map()
     try {
