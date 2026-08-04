@@ -124,9 +124,29 @@ export function MiniSerie({ titulo, puntos, formato = fmtNum, invertirY = false,
     setIdx(mejor)
   }
 
+  const serieValida = (puntos ?? []).filter((p) => Number.isFinite(p.valor))
+  const ultimo = serieValida.at(-1)?.valor ?? null
+  const previo = serieValida.at(-2)?.valor ?? null
+  const delta = ultimo != null && previo != null ? ultimo - previo : null
+  const deltaBueno = delta != null && (invertirY ? delta < 0 : delta > 0)
+  const areaPath = `${datos.path} L ${datos.coords.at(-1).x.toFixed(2)},100 L ${datos.coords[0].x.toFixed(2)},100 Z`
+
   return (
     <figure className="grafico" role="img" aria-labelledby={tituloId}>
-      <figcaption id={tituloId}>{titulo}</figcaption>
+      <figcaption id={tituloId} className="grafico-cabecera">
+        <span>{titulo}</span>
+        {ultimo != null ? (
+          <span className="grafico-actual">
+            {formato(ultimo)}
+            {delta ? (
+              <span className={deltaBueno ? 'grafico-delta delta-sube' : 'grafico-delta delta-baja'}>
+                {delta > 0 ? '+' : ''}
+                {formato(delta)}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
+      </figcaption>
       <div
         className="grafico-area"
         style={{ height: alto }}
@@ -134,6 +154,13 @@ export function MiniSerie({ titulo, puntos, formato = fmtNum, invertirY = false,
         onMouseLeave={() => setIdx(null)}
       >
         <svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 100 100">
+          <defs>
+            <linearGradient id={`gr-${tituloId}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={areaPath} className="linea-area" fill={`url(#gr-${tituloId})`} stroke="none" />
           {activo ? <line x1={activo.x} y1="0" x2={activo.x} y2="100" className="crosshair" /> : null}
           <path d={datos.path} className="linea" vectorEffect="non-scaling-stroke" fill="none" />
           {datos.coords.map((c, i) => (

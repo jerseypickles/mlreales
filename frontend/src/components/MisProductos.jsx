@@ -284,12 +284,14 @@ function PanelPropio({ propio, onCerrar, onGuardarCosto }) {
         <p className="panel-meta">
           Con el costo real por unidad, cada venta calcula su margen: precio − comisión ML exacta − costo.
         </p>
-        <MiniSerie titulo="Precio" puntos={serie('precio')} formato={fmtPrecio} />
-        <MiniSerie titulo="Vendidos acumulados (real)" puntos={serie('vendidos')} />
-        <MiniSerie titulo="Stock" puntos={serie('stock')} />
-        <MiniSerie titulo="Visitas (ventana 7d)" puntos={serie('visitas')} />
-        <MiniSerie titulo="Reseñas acumuladas" puntos={serie('numReviews')} />
-        <MiniSerie titulo="Rating" puntos={serie('rating')} />
+        <div className="panel-graficos">
+          <MiniSerie titulo="Vendidos acumulados (real)" puntos={serie('vendidos')} alto={110} />
+          <MiniSerie titulo="Visitas (ventana 7d)" puntos={serie('visitas')} alto={110} />
+          <MiniSerie titulo="Precio" puntos={serie('precio')} formato={fmtPrecio} alto={110} />
+          <MiniSerie titulo="Stock" puntos={serie('stock')} alto={110} />
+          <MiniSerie titulo="Reseñas acumuladas" puntos={serie('numReviews')} alto={110} />
+          <MiniSerie titulo="Rating" puntos={serie('rating')} alto={110} />
+        </div>
       </aside>
     </div>
   )

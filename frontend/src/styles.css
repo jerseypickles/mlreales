@@ -3705,3 +3705,43 @@ section {
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+/* Panel de producto: gráficos en grilla + cabecera con valor actual */
+.panel { min-width: min(560px, 92vw); }
+.panel-graficos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+@media (max-width: 640px) { .panel-graficos { grid-template-columns: 1fr; } }
+
+.panel-graficos .grafico {
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 10px 12px 8px;
+  background: color-mix(in srgb, var(--tinta) 2%, var(--superficie));
+  margin: 0;
+}
+
+.grafico-cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.grafico-actual {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.grafico-delta {
+  font-size: 11px;
+  font-weight: 700;
+}
+.grafico-area { color: var(--acento); }
+.linea-area { pointer-events: none; }
