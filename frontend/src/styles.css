@@ -3745,3 +3745,17 @@ section {
 }
 .grafico-area { color: var(--acento); }
 .linea-area { pointer-events: none; }
+
+/* Serie por segmentos <line>: única forma que renderiza pareja con
+   preserveAspectRatio="none" en todos los navegadores */
+.linea-seg {
+  stroke: var(--acento);
+  stroke-width: 2.25px;
+  stroke-linecap: round;
+}
+.punto-dot {
+  stroke: var(--acento);
+  stroke-width: 5px;
+  stroke-linecap: round;
+}
+.punto-dot.activo { stroke-width: 8px; }

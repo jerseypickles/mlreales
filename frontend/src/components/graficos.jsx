@@ -129,6 +129,7 @@ export function MiniSerie({ titulo, puntos, formato = fmtNum, invertirY = false,
   const previo = serieValida.at(-2)?.valor ?? null
   const delta = ultimo != null && previo != null ? ultimo - previo : null
   const deltaBueno = delta != null && (invertirY ? delta < 0 : delta > 0)
+  const gradId = `gr-${tituloId.replace(/[^a-zA-Z0-9_-]/g, '')}`
   const areaPath = `${datos.path} L ${datos.coords.at(-1).x.toFixed(2)},100 L ${datos.coords[0].x.toFixed(2)},100 Z`
 
   return (
@@ -155,21 +156,32 @@ export function MiniSerie({ titulo, puntos, formato = fmtNum, invertirY = false,
       >
         <svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 100 100">
           <defs>
-            <linearGradient id={`gr-${tituloId}`} x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
               <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
             </linearGradient>
           </defs>
-          <path d={areaPath} className="linea-area" fill={`url(#gr-${tituloId})`} stroke="none" />
+          <path d={areaPath} className="linea-area" fill={`url(#${gradId})`} stroke="none" />
           {activo ? <line x1={activo.x} y1="0" x2={activo.x} y2="100" className="crosshair" /> : null}
-          <path d={datos.path} className="linea" vectorEffect="non-scaling-stroke" fill="none" />
+          {datos.coords.slice(1).map((c, i) => (
+            <line
+              key={`s${i}`}
+              x1={datos.coords[i].x}
+              y1={datos.coords[i].y}
+              x2={c.x}
+              y2={c.y}
+              className="linea-seg"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
           {datos.coords.map((c, i) => (
-            <circle
-              key={i}
-              cx={c.x}
-              cy={c.y}
-              r={i === idx ? 2.6 : 1.6}
-              className="punto"
+            <line
+              key={`p${i}`}
+              x1={c.x}
+              y1={c.y}
+              x2={c.x}
+              y2={c.y}
+              className={i === idx ? 'punto-dot activo' : 'punto-dot'}
               vectorEffect="non-scaling-stroke"
             />
           ))}
