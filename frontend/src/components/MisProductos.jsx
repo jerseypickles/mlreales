@@ -2,6 +2,17 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { IconoExterno, Cargando } from './ui.jsx'
 import { MiniSerie } from './graficos.jsx'
+import {
+  Tag,
+  ShoppingCart,
+  DollarSign,
+  PiggyBank,
+  Percent,
+  Eye,
+  Star,
+  Package,
+  Sparkles,
+} from 'lucide-react'
 import { BotonCopiar } from './Listing.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 
@@ -18,10 +29,17 @@ function deltas(mediciones) {
   return { ultima, dReviews: delta('numReviews'), dPrecio: delta('precio'), dVendidos: delta('vendidos') }
 }
 
-function Metrica({ etiqueta, children, alerta }) {
+// estado: 'buena' | 'mala' | 'atenta' | undefined — pinta el tile según el negocio
+function Metrica({ etiqueta, children, alerta, estado, Icono }) {
+  const clase = ['propio-metrica']
+  if (estado) clase.push(`m-${estado}`)
+  else if (alerta) clase.push('propio-metrica-alerta')
   return (
-    <span className={alerta ? 'propio-metrica propio-metrica-alerta' : 'propio-metrica'}>
-      <span className="propio-metrica-etiqueta">{etiqueta}</span>
+    <span className={clase.join(' ')}>
+      <span className="propio-metrica-etiqueta">
+        {Icono ? <Icono aria-hidden="true" /> : null}
+        {etiqueta}
+      </span>
       <span className="propio-metrica-valor">{children}</span>
     </span>
   )
@@ -91,33 +109,55 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
       </div>
 
       <div className="propio-metricas" onClick={() => onAbrir(p)}>
-        <Metrica etiqueta="Precio">
+        <Metrica etiqueta="Precio" Icono={Tag}>
           {fmtPrecio(d?.ultima?.precio)}
           {d?.dPrecio ? (
             <span className={d.dPrecio > 0 ? 'delta delta-sube' : 'delta delta-baja'}>{d.dPrecio > 0 ? '▲' : '▼'}</span>
           ) : null}
         </Metrica>
-        <Metrica etiqueta="Ventas" alerta={ventas === '—' || ventas === '0 real' || ventas === '0 · 7d real'}>
+        <Metrica
+          etiqueta="Ventas"
+          Icono={ShoppingCart}
+          estado={p.ventas7d?.unidades > 0 ? 'buena' : ventas.startsWith('0') || ventas === '—' ? 'mala' : undefined}
+        >
           {ventas}
         </Metrica>
-        <Metrica etiqueta="Ingresos 30d">
+        <Metrica etiqueta="Ingresos 30d" Icono={DollarSign}>
           {p.ventas30d ? `${fmtPrecio(p.ventas30d.ingresosClp)} · ${fmtNum(p.ventas30d.unidades)}u` : '—'}
         </Metrica>
-        <Metrica etiqueta="Margen 30d" alerta={p.margen30d ? p.margen30d.margenClp < 0 : false}>
+        <Metrica
+          etiqueta="Margen 30d"
+          Icono={PiggyBank}
+          estado={p.margen30d ? (p.margen30d.margenClp < 0 ? 'mala' : 'buena') : p.ventas30d ? 'atenta' : undefined}
+        >
           {p.margen30d
             ? fmtPrecio(p.margen30d.margenClp)
             : p.ventas30d && p.costoUnitarioClp == null
               ? 'falta costo'
               : '—'}
         </Metrica>
-        <Metrica etiqueta="Conversión 7d">{p.conversion7d != null ? `${p.conversion7d}%` : '—'}</Metrica>
-        <Metrica etiqueta="Visitas 7d" alerta={(d?.ultima?.visitas ?? 0) < 10}>{fmtNum(d?.ultima?.visitas)}</Metrica>
-        <Metrica etiqueta="Reseñas" alerta={!d?.ultima?.numReviews}>
+        <Metrica
+          etiqueta="Conversión 7d"
+          Icono={Percent}
+          estado={p.conversion7d != null ? (p.conversion7d >= 3 ? 'buena' : undefined) : undefined}
+        >
+          {p.conversion7d != null ? `${p.conversion7d}%` : '—'}
+        </Metrica>
+        <Metrica etiqueta="Visitas 7d" Icono={Eye} estado={(d?.ultima?.visitas ?? 0) < 10 ? 'mala' : undefined}>
+          {fmtNum(d?.ultima?.visitas)}
+        </Metrica>
+        <Metrica etiqueta="Reseñas" Icono={Star} estado={!d?.ultima?.numReviews ? 'mala' : 'buena'}>
           {fmtNum(d?.ultima?.numReviews)}
           {d?.dReviews > 0 ? <span className="delta delta-sube">+{d.dReviews}</span> : null}
           {d?.ultima?.rating ? ` ★${d.ultima.rating}` : ''}
         </Metrica>
-        <Metrica etiqueta="Stock">{fmtNum(d?.ultima?.stock)}</Metrica>
+        <Metrica
+          etiqueta="Stock"
+          Icono={Package}
+          estado={Number.isFinite(d?.ultima?.stock) && d.ultima.stock <= 3 ? 'atenta' : undefined}
+        >
+          {fmtNum(d?.ultima?.stock)}
+        </Metrica>
       </div>
 
       {p.impacto?.intervenciones?.length ? (
@@ -145,7 +185,10 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
       ) : null}
 
       <div className="propio-optimizacion">
-        <span className="propio-optimizacion-marca">Fable</span>
+        <span className="propio-optimizacion-marca">
+          <Sparkles aria-hidden="true" />
+          Fable
+        </span>
         <select
           className="selector-nicho"
           value={p.nichoId ?? ''}

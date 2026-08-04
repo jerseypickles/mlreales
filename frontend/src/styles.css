@@ -3565,3 +3565,143 @@ section {
   white-space: nowrap;
   cursor: help;
 }
+
+/* ============================================================
+   Mis productos — rediseño premium (overrides, ganan por cascada)
+   ============================================================ */
+.propio-card {
+  position: relative;
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--acento) 3%, var(--superficie)) 0%, var(--superficie) 56px);
+  box-shadow: var(--sombra-1);
+  padding: 18px 20px 14px;
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.propio-card:hover {
+  box-shadow: var(--sombra-2);
+  border-color: color-mix(in srgb, var(--acento) 26%, var(--borde));
+  transform: translateY(-1px);
+}
+
+.propio-encabezado { gap: 14px; }
+
+.propio-foto {
+  border-radius: 14px;
+  padding: 3px;
+  box-shadow: var(--sombra-1);
+  transition: transform 0.2s ease;
+}
+.propio-foto:hover { transform: scale(1.03); }
+.propio-foto img { width: 68px; height: 68px; border-radius: 11px; }
+
+.propio-titular h3 { font-size: 15.5px; font-weight: 700; letter-spacing: -0.01em; }
+.propio-sub { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+
+.propio-metricas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: 8px;
+  margin: 14px 0 12px;
+}
+
+.propio-metrica {
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tinta) 2.5%, var(--superficie));
+  padding: 8px 11px 7px;
+  min-width: 0;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.propio-metrica:hover { border-color: var(--borde-fuerte); }
+
+.propio-metrica-etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+}
+.propio-metrica-etiqueta svg { width: 11px; height: 11px; opacity: 0.75; }
+
+.propio-metrica-valor { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+.propio-metrica.m-buena {
+  border-color: color-mix(in srgb, var(--exito) 38%, var(--borde));
+  background: color-mix(in srgb, var(--exito) 7%, var(--superficie));
+}
+.propio-metrica.m-buena .propio-metrica-valor { color: var(--exito); }
+
+.propio-metrica.m-mala,
+.propio-metrica-alerta {
+  border-color: color-mix(in srgb, var(--peligro) 42%, var(--borde));
+  background: color-mix(in srgb, var(--peligro) 6%, var(--superficie));
+}
+.propio-metrica.m-mala .propio-metrica-valor { color: var(--peligro); }
+
+.propio-metrica.m-atenta {
+  border-color: color-mix(in srgb, #d97706 45%, var(--borde));
+  background: color-mix(in srgb, #f59e0b 8%, var(--superficie));
+}
+
+/* Lupa como línea de tiempo */
+.lupa {
+  margin: 0 0 12px;
+  border: 1px solid var(--borde);
+  border-left: 3px solid var(--acento);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--acento) 3%, var(--superficie));
+}
+.lupa-lista { gap: 6px; margin-top: 6px; }
+.lupa-lista li { position: relative; padding-left: 14px; }
+.lupa-lista li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tinta-3);
+}
+.lupa-mejoro::before { background: var(--exito) !important; }
+.lupa-empeoro::before { background: var(--peligro) !important; }
+.lupa-midiendo::before {
+  background: #f59e0b !important;
+  animation: lupa-pulso 2s ease-in-out infinite;
+}
+@keyframes lupa-pulso { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .lupa-midiendo::before { animation: none; }
+  .propio-card, .propio-foto { transition: none; }
+  .propio-card:hover { transform: none; }
+}
+
+/* Franja Fable */
+.propio-optimizacion {
+  border-top: none;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--acento) 6%, var(--superficie));
+  border: 1px solid color-mix(in srgb, var(--acento) 18%, var(--borde));
+  padding: 9px 12px;
+  margin-top: 2px;
+}
+.propio-optimizacion-marca {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.propio-optimizacion-marca svg { width: 13px; height: 13px; }
+
+.propio-acciones .enlace-icono,
+.propio-acciones .enlace-boton { transition: color 0.2s ease; }
+
+.propio-card :is(button, a, select, .propio-foto, .propio-metricas, h3) { cursor: pointer; }
+.propio-card :is(button, a, select):focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
