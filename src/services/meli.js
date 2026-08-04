@@ -111,7 +111,7 @@ async function cuentaConTokenFresco() {
   return cuenta
 }
 
-async function meliFetch(ruta, { method = 'GET', body } = {}) {
+async function meliFetch(ruta, { method = 'GET', body, headers = {} } = {}) {
   let cuenta = await cuentaConTokenFresco()
   const pedir = (token) =>
     fetch(`${API_BASE}${ruta}`, {
@@ -120,6 +120,7 @@ async function meliFetch(ruta, { method = 'GET', body } = {}) {
         Authorization: `Bearer ${token}`,
         Accept: 'application/json',
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...headers,
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     })
@@ -136,8 +137,8 @@ async function meliFetch(ruta, { method = 'GET', body } = {}) {
   return datos
 }
 
-export async function meliGet(ruta) {
-  return meliFetch(ruta)
+export async function meliGet(ruta, { headers } = {}) {
+  return meliFetch(ruta, { headers })
 }
 
 // Escrituras sobre items PROPIOS (scope Publicación): título, descripción, etc.

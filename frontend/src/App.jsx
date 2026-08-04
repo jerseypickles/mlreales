@@ -7,6 +7,7 @@ import { Analisis } from './components/Analisis.jsx'
 import { Listing } from './components/Listing.jsx'
 import { MisProductos } from './components/MisProductos.jsx'
 import { Tendencias } from './components/Tendencias.jsx'
+import { Publicidad } from './components/Publicidad.jsx'
 import { Oportunidades } from './components/Oportunidades.jsx'
 import { PlanillaGlobal } from './components/PlanillaGlobal.jsx'
 import { Radar } from './components/Sugerencias.jsx'
@@ -664,6 +665,12 @@ export default function App() {
           >
             Tendencias
           </button>
+          <button
+            className={vista === 'publicidad' ? 'seccion activa' : 'seccion'}
+            onClick={() => setVista('publicidad')}
+          >
+            Publicidad
+          </button>
         </nav>
         <VentasChip />
         <PresupuestoChip />
@@ -687,6 +694,8 @@ export default function App() {
         <MisProductos />
       ) : vista === 'tendencias' ? (
         <Tendencias />
+      ) : vista === 'publicidad' ? (
+        <Publicidad />
       ) : (
       <div className="cuerpo">
         <aside>

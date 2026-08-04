@@ -38,6 +38,18 @@ router.post(
   }),
 )
 
+// Publicidad (Product Ads): campañas con métricas + atribución por item
+router.get(
+  '/ads',
+  manejar(async (req, res) => {
+    const { resumenAds } = await import('../../services/ads.js')
+    const dias = Math.min(90, Math.max(1, Number(req.query.dias) || 30))
+    const r = await resumenAds({ dias })
+    if (!r) return res.status(409).json({ error: 'sin cuenta ML conectada o sin advertiser de Product Ads' })
+    res.json(r)
+  }),
+)
+
 // Crea una publicación nueva en ML desde un borrador de listing (pausada por
 // defecto: se activa cuando llega el stock). El título nace libre — el bloqueo
 // 374 de family_name solo aplica a EDITAR user products existentes.

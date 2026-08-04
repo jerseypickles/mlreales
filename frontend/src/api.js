@@ -70,6 +70,7 @@ export const api = {
   estratega: () => pedir('/api/estratega'),
   generarEstratega: () => pedir('/api/estratega', { method: 'POST' }),
   meliEstado: () => pedir('/api/meli/estado'),
+  ads: (dias = 30) => pedir(`/api/meli/ads?dias=${dias}`),
   meliConectar: () => pedir('/api/meli/conectar'),
   meliImportar: () => pedir('/api/meli/importar-items', { method: 'POST' }),
 }
