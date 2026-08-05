@@ -6,7 +6,6 @@ import { Simulador } from './components/Simulador.jsx'
 import { Analisis } from './components/Analisis.jsx'
 import { Listing } from './components/Listing.jsx'
 import { MisProductos } from './components/MisProductos.jsx'
-import { Tendencias } from './components/Tendencias.jsx'
 import { Publicidad } from './components/Publicidad.jsx'
 import { Oportunidades } from './components/Oportunidades.jsx'
 import { PlanillaGlobal } from './components/PlanillaGlobal.jsx'
@@ -660,12 +659,6 @@ export default function App() {
             Mis productos
           </button>
           <button
-            className={vista === 'tendencias' ? 'seccion activa' : 'seccion'}
-            onClick={() => setVista('tendencias')}
-          >
-            Tendencias
-          </button>
-          <button
             className={vista === 'publicidad' ? 'seccion activa' : 'seccion'}
             onClick={() => setVista('publicidad')}
           >
@@ -692,8 +685,6 @@ export default function App() {
         />
       ) : vista === 'propios' ? (
         <MisProductos />
-      ) : vista === 'tendencias' ? (
-        <Tendencias />
       ) : vista === 'publicidad' ? (
         <Publicidad />
       ) : (
