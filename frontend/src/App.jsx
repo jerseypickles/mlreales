@@ -30,7 +30,14 @@ function PresupuestoChip() {
   if (!gastos) return null
   const pct = Math.min(100, Math.round((gastos.gastadoUsd / gastos.presupuestoUsd) * 100))
   return (
-    <div className="presupuesto" title={`Gasto de ${gastos.mes}: Apify + IA`}>
+    <div
+      className="presupuesto"
+      title={`Gasto de ${gastos.mes}: Apify + IA${
+        gastos.apify?.topeUsd
+          ? ` · saldo REAL Apify: US$${Math.round(gastos.apify.gastadoUsd)} de ${gastos.apify.topeUsd} (ciclo hasta ${String(gastos.apify.cicloHasta ?? '').slice(0, 10)})`
+          : ''
+      }`}
+    >
       <span className="presupuesto-texto">
         US$ {gastos.gastadoUsd.toFixed(2)} <span className="presupuesto-tope">/ {gastos.presupuestoUsd} este mes</span>
       </span>

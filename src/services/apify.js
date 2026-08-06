@@ -218,3 +218,21 @@ export async function buscarNivel1(keyword, { domainCode = 'CL', maxPages = conf
   )
   return { items, costoUsd: await obtenerCostoRun(runId) }
 }
+
+
+// Saldo REAL del ciclo de facturación de Apify (no nuestro contador interno):
+// el guardián del programador frena ANTES del muro. Cache 15 min.
+let cacheSaldo = null
+export async function saldoApify() {
+  if (cacheSaldo && Date.now() - cacheSaldo.el < 15 * 60_000) return cacheSaldo.valor
+  const resp = await fetch(`https://api.apify.com/v2/users/me/limits?token=${config.apifyToken}`)
+  if (!resp.ok) throw new Error(`limits ${resp.status}`)
+  const d = (await resp.json()).data ?? {}
+  const valor = {
+    topeUsd: d.limits?.maxMonthlyUsageUsd ?? null,
+    gastadoUsd: d.current?.monthlyUsageUsd ?? null,
+    cicloHasta: d.monthlyUsageCycle?.endAt ?? null,
+  }
+  cacheSaldo = { valor, el: Date.now() }
+  return valor
+}

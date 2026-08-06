@@ -56,7 +56,9 @@ export function crearApp() {
   // gasto del mes vs techo: cuando gastado >= presupuesto, programador y radar se detienen solos
   app.get('/api/gastos', async (_req, res) => {
     const gastadoUsd = await gastoDelMes()
-    res.json({ mes: mesActual(), gastadoUsd, presupuestoUsd: config.presupuestoUsdMes })
+    const { saldoApify } = await import('../services/apify.js')
+    const apify = await saldoApify().catch(() => null)
+    res.json({ mes: mesActual(), gastadoUsd, presupuestoUsd: config.presupuestoUsdMes, apify })
   })
 
   app.use('/api/nichos', rutasNichos)

@@ -16,6 +16,7 @@ import { sugerirNichos, palabrasSaturadas } from '../services/sugeridor.js'
 import { keywordReal, palabrasClave } from '../services/busquedasReales.js'
 import { registrarGasto, gastoDelMes } from '../services/gastos.js'
 import { escanearPropios, importarMisItems } from '../services/propios.js'
+import { saldoApify } from '../services/apify.js'
 import { capturarTendencias, movimientosRecientes, lineasEnAlza } from '../services/tendencias.js'
 import { generarRfqPendientes } from '../services/rfq.js'
 import { ProductoPropio } from '../models/ProductoPropio.js'
@@ -74,7 +75,14 @@ export async function procesarScanNicho(job) {
   if (config.nivel2Activo) {
     // screening: detalle barato para que los candidatos del radar prueben que
     // merecen el detalle completo antes de gastar como un nicho consolidado
-    const topN = nicho.fase === 'screening' ? config.detalleScreeningN : config.detalleTopN
+    // mantenimiento semanal ('programado') con detalle recortado: la serie de un
+    // graduado no necesita 30 reseñas — maduración y manuales mantienen el full
+    const topN =
+      nicho.fase === 'screening'
+        ? config.detalleScreeningN
+        : job?.data?.motivo === 'programado'
+          ? config.detalleTopNMantenimiento
+          : config.detalleTopN
     const top = items
       .sort((a, b) => (a.snapshot.posicion ?? Infinity) - (b.snapshot.posicion ?? Infinity))
       .slice(0, topN)
@@ -517,6 +525,22 @@ export async function procesarProgramadorScans() {
       motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})`,
       propiosEncolados: Boolean(propioVencidoPre),
     }
+  }
+
+  // guardián del muro: saldo REAL de Apify (su ciclo va del 16 al 15, no es el
+  // mes calendario del contador interno) — frenar al 90% en vez de chocar con
+  // 3 reintentos quemados por job como el 2-ago
+  try {
+    const saldo = await saldoApify()
+    if (saldo.topeUsd && saldo.gastadoUsd >= saldo.topeUsd * 0.9) {
+      return {
+        omitido: true,
+        motivo: `Apify al ${Math.round((saldo.gastadoUsd / saldo.topeUsd) * 100)}% del tope real (US$ ${saldo.gastadoUsd.toFixed(0)} de ${saldo.topeUsd})`,
+        propiosEncolados: Boolean(propioVencidoPre),
+      }
+    }
+  } catch (err) {
+    console.warn(`[programador] saldo Apify no disponible: ${err.message}`)
   }
   const nichos = await Nicho.find({ estado: 'activo' }).lean()
 
