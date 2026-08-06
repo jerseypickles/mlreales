@@ -140,7 +140,7 @@ Reglas:
 - El EXW máximo de tu recomendación debe salir de la tabla precalculada (interpola si el precio sugerido está entre dos puntos). Se compra EXW: precio ex-fábrica, el forwarder cubre retiro y flete. No inventes números de costos.
 - CALENDARIO Y LEAD TIME (eliminatorio): te paso la fecha actual. Entre comprar en China y tener stock vendible en Full pasan 50-70 días (producción + 35-50 días de mar + internación + ingreso a Full). Si el nicho es estacional y su pico de venta ya pasó o termina antes de que alcance a llegar un pedido hecho HOY, el veredicto es no_entrar aunque las métricas sean excelentes: la demanda que ves es de la temporada en curso y el stock llegaría a bodega muerta. En el resumen di explícitamente que es por ventana de importación e indica en qué mes comprar para el próximo pico — y declara ese mes en el campo revisarEn ("AAAA-MM"): el sistema reactivará el nicho solo en esa fecha para re-evaluarlo a tiempo. Producto de la estación en curso (ej: ropa de invierno en pleno invierno) ya es tarde. Si la ventana es justa (el pedido llega apenas al inicio del pico), solo entrar_con_condiciones con envío aéreo o pedido chico, y dilo.
 - BARRERAS DE IMPORTACIÓN (informar, no vetar): los eléctricos que se enchufan a la red (220V) requieren certificación SEC en Chile; los cosméticos, registro ISP. Son trámites con costo y semanas — NO descartan un nicho bueno por sí solos, pero la recomendación debe dejarlos explícitos: nómbralos en riesgos, súmalos a la jugada (tramitar mientras se valida) e indica si existe una variante del producto sin la barrera (ej: a pilas/USB/12V) para partir más rápido.
-- EXPERIENCIA PROPIA EN ESTE NICHO (experienciaPropiaEnEsteNicho, si viene): el importador YA VENDE estos productos DENTRO de este nicho — ventas reales de su cuenta ML, visitas y logística, medidas, no contadas. Es la evidencia de mayor jerarquía que recibes: pésala por sobre toda inferencia de reseñas ajenas. Ventas reales desde un listing aún sin optimizar y con pocas visitas = la demanda de entrada es REAL y el techo es mayor; sin ventas con visitas altas = problema de cierre (precio/ficha), no de demanda. Úsala también para juzgar si tu precio sugerido es realista contra el precio al que él ya vende. Y OBLIGATORIO cuando ya vende aquí: recomienda EXPANSIÓN DE SURTIDO — compara los formatos/variantes del top50 (packs, tamaños, cantidades de piezas, modelos) contra sus productos propios y di explícitamente en el resumen qué variantes que YA venden fuerte en el top le faltan al catálogo propio, citando cifras (ej: "vendes sets de 9-10 brochas; el top mueve sets de 24 pcs a $X con N reseñas y 32 pcs a $Y — tráelos"). El que ya vende en un nicho expande con menos riesgo que el que entra de cero.
+- EXPERIENCIA PROPIA EN ESTE NICHO (experienciaPropiaEnEsteNicho, si viene): el importador YA VENDE estos productos DENTRO de este nicho — ventas reales de su cuenta ML, visitas y logística, medidas, no contadas. Es la evidencia de mayor jerarquía que recibes: pésala por sobre toda inferencia de reseñas ajenas. Ventas reales desde un listing aún sin optimizar y con pocas visitas = la demanda de entrada es REAL y el techo es mayor; sin ventas con visitas altas = problema de cierre (precio/ficha), no de demanda. Úsala también para juzgar si tu precio sugerido es realista contra el precio al que él ya vende. OJO CON LA ANTIGÜEDAD: solo recibes publicaciones ACTIVAS, y una con pocos días (antiguedadDias bajo) y pocas visitas AÚN NO ES TEST de nada — jamás uses un listing recién nacido como prueba de que un segmento no vende. Y OBLIGATORIO cuando ya vende aquí: recomienda EXPANSIÓN DE SURTIDO — compara los formatos/variantes del top50 (packs, tamaños, cantidades de piezas, modelos) contra sus productos propios y di explícitamente en el resumen qué variantes que YA venden fuerte en el top le faltan al catálogo propio, citando cifras (ej: "vendes sets de 9-10 brochas; el top mueve sets de 24 pcs a $X con N reseñas y 32 pcs a $Y — tráelos"). El que ya vende en un nicho expande con menos riesgo que el que entra de cero.
 - EXPERIENCIA REAL DEL IMPORTADOR (pésala más que tus supuestos de manual): ya vende en Mercado Libre Chile y HA VENDIDO COSMÉTICO GENÉRICO con éxito — en Chile el comprador sí compra genérico, también en belleza. No descartes un nicho por "categoría de marca" a priori: mídelo en el top 50 que te paso (campo "oficial"): si hay productos genéricos/no-oficiales con reseñas, el genérico vende; descarta por marca solo si el top está copado por tiendas oficiales Y los genéricos no tienen tracción. El registro ISP el importador ya lo tramitó antes (se hace por producto): trátalo como costo y plazo conocidos dentro de la jugada, nunca como razón de no_entrar.
 - NICHOS QUE VENDEN EN PACKS (campo metricas.precio.porUnidad, si viene): parte del top vende multipacks y los precios por listing NO son comparables entre sí — usa precio.porUnidad (precio ÷ unidades declaradas en el título) para comparar segmentos y hablar de precios. OJO con la tabla EXW: está calculada a precio de LISTING, así que el máximo que entrega es por el BULTO completo a ese precio — divide por las unidades del pack para el costo por pieza. Decide sobre el formato que concentra el volumen de venta (¿qué tamaño de pack manda?).
 - SELLERS GEMELOS (campo metricas.competencia.sellersGemelos): vendedores NO oficiales y chicos que están ganando reseñas AHORA dentro del nicho. Lee el campo con precisión: (a) si viene con elementos, es la prueba directa de que un entrante genérico como el importador puede vender aquí — pésala fuerte a favor; (b) si viene como lista VACÍA, se midió entre dos scans y nadie chico creció — pésalo en contra SOLO si además el top está dominado por tiendas oficiales; (c) si el campo NO viene, es el primer scan y la señal aún no se puede medir — NO lo uses ni a favor ni en contra, y jamás como razón de no_entrar.
@@ -261,19 +261,24 @@ export async function analizarNicho(nicho) {
   if (propiosDelNicho.length) {
     const v7 = await ventasPorItem({ dias: 7 }).catch(() => new Map())
     const v30 = await ventasPorItem({ dias: 30 }).catch(() => new Map())
-    experienciaPropiaEnEsteNicho = propiosDelNicho.map((p) => {
-      const ult = (p.mediciones ?? []).at(-1) ?? {}
-      const clave = p.itemIdMl ?? p.sku
-      return {
-        titulo: p.titulo ?? p.sku,
-        precioClp: ult.precio ?? null,
-        ventasReales7d: v7.get(clave)?.unidades ?? 0,
-        ventasReales30d: v30.get(clave)?.unidades ?? 0,
-        visitas7d: ult.visitas ?? null,
-        resenasAcumuladas: ult.numReviews ?? null,
-        logistica: p.envioMl?.logistica ?? null,
-      }
-    })
+    experienciaPropiaEnEsteNicho = propiosDelNicho
+      // una publicación pausada o sin stock no es un test de demanda: fuera
+      .filter((p) => p.estadoMl === 'active')
+      .map((p) => {
+        const ult = (p.mediciones ?? []).at(-1) ?? {}
+        const clave = p.itemIdMl ?? p.sku
+        return {
+          titulo: p.titulo ?? p.sku,
+          precioClp: ult.precio ?? null,
+          antiguedadDias: p.creadoEl ? Math.round((Date.now() - new Date(p.creadoEl)) / 86400e3) : null,
+          ventasReales7d: v7.get(clave)?.unidades ?? 0,
+          ventasReales30d: v30.get(clave)?.unidades ?? 0,
+          visitas7d: ult.visitas ?? null,
+          resenasAcumuladas: ult.numReviews ?? null,
+          logistica: p.envioMl?.logistica ?? null,
+        }
+      })
+    if (!experienciaPropiaEnEsteNicho.length) experienciaPropiaEnEsteNicho = undefined
   }
 
   const entrada = {
