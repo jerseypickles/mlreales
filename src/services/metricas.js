@@ -429,7 +429,7 @@ export async function obtenerProductosUltimoScan(nicho) {
         categoriaRuta: p.categoriaRuta ?? null,
         preguntas: p.preguntas ?? null,
         esTiendaOficial: p.esTiendaOficial ?? false,
-        esFull: p.esFull ?? false,
+        esFull: p.esFull ?? null,
         envioRapido: p.envioRapido ?? false,
         origenCrossBorder: p.origenCrossBorder ?? false,
         tipoListing: p.tipoListing ?? null,
