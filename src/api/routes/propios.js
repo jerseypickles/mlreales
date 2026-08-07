@@ -80,6 +80,27 @@ router.get(
       })
     }
 
+    // surtido que falta, por nicho (una vez por nicho, no por producto)
+    try {
+      const { surtidoQueFalta } = await import('../../services/surtido.js')
+      const porNicho = new Map()
+      for (const p of propios) {
+        if (!p.nichoId) continue
+        const k = String(p.nichoId)
+        porNicho.set(k, [...(porNicho.get(k) ?? []), p])
+      }
+      const surtidos = new Map()
+      for (const [nichoId, hermanos] of porNicho) {
+        const s = await surtidoQueFalta(nichoId, hermanos).catch(() => null)
+        if (s) surtidos.set(nichoId, s)
+      }
+      for (const p of lista) {
+        if (p.nichoId) p.surtido = surtidos.get(String(p.nichoId)) ?? null
+      }
+    } catch (err) {
+      console.warn(`[propios] surtido no disponible: ${err.message}`)
+    }
+
     const todasLasVentas = await VentaMl.find().lean().catch(() => [])
     res.json({ propios: lista, calibracion: calibracionFactor(propios, todasLasVentas) })
   }),

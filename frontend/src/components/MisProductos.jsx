@@ -12,6 +12,7 @@ import {
   Star,
   Package,
   Sparkles,
+  PackagePlus,
 } from 'lucide-react'
 import { BotonCopiar } from './Listing.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -181,6 +182,38 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {p.surtido?.sugeridos?.length ? (
+        <div className="surtido">
+          <span className="surtido-titulo">
+            <PackagePlus aria-hidden="true" />
+            Surtido que te falta · formatos que venden en “{p.surtido.keyword}” y no tienes
+          </span>
+          <div className="surtido-lista">
+            {p.surtido.sugeridos.map((s) => (
+              <a
+                key={s.sku}
+                className="surtido-item"
+                href={s.url}
+                target="_blank"
+                rel="noreferrer"
+                title={s.titulo}
+              >
+                <img src={s.imagen} alt="" loading="lazy" width="52" height="52" />
+                <span className="surtido-datos">
+                  <strong>
+                    {s.unidades ? `${s.unidades} pcs` : 'formato premium'} · {fmtPrecio(s.precio)}
+                  </strong>
+                  <span className="surtido-prueba">
+                    {s.ventasDia ? `${fmtNum(s.ventasDia)}/día` : `${fmtNum(s.numReviews)} reseñas`}
+                    {s.esFull ? ' · Full' : ' · sin Full'}
+                  </span>
+                </span>
+              </a>
+            ))}
+          </div>
         </div>
       ) : null}
 
