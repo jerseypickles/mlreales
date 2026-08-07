@@ -275,6 +275,38 @@ export async function procesarScanDetalle(job) {
     )
   }
 
+  // COBERTURA GRATIS BAJO EL TOP PAGADO ($0, API oficial): el top-N del actor
+  // es un límite de COSTO, no de relevancia — los productos caros del nicho
+  // suelen vivir bajo la posición 30 y quedaban "sin medir", lo que el
+  // analista leía como "ese segmento no vende" (caso saca puntos 7-ago: las
+  // máquinas estaban en 32-51 y el veredicto las enterró). /reviews/item da
+  // el conteo exacto de los items de CATÁLOGO sin gastar un peso.
+  try {
+    const sinMedir = await Snapshot.find({ keyword: nicho.keyword, fecha, numReviews: null })
+      .select('sku posicion')
+      .sort({ posicion: 1 })
+      .limit(40)
+      .lean()
+    if (sinMedir.length) {
+      const deCatalogo = await Producto.find({
+        sku: { $in: sinMedir.map((s) => s.sku) },
+        tipoListing: 'catalogo',
+      })
+        .select('sku')
+        .lean()
+      if (deCatalogo.length) {
+        const medidos = await rescatarConApiOficial(deCatalogo.map((p) => p.sku), fecha)
+        if (medidos) {
+          console.log(
+            `[scan-detalle] cobertura gratis bajo el top pagado: ${medidos}/${deCatalogo.length} items de catálogo medidos por API oficial ($0)`,
+          )
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[scan-detalle] cobertura gratis omitida: ${err.message}`)
+  }
+
   // Full EXACTO de los items de catálogo por API oficial ($0): el ícono
   // {full_icon} del listado se pierde seguido y envenenaba el %Full del nicho
   // (caso Beauty Creations 6-ago). /products/:id/items da logistic_type real.
