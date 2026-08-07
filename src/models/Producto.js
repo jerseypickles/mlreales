@@ -11,7 +11,10 @@ const productoSchema = new mongoose.Schema({
   vendedor: String,
   sellerId: String,
   esTiendaOficial: { type: Boolean, default: false },
-  esFull: { type: Boolean, default: false },
+  // null = el listado no mostró el flag (desconocido ≠ sin Full)
+  esFull: { type: Boolean, default: null },
+  // logistic_type exacto de la API oficial para items de catálogo (fulfillment/xd_drop_off/…)
+  logisticaMl: { type: String, default: null },
   envioRapido: { type: Boolean, default: false },
   origenCrossBorder: { type: Boolean, default: false }, // despachado desde China (nivel 2)
   imagen: String, // thumbnail de ML (nivel 2)

@@ -8,7 +8,7 @@ import { buscarNivel1, ejecutarActorAsync, construirInputDetalle } from '../serv
 import { normalizarScan } from '../services/normalizador.js'
 import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
 import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
-import { reviewsOficialesSeguro } from '../services/meli.js'
+import { reviewsOficialesSeguro, fullOficialSeguro } from '../services/meli.js'
 import { generarReporteNicho } from '../services/metricas.js'
 import { scoring } from '../config/scoring.js'
 import { analizarNicho } from '../services/analista.js'
@@ -273,6 +273,25 @@ export async function procesarScanDetalle(job) {
     throw new Error(
       `Nivel 2 quedó corto (${totalConDetalle}/${objetivos.length} con reseñas medidas, mínimo ${minimoAplicados} para poder puntuar; esta pasada midió ${aplicados} de ${pendientes.length}; ${fallidos} fallidos, ${sinMatch} sin match de SKU, ${sinReviews} con match pero sin reseñas): probable bloqueo de ML o exceso de páginas de catálogo`,
     )
+  }
+
+  // Full EXACTO de los items de catálogo por API oficial ($0): el ícono
+  // {full_icon} del listado se pierde seguido y envenenaba el %Full del nicho
+  // (caso Beauty Creations 6-ago). /products/:id/items da logistic_type real.
+  try {
+    const deCatalogo = await Producto.find({ sku: { $in: skusPedidos }, tipoListing: 'catalogo' })
+      .select('sku esFull')
+      .lean()
+    let corregidos = 0
+    for (const p of deCatalogo) {
+      const r = await fullOficialSeguro(p.sku)
+      if (!r) continue
+      if (p.esFull !== r.esFull) corregidos++
+      await Producto.updateOne({ sku: p.sku }, { $set: { esFull: r.esFull, logisticaMl: r.logistica } })
+    }
+    if (corregidos) console.log(`[scan-detalle] Full corregido por API oficial en ${corregidos} item(s) de catálogo`)
+  } catch (err) {
+    console.warn(`[scan-detalle] enriquecimiento Full omitido: ${err.message}`)
   }
 
   // recalcular el reporte ahora que hay reviews/seller/Full del nivel 2

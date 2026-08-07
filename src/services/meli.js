@@ -279,3 +279,21 @@ export async function sondearApi() {
   }
   return { sondeado: true }
 }
+
+
+// Full REAL de un item de catálogo (terceros incluidos): /products/:id/items
+// expone shipping.logistic_type del ganador del buy box — la única fuente
+// confiable, porque el ícono {full_icon} del listado no siempre viene (caso
+// Beauty Creations 6-ago). Solo sirve para skus de catálogo (MLC…). $0.
+export async function fullOficialSeguro(catalogoId) {
+  try {
+    if (!(await hayCuentaMeli())) return null
+    const r = await meliGet(`/products/${catalogoId}/items?limit=1`)
+    const ganador = (r?.results ?? [])[0]
+    const tipo = ganador?.shipping?.logistic_type ?? null
+    if (!tipo) return null
+    return { esFull: tipo === 'fulfillment', logistica: tipo }
+  } catch {
+    return null
+  }
+}
