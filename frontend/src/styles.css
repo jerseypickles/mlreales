@@ -3803,3 +3803,41 @@ section {
 .surtido-datos strong { font-size: 12.5px; font-weight: 700; white-space: nowrap; }
 .surtido-prueba { font-size: 10.5px; color: var(--tinta-3); }
 @media (prefers-reduced-motion: reduce) { .surtido-item { transition: none; } .surtido-item:hover { transform: none; } }
+
+/* Badge Full: la píldora verde con rayo, como la reconoce el comprador */
+.chip-full {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  padding: 1px 6px 1px 4px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #00a650, #00b85c);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  vertical-align: middle;
+  box-shadow: 0 1px 3px color-mix(in srgb, #00a650 45%, transparent);
+}
+.chip-full svg {
+  width: 9px;
+  height: 9px;
+  fill: currentColor;
+  stroke-width: 2.5;
+}
+.chip-full-lg {
+  margin-left: 0;
+  margin-right: 4px;
+  font-size: 10px;
+  padding: 2px 8px 2px 6px;
+  gap: 3px;
+}
+.chip-full-lg svg { width: 11px; height: 11px; }
+.chip-sinfull {
+  margin-left: 6px;
+  font-size: 9.5px;
+  color: var(--tinta-3);
+  opacity: 0.75;
+}

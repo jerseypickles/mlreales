@@ -13,6 +13,7 @@ import {
   Package,
   Sparkles,
   PackagePlus,
+  Zap,
 } from 'lucide-react'
 import { BotonCopiar } from './Listing.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -81,10 +82,19 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
             ) : null}
             {p.envioMl?.logistica ? (
               <span
-                className={p.envioMl.logistica === 'fulfillment' ? 'badge badge-full' : 'badge badge-neutro'}
+                className={p.envioMl.logistica === 'fulfillment' ? 'chip-full chip-full-lg' : 'badge badge-neutro'}
                 title={`Logística según ML: ${p.envioMl.logistica}${p.envioMl.envioGratis ? ' · envío gratis' : ''}`}
               >
-                {p.envioMl.logistica === 'fulfillment' ? 'Full' : p.envioMl.flex ? 'Flex' : 'colecta'}
+                {p.envioMl.logistica === 'fulfillment' ? (
+                  <>
+                    <Zap aria-hidden="true" />
+                    FULL
+                  </>
+                ) : p.envioMl.flex ? (
+                  'Flex'
+                ) : (
+                  'colecta'
+                )}
               </span>
             ) : null}{' '}
             {p.posicionReciente
@@ -208,7 +218,14 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
                   </strong>
                   <span className="surtido-prueba">
                     {s.ventasDia ? `${fmtNum(s.ventasDia)}/día` : `${fmtNum(s.numReviews)} reseñas`}
-                    {s.esFull === true ? ' · Full' : s.esFull === false ? ' · sin Full' : ''}
+                    {s.esFull === true ? (
+                      <span className="chip-full">
+                        <Zap aria-hidden="true" />
+                        FULL
+                      </span>
+                    ) : s.esFull === false ? (
+                      <span className="chip-sinfull">sin Full</span>
+                    ) : null}
                   </span>
                 </span>
               </a>
