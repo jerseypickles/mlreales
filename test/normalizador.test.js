@@ -64,9 +64,15 @@ test('parsearEnvio: solo envío gratis', () => {
   assert.equal(envio.envioGratis, true)
 })
 
-test('parsearEnvio: vacío o no-string', () => {
-  assert.equal(parsearEnvio('').esFull, false)
-  assert.equal(parsearEnvio(undefined).esFull, false)
+test('parsearEnvio: sin flags legibles = DESCONOCIDO, no "sin Full"', () => {
+  // el listado de ML no siempre pinta el ícono aunque el item sea Full
+  // (caso Beauty Creations 6-ago): afirmar false envenena el %Full del nicho
+  assert.equal(parsearEnvio('').esFull, null)
+  assert.equal(parsearEnvio(undefined).esFull, null)
+  assert.equal(parsearEnvio('').envioRapido, null)
+  // con flags presentes sí se puede afirmar la ausencia del ícono Full
+  assert.equal(parsearEnvio('{free_shipping}').esFull, false)
+  assert.equal(parsearEnvio('{full_icon}').esFull, true)
 })
 
 test('detectarTipoListing', () => {

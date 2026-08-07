@@ -208,7 +208,7 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
                   </strong>
                   <span className="surtido-prueba">
                     {s.ventasDia ? `${fmtNum(s.ventasDia)}/día` : `${fmtNum(s.numReviews)} reseñas`}
-                    {s.esFull ? ' · Full' : ' · sin Full'}
+                    {s.esFull === true ? ' · Full' : s.esFull === false ? ' · sin Full' : ''}
                   </span>
                 </span>
               </a>

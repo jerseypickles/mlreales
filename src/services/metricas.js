@@ -262,13 +262,19 @@ export function calcularMetricas({
   const infoVendedor = new Map() // reputación/power seller del nivel 2, primera vista
   let oficiales = 0
   let full = 0
+  let conDatoFull = 0
   let rapido = 0
   let conVendedor = 0
   for (const snap of top) {
     const prod = productosPorSku.get(snap.sku)
     if (!prod) continue
     if (prod.esTiendaOficial) oficiales++
-    if (prod.esFull) full++
+    // esFull null = el listado no mostró el flag: no cuenta ni a favor ni en
+    // contra (mismo criterio que reviews null: sin medir ≠ cero)
+    if (prod.esFull != null) {
+      conDatoFull++
+      if (prod.esFull) full++
+    }
     if (prod.envioRapido) rapido++
     if (prod.vendedor) {
       conVendedor++
@@ -290,7 +296,8 @@ export function calcularMetricas({
     sellersUnicos: cuentaPorVendedor.size,
     pctTiendaOficial: pct(oficiales),
     concentracionTop3Pct: conVendedor > 0 ? redondear((itemsTop3 / conVendedor) * 100) : null,
-    pctFull: pct(full),
+    pctFull: conDatoFull > 0 ? pct(full, conDatoFull) : null,
+    itemsConDatoFull: conDatoFull,
     pctEnvioRapido: pct(rapido),
     topSellers: vendedoresOrdenados
       .slice(0, 5)

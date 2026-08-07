@@ -44,6 +44,11 @@ export const parsearPrecio = parsearNumero
 export function parsearEnvio(envio) {
   const texto = typeof envio === 'string' ? envio : ''
   const flags = [...texto.matchAll(/\{([a-z0-9_]+)\}/gi)].map((m) => m[1].toLowerCase())
+  // sin string de envío o sin flags legibles: DESCONOCIDO, no "no tiene". El
+  // listado de ML no siempre pinta el ícono Full aunque el item sí lo sea
+  // (caso Beauty Creations 6-ago: Full en la ficha, sin flag en el listado) —
+  // afirmar false envenena el %Full del nicho y el componente del score.
+  if (!flags.length) return { esFull: null, envioRapido: null, envioGratis: null, flags }
   return {
     esFull: flags.some((f) => f === 'full_icon' || f === 'full'),
     envioRapido: flags.some((f) => f.includes('same_day') || f.includes('next_day') || f.includes('flash')),
