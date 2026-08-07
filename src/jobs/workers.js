@@ -90,6 +90,21 @@ export async function procesarScanNicho(job) {
       { $group: { _id: '$sku', fecha: { $max: '$fecha' } } },
     ])
     const medidoEl = new Map(ultimasMediciones.map((m) => [m._id, new Date(m.fecha).getTime()]))
+    // los que formaron la canasta comparable del scan anterior: mantenerlos
+    // adentro es lo que hace que el delta siga siendo comparable
+    const previo = await Snapshot.findOne({ keyword: nicho.keyword, fecha: { $lt: fecha }, numReviews: { $ne: null } })
+      .sort({ fecha: -1 })
+      .select('fecha')
+      .lean()
+    const enSerie = new Set(
+      previo
+        ? (
+            await Snapshot.find({ keyword: nicho.keyword, fecha: previo.fecha, numReviews: { $ne: null } })
+              .select('sku')
+              .lean()
+          ).map((s) => s.sku)
+        : [],
+    )
     const top = elegirObjetivosDetalle(
       items.map((i) => ({
         sku: i.producto.sku,
@@ -97,7 +112,7 @@ export async function procesarScanNicho(job) {
         posicion: i.snapshot.posicion,
         precio: i.snapshot.precio,
       })),
-      { topN, medidoEl },
+      { topN, medidoEl, enSerie },
     ).map((i) => ({ sku: i.sku, url: i.url }))
     await colas.scanDetalle.add('detalle', {
       nichoId: String(nicho._id),

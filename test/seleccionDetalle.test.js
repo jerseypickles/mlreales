@@ -43,3 +43,11 @@ test('elegirObjetivosDetalle: ignora items sin URL y respeta el orden de posici�
   const posiciones = sel.map((i) => i.posicion)
   assert.deepEqual(posiciones, [...posiciones].sort((a, b) => a - b))
 })
+
+test('elegirObjetivosDetalle: la continuidad manda — no rompe la canasta comparable', () => {
+  // items 25-32 sostienen la serie: deben entrar aunque estén fuera del núcleo
+  const enSerie = new Set(['S25', 'S26', 'S27', 'S28', 'S29', 'S30', 'S31', 'S32'])
+  const sel = elegirObjetivosDetalle(listado, { topN: 20, enSerie })
+  const conservados = sel.filter((i) => enSerie.has(i.sku))
+  assert.ok(conservados.length >= 6, `la canasta se rompió: solo ${conservados.length} de la serie sobrevivieron`)
+})

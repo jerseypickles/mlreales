@@ -4,6 +4,8 @@
 // 7-ago: las máquinas vivían en las posiciones 32-51 y el veredicto las
 // enterró por "no vender". El cupo se reparte en tres bolsillos:
 //   1. NÚCLEO: las primeras posiciones, que mandan el ranking y la serie.
+//   1.b CONTINUIDAD: quien ya estaba en la canasta comparable sigue dentro —
+//      si sale, el delta se calcula sobre otra canasta y la serie miente.
 //   2. COBERTURA: al menos un representante de cada banda de precio, para que
 //      ningún segmento quede sin medir.
 //   3. ROTACIÓN: lo que hace más tiempo no se mide entra antes que lo fresco.
@@ -28,7 +30,7 @@ function bandasDePrecio(items) {
   )
 }
 
-export function elegirObjetivosDetalle(items, { topN, medidoEl = new Map() } = {}) {
+export function elegirObjetivosDetalle(items, { topN, medidoEl = new Map(), enSerie = new Set() } = {}) {
   const candidatos = items.filter((i) => i.url)
   if (candidatos.length <= topN) return candidatos
 
@@ -36,6 +38,17 @@ export function elegirObjetivosDetalle(items, { topN, medidoEl = new Map() } = {
   const orden = [...candidatos].sort(porPosicion)
   const elegidos = orden.slice(0, Math.ceil(topN * PCT_NUCLEO))
   const yaElegido = new Set(elegidos.map((i) => i.sku))
+
+  // 1.b CONTINUIDAD (antes que cobertura y rotación): los que ya venían
+  // midiéndose sostienen la canasta comparable del delta. Sacarlos rompe la
+  // serie y hunde las ventas/día sin que el mercado cambie (caso 7-ago:
+  // manguera pasó de 4.970 a 2.741 reseñas medidas con MÁS items).
+  for (const i of orden) {
+    if (elegidos.length >= topN) break
+    if (yaElegido.has(i.sku) || !enSerie.has(i.sku)) continue
+    elegidos.push(i)
+    yaElegido.add(i.sku)
+  }
   const cubiertas = new Set(elegidos.map((i) => banda.get(i.sku)))
 
   // más viejo primero (nunca medido = 0), y a igualdad, mejor posición
