@@ -17,6 +17,7 @@ import { keywordReal, palabrasClave } from '../services/busquedasReales.js'
 import { registrarGasto, gastoDelMes } from '../services/gastos.js'
 import { escanearPropios, importarMisItems } from '../services/propios.js'
 import { saldoApify } from '../services/apify.js'
+import { elegirObjetivosDetalle } from '../services/seleccionDetalle.js'
 import { capturarTendencias, movimientosRecientes, lineasEnAlza } from '../services/tendencias.js'
 import { generarRfqPendientes } from '../services/rfq.js'
 import { ProductoPropio } from '../models/ProductoPropio.js'
@@ -83,11 +84,21 @@ export async function procesarScanNicho(job) {
         : job?.data?.motivo === 'programado'
           ? config.detalleTopNMantenimiento
           : config.detalleTopN
-    const top = items
-      .sort((a, b) => (a.snapshot.posicion ?? Infinity) - (b.snapshot.posicion ?? Infinity))
-      .slice(0, topN)
-      .filter((i) => i.producto.url)
-      .map((i) => ({ sku: i.producto.sku, url: i.producto.url }))
+    // cuándo se midió por última vez cada sku (para la rotación de la selección)
+    const ultimasMediciones = await Snapshot.aggregate([
+      { $match: { sku: { $in: items.map((i) => i.producto.sku) }, numReviews: { $ne: null } } },
+      { $group: { _id: '$sku', fecha: { $max: '$fecha' } } },
+    ])
+    const medidoEl = new Map(ultimasMediciones.map((m) => [m._id, new Date(m.fecha).getTime()]))
+    const top = elegirObjetivosDetalle(
+      items.map((i) => ({
+        sku: i.producto.sku,
+        url: i.producto.url,
+        posicion: i.snapshot.posicion,
+        precio: i.snapshot.precio,
+      })),
+      { topN, medidoEl },
+    ).map((i) => ({ sku: i.sku, url: i.url }))
     await colas.scanDetalle.add('detalle', {
       nichoId: String(nicho._id),
       fechaScan: fecha.toISOString(),
