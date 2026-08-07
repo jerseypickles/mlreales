@@ -7,10 +7,16 @@ export async function guardarScan({ items, fecha }) {
   if (!items?.length) return { productosNuevos: 0, productosActualizados: 0, snapshotsInsertados: 0 }
 
   const ops = items.map(({ producto }) => {
-    const { sku, keywordOrigen, sellerId, imagen, ...resto } = producto
+    const { sku, keywordOrigen, sellerId, imagen, esFull, envioRapido, ...resto } = producto
     const set = { ...resto, activo: true, ultimaVezVisto: fecha }
     if (sellerId) set.sellerId = sellerId // nivel 1 lo trae vacío: no pisar lo que llene el nivel 2
     if (imagen) set.imagen = imagen // no pisar una imagen existente con null
+    // el ícono {full_icon} del listado se pierde seguido: cuando el nivel 1 no
+    // sabe (null), NO pisar el Full exacto que dejó la API oficial en el scan
+    // anterior (caso 6-ago: 29 items con logistic_type fulfillment quedaron
+    // en null porque el siguiente nivel 1 los sobrescribió)
+    if (esFull != null) set.esFull = esFull
+    if (envioRapido != null) set.envioRapido = envioRapido
     return {
       updateOne: {
         filter: { sku },
