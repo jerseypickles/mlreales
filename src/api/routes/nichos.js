@@ -398,7 +398,7 @@ router.post(
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {
   const cambios = {}
-  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, unidadesPedido } = req.body ?? {}
+  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, costoPuestoClp, unidadesPedido } = req.body ?? {}
   if (unidadesPedido !== undefined) {
     // cantidad del pedido editada a mano en la planilla (pisa la sugerida por
     // el análisis; null = volver a la sugerencia)
@@ -419,6 +419,17 @@ const ajustarNicho = manejar(async (req, res) => {
       if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'exwCotizadoUsd inválido (> 0)' })
       cambios.exwCotizadoUsd = n
       cambios.exwCotizadoEl = new Date()
+    }
+  }
+  if (costoPuestoClp !== undefined) {
+    if (costoPuestoClp === null || costoPuestoClp === '') {
+      cambios.costoPuestoClp = null
+      cambios.costoPuestoEl = null
+    } else {
+      const n = Number(costoPuestoClp)
+      if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'costoPuestoClp inválido (> 0)' })
+      cambios.costoPuestoClp = Math.round(n)
+      cambios.costoPuestoEl = new Date()
     }
   }
   if (revisarEl !== undefined) {

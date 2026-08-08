@@ -175,6 +175,51 @@ function CotizacionExw({ fila, onCambiada }) {
   )
 }
 
+// Costo REAL por unidad puesto en Chile (CLP). Regla del importador 8-ago:
+// más fácil y exacto que la cadena EXW → flete → cubicaje → despacho, que son
+// puros supuestos. Si está cargado, el margen se calcula con él.
+function CostoPuesto({ fila, onCambiada }) {
+  const [valor, setValor] = useState(fila.cotizacion?.costoPuestoClp ?? '')
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    setValor(fila.cotizacion?.costoPuestoClp ?? '')
+  }, [fila.nichoId, fila.cotizacion?.costoPuestoClp])
+
+  async function guardar() {
+    const previo = fila.cotizacion?.costoPuestoClp ?? ''
+    if (String(previo) === String(valor).trim()) return
+    setGuardando(true)
+    try {
+      const ids = fila.nichoIds ?? [fila.nichoId]
+      await Promise.all(ids.map((id) => api.ajustarNicho(id, { costoPuestoClp: valor === '' ? null : Number(valor) })))
+      await onCambiada()
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <input
+      type="number"
+      className="exw-cotizado"
+      value={valor}
+      min="0"
+      step="10"
+      disabled={guardando}
+      placeholder="$ puesto…"
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => setValor(e.target.value)}
+      onBlur={guardar}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.target.blur()
+      }}
+      aria-label="Costo por unidad puesto en Chile (CLP, todo incluido)"
+      title="Lo que te cuesta la unidad puesta en Chile: producto + flete + internación. Si lo pones, el margen se calcula con este número exacto en vez de estimar la cadena desde EXW."
+    />
+  )
+}
+
 // Cantidad del pedido, editable (pisa la sugerida por el análisis): bajar la
 // cantidad de un producto reajusta al instante el gasto y el margen (el flete
 // prorrateado por unidad cambia con el tamaño del pedido).
@@ -784,6 +829,14 @@ function PlanillaIA({ onAbrirNicho }) {
       soloVista: true,
       banda: 'cotiza',
       render: (o) => <CotizacionExw fila={o} onCambiada={recargar} />,
+    },
+    {
+      clave: 'costoPuesto',
+      titulo: 'Costo puesto CL',
+      tipo: 'numero',
+      soloVista: true,
+      banda: 'cotiza',
+      render: (o) => <CostoPuesto fila={o} onCambiada={recargar} />,
     },
     {
       clave: 'margenCotizacion',

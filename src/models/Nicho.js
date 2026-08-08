@@ -42,6 +42,12 @@ const nichoSchema = new mongoose.Schema({
   // cotización real del proveedor (EXW por unidad de venta): se compara contra
   // el EXW máximo del análisis y alimenta el margen estimado en la planilla
   exwCotizadoUsd: { type: Number, default: null },
+  // costo REAL por unidad puesto en Chile (CLP, todo incluido: producto, flete,
+  // internación, despacho). Manda sobre el cálculo desde EXW: es un dato del
+  // importador, no una cadena de supuestos (cubicaje/prorrateo ya nos mordió
+  // dos veces). Si está, el margen es una resta exacta.
+  costoPuestoClp: { type: Number, default: null },
+  costoPuestoEl: { type: Date, default: null },
   exwCotizadoEl: { type: Date, default: null },
   // cantidad del pedido fijada a mano en la planilla (pisa la sugerida por el
   // análisis en primeraCompra; null = usar la sugerencia)

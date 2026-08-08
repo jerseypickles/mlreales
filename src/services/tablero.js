@@ -16,6 +16,24 @@ import { topSkusPorKeyword, agruparFamilias } from './familias.js'
 // supuestos estándar de la tabla del análisis (volumen 0.003 m³/u, marítimo).
 // Es el semáforo de la planilla; la afinación fina se hace en el simulador.
 // comisionPct: la exacta de la API oficial manda sobre la que declaró el LLM.
+// Margen con el costo REAL puesto en Chile: sin flete estimado ni cubicaje,
+// solo precio − comisión ML − costo. Es la vía preferida cuando el importador
+// conoce el número (regla suya del 8-ago: "más fácil de calcular").
+function margenPuesto({ costoPuestoClp, rec, comisionPct = null }) {
+  if (!Number.isFinite(costoPuestoClp) || !Number.isFinite(rec?.precioVentaClp)) return null
+  const pct = comisionPct ?? rec.comisionMlPct ?? 14
+  const comisionClp = Math.round((pct / 100) * rec.precioVentaClp)
+  const margenClp = rec.precioVentaClp - comisionClp - costoPuestoClp
+  return {
+    margenClp,
+    margenPct: Math.round((margenClp / rec.precioVentaClp) * 1000) / 10,
+    viable: margenClp > 0,
+    landedClp: costoPuestoClp,
+    comisionClp,
+    base: 'costo puesto en Chile',
+  }
+}
+
 function margenCotizacion({ exwUsd, rec, unidades, comisionPct = null }) {
   if (!Number.isFinite(exwUsd) || !Number.isFinite(rec?.precioVentaClp)) return null
   const pctFinal = comisionPct ?? rec.comisionMlPct
@@ -104,6 +122,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
         frecuenciaScan: 1,
         exwCotizadoUsd: 1,
         exwCotizadoEl: 1,
+        costoPuestoClp: 1,
+        costoPuestoEl: 1,
         unidadesPedido: 1,
         radarInfo: 1,
         rfq: 1,
@@ -119,7 +139,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
   const comisionPorKeyword = new Map()
   await Promise.all(
     filas
-      .filter((n) => Number.isFinite(n.exwCotizadoUsd) && n.conAnalisis?.[0]?.analisis)
+      .filter((n) => (Number.isFinite(n.exwCotizadoUsd) || Number.isFinite(n.costoPuestoClp)) && n.conAnalisis?.[0]?.analisis)
       .map(async (n) => {
         try {
           const rec = n.conAnalisis[0].analisis.recomendacion ?? {}
@@ -152,8 +172,18 @@ export async function tableroOportunidades({ todos = false } = {}) {
     // cotización real del proveedor: se compara contra el máximo y se estima
     // la ganancia por unidad al precio recomendado del análisis
     let cotizacion = null
-    if (Number.isFinite(n.exwCotizadoUsd)) {
-      const comisionPct = comisionPorKeyword.get(n.keyword) ?? null
+    const comisionPct = comisionPorKeyword.get(n.keyword) ?? null
+    if (Number.isFinite(n.costoPuestoClp)) {
+      // el costo puesto en Chile manda: dato real del importador
+      const m = margenPuesto({ costoPuestoClp: n.costoPuestoClp, rec, comisionPct })
+      cotizacion = {
+        costoPuestoClp: n.costoPuestoClp,
+        exwUsd: n.exwCotizadoUsd ?? null,
+        fecha: n.costoPuestoEl ?? n.exwCotizadoEl ?? null,
+        cierra: m ? m.margenClp > 0 : null,
+        ...(m ?? {}),
+      }
+    } else if (Number.isFinite(n.exwCotizadoUsd)) {
       cotizacion = {
         exwUsd: n.exwCotizadoUsd,
         fecha: n.exwCotizadoEl ?? null,
