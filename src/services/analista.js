@@ -5,6 +5,7 @@ import { Reporte } from '../models/Reporte.js'
 import { ProductoPropio } from '../models/ProductoPropio.js'
 import { ventasPorItem } from './ventasMl.js'
 import { criteriosActivos } from './criterios.js'
+import { leccionesAprendidas } from './aprendizajes.js'
 import { movimientosRecientes, lineasEnAlza, prefijoDeKeyword } from './tendencias.js'
 import { comisionMlExacta, categoriaDominante } from './comisionesMl.js'
 import { config } from '../config/env.js'
@@ -283,8 +284,12 @@ export async function analizarNicho(nicho) {
     if (!experienciaPropiaEnEsteNicho.length) experienciaPropiaEnEsteNicho = undefined
   }
 
+  const aprendido = await leccionesAprendidas().catch(() => [])
+
   const entrada = {
     keyword: nicho.keyword,
+    // memoria del negocio: hechos con plata real de todo el tablero
+    loQueYaSabemosPorVentasReales: aprendido.length ? aprendido : undefined,
     experienciaPropiaEnEsteNicho,
     serieDemanda: serieDemanda.length > 1 ? serieDemanda : undefined,
     esVeredictoDeGraduacion: serieDemanda.length >= config.maduracionScans || undefined,

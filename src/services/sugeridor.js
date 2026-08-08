@@ -6,6 +6,7 @@ import { Producto } from '../models/Producto.js'
 import { ProductoPropio } from '../models/ProductoPropio.js'
 import { ventasPorItem } from './ventasMl.js'
 import { criteriosActivos } from './criterios.js'
+import { leccionesAprendidas, hermanasDeLoQueVende } from './aprendizajes.js'
 
 // Palabras que dominan el tablero: si una raíz aparece en 3+ keywords activas
 // (ej: "solar"), esa vertical está saturada y el radar no debe abrir más ahí.
@@ -137,6 +138,8 @@ async function armarHistorial() {
 export async function sugerirNichos({ contexto, tendencias } = {}) {
   const historial = await armarHistorial()
   const pasillos = await pasillosProbados().catch(() => [])
+  const lecciones = await leccionesAprendidas().catch(() => [])
+  const hermanas = await hermanasDeLoQueVende().catch(() => [])
   const criterios = await criteriosActivos().catch(() => [])
   const fecha = new Date().toLocaleDateString('es-CL', { month: 'long', year: 'numeric', timeZone: 'America/Santiago' })
 
@@ -153,6 +156,14 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
       : '',
     pasillos.length
       ? `PASILLOS PROBADOS CON PLATA REAL (el importador YA VENDE aquí con su cuenta):\n${pasillos.map((p) => `- ${p}`).join('\n')}`
+      : '',
+    lecciones.length
+      ? `LO QUE EL SISTEMA YA APRENDIÓ CON VENTAS REALES (memoria del negocio, no estimaciones):\n${lecciones.map((l) => `- ${l}`).join('\n')}`
+      : '',
+    hermanas.length
+      ? `CATEGORÍAS HERMANAS de lo que YA VENDE, según el árbol real de Mercado Libre — las candidatas más fuertes porque comparten comprador y rama:\n${hermanas
+          .map((h) => `- "${h.nombre}" (rama ${h.rama}, hermana de lo que vendes en "${h.hermanaDe}")`)
+          .join('\n')}\nConviértelas en keywords que la gente ESCRIBA: el nombre de la categoría casi nunca es la búsqueda real.`
       : '',
     tendencias?.length
       ? `Búsquedas EN ALZA esta semana según el autocompletado real de ML (gente escribiéndolas más que antes — priorízalas como candidatas si cumplen las demás reglas):\n${tendencias.join('\n')}`
