@@ -44,6 +44,9 @@ const productoPropioSchema = new mongoose.Schema({
         _id: false,
         fecha: Date,
         precio: Number,
+        // precio EFECTIVO que ve el comprador (con promo aplicada) — la serie
+        // del experimento de elasticidad se lee de aquí, no del de lista
+        precioEfectivo: Number,
         numReviews: Number,
         rating: Number,
         // solo con cuenta ML conectada: datos oficiales que el scraper no ve

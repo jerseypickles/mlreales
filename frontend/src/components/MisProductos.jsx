@@ -14,6 +14,7 @@ import {
   Sparkles,
   PackagePlus,
   Zap,
+  BadgePercent,
 } from 'lucide-react'
 import { BotonCopiar } from './Listing.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -120,8 +121,15 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
       </div>
 
       <div className="propio-metricas" onClick={() => onAbrir(p)}>
-        <Metrica etiqueta="Precio" Icono={Tag}>
-          {fmtPrecio(d?.ultima?.precio)}
+        <Metrica etiqueta="Precio" Icono={Tag} estado={p.promoMl?.activa ? 'atenta' : undefined}>
+          {p.promoMl?.activa?.precio ? (
+            <>
+              {fmtPrecio(p.promoMl.activa.precio)}
+              <span className="precio-lista">{fmtPrecio(d?.ultima?.precio)}</span>
+            </>
+          ) : (
+            fmtPrecio(d?.ultima?.precio)
+          )}
           {d?.dPrecio ? (
             <span className={d.dPrecio > 0 ? 'delta delta-sube' : 'delta delta-baja'}>{d.dPrecio > 0 ? '▲' : '▼'}</span>
           ) : null}
@@ -171,6 +179,34 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
         </Metrica>
       </div>
 
+      {p.promoMl?.activa || p.promoMl?.ofertaPropia || p.promoMl?.campanasDisponibles?.length ? (
+        <div className={p.promoMl?.activa ? 'promo promo-activa' : 'promo'}>
+          <span className="promo-titulo">
+            <BadgePercent aria-hidden="true" />
+            {p.promoMl?.activa ? 'Promoción de ML activa' : 'Precio sin promoción'}
+          </span>
+          {p.promoMl?.activa ? (
+            <p className="promo-linea">
+              <strong>{p.promoMl.activa.nombre}</strong> — el cliente paga{' '}
+              <strong>{fmtPrecio(p.promoMl.activa.precio)}</strong>, no {fmtPrecio(p.promoMl.activa.precioOriginal)}
+              {p.promoMl.activa.terminaEl ? ` · termina ${fmtFecha(p.promoMl.activa.terminaEl)}` : ''}
+            </p>
+          ) : null}
+          {p.promoMl?.ofertaPropia?.maximo ? (
+            <p className="promo-linea promo-tenue">
+              Oferta propia posible: entre {fmtPrecio(p.promoMl.ofertaPropia.minimo)} y{' '}
+              {fmtPrecio(p.promoMl.ofertaPropia.maximo)} · ML sugiere {fmtPrecio(p.promoMl.ofertaPropia.sugerido)}
+            </p>
+          ) : null}
+          {p.promoMl?.campanasDisponibles?.length ? (
+            <p className="promo-linea promo-tenue">
+              Campañas a las que puedes postular:{' '}
+              {p.promoMl.campanasDisponibles.map((c) => `${c.nombre} (${String(c.desde).slice(0, 10)})`).join(' · ')}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {p.impacto?.intervenciones?.length ? (
         <div className="lupa">
           <span className="lupa-titulo">Lupa · qué se cambió y si sirvió</span>
@@ -184,7 +220,9 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
                       ? 'descripción'
                       : i.tipo === 'logistica'
                         ? 'logística'
-                        : i.tipo}
+                        : i.tipo === 'precio'
+                          ? 'precio'
+                          : i.tipo}
                 </span>
                 <span className="lupa-fecha">{fmtFecha(i.fecha)}</span>
                 <span className="lupa-veredicto">{i.veredicto}</span>
@@ -337,7 +375,7 @@ function PanelPropio({ propio, onCerrar, onGuardarCosto }) {
         <div className="panel-graficos">
           <MiniSerie titulo="Vendidos acumulados (real)" puntos={serie('vendidos')} alto={110} />
           <MiniSerie titulo="Visitas (ventana 7d)" puntos={serie('visitas')} alto={110} />
-          <MiniSerie titulo="Precio" puntos={serie('precio')} formato={fmtPrecio} alto={110} />
+          <MiniSerie titulo="Precio efectivo (lo que paga el cliente)" puntos={serie('precioEfectivo')} formato={fmtPrecio} alto={110} />
           <MiniSerie titulo="Stock" puntos={serie('stock')} alto={110} />
           <MiniSerie titulo="Reseñas acumuladas" puntos={serie('numReviews')} alto={110} />
           <MiniSerie titulo="Rating" puntos={serie('rating')} alto={110} />

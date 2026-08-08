@@ -5,6 +5,7 @@ import { ejecutarActorAsync, construirInputDetalle } from './apify.js'
 import { indexarDetallesPorSku } from './normalizadorDetalle.js'
 import { registrarGasto } from './gastos.js'
 import { reviewsOficialesSeguro, itemOficialSeguro, visitasSeguro, precioParaGanarSeguro, meliGet } from './meli.js'
+import { promocionesDeItem } from './promociones.js'
 import { sincronizarOrdenes } from './ventasMl.js'
 
 const MAX_MEDICIONES = 180 // ~6 meses de serie diaria
@@ -121,6 +122,23 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     const stock = Number.isFinite(oficial?.available_quantity) ? oficial.available_quantity : null
     const vendidos = Number.isFinite(oficial?.sold_quantity) ? oficial.sold_quantity : null
     const visitas = oficial ? await visitasSeguro(propio.itemIdMl ?? propio.sku) : null
+    // promoción vigente: el precio efectivo manda sobre el de lista
+    const promo = oficial ? await promocionesDeItem(propio.itemIdMl ?? propio.sku) : null
+    if (promo) propio.promoMl = { ...promo, fecha }
+    const precioEfectivo = promo?.activa?.precio ?? precio
+    // un cambio del precio EFECTIVO (subida, o fin de campaña) es una
+    // intervención medible: la lupa lee su efecto en visitas y ventas
+    const efectivoPrevio = (propio.mediciones ?? []).at(-1)?.precioEfectivo
+    if (Number.isFinite(efectivoPrevio) && Number.isFinite(precioEfectivo) && efectivoPrevio !== precioEfectivo) {
+      propio.historialPrecios.push({
+        fecha,
+        anterior: efectivoPrevio,
+        nuevo: precioEfectivo,
+        motivo: promo?.activa ? `promo ${promo.activa.nombre}` : 'precio de lista',
+      })
+      if (propio.historialPrecios.length > 20) propio.historialPrecios = propio.historialPrecios.slice(-20)
+      console.log(`[scan-propios] ${propio.sku} precio efectivo ${efectivoPrevio} → ${precioEfectivo}`)
+    }
     // caja de compra: solo tiene sentido en items que compiten en un catálogo
     if (oficial?.catalog_product_id) {
       const ptw = await precioParaGanarSeguro(propio.itemIdMl ?? propio.sku)
@@ -160,7 +178,7 @@ export async function escanearPropios({ soloOficial = false } = {}) {
       }
     }
     propio.ultimoScanEl = fecha
-    propio.mediciones.push({ fecha, precio, numReviews, rating, stock, vendidos, visitas })
+    propio.mediciones.push({ fecha, precio, precioEfectivo, numReviews, rating, stock, vendidos, visitas })
     if (propio.mediciones.length > MAX_MEDICIONES) {
       propio.mediciones = propio.mediciones.slice(-MAX_MEDICIONES)
     }

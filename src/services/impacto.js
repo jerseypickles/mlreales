@@ -17,6 +17,10 @@ export function intervencionesDe(propio) {
     if (!h?.fecha) continue
     lista.push({ tipo: 'titulo', fecha: new Date(h.fecha), anterior: h.anterior ?? null, nuevo: h.nuevo ?? null })
   }
+  for (const h of propio.historialPrecios ?? []) {
+    if (!h?.fecha) continue
+    lista.push({ tipo: 'precio', fecha: new Date(h.fecha), anterior: h.anterior ?? null, nuevo: h.nuevo ?? null })
+  }
   for (const h of propio.historialLogistica ?? []) {
     if (!h?.fecha) continue
     lista.push({ tipo: 'logistica', fecha: new Date(h.fecha), anterior: h.anterior ?? null, nuevo: h.nuevo ?? null })
