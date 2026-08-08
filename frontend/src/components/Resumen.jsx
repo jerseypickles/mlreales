@@ -164,6 +164,37 @@ export function Resumen({ reporte, productos, nichoId, nicho }) {
         ) : null}
       </div>
 
+      {m.competencia?.composicionCategorias?.length > 1 ? (
+        <section className={m.competencia.topMezclado ? 'composicion mezclado' : 'composicion'}>
+          <h3>
+            De qué está hecho este top
+            {m.competencia.topMezclado ? (
+              <span className="badge badge-neutro" title="La familia dominante no llega al 60% del top: la mediana, el %Full y la demanda mezclan productos distintos">
+                ⚠️ mezclado
+              </span>
+            ) : null}
+          </h3>
+          <div className="composicion-barras">
+            {m.competencia.composicionCategorias.map((c) => (
+              <div key={c.categoria} className="comp-fila" title={c.ruta}>
+                <span className="comp-nombre">{c.categoria}</span>
+                <span className="comp-riel">
+                  <span className="comp-uso" style={{ width: `${c.pctItems}%` }} />
+                </span>
+                <span className="comp-pct">{c.pctItems}%</span>
+                <span className="comp-precio">{fmtPrecio(c.medianaPrecio)}</span>
+              </div>
+            ))}
+          </div>
+          {m.competencia.topMezclado ? (
+            <p className="composicion-nota">
+              Este listado mezcla familias distintas: lee la mediana y el %Full del segmento que te interesa, no del
+              promedio. El análisis lo tiene en cuenta.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       {tendencia && tendencia.puntos.length >= 2 ? (
         <section>
           <div className="tendencia-encabezado">

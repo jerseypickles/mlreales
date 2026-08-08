@@ -4098,3 +4098,23 @@ section {
 .v-futura { background: var(--acento-tenue); color: var(--acento); }
 .v-pasada { background: color-mix(in srgb, var(--peligro) 12%, transparent); color: var(--peligro); }
 @media (prefers-color-scheme: dark) { .v-pronto { color: #fbbf24; } }
+
+/* Composición del top: qué familias reales trae la keyword */
+.composicion { margin-top: 18px; }
+.composicion h3 { display: flex; align-items: center; gap: 8px; }
+.composicion-barras { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.comp-fila {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) minmax(80px, 3fr) 44px 78px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.comp-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.comp-riel { height: 8px; border-radius: 999px; background: var(--borde); overflow: hidden; }
+.comp-uso { display: block; height: 100%; background: var(--acento); border-radius: 999px; }
+.comp-fila:first-child .comp-uso { background: var(--exito); }
+.comp-pct { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.comp-precio { text-align: right; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
+.mezclado .comp-fila:first-child .comp-uso { background: #d97706; }
+.composicion-nota { margin: 8px 0 0; font-size: 12px; color: var(--tinta-3); }

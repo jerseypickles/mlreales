@@ -292,8 +292,41 @@ export function calcularMetricas({
 
   const pct = (parte, total = n) => (total > 0 ? redondear((parte / total) * 100) : null)
 
+  // COMPOSICIÓN DEL TOP por categoría real de ML: una keyword casi nunca trae
+  // una sola familia — "partidor bateria" mezcla partidores con cargadores y
+  // motores de partida, "saca puntos negros" mezcla pinzas con máquinas. Si el
+  // top está mezclado, la mediana, el %Full y la demanda describen a Frankenstein
+  // y no al producto que el importador quiere traer.
+  const porCategoria = new Map()
+  for (const snap of top) {
+    const prod = productosPorSku.get(snap.sku)
+    const ruta = prod?.categoriaRuta ?? null
+    if (!ruta) continue
+    const hoja = ruta.split(' > ').at(-1)
+    const acc = porCategoria.get(hoja) ?? { items: 0, precios: [], ruta }
+    acc.items++
+    if (Number.isFinite(snap.precio)) acc.precios.push(snap.precio)
+    porCategoria.set(hoja, acc)
+  }
+  const conCategoria = [...porCategoria.values()].reduce((s, c) => s + c.items, 0)
+  const composicion = [...porCategoria.entries()]
+    .map(([nombre, c]) => ({
+      categoria: nombre,
+      ruta: c.ruta,
+      items: c.items,
+      pctItems: conCategoria ? redondear((c.items / conCategoria) * 100) : null,
+      medianaPrecio: c.precios.length ? redondear(percentil([...c.precios].sort((a, b) => a - b), 50), 0) : null,
+    }))
+    .sort((a, b) => b.items - a.items)
+  const dominante = composicion[0] ?? null
+
   const competencia = {
     sellersUnicos: cuentaPorVendedor.size,
+    // composición real del top y aviso de mezcla: si la familia dominante no
+    // llega al 60%, las métricas globales del nicho hay que leerlas con pinzas
+    composicionCategorias: composicion.length ? composicion.slice(0, 5) : undefined,
+    categoriaDominantePct: dominante?.pctItems ?? null,
+    topMezclado: dominante ? dominante.pctItems < 60 : null,
     pctTiendaOficial: pct(oficiales),
     concentracionTop3Pct: conVendedor > 0 ? redondear((itemsTop3 / conVendedor) * 100) : null,
     pctFull: conDatoFull > 0 ? pct(full, conDatoFull) : null,
