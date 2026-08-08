@@ -20,6 +20,8 @@ import {
   ExternalLink,
   Trash2,
   LineChart,
+  Users,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { BotonCopiar } from './Listing.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -50,6 +52,45 @@ function Metrica({ etiqueta, children, alerta, estado, Icono }) {
       </span>
       <span className="propio-metrica-valor">{children}</span>
     </span>
+  )
+}
+
+// Comparador de cartera propia: con 2+ productos en un nicho, tus SKUs son un
+// A/B natural. Qué convierte, qué trae tráfico y qué copiarle a cuál.
+function CarteraNicho({ c }) {
+  const ICONO = { trasplante: ArrowLeftRight, cierre: Percent, exposicion: Eye, 'no-es-precio': Tag }
+  return (
+    <section className="cartera">
+      <header className="cartera-head">
+        <Users aria-hidden="true" />
+        <h3>Tu cartera en “{c.keyword}”</h3>
+        <span className="cartera-share">
+          {c.ventasDia} u/día
+          {c.sharePct != null ? ` · ${c.sharePct}% del nicho` : ''}
+        </span>
+      </header>
+      <div className="cartera-tabla">
+        {c.productos.map((p, i) => (
+          <div key={p.sku} className={i === 0 ? 'cartera-fila lider' : 'cartera-fila'}>
+            <span className="cartera-pos">{i + 1}</span>
+            <span className="cartera-tit" title={p.titulo}>{p.titulo}</span>
+            <span className="cartera-dato"><b>{p.conversion != null ? `${p.conversion}%` : '—'}</b> conv.</span>
+            <span className="cartera-dato">{fmtNum(p.visitas)} visitas</span>
+            <span className="cartera-dato">{fmtNum(p.ventas)} ventas</span>
+            <span className="cartera-dato">{fmtPrecio(p.precio)}</span>
+          </div>
+        ))}
+      </div>
+      {c.lecciones.map((l, i) => {
+        const Icono = ICONO[l.tipo] ?? Sparkles
+        return (
+          <p key={i} className={`cartera-leccion lec-${l.tipo}`}>
+            <Icono aria-hidden="true" />
+            <span>{l.texto}</span>
+          </p>
+        )
+      })}
+    </section>
   )
 }
 
@@ -994,6 +1035,9 @@ export function MisProductos() {
         </p>
       ) : (
         <div className="propios-lista">
+          {Object.entries(datos.carteras ?? {}).map(([nichoId, c]) => (
+            <CarteraNicho key={nichoId} c={c} />
+          ))}
           {datos.propios.map((p) => (
             <TarjetaPropio
               key={p._id}

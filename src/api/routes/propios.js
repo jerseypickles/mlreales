@@ -101,8 +101,42 @@ router.get(
       console.warn(`[propios] surtido no disponible: ${err.message}`)
     }
 
+    // comparador de cartera: con 2+ productos propios en un nicho, tus SKUs son
+    // un A/B natural — qué convierte mejor, qué trae más tráfico y qué copiar
+    const carteras = {}
+    try {
+      const { compararCartera } = await import('../../services/cartera.js')
+      const { Reporte } = await import('../../models/Reporte.js')
+      const porNicho = new Map()
+      for (const p of lista) {
+        if (!p.nichoId) continue
+        const k = String(p.nichoId)
+        porNicho.set(k, [...(porNicho.get(k) ?? []), p])
+      }
+      for (const [nichoId, hermanos] of porNicho) {
+        if (hermanos.length < 2) continue
+        const nicho = await Nicho.findById(nichoId).select('keyword').lean()
+        const rep = await Reporte.findOne({ nichoId }).sort({ fecha: -1 }).select('metricas.demanda').lean()
+        const c = compararCartera(
+          hermanos.map((p) => ({
+            sku: p.sku,
+            titulo: p.titulo,
+            visitas7d: (p.mediciones ?? []).at(-1)?.visitas,
+            ventas7d: p.ventas7d?.unidades ?? 0,
+            conversion7d: p.conversion7d,
+            precioEfectivo: (p.mediciones ?? []).at(-1)?.precioEfectivo,
+            esFull: p.envioMl?.logistica === 'fulfillment',
+          })),
+          { demandaNichoDia: rep?.metricas?.demanda?.ventasEstimadasPorDia ?? null },
+        )
+        if (c) carteras[nichoId] = { keyword: nicho?.keyword ?? null, ...c }
+      }
+    } catch (err) {
+      console.warn(`[propios] comparador de cartera no disponible: ${err.message}`)
+    }
+
     const todasLasVentas = await VentaMl.find().lean().catch(() => [])
-    res.json({ propios: lista, calibracion: calibracionFactor(propios, todasLasVentas) })
+    res.json({ propios: lista, carteras, calibracion: calibracionFactor(propios, todasLasVentas) })
   }),
 )
 

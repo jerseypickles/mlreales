@@ -4024,3 +4024,62 @@ section {
   .seccion-cuerpo[data-state='open'], .seccion-cuerpo[data-state='closed'] { animation: none; }
   .pc-foto:hover { transform: none; }
 }
+
+/* Comparador de cartera propia: tus SKUs como A/B natural del nicho */
+.cartera {
+  border: 1px solid color-mix(in srgb, var(--acento) 22%, var(--borde));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--acento) 6%, var(--superficie)), var(--superficie) 70px);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: var(--sombra-1);
+}
+.cartera-head { display: flex; align-items: center; gap: 8px; }
+.cartera-head svg { width: 15px; height: 15px; color: var(--acento); flex: none; }
+.cartera-head h3 { margin: 0; font-size: 14px; font-weight: 700; flex: 1; }
+.cartera-share {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--acento);
+  background: var(--acento-tenue);
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+.cartera-tabla { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
+.cartera-fila {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) repeat(4, minmax(62px, auto));
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  font-size: 12px;
+}
+.cartera-fila.lider { border-color: color-mix(in srgb, var(--exito) 40%, var(--borde)); background: color-mix(in srgb, var(--exito) 5%, var(--superficie)); }
+.cartera-pos { font-weight: 800; color: var(--tinta-3); font-size: 11px; }
+.cartera-tit { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.cartera-dato { color: var(--tinta-3); font-variant-numeric: tabular-nums; text-align: right; }
+.cartera-dato b { color: var(--tinta); font-size: 13px; }
+.cartera-leccion {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 8px 0 0;
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tinta) 3%, var(--superficie));
+  border-left: 3px solid var(--tinta-3);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--tinta-2);
+}
+.cartera-leccion svg { width: 14px; height: 14px; flex: none; margin-top: 1px; }
+.lec-trasplante { border-left-color: var(--acento); background: color-mix(in srgb, var(--acento) 5%, var(--superficie)); }
+.lec-cierre { border-left-color: var(--peligro); }
+.lec-exposicion { border-left-color: #d97706; }
+@media (max-width: 700px) {
+  .cartera-fila { grid-template-columns: 18px minmax(0, 1fr) repeat(2, minmax(56px, auto)); }
+  .cartera-fila .cartera-dato:nth-last-child(-n + 2) { display: none; }
+}
