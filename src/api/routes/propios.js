@@ -129,7 +129,21 @@ router.get(
           })),
           { demandaNichoDia: rep?.metricas?.demanda?.ventasEstimadasPorDia ?? null },
         )
-        if (c) carteras[nichoId] = { keyword: nicho?.keyword ?? null, ...c }
+        if (c) {
+          carteras[nichoId] = { keyword: nicho?.keyword ?? null, ...c }
+          // el hecho "este nicho vende" pasa a la memoria de largo plazo,
+          // anclado a su categoría de ML (idempotente: actualiza la evidencia)
+          if (c.ventasDia > 0 && nicho) {
+            const { registrarNichoQueVende } = await import('../../services/aprendizajes.js')
+            await registrarNichoQueVende({
+              nicho,
+              ventasDia: c.ventasDia,
+              sharePct: c.sharePct,
+              conversion: c.productos[0]?.conversion ?? null,
+              precio: c.productos[0]?.precio ?? null,
+            }).catch(() => null)
+          }
+        }
       }
     } catch (err) {
       console.warn(`[propios] comparador de cartera no disponible: ${err.message}`)
