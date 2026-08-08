@@ -82,7 +82,7 @@ router.get(
             { $match: { $expr: { $eq: ['$nichoId', '$$nid'] }, analisis: { $ne: null } } },
             { $sort: { fecha: -1 } },
             { $limit: 1 },
-            { $project: { _id: 0, veredicto: '$analisis.veredicto' } },
+            { $project: { _id: 0, veredicto: '$analisis.veredicto', ventanaCompra: '$analisis.ventanaCompra' } },
           ],
           as: 'ultimoAnalisis',
         },
@@ -104,6 +104,7 @@ router.get(
         $addFields: {
           ultimoReporte: { $ifNull: [{ $first: '$ultimoReporte' }, null] },
           veredicto: { $first: '$ultimoAnalisis.veredicto' },
+          ventanaCompra: { $first: '$ultimoAnalisis.ventanaCompra' },
           scansConDemanda: { $ifNull: [{ $first: '$conteoDemanda.n' }, 0] },
         },
       },

@@ -4083,3 +4083,18 @@ section {
   .cartera-fila { grid-template-columns: 18px minmax(0, 1fr) repeat(2, minmax(56px, auto)); }
   .cartera-fila .cartera-dato:nth-last-child(-n + 2) { display: none; }
 }
+
+/* Ventana de compra: el momento manda tanto como el score */
+.chip-ventana {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1.5px 7px;
+  border-radius: 999px;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+.v-ahora { background: color-mix(in srgb, var(--exito) 16%, transparent); color: var(--exito); }
+.v-pronto { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #b45309; }
+.v-futura { background: var(--acento-tenue); color: var(--acento); }
+.v-pasada { background: color-mix(in srgb, var(--peligro) 12%, transparent); color: var(--peligro); }
+@media (prefers-color-scheme: dark) { .v-pronto { color: #fbbf24; } }

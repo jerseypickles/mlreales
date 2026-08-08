@@ -13,7 +13,7 @@ import { config } from '../config/env.js'
 const SCHEMA_ANALISIS = {
   type: 'object',
   additionalProperties: false,
-  required: ['veredicto', 'confianza', 'resumen', 'segmentos', 'recomendacion', 'riesgos', 'tramites', 'jugada', 'nichoIngles', 'revisarEn', 'subNichos', 'keywordJugada', 'shareJugadaPct'],
+  required: ['veredicto', 'confianza', 'resumen', 'segmentos', 'recomendacion', 'riesgos', 'tramites', 'jugada', 'nichoIngles', 'ventanaCompra', 'revisarEn', 'subNichos', 'keywordJugada', 'shareJugadaPct'],
   properties: {
     veredicto: { type: 'string', enum: ['entrar', 'entrar_con_condiciones', 'no_entrar'] },
     confianza: { type: 'string', enum: ['alta', 'media', 'baja'] },
@@ -92,6 +92,18 @@ const SCHEMA_ANALISIS = {
       description:
         '% de las reseñas del top 50 que concentra el segmento de tu recomendación (copia el shareReviewsPct del segmento elegido). null solo si no hay recomendación aplicable.',
     },
+    ventanaCompra: {
+      type: ['object', 'null'],
+      additionalProperties: false,
+      required: ['desde', 'hasta', 'motivo'],
+      description:
+        'CUÁNDO conviene comprar en China para llegar a tiempo, en meses "AAAA-MM". Para todo_el_año usa el mes actual como desde y +3 meses como hasta. Para estacionales: pico menos 2,5-3 meses de lead time. null solo si el veredicto es no_entrar estructural (no por ventana).',
+      properties: {
+        desde: { type: 'string', description: 'Mes AAAA-MM en que conviene empezar a comprar' },
+        hasta: { type: 'string', description: 'Último mes AAAA-MM en que comprar sirve para el próximo pico' },
+        motivo: { type: 'string', description: 'Una frase: por qué esa ventana (pico esperado y lead time)' },
+      },
+    },
     revisarEn: {
       type: ['string', 'null'],
       description: 'SOLO si el veredicto es no_entrar POR VENTANA DE IMPORTACIÓN estacional: mes "AAAA-MM" en que conviene re-evaluar el nicho para alcanzar a comprar para el próximo pico (pico menos ~3 meses). null si el rechazo es estructural (marca, volumen, margen) o si el veredicto es de entrada.',
@@ -137,6 +149,7 @@ Reglas:
 - Usa las reseñas como proxy de ventas (~1 reseña por cada 25 ventas). El share de reseñas de un segmento indica dónde está la demanda real.
 - Los items con origenCrossBorder=true son sellers chinos despachando directo: son a la vez señal de que el producto se puede importar barato y competencia difícil de ganar en precio.
 - OJO CON %FULL: pctFull se mide SOLO sobre los items cuyo listado mostró el flag (itemsConDatoFull); si es null o la cobertura es baja, di que no está medido en vez de celebrar un 0%. El listado de ML a veces no pinta el ícono aunque el item sí sea Full.
+- VENTANA DE COMPRA OBLIGATORIA (campo ventanaCompra): todo veredicto de entrada debe declarar EN QUÉ MESES conviene comprar, no solo describirlo en prosa. Es lo que ordena el tablero del importador: un nicho bueno con la ventana cerrada es peor negocio que uno mediano con la ventana abierta hoy. Calcula con 50-70 días de lead time desde China.
 - ESTACIONALIDAD ANTES QUE VEREDICTO (regla del importador, 8-ago): un nicho de temporada medido FUERA de su temporada no se puede juzgar por su demanda actual — es como medir útiles escolares en julio. Si el producto es claramente estacional (playa, verano, navidad, invierno, vuelta a clases) y estás midiendo fuera de su ventana, PROHIBIDO concluir "no vende": el veredicto correcto es esperar, con revisarEn puesto en el mes de COMPRA (pico menos ~3 meses de lead time). Un 0 de temporada baja es información sobre el calendario, no sobre el nicho. Solo dictamina falta de movimiento cuando el producto es de todo el año, o cuando tienes serie DE SU PROPIA TEMPORADA que muestre que ni en su pico se mueve.
 - JERARQUÍA DE DECISIÓN (regla del importador, 8-ago — pesa sobre cualquier análisis de marca): lo PRIMERO es cuánto SE MUEVE el nicho. Un nicho que mueve mucho tiene espacio para un entrante más, incluso con marcas fuertes arriba: con Full se compra posicionamiento y en un mercado grande siempre hay compradores que eligen por precio y envío rápido. PROBADO en su cuenta: brochas maquillaje tiene 63% Full, marcas premium a $37.990 y un platinum con 590 reseñas, y él vende 47 u/semana con genéricos a $1.890. Por tanto: la dominancia de marca NUNCA es motivo de no_entrar por sí sola — es un dato sobre CÓMO entrar (por precio, por formato, por Full), no sobre SI entrar. Reserva el rechazo por marca solo para casos donde la marca es funcionalmente insustituible: productos de seguridad o riesgo personal (donde el comprador no arriesga con genérico) o catálogos cerrados donde ML no deja competir. Si el nicho NO se mueve (demanda medida floja y sostenida en la serie), ahí sí rechaza — pero di que es por falta de movimiento, no por las marcas.
 - FULL ES VOTO DE CONFIANZA CON PLATA (criterio del importador, pesa fuerte): mandar stock a la bodega de ML cuesta almacenaje e inmoviliza inventario — nadie lo hace con un producto que no vende. Por eso pctFull alto NO es solo "competencia dura": es DEMANDA VALIDADA por terceros que arriesgaron capital. Y un 0% Full en un producto APTO para Full (liviano, caja normal) es señal de ALERTA, no de fiesta: puede significar que nadie se atreve a inmovilizar stock ahí porque el nicho no mueve. Distingue siempre: 0% Full + producto voluminoso = estructural (neutro); 0% Full + producto apto + demanda medida floja = el mercado ya votó que no vende; Full presente = el nicho vende de verdad y tu ventaja debe venir de otro lado (precio, formato, listing).

@@ -135,6 +135,29 @@ function fmtProximoScan(fecha) {
   if (falta < 48 * 3600e3) return `en ${Math.round(falta / 3600e3)} h`
   return `en ${Math.round(falta / 86400e3)} d`
 }
+// Ventana de compra: un nicho bueno con la ventana cerrada es peor negocio que
+// uno mediano comprable hoy. El mes de compra manda sobre el score.
+function ventanaDeCompra(n) {
+  const mesActual = new Date().toISOString().slice(0, 7)
+  if (n.estado === 'pausado' && n.revisarEl) {
+    const m = new Date(n.revisarEl).toISOString().slice(0, 7)
+    return { estado: m <= mesActual ? 'ahora' : 'futura', desde: m, texto: `vuelve ${fmtMes(m)}` }
+  }
+  const v = n.ventanaCompra
+  if (!v?.desde) return null
+  if (v.hasta && v.hasta < mesActual) return { estado: 'pasada', desde: v.desde, texto: `ventana cerrada (${fmtMes(v.hasta)})` }
+  if (v.desde <= mesActual) return { estado: 'ahora', desde: v.desde, texto: 'comprar AHORA' }
+  const meses = (Number(v.desde.slice(0, 4)) - Number(mesActual.slice(0, 4))) * 12 + (Number(v.desde.slice(5, 7)) - Number(mesActual.slice(5, 7)))
+  return { estado: meses <= 2 ? 'pronto' : 'futura', desde: v.desde, texto: `comprar ${fmtMes(v.desde)}` }
+}
+
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+const fmtMes = (aaaamm) => {
+  if (!aaaamm) return ''
+  const [a, m] = aaaamm.split('-')
+  return `${MESES[Number(m) - 1]}${a !== String(new Date().getFullYear()) ? ` ${a.slice(2)}` : ''}`
+}
+
 const EN_CARTERA = new Set(['cotizando', 'pedido', 'vendiendo', 'en-espera'])
 
 // Grupo plegable del sidebar: recuerda abierto/cerrado por usuario (localStorage)
@@ -242,6 +265,18 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
               ) : n.veredicto ? (
                 <span className={`veredicto veredicto-${n.veredicto}`}>{n.veredicto.replace(/_/g, ' ')}</span>
               ) : null}
+              {(() => {
+                const v = ventanaDeCompra(n)
+                return v ? (
+                  <span
+                    className={`chip-ventana v-${v.estado}`}
+                    title={n.ventanaCompra?.motivo ?? 'fecha de re-evaluación programada'}
+                  >
+                    {v.estado === 'ahora' ? '🎯 ' : ''}
+                    {v.texto}
+                  </span>
+                ) : null
+              })()}
               {n.madurando && n.proximoScanEl ? (
                 <span
                   className="etapa-mini timer-scan"
