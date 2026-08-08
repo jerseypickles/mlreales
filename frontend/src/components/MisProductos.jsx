@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import * as Collapsible from '@radix-ui/react-collapsible'
 import { api } from '../api.js'
 import { IconoExterno, Cargando } from './ui.jsx'
 import { MiniSerie } from './graficos.jsx'
@@ -15,6 +16,10 @@ import {
   PackagePlus,
   Zap,
   BadgePercent,
+  ChevronDown,
+  ExternalLink,
+  Trash2,
+  LineChart,
 } from 'lucide-react'
 import { BotonCopiar } from './Listing.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -48,231 +53,133 @@ function Metrica({ etiqueta, children, alerta, estado, Icono }) {
   )
 }
 
-// Tarjeta por producto: arriba lo que ES (foto, título, estado), al medio lo
-// que MIDE (chips), abajo la optimización de Fable (nicho + estado + resumen)
+// Tarjeta de producto (rediseño 8-ago): la altura estaba fuera de control con
+// 5 bloques apilados. Ahora manda la jerarquía: identidad + KPIs + la acción de
+// Fable siempre visibles; lupa, promoción y surtido viven en secciones
+// colapsables (Radix: accesibles y animadas) que se abren cuando decides mirar.
+function Seccion({ icono: Icono, titulo, resumen, tono, children, abiertaPorDefecto = false }) {
+  const [abierta, setAbierta] = useState(abiertaPorDefecto)
+  return (
+    <Collapsible.Root open={abierta} onOpenChange={setAbierta} className={`seccion-plegable tono-${tono ?? 'neutro'}`}>
+      <Collapsible.Trigger className="seccion-cabeza">
+        <Icono aria-hidden="true" className="seccion-icono" />
+        <span className="seccion-titulo">{titulo}</span>
+        <span className="seccion-resumen">{resumen}</span>
+        <ChevronDown aria-hidden="true" className="seccion-chevron" />
+      </Collapsible.Trigger>
+      <Collapsible.Content className="seccion-cuerpo">
+        <div className="seccion-contenido">{children}</div>
+      </Collapsible.Content>
+    </Collapsible.Root>
+  )
+}
+
 function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria }) {
   const d = deltas(p.mediciones)
   const a = p.auditoria
   const generando =
     a?.estado === 'generando' &&
     (!a.solicitadaEl || Date.now() - new Date(a.solicitadaEl).getTime() < 30 * 60e3)
-  // ventas reales de órdenes en ventana de 7 días (igual que visitas y
-  // conversión) — el delta de mediciones quedó obsoleto con el ciclo de 45 min
-  const ventas = p.ventas7d
-    ? `${fmtNum(p.ventas7d.unidades)} · 7d real`
-    : p.ventas30d
-      ? '0 · 7d real'
-      : d?.dVendidos != null
-        ? `${fmtNum(d.dVendidos)} real`
-        : Number.isFinite(d?.ultima?.vendidos)
-          ? `${fmtNum(d.ultima.vendidos)} acum.`
-          : d?.dReviews != null
-            ? `~${fmtNum(d.dReviews * FACTOR_VENTAS)}`
-            : '—'
+  const ventas7 = p.ventas7d?.unidades ?? (p.ventas30d ? 0 : null)
+  const promo = p.promoMl?.activa ?? null
+  const precioEfectivo = promo?.precio ?? d?.ultima?.precioEfectivo ?? d?.ultima?.precio
+  const intervenciones = p.impacto?.intervenciones ?? []
+  const midiendo = intervenciones.filter((i) => i.veredicto === 'midiendo').length
+
+  const kpis = [
+    {
+      k: 'Precio',
+      v: fmtPrecio(precioEfectivo),
+      extra: promo ? <span className="precio-lista">{fmtPrecio(d?.ultima?.precio)}</span> : null,
+      Icono: Tag,
+      tono: promo ? 'aviso' : null,
+    },
+    {
+      k: 'Ventas 7d',
+      v: ventas7 != null ? fmtNum(ventas7) : '—',
+      Icono: ShoppingCart,
+      tono: ventas7 > 0 ? 'bien' : ventas7 === 0 ? 'mal' : null,
+    },
+    {
+      k: 'Conversión',
+      v: p.conversion7d != null ? `${p.conversion7d}%` : '—',
+      Icono: Percent,
+      tono: p.conversion7d >= 3 ? 'bien' : null,
+    },
+    { k: 'Visitas 7d', v: fmtNum(d?.ultima?.visitas), Icono: Eye, tono: (d?.ultima?.visitas ?? 0) < 10 ? 'mal' : null },
+    {
+      k: 'Margen 30d',
+      v: p.margen30d ? fmtPrecio(p.margen30d.margenClp) : p.ventas30d ? 'falta costo' : '—',
+      Icono: PiggyBank,
+      tono: p.margen30d ? (p.margen30d.margenClp < 0 ? 'mal' : 'bien') : p.ventas30d ? 'aviso' : null,
+    },
+    { k: 'Stock', v: fmtNum(d?.ultima?.stock), Icono: Package, tono: d?.ultima?.stock <= 3 ? 'aviso' : null },
+    {
+      k: 'Reseñas',
+      v: `${fmtNum(d?.ultima?.numReviews)}${d?.ultima?.rating ? ` ★${d.ultima.rating}` : ''}`,
+      Icono: Star,
+      tono: d?.ultima?.numReviews ? 'bien' : 'mal',
+    },
+    { k: 'Ingresos 30d', v: p.ventas30d ? fmtPrecio(p.ventas30d.ingresosClp) : '—', Icono: DollarSign },
+  ]
+
   return (
     <article className="propio-card">
-      <div className="propio-encabezado">
-        <button className="propio-foto" onClick={() => onAbrir(p)} aria-label="Ver series del producto">
-          {p.imagen ? <img src={p.imagen} alt="" loading="lazy" width="56" height="56" /> : <span className="sin-imagen" />}
+      <header className="pc-head">
+        <button className="pc-foto" onClick={() => onAbrir(p)} aria-label="Ver series del producto">
+          {p.imagen ? <img src={p.imagen} alt="" loading="lazy" width="64" height="64" /> : <span className="sin-imagen" />}
         </button>
-        <div className="propio-titular">
+        <div className="pc-ident">
           <h3 onClick={() => onAbrir(p)}>{p.titulo ?? p.sku}</h3>
-          <p className="propio-sub">
+          <div className="pc-chips">
+            {p.envioMl?.logistica === 'fulfillment' ? (
+              <span className="chip-full">
+                <Zap aria-hidden="true" />
+                FULL
+              </span>
+            ) : p.envioMl?.logistica ? (
+              <span className="badge badge-neutro">{p.envioMl.flex ? 'Flex' : 'colecta'}</span>
+            ) : null}
             {p.estadoMl && p.estadoMl !== 'active' ? (
               <span className="badge badge-neutro">{p.estadoMl === 'paused' ? 'pausada' : p.estadoMl}</span>
             ) : null}
-            {p.envioMl?.logistica ? (
-              <span
-                className={p.envioMl.logistica === 'fulfillment' ? 'chip-full chip-full-lg' : 'badge badge-neutro'}
-                title={`Logística según ML: ${p.envioMl.logistica}${p.envioMl.envioGratis ? ' · envío gratis' : ''}`}
-              >
-                {p.envioMl.logistica === 'fulfillment' ? (
-                  <>
-                    <Zap aria-hidden="true" />
-                    FULL
-                  </>
-                ) : p.envioMl.flex ? (
-                  'Flex'
-                ) : (
-                  'colecta'
-                )}
-              </span>
-            ) : null}{' '}
-            {p.posicionReciente
-              ? `#${p.posicionReciente.posicion} en “${p.posicionReciente.keyword}”`
-              : 'fuera de los listados trackeados'}
-            {p.buyBox
-              ? p.buyBox.estado === 'winning'
-                ? ' · ganando la caja de compra'
-                : Number.isFinite(p.buyBox.precioParaGanar)
-                  ? ` · caja de compra: gana con ${fmtPrecio(p.buyBox.precioParaGanar)}`
-                  : ' · compitiendo por la caja de compra'
-              : ''}
-          </p>
-        </div>
-        <div className="propio-acciones">
-          <a href={p.url} target="_blank" rel="noreferrer" className="enlace-icono" aria-label="Abrir en Mercado Libre">
-            <IconoExterno />
-          </a>
-          <button className="enlace-boton" onClick={() => onEliminar(p)}>
-            quitar
-          </button>
-        </div>
-      </div>
-
-      <div className="propio-metricas" onClick={() => onAbrir(p)}>
-        <Metrica etiqueta="Precio" Icono={Tag} estado={p.promoMl?.activa ? 'atenta' : undefined}>
-          {p.promoMl?.activa?.precio ? (
-            <>
-              {fmtPrecio(p.promoMl.activa.precio)}
-              <span className="precio-lista">{fmtPrecio(d?.ultima?.precio)}</span>
-            </>
-          ) : (
-            fmtPrecio(d?.ultima?.precio)
-          )}
-          {d?.dPrecio ? (
-            <span className={d.dPrecio > 0 ? 'delta delta-sube' : 'delta delta-baja'}>{d.dPrecio > 0 ? '▲' : '▼'}</span>
-          ) : null}
-        </Metrica>
-        <Metrica
-          etiqueta="Ventas"
-          Icono={ShoppingCart}
-          estado={p.ventas7d?.unidades > 0 ? 'buena' : ventas.startsWith('0') || ventas === '—' ? 'mala' : undefined}
-        >
-          {ventas}
-        </Metrica>
-        <Metrica etiqueta="Ingresos 30d" Icono={DollarSign}>
-          {p.ventas30d ? `${fmtPrecio(p.ventas30d.ingresosClp)} · ${fmtNum(p.ventas30d.unidades)}u` : '—'}
-        </Metrica>
-        <Metrica
-          etiqueta="Margen 30d"
-          Icono={PiggyBank}
-          estado={p.margen30d ? (p.margen30d.margenClp < 0 ? 'mala' : 'buena') : p.ventas30d ? 'atenta' : undefined}
-        >
-          {p.margen30d
-            ? fmtPrecio(p.margen30d.margenClp)
-            : p.ventas30d && p.costoUnitarioClp == null
-              ? 'falta costo'
-              : '—'}
-        </Metrica>
-        <Metrica
-          etiqueta="Conversión 7d"
-          Icono={Percent}
-          estado={p.conversion7d != null ? (p.conversion7d >= 3 ? 'buena' : undefined) : undefined}
-        >
-          {p.conversion7d != null ? `${p.conversion7d}%` : '—'}
-        </Metrica>
-        <Metrica etiqueta="Visitas 7d" Icono={Eye} estado={(d?.ultima?.visitas ?? 0) < 10 ? 'mala' : undefined}>
-          {fmtNum(d?.ultima?.visitas)}
-        </Metrica>
-        <Metrica etiqueta="Reseñas" Icono={Star} estado={!d?.ultima?.numReviews ? 'mala' : 'buena'}>
-          {fmtNum(d?.ultima?.numReviews)}
-          {d?.dReviews > 0 ? <span className="delta delta-sube">+{d.dReviews}</span> : null}
-          {d?.ultima?.rating ? ` ★${d.ultima.rating}` : ''}
-        </Metrica>
-        <Metrica
-          etiqueta="Stock"
-          Icono={Package}
-          estado={Number.isFinite(d?.ultima?.stock) && d.ultima.stock <= 3 ? 'atenta' : undefined}
-        >
-          {fmtNum(d?.ultima?.stock)}
-        </Metrica>
-      </div>
-
-      {p.promoMl?.activa || p.promoMl?.ofertaPropia || p.promoMl?.campanasDisponibles?.length ? (
-        <div className={p.promoMl?.activa ? 'promo promo-activa' : 'promo'}>
-          <span className="promo-titulo">
-            <BadgePercent aria-hidden="true" />
-            {p.promoMl?.activa ? 'Promoción de ML activa' : 'Precio sin promoción'}
-          </span>
-          {p.promoMl?.activa ? (
-            <p className="promo-linea">
-              <strong>{p.promoMl.activa.nombre}</strong> — el cliente paga{' '}
-              <strong>{fmtPrecio(p.promoMl.activa.precio)}</strong>, no {fmtPrecio(p.promoMl.activa.precioOriginal)}
-              {p.promoMl.activa.terminaEl ? ` · termina ${fmtFecha(p.promoMl.activa.terminaEl)}` : ''}
-            </p>
-          ) : null}
-          {p.promoMl?.ofertaPropia?.maximo ? (
-            <p className="promo-linea promo-tenue">
-              Oferta propia posible: entre {fmtPrecio(p.promoMl.ofertaPropia.minimo)} y{' '}
-              {fmtPrecio(p.promoMl.ofertaPropia.maximo)} · ML sugiere {fmtPrecio(p.promoMl.ofertaPropia.sugerido)}
-            </p>
-          ) : null}
-          {p.promoMl?.campanasDisponibles?.length ? (
-            <p className="promo-linea promo-tenue">
-              Campañas a las que puedes postular:{' '}
-              {p.promoMl.campanasDisponibles.map((c) => `${c.nombre} (${String(c.desde).slice(0, 10)})`).join(' · ')}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {p.impacto?.intervenciones?.length ? (
-        <div className="lupa">
-          <span className="lupa-titulo">Lupa · qué se cambió y si sirvió</span>
-          <ul className="lupa-lista">
-            {p.impacto.intervenciones.slice(-3).reverse().map((i, idx) => (
-              <li key={idx} className={`lupa-${i.veredicto.replace('ó', 'o')}`}>
-                <span className="lupa-que">
-                  {i.tipo === 'titulo'
-                    ? 'título'
-                    : i.tipo === 'descripcion'
-                      ? 'descripción'
-                      : i.tipo === 'logistica'
-                        ? 'logística'
-                        : i.tipo === 'precio'
-                          ? 'precio'
-                          : i.tipo}
-                </span>
-                <span className="lupa-fecha">{fmtFecha(i.fecha)}</span>
-                <span className="lupa-veredicto">{i.veredicto}</span>
-                <span className="lupa-lectura">{i.lectura}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {p.surtido?.sugeridos?.length ? (
-        <div className="surtido">
-          <span className="surtido-titulo">
-            <PackagePlus aria-hidden="true" />
-            Surtido que te falta · formatos que venden en “{p.surtido.keyword}” y no tienes
-          </span>
-          <div className="surtido-lista">
-            {p.surtido.sugeridos.map((s) => (
-              <a
-                key={s.sku}
-                className="surtido-item"
-                href={s.url}
-                target="_blank"
-                rel="noreferrer"
-                title={s.titulo}
-              >
-                <img src={s.imagen} alt="" loading="lazy" width="52" height="52" />
-                <span className="surtido-datos">
-                  <strong>
-                    {s.unidades ? `${s.unidades} pcs` : 'formato premium'} · {fmtPrecio(s.precio)}
-                  </strong>
-                  <span className="surtido-prueba">
-                    {s.ventasDia ? `${fmtNum(s.ventasDia)}/día` : `${fmtNum(s.numReviews)} reseñas`}
-                    {s.esFull === true ? (
-                      <span className="chip-full">
-                        <Zap aria-hidden="true" />
-                        FULL
-                      </span>
-                    ) : s.esFull === false ? (
-                      <span className="chip-sinfull">sin Full</span>
-                    ) : null}
-                  </span>
-                </span>
-              </a>
-            ))}
+            {promo ? <span className="chip-promo">–{Math.round((1 - promo.precio / promo.precioOriginal) * 100)}%</span> : null}
+            <span className="pc-pos">
+              {p.posicionReciente
+                ? `#${p.posicionReciente.posicion} en “${p.posicionReciente.keyword}”`
+                : 'fuera de los listados trackeados'}
+            </span>
           </div>
         </div>
-      ) : null}
+        <div className="pc-acciones">
+          <button className="icono-boton" onClick={() => onAbrir(p)} aria-label="Ver series">
+            <LineChart aria-hidden="true" />
+          </button>
+          <a href={p.url} target="_blank" rel="noreferrer" className="icono-boton" aria-label="Abrir en Mercado Libre">
+            <ExternalLink aria-hidden="true" />
+          </a>
+          <button className="icono-boton icono-peligro" onClick={() => onEliminar(p)} aria-label="Quitar producto">
+            <Trash2 aria-hidden="true" />
+          </button>
+        </div>
+      </header>
 
-      <div className="propio-optimizacion">
+      <div className="pc-kpis" onClick={() => onAbrir(p)}>
+        {kpis.map(({ k, v, extra, Icono, tono }) => (
+          <div key={k} className={`kpi${tono ? ` kpi-${tono}` : ''}`}>
+            <span className="kpi-k">
+              <Icono aria-hidden="true" />
+              {k}
+            </span>
+            <span className="kpi-v">
+              {v}
+              {extra}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="pc-fable">
         <span className="propio-optimizacion-marca">
           <Sparkles aria-hidden="true" />
           Fable
@@ -304,26 +211,105 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
                 1º: {a.resultado.quickWins[0]}
               </span>
             ) : null}
-            {a.resultado?.expansionSurtido ? (
-              <span className="propio-quickwin" title={a.resultado.expansionSurtido}>
-                🧺 Surtido: {a.resultado.expansionSurtido}
-              </span>
-            ) : null}
           </>
         ) : (
           <button
             className="boton-secundario boton-chico"
-            title={
-              a?.estado === 'error'
-                ? `la anterior falló: ${a.error}`
-                : 'Fable lee título, descripción, ficha y fotos reales de los peces gordos del nicho'
-            }
+            title={a?.estado === 'error' ? `la anterior falló: ${a.error}` : 'Fable lee título, descripción, ficha y fotos reales de los peces gordos'}
             onClick={() => onAuditar(p)}
           >
             {a?.estado === 'error' ? 'reintentar optimización' : 'optimizar con Fable'}
           </button>
         )}
       </div>
+
+      {promo || p.promoMl?.ofertaPropia || p.promoMl?.campanasDisponibles?.length ? (
+        <Seccion
+          icono={BadgePercent}
+          titulo="Promoción"
+          tono={promo ? 'aviso' : 'neutro'}
+          resumen={
+            promo
+              ? `${promo.nombre} · el cliente paga ${fmtPrecio(promo.precio)} hasta ${String(promo.terminaEl).slice(0, 10)}`
+              : 'sin promo activa · puedes ofertar o postular a campañas'
+          }
+        >
+          {p.promoMl?.ofertaPropia?.maximo ? (
+            <p className="sec-linea">
+              Oferta propia posible: {fmtPrecio(p.promoMl.ofertaPropia.minimo)} a{' '}
+              {fmtPrecio(p.promoMl.ofertaPropia.maximo)} · ML sugiere {fmtPrecio(p.promoMl.ofertaPropia.sugerido)}
+            </p>
+          ) : null}
+          {p.promoMl?.campanasDisponibles?.length ? (
+            <p className="sec-linea">
+              Campañas para postular:{' '}
+              {p.promoMl.campanasDisponibles.map((c) => `${c.nombre} (${String(c.desde).slice(0, 10)})`).join(' · ')}
+            </p>
+          ) : null}
+        </Seccion>
+      ) : null}
+
+      {intervenciones.length ? (
+        <Seccion
+          icono={LineChart}
+          titulo="Lupa"
+          resumen={
+            midiendo
+              ? `${intervenciones.length} cambio(s) · ${midiendo} midiendo`
+              : `${intervenciones.length} cambio(s) medidos`
+          }
+        >
+          <ul className="lupa-lista">
+            {intervenciones.slice(-4).reverse().map((i, idx) => (
+              <li key={idx} className={`lupa-${i.veredicto.replace('ó', 'o')}`}>
+                <span className="lupa-que">
+                  {i.tipo === 'titulo'
+                    ? 'título'
+                    : i.tipo === 'descripcion'
+                      ? 'descripción'
+                      : i.tipo === 'logistica'
+                        ? 'logística'
+                        : i.tipo}
+                </span>
+                <span className="lupa-fecha">{fmtFecha(i.fecha)}</span>
+                <span className="lupa-veredicto">{i.veredicto}</span>
+                <span className="lupa-lectura">{i.lectura}</span>
+              </li>
+            ))}
+          </ul>
+        </Seccion>
+      ) : null}
+
+      {p.surtido?.sugeridos?.length ? (
+        <Seccion
+          icono={PackagePlus}
+          titulo="Surtido que falta"
+          tono="exito"
+          resumen={`${p.surtido.sugeridos.length} formato(s) que venden en “${p.surtido.keyword}” y no tienes`}
+        >
+          <div className="surtido-lista">
+            {p.surtido.sugeridos.map((s) => (
+              <a key={s.sku} className="surtido-item" href={s.url} target="_blank" rel="noreferrer" title={s.titulo}>
+                <img src={s.imagen} alt="" loading="lazy" width="52" height="52" />
+                <span className="surtido-datos">
+                  <strong>
+                    {s.unidades ? `${s.unidades} pcs` : 'premium'} · {fmtPrecio(s.precio)}
+                  </strong>
+                  <span className="surtido-prueba">
+                    {s.ventasDia ? `${fmtNum(s.ventasDia)}/día` : `${fmtNum(s.numReviews)} reseñas`}
+                    {s.esFull === true ? (
+                      <span className="chip-full">
+                        <Zap aria-hidden="true" />
+                        FULL
+                      </span>
+                    ) : null}
+                  </span>
+                </span>
+              </a>
+            ))}
+          </div>
+        </Seccion>
+      ) : null}
     </article>
   )
 }
