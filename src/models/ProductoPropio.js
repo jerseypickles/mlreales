@@ -37,6 +37,12 @@ const productoPropioSchema = new mongoose.Schema({
   // cambios de logística detectados por el scan (ej: colecta → Full cuando ML
   // activa el stock en bodega): intervención medible por la lupa
   historialLogistica: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  // promoción de ML vigente {activa, ofertaPropia, campanasDisponibles}: con
+  // campaña activa el precio de lista NO es el que ve el comprador
+  promoMl: { type: mongoose.Schema.Types.Mixed, default: null },
+  // cambios del PRECIO EFECTIVO (lo que paga el cliente): [{fecha, anterior,
+  // nuevo, motivo}] — cada uno es una intervención que la lupa mide
+  historialPrecios: { type: [mongoose.Schema.Types.Mixed], default: [] },
   // serie embebida (una medición por scan, acotada): suficiente para deltas y gráficos
   mediciones: {
     type: [
