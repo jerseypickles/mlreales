@@ -323,6 +323,53 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
         </details>
       ) : null}
 
+      {/* en repuestos la decisión es por vehículo: va abierto y antes de los
+          segmentos, porque ES la recomendación, no un detalle */}
+      {analisis.planRepuestos?.length ? (
+        <details className="pliegue" open>
+          <summary>🚗 Para qué autos traer, en orden de compra</summary>
+          <div className="tabla-envoltura">
+            <table>
+              <thead>
+                <tr>
+                  <th className="num">#</th>
+                  <th>Marca y modelos</th>
+                  <th>Precio venta</th>
+                  <th>EXW máx</th>
+                  <th>Competencia</th>
+                  <th>Por qué</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...analisis.planRepuestos]
+                  .sort((a, b) => (a.prioridad ?? 99) - (b.prioridad ?? 99))
+                  .map((f) => (
+                    <tr key={`${f.prioridad}-${f.marca}`} className={f.prioridad === 1 ? 'fila-destacada' : ''}>
+                      <td className="num">{f.prioridad}</td>
+                      <td>
+                        <strong>{f.marca}</strong>
+                        <span className="sub">{f.modelos}</span>
+                      </td>
+                      <td className="sin-corte">{fmtPrecio(f.precioVentaClp)}</td>
+                      <td className="sin-corte">US$ {f.exwMaximoUsd}</td>
+                      <td>
+                        <Badge tipo={f.competencia === 'baja' ? 'full' : f.competencia === 'media' ? 'neutro' : 'peligro'}>
+                          {f.competencia}
+                        </Badge>
+                      </td>
+                      <td className="celda-razon">{f.porQue}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="nota">
+            En repuestos la búsqueda por texto ve solo una fracción del catálogo: este orden prioriza qué pedir
+            primero, no mide el tamaño del mercado.
+          </p>
+        </details>
+      ) : null}
+
       <details className="pliegue">
         <summary>Segmentos del nicho ({analisis.segmentos.length})</summary>
         <div className="tabla-envoltura">

@@ -70,6 +70,38 @@ const SCHEMA_ANALISIS = {
         comoValidar: { type: 'string', description: 'Cómo validar antes de comprar el embarque' },
       },
     },
+    // en repuestos la pregunta no es "entro" sino "para qué autos traigo": sin
+    // esto el veredicto es una mediana que no describe a ningún vehículo
+    planRepuestos: {
+      type: 'array',
+      description:
+        'SOLO en nichos de repuestos con compatibilidad (cuando venga desglosePorMarcaVehiculo). De 3 a 5 filas ORDENADAS por prioridad de compra: qué marca/modelos traer primero y con qué precio. Omite el campo en nichos que no son de repuestos.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['prioridad', 'marca', 'modelos', 'precioVentaClp', 'exwMaximoUsd', 'competencia', 'porQue'],
+        properties: {
+          prioridad: { type: 'integer', description: '1 = el primero que se compra' },
+          marca: { type: 'string', description: 'Marca del vehículo, ej: Chevrolet' },
+          modelos: {
+            type: 'string',
+            description:
+              'Modelos y AÑOS concretos que cubre el SKU, ej: "Sail 1.4 2010-2019; Spark GT 2011-2017". Un SKU cubre varios años del mismo modelo: dilo así.',
+          },
+          precioVentaClp: { type: 'integer', description: 'Precio de venta sugerido para esa marca' },
+          exwMaximoUsd: { type: 'number' },
+          competencia: {
+            type: 'string',
+            enum: ['baja', 'media', 'alta'],
+            description: 'Según listings, %Full y reseñas de esa marca en el desglose',
+          },
+          porQue: {
+            type: 'string',
+            description: 'Justificación con los números del desglose (listings, reseñas, %Full, mediana) en 1-2 frases',
+          },
+        },
+      },
+    },
     riesgos: { type: 'array', items: { type: 'string' } },
     tramites: {
       type: 'array',
@@ -149,7 +181,12 @@ Reglas:
 - Usa las reseñas como proxy de ventas (~1 reseña por cada 25 ventas). El share de reseñas de un segmento indica dónde está la demanda real.
 - Los items con origenCrossBorder=true son sellers chinos despachando directo: son a la vez señal de que el producto se puede importar barato y competencia difícil de ganar en precio.
 - OJO CON %FULL: pctFull se mide SOLO sobre los items cuyo listado mostró el flag (itemsConDatoFull); si es null o la cobertura es baja, di que no está medido en vez de celebrar un 0%. El listado de ML a veces no pinta el ícono aunque el item sí sea Full.
-- NICHOS DE REPUESTOS CON COMPATIBILIDAD (si viene desgloseporMarcaVehiculo): en repuestos la decisión NO es "entro o no" sino PARA QUÉ VEHÍCULOS traer. El mercado se navega por el selector marca/modelo/año de ML, así que la mediana global no describe a nadie. Recomienda 3-5 marcas/modelos concretos usando el desglose (tracción por reseñas, precio de esa marca y su %Full), y advierte que la keyword ve solo una fracción del catálogo real de la categoría.
+- 🚗 NICHOS DE REPUESTOS CON COMPATIBILIDAD (cuando venga desglosePorMarcaVehiculo). Aquí la decisión NO es "entro o no": es PARA QUÉ VEHÍCULOS TRAIGO. El comprador chileno no busca "pastillas de freno", busca las de SU auto usando el selector marca/modelo/año/versión de ML, así que la mediana global, el %Full global y la demanda global NO describen a ningún vehículo en particular — no bases el veredicto en ellos. Reglas obligatorias:
+  1. LLENA planRepuestos con 3 a 5 filas ordenadas por prioridad de compra (prioridad 1 = lo primero que se pide). Cada fila justifica con los NÚMEROS del desglose que recibes: listings de esa marca, % del top, reseñas acumuladas, %Full y precio mediana de esa marca. Prohibido recomendar una marca sin citar su fila del desglose.
+  2. CRUZA DOS FUENTES para elegir marcas: (a) la TRACCIÓN medida en el desglose y (b) marcasMasBuscadasEnMl, que es lo que el propio selector de ML declara como más buscado en Chile. Una marca top del selector con pocos listings en el desglose es OPORTUNIDAD (demanda declarada por ML, poca oferta medida); una marca con muchos listings y muchas reseñas es DEMANDA PROBADA pero más peleada. Di a cuál de los dos casos corresponde cada fila.
+  3. MODELOS Y AÑOS, no solo la marca: un SKU cubre varios años del mismo modelo ("Sail 1.4 2010-2019"), y eso es lo que se cotiza y se publica. Sácalos de los títulos del top50.
+  4. El genérico SÍ vende en este rubro: los compradores compran pastillas genéricas aptas para su modelo, con Full y vendedores de miles de ventas. No rechaces por "marca" ni por "seguridad" — si hay motivo de rechazo, que sea falta de movimiento medido.
+  5. ADVERTENCIA OBLIGATORIA en el resumen: la keyword ve solo una fracción del catálogo real de la categoría (en repuestos el volumen vive en la categoría con filtro de compatibilidad, no en la búsqueda por texto), así que el desglose ordena PRIORIDADES pero no mide tamaño de mercado.
 - COMPOSICIÓN DEL TOP (metricas.competencia.composicionCategorias y topMezclado): te digo qué categorías REALES de ML componen el top y en qué proporción. Si topMezclado=true (la familia dominante no llega al 60%), las métricas globales — mediana, %Full, demanda — describen una mezcla de productos distintos, NO tu producto: dilo explícito y basa tu recomendación en la categoría que corresponde a tu jugada, no en el promedio del listado. Y si la familia de tu jugada es minoritaria en el top, propón la keywordJugada que la aísle.
 - VENTANA DE COMPRA OBLIGATORIA (campo ventanaCompra): todo veredicto de entrada debe declarar EN QUÉ MESES conviene comprar, no solo describirlo en prosa. Es lo que ordena el tablero del importador: un nicho bueno con la ventana cerrada es peor negocio que uno mediano con la ventana abierta hoy. Calcula con 50-70 días de lead time desde China.
 - ESTACIONALIDAD ANTES QUE VEREDICTO (regla del importador, 8-ago): un nicho de temporada medido FUERA de su temporada no se puede juzgar por su demanda actual — es como medir útiles escolares en julio. Si el producto es claramente estacional (playa, verano, navidad, invierno, vuelta a clases) y estás midiendo fuera de su ventana, PROHIBIDO concluir "no vende": el veredicto correcto es esperar, con revisarEn puesto en el mes de COMPRA (pico menos ~3 meses de lead time). Un 0 de temporada baja es información sobre el calendario, no sobre el nicho. Solo dictamina falta de movimiento cuando el producto es de todo el año, o cuando tienes serie DE SU PROPIA TEMPORADA que muestre que ni en su pico se mueve.
@@ -303,6 +340,22 @@ export async function analizarNicho(nicho) {
 
   const aprendido = await leccionesAprendidas().catch(() => [])
 
+  // repuestos: el veredicto útil es por vehículo, no global (ver regla 🚗 del
+  // prompt). El desglose ya se calcula para la tabla del dashboard; hasta ahora
+  // no viajaba al analista y la regla del prompt nunca se activaba.
+  let desglosePorMarcaVehiculo
+  let marcasMasBuscadasEnMl
+  try {
+    const { desglosePorMarca, esNichoDeRepuesto, MARCAS_MAS_BUSCADAS_MLC } = await import('./compatibilidad.js')
+    const ruta = vista.productos.map((p) => p.categoriaRuta).find(Boolean)
+    if (esNichoDeRepuesto(ruta)) {
+      desglosePorMarcaVehiculo = desglosePorMarca(vista.productos) ?? undefined
+      marcasMasBuscadasEnMl = MARCAS_MAS_BUSCADAS_MLC
+    }
+  } catch {
+    // sin desglose: el analista cae al veredicto global, como antes
+  }
+
   const entrada = {
     keyword: nicho.keyword,
     // memoria del negocio: hechos con plata real de todo el tablero
@@ -324,6 +377,8 @@ export async function analizarNicho(nicho) {
     busquedasEnAlza,
     comisionMlRealPct: comisionReal?.pct ?? undefined,
     metricas: reporte.metricas,
+    desglosePorMarcaVehiculo,
+    marcasMasBuscadasEnMl,
     tablaExwMaximo: tablaExwMaximo(reporte.metricas, comisionReal?.pct ?? null),
     supuestosTabla: `EXW máximo por unidad (precio ex-fábrica) asumiendo 500 unidades, 0.003 m³/unidad, flete marítimo prorrateado de contenedor surtido completo, TLC 0% arancel, comisión ML ${
       Number.isFinite(comisionReal?.pct) ? `${comisionReal.pct}% (exacta de la API oficial para la categoría del nicho)` : '16%'

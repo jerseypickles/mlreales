@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { marcaDelTitulo, desglosePorMarca, esNichoDeRepuesto } from '../src/services/compatibilidad.js'
+import { marcaDelTitulo, desglosePorMarca, esNichoDeRepuesto, MARCAS_MAS_BUSCADAS_MLC } from '../src/services/compatibilidad.js'
 
 const top = [
   { titulo: 'Pastillas Freno Delantera Y Trasera Chery Tiggo 2 2017', precio: 35990, esFull: true, numReviews: 12, ventasDia: 3 },
@@ -33,4 +33,13 @@ test('desglosePorMarca: agrupa por marca con precio, Full y reseñas, ordenado p
 
 test('desglosePorMarca: sin marcas reconocibles devuelve null', () => {
   assert.equal(desglosePorMarca([{ titulo: 'Brochas Maquillaje Set 10', precio: 2990 }]), null)
+})
+
+test('MARCAS_MAS_BUSCADAS_MLC: lo que el selector de ML declara para Chile', () => {
+  // dato leído del filtro de compatibilidad de ML (9-ago): sirve para detectar
+  // marcas con demanda declarada y poca oferta en el top medido
+  assert.deepEqual(MARCAS_MAS_BUSCADAS_MLC, ['Chevrolet', 'Toyota', 'Hyundai', 'Nissan', 'Suzuki'])
+  for (const m of MARCAS_MAS_BUSCADAS_MLC) {
+    assert.equal(marcaDelTitulo(`Pastillas De Freno Delanteras ${m} Modelo 2015`), m)
+  }
 })

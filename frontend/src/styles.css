@@ -858,6 +858,16 @@ td a:hover {
   font-size: 12.5px;
 }
 
+/* segunda línea dentro de una celda: modelos/años bajo la marca */
+.sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--tinta-3);
+  white-space: normal;
+  max-width: 260px;
+}
+
 .sin-corte {
   white-space: nowrap;
 }

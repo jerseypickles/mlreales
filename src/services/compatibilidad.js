@@ -9,6 +9,11 @@ const MARCAS = [
   'Changan', 'Baic', 'Maxus', 'Foton', 'DFSK',
 ]
 
+// Lo que el propio selector de compatibilidad de ML Chile declara como "Más
+// buscados" (leído del filtro de marca, 9-ago). Vale oro para elegir SKUs: es
+// demanda declarada por ML, no inferida de un top de 50 items.
+export const MARCAS_MAS_BUSCADAS_MLC = ['Chevrolet', 'Toyota', 'Hyundai', 'Nissan', 'Suzuki']
+
 const norm = (s) => String(s ?? '').toLowerCase()
 
 export function marcaDelTitulo(titulo) {
