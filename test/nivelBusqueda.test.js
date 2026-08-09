@@ -171,6 +171,34 @@ test('FOCO SOLARES: la raíz manda, "foco solar" es la misma búsqueda', () => {
   assert.notEqual(r.keywordSugerida, 'foco')
 })
 
+test('LAMPARA SOLAR JARDIN: la sugerencia del prefijo largo también cuenta', () => {
+  // se estaban tirando a la basura las sugerencias del prefijo de dos palabras,
+  // que son las más específicas: proponía la genérica "lampara"
+  const listas = new Map([
+    ['lampara', ['lampara', 'lampara velador', 'lampara pie']],
+    ['lampara s', ['lampara sal', 'lampara solar', 'lampara solar exterior', 'lampara soft gel']],
+  ])
+  const r = analizarFamilia('lampara solar jardin', listas)
+  assert.equal(r.nivel, 'renombrar')
+  assert.equal(r.keywordSugerida, 'lampara solar')
+})
+
+test('MOCHILA PORTA BEBE: ML fusiona palabras y hay que verlo', () => {
+  // "portabebe" no comparte raíz con ninguna palabra del nicho, pero contiene
+  // dos de ellas: es la misma búsqueda aunque no lleve el sustantivo "mochila"
+  const listas = new Map([
+    ['mochila', ['mochila', 'mochila escolar', 'mochila notebook']],
+    ['mochila p', ['mochila puma', 'mochila panalera', 'mochila perro']],
+    ['porta', ['portabebe', 'portabebe ergonomico', 'portabebes', 'portadocumentos']],
+    ['bebe', ['bebe', 'coche bebe']],
+  ])
+  const r = analizarFamilia('mochila porta bebe', listas)
+  assert.equal(r.nivel, 'renombrar')
+  assert.equal(r.keywordSugerida, 'portabebe')
+  // portadocumentos solo comparte "porta": no es el mismo producto
+  assert.ok(!r.alternativas.includes('portadocumentos'))
+})
+
 test('el plural y el singular son la misma búsqueda', () => {
   const listas = new Map([
     ['rascador', ['rascador', 'rascador gatos', 'rascador pared']],

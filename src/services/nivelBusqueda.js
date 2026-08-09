@@ -111,17 +111,27 @@ export function analizarFamilia(keyword, listas) {
         exacta = { consulta, esFrase, posicion, deCuantas: lista.length, seEscribe: s === f ? null : s }
         return
       }
-      if (esFrase) return // el prefijo largo sirve para confirmar, no para proponer
-      // el reemplazo tiene que hablar del MISMO producto: sin este candado se
-      // proponía "extensible" para manguera y "electrica toothbrush" para waflera
-      if (cabeza && !s.includes(cabeza)) return
       const suyas = palabrasClave(s)
+      // cuánto del nicho cubre esta búsqueda. Por RAÍZ ("foco solar" cubre
+      // "foco solares") y también por TEXTO, porque ML fusiona palabras:
+      // "portabebe" cubre dos palabras de "mochila porta bebe" y por raíz no
+      // cubriría ninguna.
+      const cubre = Math.max(
+        [...raices].filter((r) => suyas.has(r)).length,
+        palabras.filter((w) => s.includes(w)).length,
+      )
+      // el reemplazo tiene que hablar del MISMO producto: o lleva el sustantivo
+      // del nicho, o cubre dos de sus palabras. Sin este candado se proponía
+      // "extensible" para manguera y "electrica toothbrush" para waflera.
+      if (cabeza && !s.includes(cabeza) && cubre < 2) return
       candidatas.push({
         q: s,
         consulta,
         posicion,
-        // cuánto del nicho cubre esta búsqueda (por raíz)
-        cubre: [...raices].filter((r) => suyas.has(r)).length,
+        cubre,
+        // el #1 de un prefijo largo no vale lo mismo que el #1 de uno corto:
+        // el corto lo alcanza mucha más gente
+        esFrase: esFrase ? 1 : 0,
         // ¿trae la palabra que conecta con la otra mitad del nicho?
         puente: [...suyas].some((r) => calificadores.has(r)) ? 1 : 0,
       })
@@ -146,7 +156,9 @@ export function analizarFamilia(keyword, listas) {
   // la frase no existe. ¿Existe el PRODUCTO? Gana la búsqueda que cubre más
   // del nicho; a igualdad, la que hace de puente con su otra mitad; recién
   // ahí decide el volumen (la posición en la lista).
-  candidatas.sort((a, b) => b.cubre - a.cubre || b.puente - a.puente || a.posicion - b.posicion)
+  candidatas.sort(
+    (a, b) => b.cubre - a.cubre || b.puente - a.puente || a.esFrase - b.esFrase || a.posicion - b.posicion,
+  )
   const vistas = new Set()
   const propuestas = candidatas.filter((c) => !vistas.has(c.q) && vistas.add(c.q)).slice(0, 5)
 
