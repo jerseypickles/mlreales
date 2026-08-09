@@ -395,3 +395,18 @@ test('preciosPorUnidad: mediana comparable cuando el nicho mezcla packs', async 
     null,
   )
 })
+
+test('calcularDemanda: la cadencia diaria sigue midiendo aunque el cron se adelante', () => {
+  // el guardia de ventana degenerada no puede romper la maduración diaria: si
+  // el cron corre 20 min antes que ayer, la ventana es 0,99 días y debe medir
+  const previa = new Date('2026-08-08T14:56:00Z')
+  const actual = new Date('2026-08-09T14:36:00Z')
+  const actuales = Array.from({ length: 5 }, (_, i) => ({ sku: `S${i}`, numReviews: 100, fecha: actual }))
+  const previos = Array.from({ length: 5 }, (_, i) => ({ sku: `S${i}`, numReviews: 100, fecha: previa }))
+
+  const d = calcularDemanda(actuales, previos, { minItems: 1 })
+  assert.equal(d.reviews.ventanaInsuficiente, undefined)
+  assert.equal(d.reviews.porDia, 0)
+  assert.equal(d.ventasEstimadasPorDia, 0, 'un 0 con ventana válida sí es medición (bajo el piso)')
+  assert.ok(d.pisoDeteccionVentasDia > 0, 'y viaja con su piso de detección')
+})

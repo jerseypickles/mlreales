@@ -46,7 +46,10 @@ export const scoring = {
     ventanaMinDias: 3,
     // por debajo de esto no se publica tasa/día: un re-scan manual encima del
     // automático deja ventanas de minutos, y ahí tanto el 0 como el positivo
-    // son ruido de resolución, no medición
-    ventanaMinTasaDias: 1,
+    // son ruido de resolución, no medición. Es un tope contra ventanas
+    // degeneradas, no la resolución buena (esa la fija ventanaMinDias): medio
+    // día deja holgura para que la cadencia diaria siga midiendo aunque el cron
+    // corra unos minutos antes que el día anterior.
+    ventanaMinTasaDias: 0.5,
   },
 }
