@@ -778,9 +778,13 @@ export async function procesarTendencias() {
 
 // ¿Alguien busca la keyword del nicho? Misma fuente que tendencias (gratis):
 // marca los nichos cuya búsqueda no existe, que son los que el radar inventa.
-export async function procesarNivelBusqueda() {
+export async function procesarNivelBusqueda(job) {
   const { medirNichosPendientes } = await import('../services/nivelBusqueda.js')
-  return medirNichosPendientes({ dias: config.nivelBusquedaDias, max: config.nivelBusquedaMax })
+  return medirNichosPendientes({
+    dias: config.nivelBusquedaDias,
+    max: config.nivelBusquedaMax,
+    forzar: job?.data?.forzar === true,
+  })
 }
 
 // Estratega semanal: una llamada LLM sobre el tablero completo con acciones

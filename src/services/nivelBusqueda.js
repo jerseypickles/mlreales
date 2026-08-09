@@ -1,5 +1,5 @@
 import { medirPeso } from './pesoKeyword.js'
-import { sugerenciasReales } from './busquedasReales.js'
+import { sugerenciasReales, sinStopwords } from './busquedasReales.js'
 
 // ¿ALGUIEN BUSCA ESTO? La pieza que faltaba en el embudo.
 //
@@ -38,7 +38,7 @@ export function explicar(n) {
   if (!n) return null
   const como = n.seEscribe ? ` (la gente escribe "${n.seEscribe}")` : ''
   if (n.nivel === 'nulo') {
-    const alt = n.alternativas?.length ? ` Con "${n.prefijo}" se busca: ${n.alternativas.slice(0, 3).join(' · ')}.` : ''
+    const alt = n.alternativas?.length ? ` Lo que sí se busca: ${n.alternativas.slice(0, 4).join(' · ')}.` : ''
     return `Nadie escribe esta búsqueda en ML.${alt}`
   }
   if (n.posicion) {
@@ -48,6 +48,28 @@ export function explicar(n) {
     return `raíz viva de: ${n.derivadas.slice(0, 3).join(' · ')}${como}`
   }
   return `aparece bajo "${n.prefijo}"${como}`
+}
+
+// Palabras por las que preguntar "¿y esto qué SÍ se busca?": la primera de la
+// frase y la más distintiva (la más larga). En "set snorkel" la puerta útil es
+// "snorkel", no "set" — y jamás el prefijo de dos letras que usa el medidor
+// ("set s" devolvía set skincare / set sartenes, inservible).
+export function consultasDeAlternativa(keyword) {
+  const palabras = sinStopwords(keyword).split(' ').filter(Boolean)
+  if (!palabras.length) return []
+  const distintiva = [...palabras].sort((a, b) => b.length - a.length)[0]
+  return [...new Set([palabras[0], distintiva])].filter((p) => p.length >= 3)
+}
+
+async function alternativasDe(keyword, { pausaMs = 1300 } = {}) {
+  const salida = []
+  for (const [i, q] of consultasDeAlternativa(keyword).entries()) {
+    if (i > 0) await new Promise((r) => setTimeout(r, pausaMs))
+    for (const s of await sugerenciasReales(q, { limit: 6 }).catch(() => [])) {
+      if (!salida.includes(s)) salida.push(s)
+    }
+  }
+  return salida.slice(0, 8)
 }
 
 // Mide una keyword y devuelve el documento que se guarda en el nicho.
@@ -67,10 +89,10 @@ export async function medirNivelBusqueda(keyword, opciones = {}) {
     medidoEl: new Date(),
   }
 
-  // sin volumen, lo accionable es SABER QUÉ SÍ SE BUSCA con ese prefijo: es la
-  // keyword de reemplazo que el importador puede medir en vez de esta
-  if (nivel === 'nulo' && medicion.prefijo) {
-    nivelBusqueda.alternativas = await sugerenciasReales(medicion.prefijo, { limit: 6 }).catch(() => [])
+  // sin volumen, lo accionable es SABER QUÉ SÍ SE BUSCA: esa es la keyword de
+  // reemplazo que el importador puede medir en vez de esta
+  if (nivel === 'nulo') {
+    nivelBusqueda.alternativas = await alternativasDe(keyword, opciones)
   }
   return nivelBusqueda
 }
@@ -78,12 +100,13 @@ export async function medirNivelBusqueda(keyword, opciones = {}) {
 // Pasada en batch sobre los nichos sin medir o con medición vencida. Gratis:
 // solo autocompletado. La pausa entre consultas es obligatoria — el WAF de ML
 // corta las ráfagas (por eso también el respaldo en la serie de tendencias).
-export async function medirNichosPendientes({ dias = 14, max = 40, pausaMs = 1300 } = {}) {
+export async function medirNichosPendientes({ dias = 14, max = 40, pausaMs = 1300, forzar = false } = {}) {
   const { Nicho } = await import('../models/Nicho.js')
   const corte = new Date(Date.now() - dias * 86400e3)
-  const pendientes = await Nicho.find({
-    $or: [{ nivelBusqueda: null }, { 'nivelBusqueda.medidoEl': { $lt: corte } }],
-  })
+  // forzar: re-mide todo aunque la medición esté fresca (cambió el medidor, o
+  // el importador renombró keywords y quiere el tablero al día)
+  const vencidos = { $or: [{ nivelBusqueda: null }, { 'nivelBusqueda.medidoEl': { $lt: corte } }] }
+  const pendientes = await Nicho.find(forzar ? {} : vencidos)
     .select('keyword')
     // 'activo' < 'pausado': los que siguen gastando scans se miden primero
     .sort({ estado: 1, creadoEl: -1 })
@@ -104,7 +127,7 @@ export async function medirNichosPendientes({ dias = 14, max = 40, pausaMs = 130
       medidos++
       if (nivelBusqueda.nivel === 'nulo') {
         console.log(
-          `[nivel-busqueda] "${nicho.keyword}": NADIE la busca — con "${nivelBusqueda.prefijo}" se busca ${JSON.stringify(nivelBusqueda.alternativas?.slice(0, 3) ?? [])}`,
+          `[nivel-busqueda] "${nicho.keyword}": NADIE la busca — lo que sí se busca: ${JSON.stringify(nivelBusqueda.alternativas?.slice(0, 4) ?? [])}`,
         )
       }
     } catch (err) {
@@ -115,8 +138,6 @@ export async function medirNichosPendientes({ dias = 14, max = 40, pausaMs = 130
     }
   }
 
-  const restantes = await Nicho.countDocuments({
-    $or: [{ nivelBusqueda: null }, { 'nivelBusqueda.medidoEl': { $lt: corte } }],
-  })
+  const restantes = await Nicho.countDocuments(vencidos)
   return { medidos, fallidos, porNivel, pendientes: restantes }
 }

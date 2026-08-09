@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { clasificarPeso, explicar } from '../src/services/nivelBusqueda.js'
+import { clasificarPeso, explicar, consultasDeAlternativa } from '../src/services/nivelBusqueda.js'
 import { variantesDe } from '../src/services/pesoKeyword.js'
 import { sinStopwords } from '../src/services/busquedasReales.js'
 
@@ -57,7 +57,7 @@ test('clasificarPeso: nadie la escribe = nulo', () => {
   assert.equal(clasificarPeso(undefined).nivel, 'nulo')
 })
 
-test('explicar: el nulo dice qué SÍ se busca con ese prefijo', () => {
+test('explicar: el nulo dice qué SÍ se busca', () => {
   const texto = explicar({
     nivel: 'nulo',
     prefijo: 'cascada',
@@ -65,6 +65,18 @@ test('explicar: el nulo dice qué SÍ se busca con ese prefijo', () => {
   })
   assert.match(texto, /Nadie escribe/)
   assert.match(texto, /cascada solar/)
+})
+
+test('consultasDeAlternativa: pregunta por la primera palabra y por la distintiva', () => {
+  // el defecto que salió en producción: para "set snorkel" preguntaba por el
+  // prefijo "set s" y devolvía set skincare / set sartenes / set servicios
+  assert.deepEqual(consultasDeAlternativa('set snorkel'), ['set', 'snorkel'])
+  assert.deepEqual(consultasDeAlternativa('cascada solar jardin fuente'), ['cascada'])
+  assert.deepEqual(consultasDeAlternativa('depiladora ipl casera'), ['depiladora'])
+  // una sola palabra no se duplica; las stopwords no entran
+  assert.deepEqual(consultasDeAlternativa('cosmetiquero'), ['cosmetiquero'])
+  assert.deepEqual(consultasDeAlternativa('cama para perro'), ['cama', 'perro'])
+  assert.deepEqual(consultasDeAlternativa(''), [])
 })
 
 test('explicar: cuando la keyword difiere de lo que la gente teclea, lo dice', () => {
