@@ -36,6 +36,18 @@ export function palabrasClave(texto) {
   )
 }
 
+// La misma frase sin stopwords y EN ORDEN (sin pasar por la raíz): el
+// autocompletado indexa "arbol navidad", nunca "arbol de navidad" — comparar
+// contra la forma literal devolvía "nadie la busca" para keywords que son #1
+// de su prefijo (medido el 9-ago sobre el tablero: árbol de navidad, freidora
+// de aire, gafas de sol, cama para perro, organizador de zapatos…).
+export function sinStopwords(texto) {
+  return normalizarTexto(texto)
+    .split(' ')
+    .filter((p) => p && !STOPWORDS.has(p))
+    .join(' ')
+}
+
 function setsIguales(a, b) {
   return a.size === b.size && [...a].every((p) => b.has(p))
 }

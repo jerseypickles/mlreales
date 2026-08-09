@@ -776,6 +776,13 @@ export async function procesarTendencias() {
   return capturarTendencias()
 }
 
+// ¿Alguien busca la keyword del nicho? Misma fuente que tendencias (gratis):
+// marca los nichos cuya búsqueda no existe, que son los que el radar inventa.
+export async function procesarNivelBusqueda() {
+  const { medirNichosPendientes } = await import('../services/nivelBusqueda.js')
+  return medirNichosPendientes({ dias: config.nivelBusquedaDias, max: config.nivelBusquedaMax })
+}
+
 // Estratega semanal: una llamada LLM sobre el tablero completo con acciones
 // priorizadas. Respeta el techo de presupuesto como todo gasto de IA.
 export async function procesarEstratega() {
@@ -853,11 +860,17 @@ export function iniciarWorkers() {
       maxStalledCount: 3,
     },
   )
-  const workerTendencias = new Worker(COLA_TENDENCIAS, procesarTendencias, {
-    connection: crearConexionRedis(),
-    concurrency: 1,
-    maxStalledCount: 3, // la pasada dura ~1 min; un deploy en medio no debe botarla
-  })
+  // la cola de tendencias lleva los dos trabajos del autocompletado: la captura
+  // del ranking diario y la medición del nivel de búsqueda de cada nicho
+  const workerTendencias = new Worker(
+    COLA_TENDENCIAS,
+    (job) => (job.name === 'nivel-busqueda' ? procesarNivelBusqueda(job) : procesarTendencias(job)),
+    {
+      connection: crearConexionRedis(),
+      concurrency: 1,
+      maxStalledCount: 3, // la pasada dura ~1 min; un deploy en medio no debe botarla
+    },
+  )
   const workerRfq = new Worker(COLA_RFQ, procesarRfq, {
     connection: crearConexionRedis(),
     concurrency: 1,

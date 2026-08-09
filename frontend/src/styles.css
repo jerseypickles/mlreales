@@ -4109,6 +4109,77 @@ section {
 .v-pasada { background: color-mix(in srgb, var(--peligro) 12%, transparent); color: var(--peligro); }
 @media (prefers-color-scheme: dark) { .v-pronto { color: #fbbf24; } }
 
+/* ¿Alguien BUSCA esta keyword? El filtro de ruido que faltaba: un nicho que
+   nadie busca no es oportunidad aunque el análisis diga "entrar". */
+.chip-busqueda {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1.5px 7px;
+  border-radius: 999px;
+  margin-right: 6px;
+  white-space: nowrap;
+  cursor: help;
+  border: 1px solid transparent;
+}
+.nb-alto { background: color-mix(in srgb, var(--exito) 14%, transparent); color: var(--exito); }
+.nb-medio { background: var(--superficie-2); color: var(--tinta-2); border-color: var(--borde); }
+.nb-bajo { background: color-mix(in srgb, #f59e0b 15%, transparent); color: #b45309; }
+.nb-nulo {
+  background: color-mix(in srgb, var(--peligro) 14%, transparent);
+  color: var(--peligro);
+  border-color: color-mix(in srgb, var(--peligro) 32%, transparent);
+}
+@media (prefers-color-scheme: dark) { .nb-bajo { color: #fbbf24; } }
+
+/* el top del nicho mezcla familias: sus métricas describen un Frankenstein */
+.chip-mezclado {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1.5px 7px;
+  border-radius: 999px;
+  margin-right: 6px;
+  white-space: nowrap;
+  cursor: help;
+  background: color-mix(in srgb, #f59e0b 15%, transparent);
+  color: #b45309;
+}
+@media (prefers-color-scheme: dark) { .chip-mezclado { color: #fbbf24; } }
+
+/* los nichos que nadie busca se ven apagados hasta que decidas qué hacer */
+.grupo-nichos[data-grupo='sinBusqueda'] .nicho,
+.grupo-nichos[data-grupo='fuera'] .nicho {
+  opacity: 0.62;
+}
+.grupo-nichos[data-grupo='sinBusqueda'] .nicho:hover,
+.grupo-nichos[data-grupo='fuera'] .nicho:hover {
+  opacity: 1;
+}
+
+.grupo-cuenta {
+  font-family: 'Fira Code', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  padding: 0 6px;
+  color: var(--tinta-2);
+}
+
+.medir-busqueda {
+  width: 100%;
+  padding: 7px 12px;
+  border: 1px dashed var(--acento-borde);
+  border-radius: 10px;
+  background: var(--acento-tenue);
+  color: var(--acento);
+  font-size: 12px;
+  font-weight: 600;
+  transition: filter 160ms;
+}
+.medir-busqueda:hover:not(:disabled) { filter: brightness(1.05); }
+.medir-busqueda:disabled { opacity: 0.6; cursor: default; }
+
 /* Composición del top: qué familias reales trae la keyword */
 .composicion { margin-top: 18px; }
 .composicion h3 { display: flex; align-items: center; gap: 8px; }

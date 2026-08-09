@@ -11,6 +11,8 @@ import { llmDisponible } from '../../services/llm.js'
 import { aCsvExcel, COLUMNAS_PRODUCTO_CSV } from '../../services/csv.js'
 import { cambiosPorEtapa, ETAPAS_COMPRA } from '../../services/oportunidades.js'
 import { topSkusPorKeyword, agruparFamilias } from '../../services/familias.js'
+import { ventanaDeCompra } from '../../services/ventana.js'
+import { explicar } from '../../services/nivelBusqueda.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -67,6 +69,13 @@ router.get(
                 sellersUnicos: '$metricas.competencia.sellersUnicos',
                 pctFull: '$metricas.competencia.pctFull',
                 productosAnalizados: '$metricas.universo.productosAnalizados',
+                // el top mezcla familias de producto: las métricas del nicho
+                // describen un Frankenstein, no lo que se va a traer
+                topMezclado: '$metricas.competencia.topMezclado',
+                categoriaDominantePct: '$metricas.competencia.categoriaDominantePct',
+                categoriaDominante: {
+                  $arrayElemAt: ['$metricas.competencia.composicionCategorias.categoria', 0],
+                },
               },
             },
           ],
@@ -106,6 +115,8 @@ router.get(
           veredicto: { $first: '$ultimoAnalisis.veredicto' },
           ventanaCompra: { $first: '$ultimoAnalisis.ventanaCompra' },
           scansConDemanda: { $ifNull: [{ $first: '$conteoDemanda.n' }, 0] },
+          // el borrador pesa demasiado para el sidebar; solo interesa si existe
+          tieneListing: { $cond: [{ $ifNull: ['$listingDraft', false] }, true, false] },
         },
       },
       // el sidebar no necesita los blobs pesados
@@ -113,6 +124,15 @@ router.get(
     ])
 
     for (const n of nichos) {
+      // CUÁNDO se compra: la ventana que declaró el analista, y si no la hay
+      // (solo 2 de 80 nichos la traían), la calculada desde los meses pico del
+      // radar. Es el criterio que ordena el sidebar por sobre el score.
+      n.ventana = ventanaDeCompra({
+        ventanaCompra: n.ventanaCompra,
+        estacionalidad: n.radarInfo?.estacionalidad,
+      })
+      // frase lista para el tooltip: por qué este nicho tiene (o no) búsquedas
+      if (n.nivelBusqueda) n.nivelBusqueda.explicacion = explicar(n.nivelBusqueda)
       n.madurando =
         n.estado === 'activo' &&
         n.scansConDemanda < config.maduracionScans &&
@@ -550,6 +570,24 @@ router.post(
     res.status(202).json({
       radarJobId: job.id,
       mensaje: 'radar encolado: los nichos descubiertos aparecerán solos en la lista en unos minutos',
+    })
+  }),
+)
+
+// Medir AHORA el nivel de búsqueda de los nichos pendientes (normalmente corre
+// solo, ver NIVEL_BUSQUEDA_CRON). No gasta Apify ni IA: solo autocompletado.
+router.post(
+  '/nivel-busqueda',
+  manejar(async (req, res) => {
+    const forzar = req.body?.forzar === true
+    const job = await obtenerColas().tendencias.add(
+      'nivel-busqueda',
+      { motivo: 'manual', forzar },
+      { jobId: `nivel-busqueda-${Math.floor(Date.now() / 60_000)}` },
+    )
+    res.status(202).json({
+      jobId: job.id,
+      mensaje: 'medición encolada: ~1,3 s por nicho, el nivel aparece solo en la lista',
     })
   }),
 )

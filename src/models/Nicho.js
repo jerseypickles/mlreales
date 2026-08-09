@@ -13,6 +13,12 @@ const nichoSchema = new mongoose.Schema({
   origen: { type: String, enum: ['manual', 'radar', 'jugada'], default: 'manual' },
   // metadata del descubrimiento del radar: razon, estacionalidad, ventanaImportacion
   radarInfo: { type: mongoose.Schema.Types.Mixed, default: null },
+  // ¿alguien BUSCA esta keyword? Medido contra el autocompletado de ML (gratis).
+  // Un nicho puede tener veredicto de entrada y ser puro ruido si nadie escribe
+  // esa frase — el radar inventa keywords largas que no existen.
+  // {nivel: alto|medio|bajo|nulo, puntaje, prefijo, posicion, deCuantas,
+  //  seEscribe, derivadas, alternativas, medidoEl}
+  nivelBusqueda: { type: mongoose.Schema.Types.Mixed, default: null },
   // si origen='jugada': {nichoId, keyword, generadoEl} del nicho padre
   jugadaDe: { type: mongoose.Schema.Types.Mixed, default: null },
   // keywords con las que el usuario marcó "mantener aparte": el agrupador de

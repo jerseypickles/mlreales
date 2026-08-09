@@ -38,6 +38,7 @@ export const api = {
   medirJugada: (id) => pedir(`/api/nichos/${id}/medir-jugada`, { method: 'POST' }),
   tendencia: (id) => pedir(`/api/nichos/${id}/tendencia`),
   correrRadar: () => pedir('/api/nichos/radar', { method: 'POST' }),
+  medirNivelBusqueda: () => pedir('/api/nichos/nivel-busqueda', { method: 'POST' }),
   simularMargen: (entrada) => pedir('/api/margen', json(entrada)),
   parametrosMargen: () => pedir('/api/margen/parametros'),
   gastos: () => pedir('/api/gastos'),

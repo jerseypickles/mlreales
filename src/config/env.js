@@ -38,6 +38,15 @@ export const config = {
   // y dejarían al radar sin canonización de keywords si corriera antes.
   tendenciasActivo: process.env.TENDENCIAS_ACTIVO !== 'false',
   tendenciasCron: process.env.TENDENCIAS_CRON || '30 8 * * *',
+  // nivel de búsqueda de la keyword de cada nicho contra el autocompletado
+  // ($0, ni Apify ni LLM). Corre DESPUÉS de la captura de tendencias: reusa
+  // los snapshots del día como respaldo cuando el WAF de ML bloquea.
+  nivelBusquedaActivo: process.env.NIVEL_BUSQUEDA_ACTIVO !== 'false',
+  nivelBusquedaCron: process.env.NIVEL_BUSQUEDA_CRON || '0 9 * * *',
+  // cada cuánto se re-mide un nicho ya medido (la demanda de una búsqueda se
+  // mueve de a semanas, no de a días)
+  nivelBusquedaDias: Number(process.env.NIVEL_BUSQUEDA_DIAS) || 14,
+  nivelBusquedaMax: Number(process.env.NIVEL_BUSQUEDA_MAX) || 40,
   analisisAuto: process.env.ANALISIS_AUTO !== 'false',
   // estratega semanal: retirado del dashboard el 29-jul ("no me sirve") — el
   // cron queda APAGADO por defecto; ESTRATEGA_ACTIVO=true lo revive si algún

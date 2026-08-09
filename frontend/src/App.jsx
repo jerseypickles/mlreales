@@ -12,6 +12,7 @@ import { PlanillaGlobal } from './components/PlanillaGlobal.jsx'
 import { Radar } from './components/Sugerencias.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
+import { GRUPOS, agruparNichos, anidarFamilias } from './lib/sidebar.js'
 
 function PresupuestoChip() {
   const [gastos, setGastos] = useState(null)
@@ -135,22 +136,6 @@ function fmtProximoScan(fecha) {
   if (falta < 48 * 3600e3) return `en ${Math.round(falta / 3600e3)} h`
   return `en ${Math.round(falta / 86400e3)} d`
 }
-// Ventana de compra: un nicho bueno con la ventana cerrada es peor negocio que
-// uno mediano comprable hoy. El mes de compra manda sobre el score.
-function ventanaDeCompra(n) {
-  const mesActual = new Date().toISOString().slice(0, 7)
-  if (n.estado === 'pausado' && n.revisarEl) {
-    const m = new Date(n.revisarEl).toISOString().slice(0, 7)
-    return { estado: m <= mesActual ? 'ahora' : 'futura', desde: m, texto: `vuelve ${fmtMes(m)}` }
-  }
-  const v = n.ventanaCompra
-  if (!v?.desde) return null
-  if (v.hasta && v.hasta < mesActual) return { estado: 'pasada', desde: v.desde, texto: `ventana cerrada (${fmtMes(v.hasta)})` }
-  if (v.desde <= mesActual) return { estado: 'ahora', desde: v.desde, texto: 'comprar AHORA' }
-  const meses = (Number(v.desde.slice(0, 4)) - Number(mesActual.slice(0, 4))) * 12 + (Number(v.desde.slice(5, 7)) - Number(mesActual.slice(5, 7)))
-  return { estado: meses <= 2 ? 'pronto' : 'futura', desde: v.desde, texto: `comprar ${fmtMes(v.desde)}` }
-}
-
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const fmtMes = (aaaamm) => {
   if (!aaaamm) return ''
@@ -158,10 +143,54 @@ const fmtMes = (aaaamm) => {
   return `${MESES[Number(m) - 1]}${a !== String(new Date().getFullYear()) ? ` ${a.slice(2)}` : ''}`
 }
 
-const EN_CARTERA = new Set(['cotizando', 'pedido', 'vendiendo', 'en-espera'])
+// La ventana la calcula el backend (services/ventana.js) desde los meses pico
+// del radar; acá solo se traduce a una etiqueta corta. Un nicho bueno con la
+// ventana cerrada es peor negocio que uno mediano comprable hoy.
+function chipVentana(n) {
+  if (n.estado === 'pausado' && n.revisarEl) {
+    const m = String(n.revisarEl).slice(0, 7)
+    return { clase: 'futura', texto: `vuelve ${fmtMes(m)}`, ayuda: 'Re-evaluación programada: el sistema lo reactiva solo' }
+  }
+  const v = n.ventana
+  if (!v || v.estado === 'sin-temporada') return null
+  const pico = v.pico ? ` · pico ${fmtMes(v.pico)}` : ''
+  if (v.estado === 'ultimo-mes') {
+    return { clase: 'ahora', texto: `último mes para pedir`, icono: '🔥', ayuda: `Comprando este mes llega justo al pico${pico}` }
+  }
+  if (v.estado === 'ahora') {
+    return { clase: 'ahora', texto: `pedir hasta ${fmtMes(v.hasta)}`, icono: '🎯', ayuda: `Ventana abierta ${fmtMes(v.desde)}–${fmtMes(v.hasta)}${pico}` }
+  }
+  if (v.estado === 'pronto') {
+    return { clase: 'pronto', texto: `pedir ${fmtMes(v.desde)}`, ayuda: `La ventana abre en ${v.mesesAl} mes(es)${pico}` }
+  }
+  return {
+    clase: 'futura',
+    texto: `pedir ${fmtMes(v.desde)}`,
+    ayuda: v.perdioLaTemporada
+      ? `La temporada de este año ya no se alcanza (lead time de ~3 meses). Próxima ventana: ${fmtMes(v.desde)}–${fmtMes(v.hasta)}${pico}`
+      : `Faltan ${v.mesesAl} mes(es) para la ventana${pico}`,
+  }
+}
+
+// ¿Alguien BUSCA esta keyword? Sin esto un nicho puede tener veredicto de
+// entrada y ser puro ruido: mide un listado que ningún comprador ve.
+const NIVELES = {
+  alto: { texto: 'búsqueda alta', clase: 'nb-alto' },
+  medio: { texto: 'búsqueda media', clase: 'nb-medio' },
+  bajo: { texto: 'cola larga', clase: 'nb-bajo' },
+  nulo: { texto: 'nadie la busca', clase: 'nb-nulo' },
+}
+
+function chipBusqueda(n) {
+  const nb = n.nivelBusqueda
+  if (!nb?.nivel) return null
+  const info = NIVELES[nb.nivel]
+  if (!info) return null
+  return { ...info, ayuda: nb.explicacion ?? '' }
+}
 
 // Grupo plegable del sidebar: recuerda abierto/cerrado por usuario (localStorage)
-function GrupoNichos({ id, titulo, cantidad, abiertoPorDefecto = false, children }) {
+function GrupoNichos({ id, titulo, cantidad, ayuda, abiertoPorDefecto = false, children }) {
   const [abierto, setAbierto] = useState(() => {
     const guardado = localStorage.getItem(`sidebar-grupo-${id}`)
     return guardado === null ? abiertoPorDefecto : guardado === '1'
@@ -176,9 +205,9 @@ function GrupoNichos({ id, titulo, cantidad, abiertoPorDefecto = false, children
   }
 
   return (
-    <details className="grupo-nichos" open={abierto}>
-      <summary className="grupo-titulo grupo-plegable" onClick={alternar}>
-        {titulo} ({cantidad})
+    <details className="grupo-nichos" data-grupo={id} open={abierto}>
+      <summary className="grupo-titulo grupo-plegable" onClick={alternar} title={ayuda}>
+        {titulo} <span className="grupo-cuenta">{cantidad}</span>
       </summary>
       {children}
     </details>
@@ -190,7 +219,21 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
   const etapa = n.etapaCompra && n.etapaCompra !== 'evaluando' ? n.etapaCompra : null
   return (
     <li className={anidado ? 'nicho-anidado' : undefined}>
-      <button className={n._id === seleccionado ? 'nicho activo' : 'nicho'} onClick={() => onSeleccionar(n._id)}>
+      <button
+        className={n._id === seleccionado ? 'nicho activo' : 'nicho'}
+        onClick={() => onSeleccionar(n._id)}
+        title={
+          n.ultimoReporte
+            ? `mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}` +
+              (n.ultimoReporte.ventasEstimadasPorDia != null
+                ? ` · ~${fmtNum(Math.round(n.ultimoReporte.ventasEstimadasPorDia))} ventas/día`
+                : '') +
+              ` · último scan ${fmtFecha(n.ultimoScanEl)}`
+            : n.ultimoScanEl
+              ? 'scan hecho, sin reporte'
+              : 'scan pendiente…'
+        }
+      >
         <span className="nicho-fila">
           <span className="nicho-keyword">
             {anidado ? (
@@ -245,12 +288,33 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
             </span>
           ) : (
             <>
-              {etapa ? <span className="etapa-mini" title={n.notaEtapa ?? ''}>{etapa.replace(/-/g, ' ')}</span> : null}
-              {n.estado === 'pausado' && n.revisarEl ? (
-                <span className="etapa-mini" title="re-evaluación programada: el sistema lo reactiva solo">
-                  vuelve {fmtFecha(n.revisarEl)}
+              {(() => {
+                const b = chipBusqueda(n)
+                return b ? (
+                  <span className={`chip-busqueda ${b.clase}`} title={b.ayuda}>
+                    {b.texto}
+                  </span>
+                ) : null
+              })()}
+              {(() => {
+                const v = chipVentana(n)
+                return v ? (
+                  <span className={`chip-ventana v-${v.clase}`} title={v.ayuda}>
+                    {v.icono ? `${v.icono} ` : ''}
+                    {v.texto}
+                  </span>
+                ) : null
+              })()}
+              {n.ultimoReporte?.topMezclado ? (
+                <span
+                  className="chip-mezclado"
+                  title={`El top mezcla familias de producto: "${n.ultimoReporte.categoriaDominante ?? '—'}" es solo el ${n.ultimoReporte.categoriaDominantePct ?? '?'}%. La mediana, el %Full y la demanda describen la mezcla, no tu producto.`}
+                >
+                  ⚠ mezclado
                 </span>
               ) : null}
+              {etapa ? <span className="etapa-mini" title={n.notaEtapa ?? ''}>{etapa.replace(/-/g, ' ')}</span> : null}
+              {n.tieneListing ? <span className="etapa-mini" title="Borrador de listing generado">listing ✓</span> : null}
               {n.madurando ? (
                 <span
                   className="etapa-mini"
@@ -261,35 +325,11 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
                   }
                 >
                   madurando
+                  {n.proximoScanEl ? ` · ⏱ ${fmtProximoScan(n.proximoScanEl)}` : ''}
                 </span>
-              ) : n.veredicto ? (
+              ) : n.veredicto && n.veredicto !== 'entrar' ? (
                 <span className={`veredicto veredicto-${n.veredicto}`}>{n.veredicto.replace(/_/g, ' ')}</span>
               ) : null}
-              {(() => {
-                const v = ventanaDeCompra(n)
-                return v ? (
-                  <span
-                    className={`chip-ventana v-${v.estado}`}
-                    title={n.ventanaCompra?.motivo ?? 'fecha de re-evaluación programada'}
-                  >
-                    {v.estado === 'ahora' ? '🎯 ' : ''}
-                    {v.texto}
-                  </span>
-                ) : null
-              })()}
-              {n.madurando && n.proximoScanEl ? (
-                <span
-                  className="etapa-mini timer-scan"
-                  title={`Próximo scan ${n.cadenciaScan}: ${fmtFecha(n.proximoScanEl)} — el programador pasa cada 30 min`}
-                >
-                  ⏱ {fmtProximoScan(n.proximoScanEl)}
-                </span>
-              ) : null}
-              {n.ultimoReporte
-                ? `mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}`
-                : n.ultimoScanEl
-                  ? 'scan hecho, sin reporte'
-                  : 'scan pendiente…'}
             </>
           )}
         </span>
@@ -298,8 +338,9 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
   )
 }
 
-function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
+function ListaNichos({ nichos, seleccionado, onSeleccionar, onMedirBusqueda }) {
   const [filtro, setFiltro] = useState('')
+  const [midiendo, setMidiendo] = useState(false)
 
   if (!nichos.length) {
     return <p className="vacio">Sin nichos todavía. Crea el primero con una keyword.</p>
@@ -307,59 +348,24 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
 
   const q = filtro.trim().toLowerCase()
   const visibles = q ? nichos.filter((n) => n.keyword.includes(q)) : nichos
+  const porGrupo = agruparNichos(visibles)
+  const sinMedir = nichos.filter((n) => !n.nivelBusqueda).length
 
-  const puntaje = (n) => n.ultimoReporte?.scoreOportunidad ?? -1
-  const fechaCreado = (n) => (n.creadoEl ? new Date(n.creadoEl).getTime() : 0)
-  // vendiendo = nichos con productos propios cableados: ya no son una
-  // oportunidad por decidir — son operación. Salen del embudo a su grupo.
-  const esMio = (n) => (n.misProductos ?? 0) > 0
-  // cartera = negocio VIVO: un pausado o un no_entrar no es apuesta aunque su
-  // etapa diga cotizando (caso partidor batería / aire acondicionado)
-  const enCartera = (n) =>
-    !esMio(n) && EN_CARTERA.has(n.etapaCompra) && n.estado !== 'pausado' && n.veredicto !== 'no_entrar'
-  // cuarentena = pausados con fecha de regreso: el sistema los revive solo
-  const enCuarentena = (n) => n.estado === 'pausado' && n.revisarEl
-  const descartado = (n) =>
-    !enCartera(n) &&
-    !enCuarentena(n) &&
-    (n.veredicto === 'no_entrar' || n.estado === 'pausado' || n.etapaCompra === 'descartado')
-
-  // el sidebar sigue el embudo: vendiendo (operación real) arriba de todo,
-  // luego cartera, oportunidades por decidir y lo que aún se mide
-  const vendiendo = visibles.filter(esMio).sort((a, b) => (b.misVentas30d ?? 0) - (a.misVentas30d ?? 0))
-  const cartera = visibles.filter(enCartera).sort((a, b) => puntaje(b) - puntaje(a))
-  const cuarentena = visibles
-    .filter((n) => !esMio(n) && enCuarentena(n))
-    .sort((a, b) => new Date(a.revisarEl) - new Date(b.revisarEl))
-  const oportunidades = visibles
-    .filter((n) => !esMio(n) && !enCartera(n) && !descartado(n) && n.veredicto)
-    .sort((a, b) => puntaje(b) - puntaje(a))
-  const evaluando = visibles
-    .filter((n) => !esMio(n) && !enCartera(n) && !descartado(n) && !n.veredicto)
-    .sort((a, b) => fechaCreado(b) - fechaCreado(a))
-  const descartados = visibles.filter((n) => !esMio(n) && descartado(n)).sort((a, b) => puntaje(b) - puntaje(a))
-
-  // familias: los que miden el mismo mercado se anidan bajo su líder cuando
-  // ambos están en el mismo grupo (si el líder vive en otro grupo, la fila
-  // queda normal — el tooltip de la carta de Oportunidades cuenta el resto)
-  const render = (lista) => {
-    const enGrupo = new Set(lista.map((n) => n.keyword))
-    const hijosDe = new Map()
-    const raices = []
-    for (const n of lista) {
-      if (n.familiaLider && enGrupo.has(n.familiaLider)) {
-        if (!hijosDe.has(n.familiaLider)) hijosDe.set(n.familiaLider, [])
-        hijosDe.get(n.familiaLider).push(n)
-      } else {
-        raices.push(n)
-      }
-    }
-    return raices.flatMap((n) => [
-      <NichoItem key={n._id} n={n} seleccionado={seleccionado} onSeleccionar={onSeleccionar} />,
-      ...(hijosDe.get(n.keyword) ?? []).map((h) => (
+  const render = (lista) =>
+    anidarFamilias(lista).flatMap(({ nicho, hijos }) => [
+      <NichoItem key={nicho._id} n={nicho} seleccionado={seleccionado} onSeleccionar={onSeleccionar} />,
+      ...hijos.map((h) => (
         <NichoItem key={h._id} n={h} seleccionado={seleccionado} onSeleccionar={onSeleccionar} anidado />
       )),
     ])
+
+  async function medir() {
+    setMidiendo(true)
+    try {
+      await onMedirBusqueda()
+    } finally {
+      setMidiendo(false)
+    }
   }
 
   return (
@@ -375,41 +381,33 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar }) {
         />
       ) : null}
 
-      {vendiendo.length ? (
-        <GrupoNichos id="vendiendo" titulo="🛒 Vendiendo · mis nichos" cantidad={vendiendo.length} abiertoPorDefecto>
-          <ul className="lista-nichos">{render(vendiendo)}</ul>
-        </GrupoNichos>
+      {sinMedir ? (
+        <button
+          className="medir-busqueda"
+          onClick={medir}
+          disabled={midiendo}
+          title="Mide contra el autocompletado de ML si la gente escribe cada keyword. Gratis: no gasta Apify ni IA."
+        >
+          {midiendo ? 'Midiendo…' : `🔍 Medir nivel de búsqueda (${sinMedir} sin medir)`}
+        </button>
       ) : null}
 
-      {cartera.length ? (
-        <GrupoNichos id="cartera" titulo="Cartera" cantidad={cartera.length}>
-          <ul className="lista-nichos">{render(cartera)}</ul>
-        </GrupoNichos>
-      ) : null}
-
-      {oportunidades.length ? (
-        <GrupoNichos id="oportunidades" titulo="Oportunidades" cantidad={oportunidades.length}>
-          <ul className="lista-nichos">{render(oportunidades)}</ul>
-        </GrupoNichos>
-      ) : null}
-
-      {evaluando.length ? (
-        <GrupoNichos id="evaluando" titulo="En evaluación" cantidad={evaluando.length} abiertoPorDefecto>
-          <ul className="lista-nichos">{render(evaluando)}</ul>
-        </GrupoNichos>
-      ) : null}
-
-      {cuarentena.length ? (
-        <GrupoNichos id="cuarentena" titulo="Cuarentena · vuelven solos" cantidad={cuarentena.length}>
-          <ul className="lista-nichos">{render(cuarentena)}</ul>
-        </GrupoNichos>
-      ) : null}
-
-      {descartados.length ? (
-        <GrupoNichos id="descartados" titulo="Descartados" cantidad={descartados.length}>
-          <ul className="lista-nichos">{render(descartados)}</ul>
-        </GrupoNichos>
-      ) : null}
+      {GRUPOS.map((g) => {
+        const lista = porGrupo.get(g.id)
+        if (!lista.length) return null
+        return (
+          <GrupoNichos
+            key={g.id}
+            id={g.id}
+            titulo={g.titulo}
+            ayuda={g.ayuda}
+            cantidad={lista.length}
+            abiertoPorDefecto={g.abierto}
+          >
+            <ul className="lista-nichos">{render(lista)}</ul>
+          </GrupoNichos>
+        )
+      })}
     </div>
   )
 }
@@ -745,7 +743,16 @@ export default function App() {
             }}
           />
           {errorLista ? <p className="error-bloque">No se pudo cargar la lista: {errorLista}</p> : null}
-          <ListaNichos nichos={nichos} seleccionado={seleccionado} onSeleccionar={setSeleccionado} />
+          <ListaNichos
+            nichos={nichos}
+            seleccionado={seleccionado}
+            onSeleccionar={setSeleccionado}
+            onMedirBusqueda={async () => {
+              await api.medirNivelBusqueda().catch(() => null)
+              // la medición corre en la cola: el refresco de 15 s la va mostrando
+              setTimeout(cargarNichos, 4000)
+            }}
+          />
           <Radar />
         </aside>
         <main>

@@ -1,4 +1,4 @@
-import { sugerenciasReales } from './busquedasReales.js'
+import { sugerenciasReales, sinStopwords } from './busquedasReales.js'
 import { TendenciaBusqueda } from '../models/TendenciaBusqueda.js'
 import { diaChile } from './tendencias.js'
 
@@ -37,11 +37,24 @@ async function sugerenciasConRespaldo(prefijo) {
   return guardada?.sugerencias ?? []
 }
 
+// La frase y su variante sin stopwords son la MISMA búsqueda para ML: se
+// comparan las dos contra cada lista y el prefijo se arma con la forma sin
+// stopwords (el autocompletado responde a "arbol n", jamás a "arbol d").
+export function variantesDe(frase) {
+  const f = normalizar(frase)
+  const sin = sinStopwords(f)
+  return [...new Set([f, sin].filter(Boolean))]
+}
+
 // alto = aparece con el prefijo de su PRIMERA palabra; medio = necesita también
 // la inicial de la segunda; nulo = ML no la sugiere (nadie la escribe así)
 export async function medirPeso(frase, { pausaMs = 1200 } = {}) {
   const f = normalizar(frase)
-  const palabras = f.split(' ')
+  const variantes = variantesDe(f)
+  // la forma sin stopwords manda para armar los prefijos y para reportar cómo
+  // lo escribe la gente de verdad
+  const base = variantes[variantes.length - 1]
+  const palabras = base.split(' ')
   if (!palabras[0]) return { frase: f, peso: 'nulo', nivel: 0 }
 
   const prefijos = [palabras[0]]
@@ -50,28 +63,35 @@ export async function medirPeso(frase, { pausaMs = 1200 } = {}) {
   for (let i = 0; i < prefijos.length; i++) {
     if (i > 0) await new Promise((r) => setTimeout(r, pausaMs))
     const sugerencias = (await sugerenciasConRespaldo(prefijos[i])).map(normalizar)
-    const posicion = sugerencias.indexOf(f)
-    if (posicion !== -1) {
-      return {
-        frase: f,
-        peso: i === 0 ? 'alto' : 'medio',
-        nivel: i === 0 ? 3 : 2,
-        prefijo: prefijos[i],
-        posicion: posicion + 1,
-        deCuantas: sugerencias.length,
+    const comun = {
+      frase: f,
+      peso: i === 0 ? 'alto' : 'medio',
+      nivel: i === 0 ? 3 : 2,
+      prefijo: prefijos[i],
+    }
+    for (const v of variantes) {
+      const posicion = sugerencias.indexOf(v)
+      if (posicion !== -1) {
+        return {
+          ...comun,
+          // cómo la escribe la gente cuando difiere de la keyword del nicho
+          seEscribe: v === f ? undefined : v,
+          posicion: posicion + 1,
+          deCuantas: sugerencias.length,
+        }
       }
     }
     // la frase puede existir como raíz de sugerencias más largas ("pistola
     // juguete balines"): eso es familia viva aunque la frase exacta no esté
-    const derivadas = sugerencias.filter((s) => s.startsWith(`${f} `))
-    if (derivadas.length) {
-      return {
-        frase: f,
-        peso: i === 0 ? 'alto' : 'medio',
-        nivel: i === 0 ? 3 : 2,
-        prefijo: prefijos[i],
-        posicion: null,
-        derivadas: derivadas.slice(0, 4),
+    for (const v of variantes) {
+      const derivadas = sugerencias.filter((s) => s.startsWith(`${v} `))
+      if (derivadas.length) {
+        return {
+          ...comun,
+          seEscribe: v === f ? undefined : v,
+          posicion: null,
+          derivadas: derivadas.slice(0, 4),
+        }
       }
     }
   }

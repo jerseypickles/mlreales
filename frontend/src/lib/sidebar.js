@@ -1,0 +1,115 @@
+// Cómo se ordena la lista de nichos. Puro y sin JSX: es la regla de negocio
+// del sidebar, no su pintura.
+//
+// El criterio maestro es la URGENCIA DE COMPRA, no el score: un nicho con
+// score 90 y la ventana cerrada no se puede comprar, y uno de 65 con la
+// ventana abierta sí. Y antes de eso está la pregunta que faltaba — ¿alguien
+// busca esta keyword? — porque un nicho que nadie busca no es oportunidad
+// aunque el análisis diga "entrar" (medido 9-ago: 65 de 78 decían entrar).
+
+const VENTANA_ABIERTA = new Set(['ahora', 'ultimo-mes', 'pronto'])
+const DE_ENTRADA = new Set(['entrar', 'entrar_con_condiciones'])
+
+export function clasificarNicho(n) {
+  if ((n.misProductos ?? 0) > 0) return 'vendiendo'
+
+  const fuera = n.veredicto === 'no_entrar' || n.estado === 'pausado' || n.etapaCompra === 'descartado'
+  if (fuera) return n.estado === 'pausado' && n.revisarEl ? 'vuelven' : 'fuera'
+
+  // nadie escribe esa búsqueda: el listado que mide no lo ve ningún comprador.
+  // Se marca y se baja, nunca se pausa solo — descartar es del importador.
+  if (n.nivelBusqueda?.nivel === 'nulo') return 'sinBusqueda'
+
+  if (!DE_ENTRADA.has(n.veredicto) || n.madurando) return 'midiendo'
+
+  const v = n.ventana
+  const abierta = !v || v.estado === 'sin-temporada' || VENTANA_ABIERTA.has(v.estado)
+  if (!abierta) return 'aunNo'
+
+  // ya hay precio del proveedor sobre la mesa: lo único que falta es decidir
+  const cotizado = Number.isFinite(n.exwCotizadoUsd) || Number.isFinite(n.costoPuestoClp)
+  return cotizado ? 'decidir' : 'comprar'
+}
+
+export const GRUPOS = [
+  {
+    id: 'decidir',
+    titulo: '🔥 Con precio · decide',
+    abierto: true,
+    ayuda: 'Ventana de compra abierta y cotización del proveedor anotada: falta tu decisión.',
+  },
+  {
+    id: 'comprar',
+    titulo: '🎯 Comprar esta temporada',
+    abierto: true,
+    ayuda: 'Ventana de compra abierta y veredicto de entrada, pero todavía sin precio del proveedor.',
+  },
+  {
+    id: 'vendiendo',
+    titulo: '🛒 Vendiendo · mis nichos',
+    abierto: true,
+    ayuda: 'Nichos donde ya vendes con producto propio cableado: son operación, no apuesta.',
+  },
+  {
+    id: 'midiendo',
+    titulo: '⏳ Midiendo',
+    abierto: false,
+    ayuda: 'Sin veredicto firme todavía: el sistema los escanea solo hasta juntar la serie.',
+  },
+  {
+    id: 'aunNo',
+    titulo: '📅 Aún no toca',
+    abierto: false,
+    ayuda: 'Buenos, pero su ventana de compra abre más adelante. Ordenados por cuánto falta.',
+  },
+  {
+    id: 'sinBusqueda',
+    titulo: '🔇 Nadie los busca',
+    abierto: false,
+    ayuda: 'El autocompletado de ML no registra esa búsqueda: nadie la escribe. Renómbralos con la búsqueda real o descártalos.',
+  },
+  {
+    id: 'vuelven',
+    titulo: '♻️ Vuelven solos',
+    abierto: false,
+    ayuda: 'Descartados por temporada con fecha de regreso: el sistema los reactiva solo.',
+  },
+  { id: 'fuera', titulo: '🗑 Fuera', abierto: false, ayuda: 'No entrar, pausados o descartados a mano.' },
+]
+
+// urgencia primero, score después
+const ORDEN_VENTANA = { 'ultimo-mes': 0, ahora: 1, pronto: 2, 'sin-temporada': 3, futura: 4 }
+const puntaje = (n) => n.ultimoReporte?.scoreOportunidad ?? -1
+const urgencia = (n) => ORDEN_VENTANA[n.ventana?.estado] ?? 3
+
+// Devuelve Map<grupoId, nichos[]> ya ordenado dentro de cada grupo.
+export function agruparNichos(nichos) {
+  const porGrupo = new Map(GRUPOS.map((g) => [g.id, []]))
+  for (const n of nichos) porGrupo.get(clasificarNicho(n))?.push(n)
+
+  for (const [id, lista] of porGrupo) {
+    if (id === 'vendiendo') lista.sort((a, b) => (b.misVentas30d ?? 0) - (a.misVentas30d ?? 0))
+    else if (id === 'aunNo')
+      lista.sort((a, b) => (a.ventana?.mesesAl ?? 99) - (b.ventana?.mesesAl ?? 99) || puntaje(b) - puntaje(a))
+    else if (id === 'vuelven') lista.sort((a, b) => new Date(a.revisarEl) - new Date(b.revisarEl))
+    else lista.sort((a, b) => urgencia(a) - urgencia(b) || puntaje(b) - puntaje(a))
+  }
+  return porGrupo
+}
+
+// Los que miden el mismo mercado se anidan bajo su líder cuando ambos caen en
+// el mismo grupo; si el líder vive en otro, la fila queda suelta.
+export function anidarFamilias(lista) {
+  const enGrupo = new Set(lista.map((n) => n.keyword))
+  const hijosDe = new Map()
+  const raices = []
+  for (const n of lista) {
+    if (n.familiaLider && enGrupo.has(n.familiaLider)) {
+      if (!hijosDe.has(n.familiaLider)) hijosDe.set(n.familiaLider, [])
+      hijosDe.get(n.familiaLider).push(n)
+    } else {
+      raices.push(n)
+    }
+  }
+  return raices.map((n) => ({ nicho: n, hijos: hijosDe.get(n.keyword) ?? [] }))
+}
