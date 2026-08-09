@@ -12,7 +12,7 @@ import { aCsvExcel, COLUMNAS_PRODUCTO_CSV } from '../../services/csv.js'
 import { cambiosPorEtapa, ETAPAS_COMPRA } from '../../services/oportunidades.js'
 import { topSkusPorKeyword, agruparFamilias } from '../../services/familias.js'
 import { ventanaDeCompra } from '../../services/ventana.js'
-import { explicar } from '../../services/nivelBusqueda.js'
+import { explicar, puntajeBusqueda } from '../../services/nivelBusqueda.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -232,10 +232,14 @@ router.get(
     // familias (mismo mercado por solape de SKUs): el sidebar anida las
     // keywords duplicadas bajo su líder (el de mayor score) en cada grupo
     try {
-      const porScore = [...nichos].sort(
-        (a, b) => (b.ultimoReporte?.scoreOportunidad ?? -1) - (a.ultimoReporte?.scoreOportunidad ?? -1),
+      // el líder de cada familia es la keyword CLARA (la que la gente escribe),
+      // y solo a igualdad decide el score: antes lideraba la mal escrita
+      const porClaridad = [...nichos].sort(
+        (a, b) =>
+          puntajeBusqueda(b.nivelBusqueda) - puntajeBusqueda(a.nivelBusqueda) ||
+          (b.ultimoReporte?.scoreOportunidad ?? -1) - (a.ultimoReporte?.scoreOportunidad ?? -1),
       )
-      const filas = porScore.map((n) => ({
+      const filas = porClaridad.map((n) => ({
         keyword: n.keyword,
         familiaAparte: n.familiaAparte ?? [],
         jugadaDeKeyword: n.jugadaDe?.keyword ?? null,
@@ -331,12 +335,70 @@ router.get(
       console.warn(`[nichos] desglose por marca omitido: ${err.message}`)
     }
 
+    // LA FAMILIA, dentro del nicho: las búsquedas hermanas del autocompletado
+    // (de ahí sale la palabra clara) y los nichos del tablero que miden este
+    // mismo mercado, con su nivel — para poder limpiar sin salir de acá.
+    let familia
+    try {
+      const todos = await Nicho.find()
+        .select('keyword estado nivelBusqueda familiaAparte jugadaDe')
+        .lean()
+      const scores = await Reporte.aggregate([
+        { $sort: { fecha: -1 } },
+        { $group: { _id: '$nichoId', score: { $first: '$scoreOportunidad' } } },
+      ])
+      const porNicho = new Map(scores.map((r) => [String(r._id), r.score]))
+      const filas = todos
+        .map((n) => ({
+          _id: n._id,
+          keyword: n.keyword,
+          estado: n.estado,
+          nivelBusqueda: n.nivelBusqueda,
+          score: porNicho.get(String(n._id)) ?? null,
+          familiaAparte: n.familiaAparte ?? [],
+          jugadaDeKeyword: n.jugadaDe?.keyword ?? null,
+        }))
+        .sort(
+          (a, b) => puntajeBusqueda(b.nivelBusqueda) - puntajeBusqueda(a.nivelBusqueda) || (b.score ?? -1) - (a.score ?? -1),
+        )
+      const skus = await topSkusPorKeyword(filas.map((f) => f.keyword))
+      const { deMiembro, deLider } = agruparFamilias(filas, skus)
+      const lider = deMiembro.get(nicho.keyword)?.lider ?? nicho.keyword
+      const miembros = [lider, ...(deLider.get(lider) ?? []).map((m) => m.keyword)]
+      if (miembros.length > 1) {
+        const porKeyword = new Map(filas.map((f) => [f.keyword, f]))
+        familia = {
+          lider,
+          esLider: lider === nicho.keyword,
+          miembros: miembros.map((k) => {
+            const f = porKeyword.get(k) ?? {}
+            return {
+              id: f._id ?? null,
+              keyword: k,
+              estado: f.estado ?? null,
+              score: f.score ?? null,
+              nivel: f.nivelBusqueda?.nivel ?? null,
+              explicacion: explicar(f.nivelBusqueda),
+              esEste: k === nicho.keyword,
+              solapePct: deMiembro.get(k)?.solapePct ?? null,
+            }
+          }),
+        }
+      }
+    } catch (err) {
+      console.warn(`[nichos] familia no calculada para "${nicho.keyword}": ${err.message}`)
+    }
+
     res.json({
       porMarcaVehiculo,
+      familia,
       scans: { total: totalScans, trasAnalisis, analisisDe, conDemanda: scansConDemanda, madurando },
       nicho: {
         id: nicho._id,
         keyword: nicho.keyword,
+        nivelBusqueda: nicho.nivelBusqueda
+          ? { ...nicho.nivelBusqueda, explicacion: explicar(nicho.nivelBusqueda) }
+          : null,
         domainCode: nicho.domainCode,
         estado: nicho.estado,
         ultimoScanEl: nicho.ultimoScanEl,

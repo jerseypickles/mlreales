@@ -10,6 +10,7 @@ import { Publicidad } from './components/Publicidad.jsx'
 import { Oportunidades } from './components/Oportunidades.jsx'
 import { PlanillaGlobal } from './components/PlanillaGlobal.jsx'
 import { Radar } from './components/Sugerencias.jsx'
+import { Busqueda } from './components/Busqueda.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
 import { GRUPOS, agruparNichos, anidarFamilias } from './lib/sidebar.js'
@@ -462,7 +463,7 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar, onMedirBusqueda, onM
   )
 }
 
-function VistaNicho({ nichoId, alCambiarNichos }) {
+function VistaNicho({ nichoId, alCambiarNichos, onAbrirNicho }) {
   const [datos, setDatos] = useState(null)
   const [estado, setEstado] = useState('cargando')
   const [error, setError] = useState(null)
@@ -622,13 +623,22 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
       </nav>
 
       {pestana === 'resumen' ? (
-        <Resumen
-          reporte={reporte}
-          productos={productos?.productos}
-          nichoId={nichoId}
-          nicho={nicho}
-          porMarcaVehiculo={datos?.porMarcaVehiculo}
-        />
+        <>
+          <Busqueda
+            keyword={nicho.keyword}
+            nivelBusqueda={nicho.nivelBusqueda}
+            familia={datos?.familia}
+            onNichoCreado={alCambiarNichos}
+            onAbrirNicho={onAbrirNicho}
+          />
+          <Resumen
+            reporte={reporte}
+            productos={productos?.productos}
+            nichoId={nichoId}
+            nicho={nicho}
+            porMarcaVehiculo={datos?.porMarcaVehiculo}
+          />
+        </>
       ) : null}
       {pestana === 'productos' ? (
         <Productos nichoId={nichoId} keyword={nicho.keyword} analisis={reporte.analisis} onSimular={simularProducto} />
@@ -812,7 +822,12 @@ export default function App() {
         </aside>
         <main>
           {seleccionado ? (
-            <VistaNicho key={seleccionado} nichoId={seleccionado} alCambiarNichos={cargarNichos} />
+            <VistaNicho
+              key={seleccionado}
+              nichoId={seleccionado}
+              alCambiarNichos={cargarNichos}
+              onAbrirNicho={setSeleccionado}
+            />
           ) : (
             <p className="vacio">Selecciona o crea un nicho para ver su reporte.</p>
           )}

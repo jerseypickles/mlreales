@@ -11,6 +11,7 @@ import { config } from '../config/env.js'
 import { calcularMargen } from './margen.js'
 import { comisionMlExacta, categoriaDominante } from './comisionesMl.js'
 import { topSkusPorKeyword, agruparFamilias } from './familias.js'
+import { puntajeBusqueda, explicar } from './nivelBusqueda.js'
 
 // Margen estimado si compras al EXW que cotizó el proveedor, con los mismos
 // supuestos estándar de la tabla del análisis (volumen 0.003 m³/u, marítimo).
@@ -112,6 +113,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       $project: {
         keyword: 1,
         conteoDemanda: 1,
+        nivelBusqueda: 1,
         origen: 1,
         jugadaDe: 1,
         familiaAparte: 1,
@@ -200,6 +202,15 @@ export async function tableroOportunidades({ todos = false } = {}) {
     oportunidades.push({
       nichoId: n._id,
       keyword: n.keyword,
+      // ¿alguien busca esta keyword? La mesa de compra también tiene que
+      // avisarlo: se cotiza con proveedores sobre esta fila
+      nivelBusqueda: n.nivelBusqueda
+        ? {
+            nivel: n.nivelBusqueda.nivel,
+            keywordSugerida: n.nivelBusqueda.keywordSugerida ?? null,
+            explicacion: explicar(n.nivelBusqueda),
+          }
+        : null,
       origen: n.origen,
       jugadaDeKeyword: n.jugadaDe?.keyword ?? null,
       familiaAparte: n.familiaAparte ?? [],
@@ -280,8 +291,13 @@ export async function tableroOportunidades({ todos = false } = {}) {
   // scan). El de mayor score lidera; los demás llevan familiaLider para que la
   // UI los colapse y el estratega reclame el gasto duplicado.
   try {
-    const skus = await topSkusPorKeyword(oportunidades.map((o) => o.keyword))
-    const { deMiembro, deLider } = agruparFamilias(oportunidades, skus)
+    // mismo criterio que el sidebar: lidera la keyword CLARA, no la de mayor
+    // score (si no, la mal escrita manda sobre sus hermanas sanas)
+    const porClaridad = [...oportunidades].sort(
+      (a, b) => puntajeBusqueda(b.nivelBusqueda) - puntajeBusqueda(a.nivelBusqueda) || (b.score ?? -1) - (a.score ?? -1),
+    )
+    const skus = await topSkusPorKeyword(porClaridad.map((o) => o.keyword))
+    const { deMiembro, deLider } = agruparFamilias(porClaridad, skus)
     for (const o of oportunidades) {
       const m = deMiembro.get(o.keyword)
       o.familiaLider = m?.lider ?? null

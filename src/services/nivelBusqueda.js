@@ -138,6 +138,12 @@ export function analizarFamilia(keyword, listas) {
     })
   }
 
+  // LA FAMILIA: qué escribe la gente alrededor de este producto, en orden de
+  // volumen. Se guarda siempre —no solo cuando hay que renombrar— porque es lo
+  // que deja elegir la palabra clara mirando, en vez de adivinando.
+  const listaCabeza = listas.get(cabeza) ?? [...listas.values()].find((l) => l?.length) ?? []
+  const familia = listaCabeza.slice(0, 10).map((q, i) => ({ q, posicion: i + 1 }))
+
   if (exacta) {
     // encontrada con el prefijo de UNA palabra = la gente llega escribiendo
     // poco; solo con el de dos = existe pero es cola larga
@@ -150,6 +156,8 @@ export function analizarFamilia(keyword, listas) {
       deCuantas: exacta.deCuantas,
       seEscribe: exacta.seEscribe,
       colaLarga: exacta.esFrase || undefined,
+      familia,
+      cabeza,
     }
   }
 
@@ -171,11 +179,12 @@ export function analizarFamilia(keyword, listas) {
       keywordSugerida: propuestas[0].q,
       posicionSugerida: propuestas[0].posicion,
       alternativas: propuestas.map((c) => c.q),
+      familia,
       cabezas,
     }
   }
 
-  return { nivel: 'nulo', puntaje: 0, cabeza, cabezas, alternativas: [] }
+  return { nivel: 'nulo', puntaje: 0, cabeza, cabezas, alternativas: [], familia }
 }
 
 // ¿La gente escribe esta búsqueda? Un no_entrar sobre una keyword viva no
@@ -184,6 +193,13 @@ export function analizarFamilia(keyword, listas) {
 // caso paleta maquillaje: rechazada por dominancia de marca con 42% de tiendas
 // oficiales y ~850 ventas/día medidas).
 export const seBusca = (nivelBusqueda) => ['alto', 'medio'].includes(nivelBusqueda?.nivel)
+
+// Para ordenar familias: manda la keyword CLARA, no la de mayor score. Sin
+// esto lideraba "foco solares" (mal escrita) sobre sus hermanas sanas y
+// "depiladora ipl casera" sobre "depiladora laser", que es justo la búsqueda
+// que el sistema propone para ella. Sin medir queda en tierra de nadie: no
+// destrona a una medida sana ni la pisa una medida mala.
+export const puntajeBusqueda = (nivelBusqueda) => nivelBusqueda?.puntaje ?? 2.5
 
 // Frase corta para la UI y para los prompts.
 export function explicar(n) {
