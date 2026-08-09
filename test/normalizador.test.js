@@ -64,6 +64,18 @@ test('parsearEnvio: solo envío gratis', () => {
   assert.equal(envio.envioGratis, true)
 })
 
+test('parsearEnvio: lee el envío en TEXTO NATURAL (formato real del actor)', () => {
+  // crudo verificado 9-ago: el actor entrega "Llega gratis mañana Enviado por FULL"
+  const conFull = parsearEnvio('Llega gratis mañana Enviado por FULL')
+  assert.equal(conFull.esFull, true)
+  assert.equal(conFull.envioGratis, true)
+  assert.equal(conFull.envioRapido, true)
+  const sinFull = parsearEnvio('Llega el lunes')
+  assert.equal(sinFull.esFull, false) // el texto existe y NO dice Full: es medición, no ignorancia
+  assert.equal(sinFull.envioGratis, false)
+  assert.equal(parsearEnvio('Envío gratis').envioGratis, true)
+})
+
 test('parsearEnvio: sin flags legibles = DESCONOCIDO, no "sin Full"', () => {
   // el listado de ML no siempre pinta el ícono aunque el item sea Full
   // (caso Beauty Creations 6-ago): afirmar false envenena el %Full del nicho

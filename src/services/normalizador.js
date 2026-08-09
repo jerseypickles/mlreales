@@ -44,15 +44,24 @@ export const parsearPrecio = parsearNumero
 export function parsearEnvio(envio) {
   const texto = typeof envio === 'string' ? envio : ''
   const flags = [...texto.matchAll(/\{([a-z0-9_]+)\}/gi)].map((m) => m[1].toLowerCase())
-  // sin string de envío o sin flags legibles: DESCONOCIDO, no "no tiene". El
-  // listado de ML no siempre pinta el ícono Full aunque el item sí lo sea
-  // (caso Beauty Creations 6-ago: Full en la ficha, sin flag en el listado) —
-  // afirmar false envenena el %Full del nicho y el componente del score.
-  if (!flags.length) return { esFull: null, envioRapido: null, envioGratis: null, flags }
+  if (flags.length) {
+    return {
+      esFull: flags.some((f) => f === 'full_icon' || f === 'full'),
+      envioRapido: flags.some((f) => f.includes('same_day') || f.includes('next_day') || f.includes('flash')),
+      envioGratis: flags.some((f) => f.includes('free_shipping')),
+      flags,
+    }
+  }
+  // el actor también entrega el envío como TEXTO NATURAL, sin flags: "Llega
+  // gratis mañana Enviado por FULL" (verificado 9-ago en el crudo del nivel 1
+  // para pastillas freno — 48/48 items así). Leer solo llaves dejaba el %Full
+  // en "desconocido" para nichos enteros y lo subestimaba en todo el tablero.
+  const t = texto.toLowerCase()
+  if (!t.trim()) return { esFull: null, envioRapido: null, envioGratis: null, flags }
   return {
-    esFull: flags.some((f) => f === 'full_icon' || f === 'full'),
-    envioRapido: flags.some((f) => f.includes('same_day') || f.includes('next_day') || f.includes('flash')),
-    envioGratis: flags.some((f) => f.includes('free_shipping')),
+    esFull: /\bfull\b/.test(t),
+    envioRapido: /(mañana|manana|hoy|24\s*h|mismo d[ií]a)/.test(t),
+    envioGratis: /gratis/.test(t),
     flags,
   }
 }
