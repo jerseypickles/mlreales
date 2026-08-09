@@ -63,9 +63,24 @@ test('nivel de búsqueda medido y sano no cambia nada', () => {
   }
 })
 
-test('un descartado NO se rescata por tener búsquedas: sigue fuera', () => {
-  const n = nicho({ veredicto: 'no_entrar', nivelBusqueda: { nivel: 'alto' } })
-  assert.equal(clasificarNicho(n), 'fuera')
+test('no_entrar sobre una búsqueda VIVA queda pendiente, no descartado', () => {
+  // caso paleta maquillaje: rechazada por dominancia de marca (42% oficial)
+  // con ~850 ventas/día medidas y la keyword #3 de su prefijo. El rechazo
+  // puede estar mal leído: se revisa, no se cierra.
+  assert.equal(clasificarNicho(nicho({ veredicto: 'no_entrar', nivelBusqueda: { nivel: 'alto' } })), 'revisar')
+  assert.equal(clasificarNicho(nicho({ veredicto: 'no_entrar', nivelBusqueda: { nivel: 'medio' } })), 'revisar')
+  // aunque ya lo hayan pausado, sigue mereciendo la revisión
+  assert.equal(
+    clasificarNicho(nicho({ veredicto: 'no_entrar', estado: 'pausado', nivelBusqueda: { nivel: 'alto' } })),
+    'revisar',
+  )
+})
+
+test('un descartado sin búsqueda viva sí se queda fuera', () => {
+  assert.equal(clasificarNicho(nicho({ veredicto: 'no_entrar', nivelBusqueda: { nivel: 'nulo' } })), 'fuera')
+  assert.equal(clasificarNicho(nicho({ veredicto: 'no_entrar', nivelBusqueda: { nivel: 'bajo' } })), 'fuera')
+  // sin medir todavía no se rescata nada: no se sabe
+  assert.equal(clasificarNicho(nicho({ veredicto: 'no_entrar' })), 'fuera')
   assert.equal(clasificarNicho(nicho({ estado: 'pausado' })), 'fuera')
   assert.equal(clasificarNicho(nicho({ etapaCompra: 'descartado' })), 'fuera')
 })

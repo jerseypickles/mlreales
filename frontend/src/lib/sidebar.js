@@ -10,8 +10,19 @@
 const VENTANA_ABIERTA = new Set(['ahora', 'ultimo-mes', 'pronto'])
 const DE_ENTRADA = new Set(['entrar', 'entrar_con_condiciones'])
 
+// Un "no entrar" sobre una keyword que la gente SÍ busca no es un cierre: es
+// una duda. El rechazo pudo venir de leer mal el listado (caso paleta
+// maquillaje: no_entrar por dominancia de marca con 42% de tiendas oficiales,
+// cuando la regla del importador dice que la marca sola nunca basta si el
+// nicho se mueve). Queda pendiente de escaneo, no descartado.
+const BUSQUEDA_VIVA = new Set(['alto', 'medio'])
+export const rechazadoPeroSeBusca = (n) =>
+  n.veredicto === 'no_entrar' && BUSQUEDA_VIVA.has(n.nivelBusqueda?.nivel)
+
 export function clasificarNicho(n) {
   if ((n.misProductos ?? 0) > 0) return 'vendiendo'
+
+  if (rechazadoPeroSeBusca(n)) return 'revisar'
 
   const fuera = n.veredicto === 'no_entrar' || n.estado === 'pausado' || n.etapaCompra === 'descartado'
   if (fuera) return n.estado === 'pausado' && n.revisarEl ? 'vuelven' : 'fuera'
@@ -61,6 +72,12 @@ export const GRUPOS = [
     titulo: '⏳ Midiendo',
     abierto: false,
     ayuda: 'Sin veredicto firme todavía: el sistema los escanea solo hasta juntar la serie.',
+  },
+  {
+    id: 'revisar',
+    titulo: '🔁 Rechazados pero se buscan',
+    abierto: false,
+    ayuda: 'El analista dijo no entrar, pero la gente SÍ escribe esa búsqueda. El rechazo puede estar mal leído: quedan pendientes de un escaneo nuevo en vez de descartados.',
   },
   {
     id: 'aunNo',

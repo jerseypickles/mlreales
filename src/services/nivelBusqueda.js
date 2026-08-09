@@ -178,6 +178,13 @@ export function analizarFamilia(keyword, listas) {
   return { nivel: 'nulo', puntaje: 0, cabeza, cabezas, alternativas: [] }
 }
 
+// ¿La gente escribe esta búsqueda? Un no_entrar sobre una keyword viva no
+// cierra el nicho: el rechazo pudo salir de leer mal el listado, así que queda
+// pendiente de otro escaneo en vez de apagarse (regla del importador, 9-ago —
+// caso paleta maquillaje: rechazada por dominancia de marca con 42% de tiendas
+// oficiales y ~850 ventas/día medidas).
+export const seBusca = (nivelBusqueda) => ['alto', 'medio'].includes(nivelBusqueda?.nivel)
+
 // Frase corta para la UI y para los prompts.
 export function explicar(n) {
   if (!n) return null

@@ -455,12 +455,20 @@ export async function analizarNicho(nicho) {
   // nicho se pausa solo y deja de gastar scraper (regla 29-jul, "gastamos
   // mucho"). Con revisarEl vuelve solo en su ventana; sin ventana queda
   // pausado hasta decisión manual. Antes solo los de radar se auto-pausaban.
+  // salvo que la gente SÍ escriba esa búsqueda: ahí el rechazo pudo venir de
+  // leer mal el listado y el nicho queda pendiente de otro escaneo, no apagado
   if (analisis.veredicto === 'no_entrar' && reporte.analisis.esGraduacion && nicho.estado === 'activo') {
-    nicho.estado = 'pausado'
-    nicho.notaEtapa = revision
-      ? `no_entrar por ventana — vuelve solo ${analisis.revisarEn}`
-      : 'no_entrar con serie completa'
-    console.log(`[analista] "${nicho.keyword}" pausado solo: ${nicho.notaEtapa}`)
+    const { seBusca } = await import('./nivelBusqueda.js')
+    if (seBusca(nivelBusqueda)) {
+      nicho.notaEtapa = `no_entrar, pero la búsqueda está viva (${nivelBusqueda.nivel}): pendiente de revisión`
+      console.log(`[analista] "${nicho.keyword}" NO se pausa: ${nicho.notaEtapa}`)
+    } else {
+      nicho.estado = 'pausado'
+      nicho.notaEtapa = revision
+        ? `no_entrar por ventana — vuelve solo ${analisis.revisarEn}`
+        : 'no_entrar con serie completa'
+      console.log(`[analista] "${nicho.keyword}" pausado solo: ${nicho.notaEtapa}`)
+    }
   }
   await nicho.save()
 
