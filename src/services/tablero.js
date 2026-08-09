@@ -208,6 +208,12 @@ export async function tableroOportunidades({ todos = false } = {}) {
       nivelBusqueda: n.nivelBusqueda
         ? {
             nivel: n.nivelBusqueda.nivel,
+            // la POSICIÓN tiene que viajar: sin ella la carta dice "búsqueda
+            // alta" y hay que ir a chequear a mano si es #1 o #9 de su lista
+            posicion: n.nivelBusqueda.posicion ?? null,
+            deCuantas: n.nivelBusqueda.deCuantas ?? null,
+            prefijo: n.nivelBusqueda.prefijo ?? null,
+            colaLarga: n.nivelBusqueda.colaLarga ?? null,
             keywordSugerida: n.nivelBusqueda.keywordSugerida ?? null,
             explicacion: explicar(n.nivelBusqueda),
           }

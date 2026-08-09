@@ -88,6 +88,13 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
           {nivel ? (
             <span className={`chip-busqueda ${nivel.clase}`} title={nb.explicacion ?? ''}>
               {nivel.texto}
+              {/* la posición a la vista: "búsqueda alta" no dice si es #1 o #9
+                  de su lista, y esa diferencia es de volumen real */}
+              {nb.posicion ? (
+                <span className="chip-pos">
+                  #{nb.posicion}/{nb.deCuantas} en “{nb.prefijo}”
+                </span>
+              ) : null}
             </span>
           ) : (
             <span className="chip-busqueda nb-medio" title="Todavía sin medir si la gente busca esta keyword">

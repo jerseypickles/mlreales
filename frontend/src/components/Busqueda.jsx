@@ -97,6 +97,11 @@ export function Busqueda({ keyword, nivelBusqueda, familia, onNichoCreado, onAbr
           <p className="dato-label">
             Lo que la gente escribe con “{nivelBusqueda.cabeza ?? nivelBusqueda.prefijo}”, por volumen
           </p>
+          <p className="fam-aviso">
+            Ojo: es todo lo que empieza con esa palabra, no productos equivalentes. Bajo “quitasol” conviven
+            la sombrilla de playa y el parasol de auto — mira cuál de estas líneas es realmente tu producto
+            antes de medir una.
+          </p>
           <ul className="fam-lista">
             {nivelBusqueda.familia.map((b) => (
               <FilaFamilia
