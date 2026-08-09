@@ -42,7 +42,7 @@ const ACELERACION = {
   frenando: { texto: '▼ demanda frenando', clase: 'acel-baja' },
 }
 
-export function Resumen({ reporte, productos, nichoId, nicho }) {
+export function Resumen({ reporte, productos, nichoId, nicho, porMarcaVehiculo }) {
   const m = reporte.metricas
   const precios = (productos ?? []).map((p) => p.precio)
   const [tendencia, setTendencia] = useState(null)
@@ -163,6 +163,49 @@ export function Resumen({ reporte, productos, nichoId, nicho }) {
           />
         ) : null}
       </div>
+
+      {porMarcaVehiculo?.length ? (
+        <section className="composicion">
+          <h3>
+            ¿Para qué autos conviene traer?
+            <span className="badge badge-neutro" title="En repuestos el mercado se navega por el selector marca/modelo/año de ML: la mediana global del nicho no describe a ningún vehículo en particular">
+              repuestos
+            </span>
+          </h3>
+          <div className="tabla-envoltura">
+            <table>
+              <thead>
+                <tr>
+                  <th>Marca</th>
+                  <th className="num">Listings</th>
+                  <th className="num">% del top</th>
+                  <th className="num">Precio mediana</th>
+                  <th className="num">% Full</th>
+                  <th className="num">Reseñas</th>
+                  <th className="num">Ventas/día</th>
+                </tr>
+              </thead>
+              <tbody>
+                {porMarcaVehiculo.map((mv) => (
+                  <tr key={mv.marca}>
+                    <td><strong>{mv.marca}</strong></td>
+                    <td className="num">{mv.items}</td>
+                    <td className="num">{fmtPct(mv.pctItems)}</td>
+                    <td className="num">{fmtPrecio(mv.medianaPrecio)}</td>
+                    <td className="num">{mv.pctFull != null ? fmtPct(mv.pctFull) : '—'}</td>
+                    <td className="num">{fmtNum(mv.reviews)}</td>
+                    <td className="num">{mv.ventasDia ? fmtNum(mv.ventasDia) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="composicion-nota">
+            Ordenado por tracción (reseñas acumuladas). Ojo: la keyword ve solo una fracción del catálogo real —
+            en repuestos el volumen vive en la categoría con filtro de compatibilidad.
+          </p>
+        </section>
+      ) : null}
 
       {m.competencia?.composicionCategorias?.length > 1 ? (
         <section className={m.competencia.topMezclado ? 'composicion mezclado' : 'composicion'}>

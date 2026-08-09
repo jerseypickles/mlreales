@@ -296,7 +296,23 @@ router.get(
       ['entrar', 'entrar_con_condiciones'].includes(reporte.analisis?.veredicto) &&
       !['descartado', 'en-espera', 'vendiendo'].includes(nicho.etapaCompra ?? 'evaluando')
 
+    // nichos de repuestos: el desglose por marca de vehículo responde la
+    // pregunta real ("¿para qué autos conviene traer?"), que la mediana global
+    // del nicho no puede contestar — el top mezcla decenas de vehículos
+    let porMarcaVehiculo
+    try {
+      const { desglosePorMarca, esNichoDeRepuesto } = await import('../../services/compatibilidad.js')
+      const ruta = (reporte.metricas?.competencia?.composicionCategorias ?? [])[0]?.ruta
+      if (esNichoDeRepuesto(ruta)) {
+        const vistaTop = await obtenerProductosUltimoScan(nicho)
+        porMarcaVehiculo = desglosePorMarca(vistaTop?.productos ?? []) ?? undefined
+      }
+    } catch (err) {
+      console.warn(`[nichos] desglose por marca omitido: ${err.message}`)
+    }
+
     res.json({
+      porMarcaVehiculo,
       scans: { total: totalScans, trasAnalisis, analisisDe, conDemanda: scansConDemanda, madurando },
       nicho: {
         id: nicho._id,

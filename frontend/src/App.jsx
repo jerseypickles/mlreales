@@ -574,7 +574,13 @@ function VistaNicho({ nichoId, alCambiarNichos }) {
       </nav>
 
       {pestana === 'resumen' ? (
-        <Resumen reporte={reporte} productos={productos?.productos} nichoId={nichoId} nicho={nicho} />
+        <Resumen
+          reporte={reporte}
+          productos={productos?.productos}
+          nichoId={nichoId}
+          nicho={nicho}
+          porMarcaVehiculo={datos?.porMarcaVehiculo}
+        />
       ) : null}
       {pestana === 'productos' ? (
         <Productos nichoId={nichoId} keyword={nicho.keyword} analisis={reporte.analisis} onSimular={simularProducto} />
