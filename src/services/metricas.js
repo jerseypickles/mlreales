@@ -204,7 +204,9 @@ export function calcularDemanda(
 }
 
 // Score 0-100 según config/scoring.js. Devuelve null si aún no hay datos de demanda.
-export function calcularScoreOportunidad({ demanda, competencia, calidad }) {
+// `nivelBusqueda` descuenta confianza cuando la keyword medida no es la que la
+// gente escribe: el listado analizado no es el que ve el comprador.
+export function calcularScoreOportunidad({ demanda, competencia, calidad, nivelBusqueda = null }) {
   if (!demanda || !Number.isFinite(demanda.volumenVentasEstimado)) return null
   const { pesos, umbrales, escalas } = scoring
 
@@ -229,15 +231,24 @@ export function calcularScoreOportunidad({ demanda, competencia, calidad }) {
       : 50 // sin ratings (o muy pocos): neutro
   const componenteFull = clamp(100 - (competencia.pctFull ?? 0), 0, 100)
 
-  const score = Math.round(
+  const bruto = Math.round(
     pesos.demanda * componenteDemanda +
       pesos.competencia * componenteCompetencia +
       pesos.calidad * componenteCalidad +
       pesos.full * componenteFull,
   )
 
+  // un nicho que nadie busca puede sacar 82 y sentarse arriba de la lista: el
+  // listado que midió no lo abre ningún comprador
+  const confianza = scoring.confianzaBusqueda[nivelBusqueda?.nivel] ?? 1
+
   return {
-    score,
+    score: Math.round(bruto * confianza),
+    // el bruto y el factor viajan solo cuando hubo descuento, para poder
+    // auditar por qué este nicho bajó sin tener que re-medir nada
+    ...(confianza < 1
+      ? { scoreBruto: bruto, confianzaBusqueda: confianza, nivelBusqueda: nivelBusqueda?.nivel ?? null }
+      : {}),
     componentes: {
       demanda: Math.round(componenteDemanda),
       competencia: Math.round(componenteCompetencia),
@@ -255,6 +266,7 @@ export function calcularMetricas({
   totalResultados = null,
   topN = 50,
   snapshotsPrevios = null,
+  nivelBusqueda = null,
 }) {
   const top = [...snapshots]
     .sort((a, b) => (a.posicion ?? Infinity) - (b.posicion ?? Infinity))
@@ -356,7 +368,7 @@ export function calcularMetricas({
   }
 
   const demanda = calcularDemanda(top, snapshotsPrevios)
-  const oportunidad = calcularScoreOportunidad({ demanda, competencia, calidad })
+  const oportunidad = calcularScoreOportunidad({ demanda, competencia, calidad, nivelBusqueda })
 
   return {
     universo: {
@@ -595,6 +607,7 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
     totalResultados: nicho.ultimoTotalResultados ?? null,
     topN,
     snapshotsPrevios,
+    nivelBusqueda: nicho.nivelBusqueda ?? null,
   })
   const gemelos = detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPrevios })
   if (gemelos) metricas.competencia.sellersGemelos = gemelos

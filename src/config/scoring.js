@@ -8,6 +8,19 @@ export const scoring = {
     calidad: 0.2, // cuánto espacio deja el rating promedio bajo el umbral
     full: 0.15, // 100 - % de items con Full
   },
+  // ¿ALGUIEN BUSCA LA KEYWORD? (services/nivelBusqueda.js). El scorecard entero
+  // describe el listado que devuelve ESA búsqueda: si nadie la escribe, mide un
+  // escaparate que ningún comprador abre. No se anula el score —los datos del
+  // listado son reales— se le descuenta la confianza, y el bruto queda a la
+  // vista para poder auditarlo.
+  confianzaBusqueda: {
+    alto: 1, // la gente la escribe tal cual
+    medio: 1,
+    bajo: 0.9, // cola larga: existe, pero es una fracción de su búsqueda madre
+    renombrar: 0.75, // el producto se busca con OTRA frase: hay que republicar apuntando allá
+    nulo: 0.5, // ni la keyword ni nada parecido
+  },
+
   umbrales: {
     ratingDiferenciacion: 4.4, // rating promedio >= umbral → componente calidad = 0
     ratingPiso: 3.5, // rating promedio <= piso → componente calidad = 100

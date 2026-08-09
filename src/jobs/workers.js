@@ -510,6 +510,7 @@ export async function procesarRadar() {
   const saturadas = palabrasSaturadas(todos.filter((n) => n.estado === 'activo').map((n) => n.keyword))
 
   const creados = []
+  let sinValidar = 0
   for (const s of sugerencias) {
     if (creados.length >= cupo) break
     const ideada = String(s.keyword ?? '').trim().toLowerCase()
@@ -523,7 +524,7 @@ export async function procesarRadar() {
     // la keyword ideada se canoniza a lo que la gente escribe de verdad
     // (autocompletado de ML); si nadie busca nada parecido, el nicho mediría
     // un listado que ningún comprador ve
-    let keyword = ideada
+    let keyword
     try {
       const real = await keywordReal(ideada)
       if (!real) {
@@ -533,7 +534,13 @@ export async function procesarRadar() {
       keyword = real.keyword
       if (keyword !== ideada) console.log(`[radar] "${ideada}" → búsqueda real "${keyword}"`)
     } catch (err) {
-      console.error(`[radar] autosuggest no disponible para "${ideada}": ${err.message} — se usa tal cual`)
+      // ANTES se creaba el nicho con la keyword inventada: de ahí salieron
+      // "cascada solar jardin fuente", "lampara solar jardin estaca" y compañía,
+      // que pagaron scans y análisis para medir un listado que nadie ve. Sin
+      // validación no se crea: el radar vuelve a proponerla mañana.
+      console.error(`[radar] "${ideada}" NO se crea: el autocompletado no pudo validarla (${err.message})`)
+      sinValidar++
+      continue
     }
     const saturadaReal = [...palabrasClave(keyword)].find((p) => saturadas.has(p))
     if (saturadaReal) {
@@ -562,7 +569,10 @@ export async function procesarRadar() {
     existentes.add(keyword)
   }
 
-  return { sugeridos: sugerencias.length, creados: creados.length, keywords: creados }
+  if (sinValidar) {
+    console.warn(`[radar] ${sinValidar} keyword(s) quedaron sin crear porque el autocompletado no respondió`)
+  }
+  return { sugeridos: sugerencias.length, creados: creados.length, keywords: creados, sinValidar }
 }
 
 // Programador: encola scans de nichos activos cuyo último scan ya venció

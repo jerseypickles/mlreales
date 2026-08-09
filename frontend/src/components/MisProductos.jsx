@@ -897,6 +897,8 @@ export function MisProductos() {
       if (cuenta('creado'))
         partes.push(`${cuenta('creado')} nicho(s) nuevo(s) creados y escaneando (primeros datos en ~10-15 min)`)
       if (cuenta('presupuesto')) partes.push(`${cuenta('presupuesto')} sin crear por presupuesto mensual agotado`)
+      if (cuenta('sin-validar'))
+        partes.push(`${cuenta('sin-validar')} sin crear porque el autocompletado de ML no respondió (reintenta luego)`)
       if (cuenta('sin-keyword') + cuenta('sin-titulo'))
         partes.push(`${cuenta('sin-keyword') + cuenta('sin-titulo')} sin keyword clara (cablea a mano)`)
       if (cuenta('sin-ia')) partes.push(`${cuenta('sin-ia')} sin IA configurada`)

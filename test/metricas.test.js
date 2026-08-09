@@ -307,6 +307,48 @@ test('calcularScoreOportunidad: sin demanda devuelve null', () => {
   assert.equal(calcularScoreOportunidad({ demanda: null, competencia: {}, calidad: {} }), null)
 })
 
+test('el score descuenta confianza cuando nadie busca la keyword', () => {
+  // caso set snorkel: score 82 sobre un listado que ningún comprador abre.
+  // Los datos del listado son reales, así que el score no se anula — se
+  // descuenta, y el bruto queda a la vista para poder auditarlo.
+  const base = {
+    demanda: { volumenVentasEstimado: 10000 },
+    competencia: { concentracionTop3Pct: 40, pctFull: 10 },
+    calidad: { ratingPromedio: 4.0, itemsConRating: 20 },
+  }
+  const sano = calcularScoreOportunidad(base)
+  assert.equal(sano.scoreBruto, undefined, 'sin descuento no ensucia la salida')
+
+  const nadie = calcularScoreOportunidad({ ...base, nivelBusqueda: { nivel: 'nulo' } })
+  assert.equal(nadie.scoreBruto, sano.score)
+  assert.equal(nadie.score, Math.round(sano.score * 0.5))
+  assert.equal(nadie.confianzaBusqueda, 0.5)
+  assert.equal(nadie.nivelBusqueda, 'nulo')
+
+  // la keyword mal escrita descuenta menos: el producto sí se vende
+  const malEscrita = calcularScoreOportunidad({ ...base, nivelBusqueda: { nivel: 'renombrar' } })
+  assert.ok(malEscrita.score > nadie.score && malEscrita.score < sano.score)
+
+  // medida y sana: intacto
+  for (const nivel of ['alto', 'medio']) {
+    assert.equal(calcularScoreOportunidad({ ...base, nivelBusqueda: { nivel } }).score, sano.score)
+  }
+  // los componentes no se tocan: el descuento es de confianza, no de medición
+  assert.deepEqual(nadie.componentes, sano.componentes)
+})
+
+test('sin medir el nivel de búsqueda, el score no se castiga', () => {
+  const base = {
+    demanda: { volumenVentasEstimado: 5000 },
+    competencia: { concentracionTop3Pct: 30, pctFull: 20 },
+    calidad: { ratingPromedio: 4.1, itemsConRating: 10 },
+  }
+  assert.equal(
+    calcularScoreOportunidad({ ...base, nivelBusqueda: null }).score,
+    calcularScoreOportunidad(base).score,
+  )
+})
+
 test('calcularMetricas: integra demanda y score cuando hay vendidos', () => {
   const fecha = new Date('2026-07-16T12:00:00Z')
   const snapshots = [

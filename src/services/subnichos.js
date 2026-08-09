@@ -40,8 +40,12 @@ export async function crearSubNichoDeJugada(nicho, analisis) {
       return null
     }
     keyword = real.keyword
-  } catch {
-    // 403 del autosuggest: la keyword del analista viaja tal cual
+  } catch (err) {
+    // sin validar no se crea: un sub-nicho con una keyword inventada paga
+    // scans y análisis para medir un listado que ningún comprador abre. El
+    // botón "Medir la jugada" se puede volver a apretar cuando ML responda.
+    console.warn(`[jugada] "${candidata}" NO se crea: el autocompletado no pudo validarla (${err.message})`)
+    return null
   }
 
   const domainCode = nicho.domainCode ?? 'CL'

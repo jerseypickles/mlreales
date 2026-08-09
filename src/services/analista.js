@@ -172,6 +172,12 @@ const SYSTEM_ANALISTA = `Eres un analista de e-commerce especializado en Mercado
 Tu trabajo: dado el scorecard de un nicho y su top 50 de productos (títulos, precios, reseñas, sellers, Full, origen cross-border), decidir si vale la pena entrar y CÓMO.
 
 Reglas:
+- ¿ALGUIEN BUSCA ESTA KEYWORD? (campo nivelBusquedaDeLaKeyword, medido contra el autocompletado real de Mercado Libre — REGLA ELIMINATORIA, léela antes que cualquier métrica). El top 50 que recibes es el listado que devuelve ESA búsqueda exacta. Si nadie la escribe, ese listado no lo abre ningún comprador y todo el scorecard describe un escaparate vacío por más reseñas que tengan sus productos.
+  · nivel "alto" o "medio": la gente la escribe tal cual. Analiza normal.
+  · nivel "bajo": es cola larga — existe, pero hay que teclear dos palabras para llegar y su volumen es una fracción del de la búsqueda madre. Dilo en el resumen y sé más exigente con el margen.
+  · nivel "renombrar": la keyword NO existe en el autocompletado, pero el producto SÍ se busca con otra frase, que viene en keywordSugerida. El veredicto máximo es entrar_con_condiciones y LA condición es publicar apuntando a esa búsqueda real: dilo explícito en el resumen y en la jugada, y declara esa frase en keywordJugada.
+  · nivel "nulo": no se busca ni la keyword ni nada parecido. Veredicto no_entrar, y el motivo es exactamente ese —no hay demanda que capturar— sin importar lo que muestren las reseñas del top.
+  Si el campo no viene, todavía no se midió: no lo uses ni a favor ni en contra.
 - LECTURA HONESTA DEL TOP50 (crítico): reviews:null significa SIN MEDIR — el detalle con reseñas solo cubre las primeras ~30 posiciones y algunas páginas de catálogo no entregan conteo — JAMÁS lo leas como "cero ventas" ni lo uses contra un producto o segmento; reviews:0 sí es un cero real medido. ventasDia ausente = aún no hay segunda medición para calcular velocidad, no "no vende". El top50 es la PRIMERA PLANA de universo.totalResultadosBusqueda resultados: la demanda que calcules es un PISO del listado, no el mercado completo — al comparar segmentos, compara solo entre lo medido.
 - serieDemanda es LA PELÍCULA del nicho (una fila por scan con demanda). Si viene esVeredictoDeGraduacion=true, este análisis cierra la maduración: tu veredicto debe basarse en la SOSTENIBILIDAD de la serie — demanda estable o creciente a lo largo de los scans respalda entrar; una serie que se desinfla convierte cualquier buen día en espejismo, dilo explícito en el resumen citando las cifras de la serie.
 - CANASTA DE LA SERIE (crítico para leer tendencia): canastaComparables es cuántas publicaciones se midieron en AMBOS scans de ese punto. Dos puntos con canastas muy distintas (ej: 4 vs 24) NO son comparables entre sí — el cambio de ventasDia refleja composición del top, no demanda; un punto con canasta chica (<10) es evidencia débil, jamás lo cites como tendencia. saltosCatalogoFiltrados marca conteos de catálogo que saltaron de nivel (consolidación de ML, no ventas) y fueron excluidos del delta: si un punto los tiene, su ventasDia previo a esa fecha pudo estar inflado.
@@ -340,6 +346,23 @@ export async function analizarNicho(nicho) {
 
   const aprendido = await leccionesAprendidas().catch(() => [])
 
+  // ¿alguien busca la keyword que estamos midiendo? Sin esto el veredicto se
+  // dicta sobre un listado que puede no ver ningún comprador (caso set snorkel:
+  // "entrar" con score 82 sobre una búsqueda que nadie escribe). Si el nicho
+  // aún no está medido se mide ahora — son dos consultas al autocompletado, $0,
+  // frente a una llamada de LLM que cuesta plata y decide una compra.
+  let nivelBusqueda = nicho.nivelBusqueda ?? null
+  if (!nivelBusqueda) {
+    try {
+      const { medirNivelBusqueda } = await import('./nivelBusqueda.js')
+      nivelBusqueda = await medirNivelBusqueda(nicho.keyword)
+      nicho.nivelBusqueda = nivelBusqueda
+      nicho.markModified('nivelBusqueda')
+    } catch (err) {
+      console.warn(`[analista] nivel de búsqueda de "${nicho.keyword}" no disponible: ${err.message}`)
+    }
+  }
+
   // repuestos: el veredicto útil es por vehículo, no global (ver regla 🚗 del
   // prompt). El desglose ya se calcula para la tabla del dashboard; hasta ahora
   // no viajaba al analista y la regla del prompt nunca se activaba.
@@ -358,6 +381,18 @@ export async function analizarNicho(nicho) {
 
   const entrada = {
     keyword: nicho.keyword,
+    nivelBusquedaDeLaKeyword: nivelBusqueda
+      ? {
+          nivel: nivelBusqueda.nivel,
+          prefijo: nivelBusqueda.prefijo ?? undefined,
+          posicion: nivelBusqueda.posicion ?? undefined,
+          deCuantas: nivelBusqueda.deCuantas ?? undefined,
+          colaLarga: nivelBusqueda.colaLarga ?? undefined,
+          seEscribe: nivelBusqueda.seEscribe ?? undefined,
+          keywordSugerida: nivelBusqueda.keywordSugerida ?? undefined,
+          otrasBusquedasDelProducto: nivelBusqueda.alternativas?.length ? nivelBusqueda.alternativas : undefined,
+        }
+      : undefined,
     // memoria del negocio: hechos con plata real de todo el tablero
     loQueYaSabemosPorVentasReales: aprendido.length ? aprendido : undefined,
     experienciaPropiaEnEsteNicho,

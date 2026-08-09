@@ -64,16 +64,18 @@ MIRA LA FOTO antes que el título: el título puede estar mal puesto y la foto n
 Te paso también los NICHOS EXISTENTES del tablero: si el producto pertenece a uno de ellos, responde EXACTAMENTE esa keyword (para reusarlo en vez de crear uno duplicado).`
 
 // El autosuggest puede estar bloqueado (timeouts de 10 s por consulta): la
-// canonización no puede colgar la respuesta HTTP — pasado el tope se usa la ideada.
+// canonización no puede colgar la respuesta HTTP — pasado el tope se sigue con
+// la ideada, pero marcada como NO validada: sirve para calzar contra un nicho
+// que ya existe, jamás para crear uno nuevo con una keyword que nadie escribe.
 async function canonizarConTope(ideada, ms = 8000) {
   try {
     const real = await Promise.race([
       keywordReal(ideada),
       new Promise((resolver) => setTimeout(() => resolver(null), ms)),
     ])
-    return real?.keyword ?? ideada
+    return real?.keyword ? { keyword: real.keyword, validada: true } : { keyword: ideada, validada: false }
   } catch {
-    return ideada
+    return { keyword: ideada, validada: false }
   }
 }
 
@@ -153,15 +155,23 @@ export async function cablearPropiosAuto() {
       resultados.push({ sku: p.sku, titulo: p.titulo, accion: 'sin-keyword' })
       continue
     }
-    const keyword = await canonizarConTope(ideada)
+    const { keyword, validada } = await canonizarConTope(ideada)
     if (keyword !== ideada) console.log(`[cableador] ${p.sku}: ideada "${ideada}" → búsqueda real "${keyword}"`)
-    else console.log(`[cableador] ${p.sku}: keyword "${keyword}"`)
+    else console.log(`[cableador] ${p.sku}: keyword "${keyword}"${validada ? '' : ' (sin validar)'}`)
 
     const existente = nichoQueCalza(nichos, keyword)
     if (existente) {
       p.nichoId = existente._id
       await p.save()
       resultados.push({ sku: p.sku, titulo: p.titulo, accion: 'existente', keyword: existente.keyword })
+      continue
+    }
+
+    // sin confirmar que la búsqueda existe no se abre un nicho: calzar contra
+    // uno existente es gratis, crear uno nuevo son scans recurrentes sobre un
+    // listado que puede no ver nadie
+    if (!validada) {
+      resultados.push({ sku: p.sku, titulo: p.titulo, accion: 'sin-validar', keyword })
       continue
     }
 
