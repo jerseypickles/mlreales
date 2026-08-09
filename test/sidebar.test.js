@@ -30,6 +30,17 @@ test('la ventana futura baja el nicho aunque el score sea alto', () => {
   assert.equal(clasificarNicho(n), 'aunNo')
 })
 
+test('keyword mal escrita: grupo propio, porque el producto SÍ se busca', () => {
+  // "set snorkel" no existe pero "snorkel" tiene 10 búsquedas vivas: eso se
+  // arregla renombrando, no descartando
+  const n = nicho({
+    ventana: abierta,
+    ultimoReporte: { scoreOportunidad: 82 },
+    nivelBusqueda: { nivel: 'renombrar', keywordSugerida: 'snorkel' },
+  })
+  assert.equal(clasificarNicho(n), 'renombrar')
+})
+
 test('nadie busca la keyword: fuera del embudo aunque el análisis diga entrar', () => {
   // set snorkel (82), depiladora ipl casera (87), foco solares (80): el
   // autocompletado no las registra — miden un listado que nadie ve

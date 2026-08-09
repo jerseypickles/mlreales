@@ -1,100 +1,165 @@
-import { medirPeso } from './pesoKeyword.js'
-import { sugerenciasReales, sinStopwords } from './busquedasReales.js'
+import { sugerenciasReales, sinStopwords, normalizarTexto } from './busquedasReales.js'
 
 // ¿ALGUIEN BUSCA ESTO? La pieza que faltaba en el embudo.
 //
 // El sistema medía OFERTA (cuántos listings, a qué precio, quién vende) y
 // DEMANDA INFERIDA (delta de reseñas del top), pero nunca preguntó si la gente
 // escribe esa búsqueda. Sin ese filtro, el radar abre nichos con keywords que
-// suenan bien y no existen ("cascada solar jardin fuente", "disfraz fiestas
-// patrias niño"), se pagan scans y análisis, y salen con veredicto de entrada
-// sobre un listado que ningún comprador ve. Medido el 9-ago sobre el tablero:
-// 65 de 78 nichos decían "entrar".
+// suenan bien y no existen, se pagan scans y análisis, y salen con veredicto de
+// entrada sobre un listado que ningún comprador ve (9-ago: 65 de 78 "entrar").
 //
-// La fuente es el autocompletado de ML (mismo que ya usa el auditor de
+// PERO no alcanza con preguntar por la frase literal. Medido en vivo:
+//
+//   "set snorkel"  →  prefijo "set":     set herramientas, set mancuernas…
+//                     prefijo "snorkel": snorkel, snorkel buceo, snorkel nino,
+//                                        snorkel natacion, snorkel mascara…
+//
+// El producto se busca muchísimo; lo que está mal es la KEYWORD. Por eso se
+// consulta cada palabra significativa —no solo la primera— y se distingue:
+//
+//   · la keyword existe          → alto / medio / bajo según su posición
+//   · la keyword no, la familia sí → RENOMBRAR, con la búsqueda real propuesta
+//   · ni la keyword ni la familia  → nulo, ahí sí no hay nada
+//
+// La fuente es el autocompletado de ML (la misma que usa el auditor de
 // títulos): $0, sin Apify ni LLM. El orden de sus sugerencias ES el dato —
 // lista por volumen real de búsquedas dentro de cada prefijo.
 
 const CIMA = 3 // posiciones que consideramos "cabeza de familia"
+const MAX_PALABRAS = 4 // techo de consultas por nicho
 
-// Pura: traduce la medición cruda de pesoKeyword al nivel que ordena el tablero.
-export function clasificarPeso(medicion) {
-  if (!medicion || medicion.peso === 'nulo') return { nivel: 'nulo', puntaje: 0 }
-  // 'medio' del medidor = la frase solo asoma tecleando dos palabras: cola larga
-  if (medicion.peso === 'medio') return { nivel: 'bajo', puntaje: 1 }
-  // 'alto' = aparece con el prefijo de su primera palabra; la posición decide
-  // si encabeza la familia o vive al fondo de la lista
-  if (Number.isFinite(medicion.posicion)) {
-    return medicion.posicion <= CIMA ? { nivel: 'alto', puntaje: 3 } : { nivel: 'medio', puntaje: 2 }
-  }
-  // sin posición propia pero con derivadas: la frase es raíz viva de búsquedas
-  // más largas ("rascador gato" → "rascador gato sillon")
-  return { nivel: 'medio', puntaje: 2 }
+const normalizar = (t) => normalizarTexto(t).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+
+// Las palabras por las que vale la pena preguntar. Las de menos de 3 letras no
+// son prefijo útil del autocompletado.
+export function palabrasDeBusqueda(keyword) {
+  return sinStopwords(normalizar(keyword))
+    .split(' ')
+    .filter((p) => p.length >= 3)
+    .slice(0, MAX_PALABRAS)
 }
 
-// Frase corta para la UI y para los prompts: por qué este nicho tiene (o no)
-// nivel de búsqueda.
-export function explicar(n) {
-  if (!n) return null
-  const como = n.seEscribe ? ` (la gente escribe "${n.seEscribe}")` : ''
-  if (n.nivel === 'nulo') {
-    const alt = n.alternativas?.length ? ` Lo que sí se busca: ${n.alternativas.slice(0, 4).join(' · ')}.` : ''
-    return `Nadie escribe esta búsqueda en ML.${alt}`
-  }
-  if (n.posicion) {
-    return `#${n.posicion} de ${n.deCuantas} en "${n.prefijo}"${como}`
-  }
-  if (n.derivadas?.length) {
-    return `raíz viva de: ${n.derivadas.slice(0, 3).join(' · ')}${como}`
-  }
-  return `aparece bajo "${n.prefijo}"${como}`
+// La frase y su variante sin stopwords son la MISMA búsqueda para ML:
+// "arbol de navidad" no existe, "arbol navidad" es #1 de su prefijo.
+export function variantesDe(keyword) {
+  const f = normalizar(keyword)
+  return [...new Set([f, sinStopwords(f)].filter(Boolean))]
 }
 
-// Palabras por las que preguntar "¿y esto qué SÍ se busca?": la primera de la
-// frase y la más distintiva (la más larga). En "set snorkel" la puerta útil es
-// "snorkel", no "set" — y jamás el prefijo de dos letras que usa el medidor
-// ("set s" devolvía set skincare / set sartenes, inservible).
-export function consultasDeAlternativa(keyword) {
-  const palabras = sinStopwords(keyword).split(' ').filter(Boolean)
-  if (!palabras.length) return []
-  const distintiva = [...palabras].sort((a, b) => b.length - a.length)[0]
-  return [...new Set([palabras[0], distintiva])].filter((p) => p.length >= 3)
-}
+// Una palabra es CABEZA de búsqueda cuando el autocompletado la devuelve a
+// ella misma de primera: es una búsqueda por derecho propio ("snorkel", "ipl",
+// "foco"), no un modificador que nadie teclea solo ("set", "casera").
+export const esCabeza = (palabra, sugerencias) => sugerencias?.[0] === palabra
 
-async function alternativasDe(keyword, { pausaMs = 1300 } = {}) {
-  const salida = []
-  for (const [i, q] of consultasDeAlternativa(keyword).entries()) {
-    if (i > 0) await new Promise((r) => setTimeout(r, pausaMs))
-    for (const s of await sugerenciasReales(q, { limit: 6 }).catch(() => [])) {
-      if (!salida.includes(s)) salida.push(s)
+// ---- núcleo puro: dado lo que respondió ML, qué significa ----
+// listas: Map<palabra consultada, sugerencias[]>
+export function analizarFamilia(keyword, listas) {
+  const f = normalizar(keyword)
+  const variantes = variantesDe(f)
+  const palabras = palabrasDeBusqueda(f)
+
+  let exacta = null
+  const cabezas = []
+  const mismaIntencion = [] // sugerencias que contienen TODAS las palabras del nicho
+  const candidatas = [] // posibles keywords de reemplazo
+
+  for (const [prefijo, lista] of listas) {
+    if (!lista?.length) continue
+    const cabeza = esCabeza(prefijo, lista)
+    if (cabeza) cabezas.push(prefijo)
+
+    lista.forEach((s, i) => {
+      const posicion = i + 1
+      if (!exacta && variantes.includes(s)) {
+        exacta = {
+          prefijo,
+          posicion,
+          deCuantas: lista.length,
+          seEscribe: s === f ? null : s,
+        }
+        return
+      }
+      const cuantas = palabras.filter((w) => s.includes(w)).length
+      if (!cuantas) return
+      if (cuantas === palabras.length) mismaIntencion.push({ q: s, prefijo, posicion })
+      // solo proponemos reemplazos que salgan de una palabra que la gente SÍ
+      // teclea: las sugerencias de "casera" son mayonesa y tortas, no depiladoras
+      if (cabeza) candidatas.push({ q: s, prefijo, posicion, palabras: cuantas })
+    })
+  }
+
+  // mejor candidata: la que cubre más palabras del nicho, más arriba en su
+  // lista, y a igualdad la más específica
+  candidatas.sort(
+    (a, b) => b.palabras - a.palabras || a.posicion - b.posicion || b.q.length - a.q.length,
+  )
+  const vistas = new Set()
+  const propuestas = candidatas.filter((c) => !vistas.has(c.q) && vistas.add(c.q)).slice(0, 5)
+
+  if (exacta) {
+    const nivel = exacta.posicion <= CIMA ? 'alto' : 'medio'
+    return {
+      nivel,
+      puntaje: nivel === 'alto' ? 4 : 3,
+      ...exacta,
+      familia: mismaIntencion.length || undefined,
     }
   }
-  return salida.slice(0, 8)
+
+  // la frase exacta no existe. ¿Existe el PRODUCTO?
+  if (mismaIntencion.length || propuestas.length) {
+    const mejor = propuestas[0] ?? mismaIntencion[0]
+    return {
+      nivel: 'renombrar',
+      puntaje: 2,
+      prefijo: mejor.prefijo,
+      keywordSugerida: mejor.q,
+      posicionSugerida: mejor.posicion,
+      alternativas: propuestas.map((c) => c.q),
+      cabezas,
+    }
+  }
+
+  return { nivel: 'nulo', puntaje: 0, cabezas, alternativas: [] }
 }
 
-// Mide una keyword y devuelve el documento que se guarda en el nicho.
-export async function medirNivelBusqueda(keyword, opciones = {}) {
-  const medicion = await medirPeso(keyword, opciones)
-  const { nivel, puntaje } = clasificarPeso(medicion)
+// Frase corta para la UI y para los prompts.
+export function explicar(n) {
+  if (!n) return null
+  if (n.nivel === 'nulo') return 'Nadie busca esta keyword ni nada parecido en ML: no hay producto que medir.'
+  if (n.nivel === 'renombrar') {
+    const otras = n.alternativas?.length > 1 ? ` (también: ${n.alternativas.slice(1, 4).join(' · ')})` : ''
+    return `Esta keyword no se busca, pero el producto SÍ: la gente escribe "${n.keywordSugerida}"${n.posicionSugerida ? ` (#${n.posicionSugerida} de su prefijo)` : ''}${otras}. Conviene medir esa.`
+  }
+  const como = n.seEscribe ? ` (la gente escribe "${n.seEscribe}")` : ''
+  return `#${n.posicion} de ${n.deCuantas} en "${n.prefijo}"${como}`
+}
 
-  const nivelBusqueda = {
-    nivel,
-    puntaje,
-    peso: medicion.peso,
-    prefijo: medicion.prefijo ?? null,
-    posicion: medicion.posicion ?? null,
-    deCuantas: medicion.deCuantas ?? null,
-    seEscribe: medicion.seEscribe ?? null,
-    derivadas: medicion.derivadas ?? null,
+// ---- medición contra el autocompletado ----
+export async function medirNivelBusqueda(keyword, { pausaMs = 1300 } = {}) {
+  const palabras = palabrasDeBusqueda(keyword)
+  if (!palabras.length) return { nivel: 'nulo', puntaje: 0, medidoEl: new Date() }
+
+  const listas = new Map()
+  let bloqueadas = 0
+  for (const [i, p] of palabras.entries()) {
+    if (i > 0) await new Promise((r) => setTimeout(r, pausaMs))
+    try {
+      listas.set(p, await sugerenciasReales(p, { limit: 10 }))
+    } catch {
+      bloqueadas++
+    }
+  }
+  // sin una sola respuesta no se puede afirmar nada: mejor sin medición que
+  // con un "nadie la busca" que en realidad fue un 403
+  if (!listas.size) throw new Error(`autocompletado sin respuesta para "${keyword}" (${bloqueadas} consultas bloqueadas)`)
+
+  return {
+    ...analizarFamilia(keyword, listas),
+    consultadas: [...listas.keys()],
+    bloqueadas: bloqueadas || undefined,
     medidoEl: new Date(),
   }
-
-  // sin volumen, lo accionable es SABER QUÉ SÍ SE BUSCA: esa es la keyword de
-  // reemplazo que el importador puede medir en vez de esta
-  if (nivel === 'nulo') {
-    nivelBusqueda.alternativas = await alternativasDe(keyword, opciones)
-  }
-  return nivelBusqueda
 }
 
 // Pasada en batch sobre los nichos sin medir o con medición vencida. Gratis:
@@ -125,10 +190,12 @@ export async function medirNichosPendientes({ dias = 14, max = 40, pausaMs = 130
       await Nicho.updateOne({ _id: nicho._id }, { $set: { nivelBusqueda } })
       porNivel[nivelBusqueda.nivel] = (porNivel[nivelBusqueda.nivel] ?? 0) + 1
       medidos++
-      if (nivelBusqueda.nivel === 'nulo') {
+      if (nivelBusqueda.nivel === 'renombrar') {
         console.log(
-          `[nivel-busqueda] "${nicho.keyword}": NADIE la busca — lo que sí se busca: ${JSON.stringify(nivelBusqueda.alternativas?.slice(0, 4) ?? [])}`,
+          `[nivel-busqueda] "${nicho.keyword}": la keyword no se busca, el producto SÍ → "${nivelBusqueda.keywordSugerida}"`,
         )
+      } else if (nivelBusqueda.nivel === 'nulo') {
+        console.log(`[nivel-busqueda] "${nicho.keyword}": NADIE busca esto ni nada parecido`)
       }
     } catch (err) {
       // el autosuggest bloqueado no puede botar la pasada: ese nicho se
@@ -138,6 +205,5 @@ export async function medirNichosPendientes({ dias = 14, max = 40, pausaMs = 130
     }
   }
 
-  const restantes = await Nicho.countDocuments(vencidos)
-  return { medidos, fallidos, porNivel, pendientes: restantes }
+  return { medidos, fallidos, porNivel, pendientes: await Nicho.countDocuments(vencidos) }
 }

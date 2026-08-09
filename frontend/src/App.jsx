@@ -178,6 +178,8 @@ const NIVELES = {
   alto: { texto: 'búsqueda alta', clase: 'nb-alto' },
   medio: { texto: 'búsqueda media', clase: 'nb-medio' },
   bajo: { texto: 'cola larga', clase: 'nb-bajo' },
+  // el producto se busca, la keyword no: es un arreglo, no un descarte
+  renombrar: { texto: 'keyword mal escrita', clase: 'nb-renombrar' },
   nulo: { texto: 'nadie la busca', clase: 'nb-nulo' },
 }
 
@@ -214,7 +216,41 @@ function GrupoNichos({ id, titulo, cantidad, ayuda, abiertoPorDefecto = false, c
   )
 }
 
-function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
+// El producto se busca pero con otra palabra: se ofrece medir la búsqueda real
+// de un clic. Proponer es del sistema, gastar el scan es del importador.
+function SugerenciaKeyword({ n, onMedirKeyword }) {
+  const [estado, setEstado] = useState(null)
+  const nb = n.nivelBusqueda
+  if (nb?.nivel !== 'renombrar' || !nb.keywordSugerida || !onMedirKeyword) return null
+
+  async function medir() {
+    setEstado('creando')
+    try {
+      await onMedirKeyword(nb.keywordSugerida)
+      setEstado('creado')
+    } catch (err) {
+      setEstado(/ya existe/i.test(err.message) ? 'ya existe' : err.message)
+    }
+  }
+
+  return (
+    <div className="sugerencia-kw">
+      <span className="sugerencia-kw-texto" title={nb.explicacion ?? ''}>
+        la gente busca <strong>{nb.keywordSugerida}</strong>
+        {nb.posicionSugerida ? ` (#${nb.posicionSugerida})` : ''}
+      </span>
+      {estado === 'creado' ? (
+        <span className="sugerencia-kw-ok">✓ midiendo</span>
+      ) : (
+        <button className="sugerencia-kw-boton" onClick={medir} disabled={estado === 'creando'}>
+          {estado === 'creando' ? 'creando…' : estado ? estado : 'medirla →'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function NichoItem({ n, seleccionado, onSeleccionar, anidado = false, onMedirKeyword }) {
   const score = n.ultimoReporte?.scoreOportunidad
   const etapa = n.etapaCompra && n.etapaCompra !== 'evaluando' ? n.etapaCompra : null
   return (
@@ -334,11 +370,12 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false }) {
           )}
         </span>
       </button>
+      <SugerenciaKeyword n={n} onMedirKeyword={onMedirKeyword} />
     </li>
   )
 }
 
-function ListaNichos({ nichos, seleccionado, onSeleccionar, onMedirBusqueda }) {
+function ListaNichos({ nichos, seleccionado, onSeleccionar, onMedirBusqueda, onMedirKeyword }) {
   const [filtro, setFiltro] = useState('')
   const [midiendo, setMidiendo] = useState(false)
 
@@ -353,9 +390,22 @@ function ListaNichos({ nichos, seleccionado, onSeleccionar, onMedirBusqueda }) {
 
   const render = (lista) =>
     anidarFamilias(lista).flatMap(({ nicho, hijos }) => [
-      <NichoItem key={nicho._id} n={nicho} seleccionado={seleccionado} onSeleccionar={onSeleccionar} />,
+      <NichoItem
+        key={nicho._id}
+        n={nicho}
+        seleccionado={seleccionado}
+        onSeleccionar={onSeleccionar}
+        onMedirKeyword={onMedirKeyword}
+      />,
       ...hijos.map((h) => (
-        <NichoItem key={h._id} n={h} seleccionado={seleccionado} onSeleccionar={onSeleccionar} anidado />
+        <NichoItem
+          key={h._id}
+          n={h}
+          seleccionado={seleccionado}
+          onSeleccionar={onSeleccionar}
+          onMedirKeyword={onMedirKeyword}
+          anidado
+        />
       )),
     ])
 
@@ -751,6 +801,11 @@ export default function App() {
               await api.medirNivelBusqueda().catch(() => null)
               // la medición corre en la cola: el refresco de 15 s la va mostrando
               setTimeout(cargarNichos, 4000)
+            }}
+            onMedirKeyword={async (keyword) => {
+              const { nicho } = await api.crearNicho(keyword)
+              await cargarNichos()
+              setSeleccionado(nicho._id)
             }}
           />
           <Radar />

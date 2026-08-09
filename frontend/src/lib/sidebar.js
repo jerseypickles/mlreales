@@ -18,6 +18,9 @@ export function clasificarNicho(n) {
 
   // nadie escribe esa búsqueda: el listado que mide no lo ve ningún comprador.
   // Se marca y se baja, nunca se pausa solo — descartar es del importador.
+  // "renombrar" es distinto de "nulo": el PRODUCTO se busca, la keyword está
+  // mal ("set snorkel" no existe, "snorkel" tiene 10 búsquedas vivas).
+  if (n.nivelBusqueda?.nivel === 'renombrar') return 'renombrar'
   if (n.nivelBusqueda?.nivel === 'nulo') return 'sinBusqueda'
 
   if (!DE_ENTRADA.has(n.veredicto) || n.madurando) return 'midiendo'
@@ -57,6 +60,12 @@ export const GRUPOS = [
     ayuda: 'Sin veredicto firme todavía: el sistema los escanea solo hasta juntar la serie.',
   },
   {
+    id: 'renombrar',
+    titulo: '✏️ Keyword mal escrita',
+    abierto: false,
+    ayuda: 'El producto SÍ se busca, pero con otra palabra: la keyword del nicho no existe en el autocompletado de ML. Mide la búsqueda real de un clic.',
+  },
+  {
     id: 'aunNo',
     titulo: '📅 Aún no toca',
     abierto: false,
@@ -66,7 +75,7 @@ export const GRUPOS = [
     id: 'sinBusqueda',
     titulo: '🔇 Nadie los busca',
     abierto: false,
-    ayuda: 'El autocompletado de ML no registra esa búsqueda: nadie la escribe. Renómbralos con la búsqueda real o descártalos.',
+    ayuda: 'Ni la keyword ni ninguna de sus palabras tiene búsquedas vivas en ML: aquí no hay producto que medir.',
   },
   {
     id: 'vuelven',
