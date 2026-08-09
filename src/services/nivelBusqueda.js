@@ -224,13 +224,15 @@ export async function medirNivelBusqueda(keyword, { pausaMs = 1300 } = {}) {
 // Pasada en batch sobre los nichos sin medir o con medición vencida. Gratis:
 // solo autocompletado. La pausa entre consultas es obligatoria — el WAF de ML
 // corta las ráfagas (por eso también el respaldo en la serie de tendencias).
-export async function medirNichosPendientes({ dias = 14, max = 40, pausaMs = 1300, forzar = false } = {}) {
+export async function medirNichosPendientes({ dias = 14, max = 40, pausaMs = 1300, desde = null } = {}) {
   const { Nicho } = await import('../models/Nicho.js')
-  const corte = new Date(Date.now() - dias * 86400e3)
-  // forzar: re-mide todo aunque la medición esté fresca (cambió el medidor, o
-  // el importador renombró keywords y quiere el tablero al día)
+  // `desde` = re-medir todo lo que se midió ANTES de ese instante (cambió el
+  // medidor, o se renombraron keywords). Es una marca fija que viaja entre las
+  // pasadas encadenadas: sin ella cada vuelta volvería a tomar los mismos 40 y
+  // el resto del tablero se quedaría con la medición vieja para siempre.
+  const corte = desde ? new Date(desde) : new Date(Date.now() - dias * 86400e3)
   const vencidos = { $or: [{ nivelBusqueda: null }, { 'nivelBusqueda.medidoEl': { $lt: corte } }] }
-  const pendientes = await Nicho.find(forzar ? {} : vencidos)
+  const pendientes = await Nicho.find(vencidos)
     .select('keyword')
     // 'activo' < 'pausado': los que siguen gastando scans se miden primero
     .sort({ estado: 1, creadoEl: -1 })

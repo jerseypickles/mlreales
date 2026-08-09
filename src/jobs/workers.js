@@ -788,13 +788,31 @@ export async function procesarTendencias() {
 
 // ¿Alguien busca la keyword del nicho? Misma fuente que tendencias (gratis):
 // marca los nichos cuya búsqueda no existe, que son los que el radar inventa.
+const MAX_VUELTAS_BUSQUEDA = 8 // 8 × 40 = 320 nichos: techo contra un bucle
+
 export async function procesarNivelBusqueda(job) {
   const { medirNichosPendientes } = await import('../services/nivelBusqueda.js')
-  return medirNichosPendientes({
+  const desde = job?.data?.desde ?? null
+  const vuelta = job?.data?.vuelta ?? 1
+  const r = await medirNichosPendientes({
     dias: config.nivelBusquedaDias,
     max: config.nivelBusquedaMax,
-    forzar: job?.data?.forzar === true,
+    desde,
   })
+
+  // el tablero es más grande que una pasada: encadenar hasta terminarlo. Sin
+  // esto el resto de los nichos se quedaba con la medición vieja (y con los
+  // errores de la versión con que se midieron).
+  if (r.pendientes > 0 && r.medidos > 0 && vuelta < MAX_VUELTAS_BUSQUEDA) {
+    await obtenerColas()
+      .tendencias.add(
+        'nivel-busqueda',
+        { motivo: 'continuacion', desde, vuelta: vuelta + 1 },
+        { delay: 5000, jobId: `nivel-busqueda-v${vuelta + 1}-${desde ?? 'auto'}` },
+      )
+      .catch(() => null)
+  }
+  return { ...r, vuelta }
 }
 
 // Estratega semanal: una llamada LLM sobre el tablero completo con acciones

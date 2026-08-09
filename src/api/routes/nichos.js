@@ -579,15 +579,18 @@ router.post(
 router.post(
   '/nivel-busqueda',
   manejar(async (req, res) => {
-    const forzar = req.body?.forzar === true
+    // forzar: re-mide TODO lo medido antes de ahora, encadenando pasadas hasta
+    // terminar el tablero (el job procesa un lote por vuelta)
+    const desde = req.body?.forzar === true ? new Date().toISOString() : null
     const job = await obtenerColas().tendencias.add(
       'nivel-busqueda',
-      { motivo: 'manual', forzar },
+      { motivo: 'manual', desde, vuelta: 1 },
       { jobId: `nivel-busqueda-${Math.floor(Date.now() / 60_000)}` },
     )
     res.status(202).json({
       jobId: job.id,
-      mensaje: 'medición encolada: ~1,3 s por nicho, el nivel aparece solo en la lista',
+      forzado: Boolean(desde),
+      mensaje: 'medición encolada: ~1,3 s por nicho, sigue sola hasta terminar el tablero',
     })
   }),
 )
