@@ -137,19 +137,49 @@ test('el reemplazo tiene que hablar del MISMO producto (nunca el adjetivo)', () 
   assert.ok(!r.alternativas.includes('extensible cortina'))
 })
 
-test('DEPILADORA IPL CASERA: la palabra muerta es "casera", no el producto', () => {
+test('DEPILADORA IPL CASERA: propone la ESPECÍFICA, no la genérica', () => {
+  // el puente: la familia de "ipl" incluye "ipl laser", así que "laser" conecta
+  // las dos mitades del nicho y "depiladora laser" gana a la genérica
+  // "depiladora" aunque esta vaya primera en su lista
   const listas = new Map([
-    ['depiladora', ['depiladora', 'depiladora laser', 'depiladora facial']],
+    ['depiladora', ['depiladora', 'depiladora laser', 'depiladora facial', 'depiladora philips']],
     ['depiladora i', ['depiladora ingle', 'depiladora indolora']],
-    ['ipl', ['ipl', 'ipl philips']],
+    ['ipl', ['ipl', 'ipl philips', 'ipl gama', 'ipl laser']],
     ['casera', ['maquina pastas caseras', 'mayonesa casera']],
   ])
   const r = analizarFamilia('depiladora ipl casera', listas)
   assert.equal(r.nivel, 'renombrar')
   assert.equal(r.cabeza, 'depiladora')
+  assert.equal(r.keywordSugerida, 'depiladora laser')
   // jamás mayonesa casera como keyword de una depiladora
   assert.ok(!r.alternativas.some((a) => a.includes('mayonesa')))
   assert.ok(r.alternativas.every((a) => a.includes('depiladora')))
+})
+
+test('FOCO SOLARES: la raíz manda, "foco solar" es la misma búsqueda', () => {
+  // por texto literal "foco solar" no contiene "solares" y perdía contra la
+  // genérica "foco"; por raíz cubre las dos palabras del nicho y gana
+  const listas = new Map([
+    ['foco', ['foco', 'foco solar', 'focos solares exterior', 'foco caza', 'focos led', 'focos solares potentes']],
+    ['foco s', ['foco solar', 'foco sensor', 'foco solar sensor']],
+    ['solares', ['solares', 'solares jardin', 'solares focos']],
+  ])
+  const r = analizarFamilia('foco solares', listas)
+  assert.equal(r.nivel, 'renombrar')
+  assert.equal(r.keywordSugerida, 'foco solar')
+  // la genérica "foco" no puede ganarle a la que cubre el nicho completo
+  assert.notEqual(r.keywordSugerida, 'foco')
+})
+
+test('el plural y el singular son la misma búsqueda', () => {
+  const listas = new Map([
+    ['rascador', ['rascador', 'rascador gatos', 'rascador pared']],
+    ['rascador g', ['rascador gatos torre', 'rascadores gatos casa']],
+    ['gato', ['gato', 'gato juguete']],
+  ])
+  const r = analizarFamilia('rascador gato', listas)
+  assert.equal(r.nivel, 'renombrar')
+  assert.equal(r.keywordSugerida, 'rascador gatos')
 })
 
 test('nada vivo por ninguna palabra: nulo de verdad', () => {

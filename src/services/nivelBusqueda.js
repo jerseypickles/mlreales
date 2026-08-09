@@ -1,4 +1,4 @@
-import { sugerenciasReales, sinStopwords, normalizarTexto } from './busquedasReales.js'
+import { sugerenciasReales, sinStopwords, normalizarTexto, palabrasClave } from './busquedasReales.js'
 
 // ¿ALGUIEN BUSCA ESTO? La pieza que faltaba en el embudo.
 //
@@ -78,14 +78,32 @@ export function analizarFamilia(keyword, listas) {
   const palabras = palabrasDeBusqueda(f)
   const cabeza = cabezaDe(f)
 
+  // por RAÍZ, no por texto: "foco solar" es la misma búsqueda que "focos
+  // solares" y el sistema tiene que verlo (el stemmer ya existe)
+  const raices = palabrasClave(f)
+
   let exacta = null
   const cabezas = []
-  const candidatas = []
 
+  for (const [consulta, lista] of listas) {
+    if (!lista?.length || consulta.includes(' ')) continue
+    if (lista[0] === consulta) cabezas.push(consulta)
+  }
+
+  // CALIFICADORES: las palabras que acompañan a las OTRAS palabras-cabeza del
+  // nicho. La familia de "ipl" incluye "ipl laser", así que "laser" es el
+  // puente entre las dos mitades de "depiladora ipl casera" y el reemplazo
+  // correcto es "depiladora laser", no la genérica "depiladora".
+  const calificadores = new Set()
+  for (const [consulta, lista] of listas) {
+    if (consulta.includes(' ') || consulta === cabeza || !cabezas.includes(consulta)) continue
+    for (const s of lista) for (const r of palabrasClave(s)) if (!raices.has(r)) calificadores.add(r)
+  }
+
+  const candidatas = []
   for (const [consulta, lista] of listas) {
     if (!lista?.length) continue
     const esFrase = consulta.includes(' ')
-    if (!esFrase && lista[0] === consulta) cabezas.push(consulta)
 
     lista.forEach((s, i) => {
       const posicion = i + 1
@@ -97,7 +115,16 @@ export function analizarFamilia(keyword, listas) {
       // el reemplazo tiene que hablar del MISMO producto: sin este candado se
       // proponía "extensible" para manguera y "electrica toothbrush" para waflera
       if (cabeza && !s.includes(cabeza)) return
-      candidatas.push({ q: s, consulta, posicion, palabras: palabras.filter((w) => s.includes(w)).length })
+      const suyas = palabrasClave(s)
+      candidatas.push({
+        q: s,
+        consulta,
+        posicion,
+        // cuánto del nicho cubre esta búsqueda (por raíz)
+        cubre: [...raices].filter((r) => suyas.has(r)).length,
+        // ¿trae la palabra que conecta con la otra mitad del nicho?
+        puente: [...suyas].some((r) => calificadores.has(r)) ? 1 : 0,
+      })
     })
   }
 
@@ -116,8 +143,10 @@ export function analizarFamilia(keyword, listas) {
     }
   }
 
-  // la frase no existe. ¿Existe el PRODUCTO?
-  candidatas.sort((a, b) => b.palabras - a.palabras || a.posicion - b.posicion)
+  // la frase no existe. ¿Existe el PRODUCTO? Gana la búsqueda que cubre más
+  // del nicho; a igualdad, la que hace de puente con su otra mitad; recién
+  // ahí decide el volumen (la posición en la lista).
+  candidatas.sort((a, b) => b.cubre - a.cubre || b.puente - a.puente || a.posicion - b.posicion)
   const vistas = new Set()
   const propuestas = candidatas.filter((c) => !vistas.has(c.q) && vistas.add(c.q)).slice(0, 5)
 
