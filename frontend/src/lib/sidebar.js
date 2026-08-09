@@ -105,6 +105,23 @@ const ORDEN_VENTANA = { 'ultimo-mes': 0, ahora: 1, pronto: 2, 'sin-temporada': 3
 const puntaje = (n) => n.ultimoReporte?.scoreOportunidad ?? -1
 const urgencia = (n) => ORDEN_VENTANA[n.ventana?.estado] ?? 3
 
+// ── El orden de la mesa de compra ──────────────────────────────────────────
+// Primero LA BÚSQUEDA (si nadie escribe la keyword, el resto de las métricas
+// describen un escaparate que no se abre), después EL MOMENTO (un nicho con la
+// ventana cerrada no se puede comprar por bueno que sea) y recién ahí el score.
+// Sin medir queda en el medio: no adelanta a una búsqueda alta ni cae al fondo.
+const ORDEN_BUSQUEDA = { alto: 0, medio: 1, bajo: 2, renombrar: 3, nulo: 4 }
+export const rangoBusqueda = (o) => ORDEN_BUSQUEDA[o?.nivelBusqueda?.nivel] ?? 1.5
+export const rangoVentana = (o) => ORDEN_VENTANA[o?.ventana?.estado] ?? 3
+
+export function compararOportunidades(a, b) {
+  return (
+    rangoBusqueda(a) - rangoBusqueda(b) ||
+    rangoVentana(a) - rangoVentana(b) ||
+    (b.score ?? -1) - (a.score ?? -1)
+  )
+}
+
 // Devuelve Map<grupoId, nichos[]> ya ordenado dentro de cada grupo.
 export function agruparNichos(nichos) {
   const porGrupo = new Map(GRUPOS.map((g) => [g.id, []]))

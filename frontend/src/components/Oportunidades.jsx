@@ -2,9 +2,47 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { Cargando, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
+import { compararOportunidades } from '../lib/sidebar.js'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 
+// LA MESA DE COMPRA. El orden es el mensaje: primero si la gente BUSCA eso
+// (una keyword que nadie escribe mide un escaparate que no se abre), después
+// CUÁNDO se compra (un nicho con la ventana cerrada no se puede traer por
+// bueno que sea) y recién ahí el score.
+
 const FLECHA = { sube: ['↑', 'delta-sube'], baja: ['↓', 'delta-baja'], estable: ['→', 'delta-neutra'] }
+
+const NIVELES = {
+  alto: { texto: 'búsqueda alta', clase: 'nb-alto' },
+  medio: { texto: 'búsqueda media', clase: 'nb-medio' },
+  bajo: { texto: 'cola larga', clase: 'nb-bajo' },
+  renombrar: { texto: 'keyword mal escrita', clase: 'nb-renombrar' },
+  nulo: { texto: 'nadie la busca', clase: 'nb-nulo' },
+}
+
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+const fmtMes = (m) => (m ? MESES[Number(m.slice(5, 7)) - 1] + (m.slice(0, 4) !== String(new Date().getFullYear()) ? ` ${m.slice(2, 4)}` : '') : '')
+
+function chipVentana(v) {
+  if (!v || v.estado === 'sin-temporada') return null
+  const pico = v.pico ? ` · pico ${fmtMes(v.pico)}` : ''
+  if (v.estado === 'ultimo-mes') {
+    return { clase: 'ahora', icono: '🔥', texto: 'último mes para pedir', ayuda: `Pidiendo este mes el stock llega justo al arranque del pico${pico}` }
+  }
+  if (v.estado === 'ahora') {
+    return { clase: 'ahora', icono: '🎯', texto: `pedir hasta ${fmtMes(v.hasta)}`, ayuda: `Ventana abierta ${fmtMes(v.desde)}–${fmtMes(v.hasta)}${pico}` }
+  }
+  if (v.estado === 'pronto') {
+    return { clase: 'pronto', texto: `pedir ${fmtMes(v.desde)}`, ayuda: `La ventana abre en ${v.mesesAl} mes(es)${pico}` }
+  }
+  return {
+    clase: 'futura',
+    texto: `pedir ${fmtMes(v.desde)}`,
+    ayuda: v.perdioLaTemporada
+      ? `La temporada de este año ya no se alcanza. Próxima ventana ${fmtMes(v.desde)}–${fmtMes(v.hasta)}${pico}`
+      : `Faltan ${v.mesesAl} mes(es)${pico}`,
+  }
+}
 
 function Hecho({ etiqueta, children }) {
   if (children == null || children === '') return null
@@ -17,9 +55,14 @@ function Hecho({ etiqueta, children }) {
 
 function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
   const flecha = o.tendenciaVentas ? FLECHA[o.tendenciaVentas] : null
+  const nb = o.nivelBusqueda
+  const nivel = nb?.nivel ? NIVELES[nb.nivel] : null
+  const ven = chipVentana(o.ventana)
+  const cot = o.cotizacion
+
   return (
     <article
-      className="op-carta"
+      className={`op-carta${nb?.nivel === 'renombrar' || nb?.nivel === 'nulo' ? ' op-carta-tibia' : ''}`}
       onClick={() => onAbrir(o.nichoId)}
       tabIndex={0}
       role="button"
@@ -30,10 +73,7 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
       <div className="op-lateral">
         <span className="op-rank">#{rank}</span>
         {o.madurando ? (
-          <span
-            className="mini-madurando mini-madurando-carta"
-            title="Midiendo entrabilidad: el score y el veredicto aparecen al graduar la serie (5 scans con demanda)"
-          >
+          <span className="mini-madurando mini-madurando-carta" title="Midiendo entrabilidad: el veredicto firme llega al completar la serie">
             {o.scansConDemanda}/5
           </span>
         ) : o.score != null ? (
@@ -42,39 +82,22 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
       </div>
 
       <div className="op-cuerpo">
+        {/* fila 1: lo que decide si esto se mira o no */}
         <div className="op-encabezado">
           <h3 className="op-keyword">{o.keyword}</h3>
-          {o.madurando ? (
-            <span className="op-confianza op-confianza-media" title="Sin veredicto hasta juntar la serie: estamos midiendo entrabilidad, no adivinándola">
-              midiendo entrabilidad
+          {nivel ? (
+            <span className={`chip-busqueda ${nivel.clase}`} title={nb.explicacion ?? ''}>
+              {nivel.texto}
             </span>
           ) : (
-            <span className={`veredicto veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span>
+            <span className="chip-busqueda nb-medio" title="Todavía sin medir si la gente busca esta keyword">
+              búsqueda sin medir
+            </span>
           )}
-          {!o.madurando && o.confianza ? (
-            <span className={`op-confianza op-confianza-${o.confianza}`} title="Confianza del análisis">
-              confianza {o.confianza}
-            </span>
-          ) : null}
-          {o.veredictoDeSerie ? (
-            <span className="op-confianza op-confianza-alta" title="Veredicto dictado con la serie de maduración completa, no con la foto de un scan">
-              veredicto de serie ✓
-            </span>
-          ) : null}
-          {o.confirmacion ? (
-            <span
-              className={`op-confianza ${o.confirmacion === 'confirmado' ? 'op-confianza-alta' : 'op-confianza-media'}`}
-              title={
-                o.confirmacion === 'confirmado'
-                  ? `Demanda sostenida en ${o.scansConDemanda} scans`
-                  : o.madurando
-                    ? `Solo ${o.scansConDemanda} scan(s) con demanda: el sistema lo escanea a diario solo hasta confirmar — no comprar todavía`
-                    : `Solo ${o.scansConDemanda} scan(s) con demanda: espera 2-3 antes de apostar`
-              }
-            >
-              {o.confirmacion === 'confirmado'
-                ? `✓ confirmado (${o.scansConDemanda} scans)`
-                : `preliminar (${o.scansConDemanda} scan${o.scansConDemanda === 1 ? '' : 's'})${o.madurando ? ' · madurando a diario' : ''}`}
+          {ven ? (
+            <span className={`chip-ventana v-${ven.clase}`} title={ven.ayuda}>
+              {ven.icono ? `${ven.icono} ` : ''}
+              {ven.texto}
             </span>
           ) : null}
           {o.tramites.map((t) => (
@@ -82,33 +105,19 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
               ⚠ {t}
             </span>
           ))}
-          {o.etapaCompra && o.etapaCompra !== 'evaluando' ? (
-            <span className="op-confianza op-confianza-alta" title={o.notaEtapa ?? 'Etapa del embudo de compra'}>
-              {o.etapaCompra.replace(/-/g, ' ')}
-              {o.notaEtapa ? ` · ${o.notaEtapa}` : ''}
-            </span>
-          ) : null}
-          {Number.isFinite(o.shareJugadaPct) && o.shareJugadaPct < 50 ? (
-            <span
-              className="op-confianza op-confianza-media"
-              title={`El score del nicho mezcla familias de producto; la jugada recomendada concentra el ${o.shareJugadaPct}% de las reseñas del top${o.keywordJugada ? ` — el sistema la mide aparte como "${o.keywordJugada}"` : ''}`}
-            >
-              jugada {o.shareJugadaPct}% del top
-            </span>
-          ) : null}
-          {o.listingListo ? <span className="op-listing" title="Borrador de listing generado">listing ✓</span> : null}
-          {mismaCompraQue ? (
-            <span
-              className="op-listing"
-              title="Mismo producto de fábrica: un solo pedido a China cubre ambos nichos; lo que cambia es la jugada de listing"
-            >
-              🔁 misma compra que "{mismaCompraQue}"
-            </span>
-          ) : null}
         </div>
+
+        {/* si la keyword está mal, eso manda sobre cualquier otra cosa */}
+        {nb?.nivel === 'renombrar' && nb.keywordSugerida ? (
+          <p className="op-aviso-kw">
+            Esta búsqueda no existe en Mercado Libre. La gente escribe <strong>{nb.keywordSugerida}</strong> —
+            cotizar sobre esta keyword es cotizar sobre un listado que nadie abre.
+          </p>
+        ) : null}
 
         {o.titular ? <p className="op-titular">{o.titular}</p> : null}
 
+        {/* fila 2: los números de la compra */}
         <div className="op-hechos">
           <Hecho etiqueta="vender a">{o.precioVentaClp ? fmtPrecio(o.precioVentaClp) : null}</Hecho>
           <Hecho etiqueta="EXW máx">{o.exwMaximoUsd != null ? `US$ ${o.exwMaximoUsd}` : null}</Hecho>
@@ -123,13 +132,56 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
           <Hecho etiqueta="mediana">{o.mediana ? fmtPrecio(o.mediana) : null}</Hecho>
           <Hecho etiqueta="Full">{o.pctFull != null ? `${Math.round(o.pctFull)}%` : null}</Hecho>
           <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
-          <Hecho etiqueta="gemelos creciendo">
-            {o.sellersGemelos != null ? (
-              <span title={o.gemelosDetalle ?? 'Vendedores chicos no-oficiales ganando reseñas en el nicho'}>
-                {o.sellersGemelos}
-              </span>
-            ) : null}
-          </Hecho>
+        </div>
+
+        {/* fila 3: en qué estado está la decisión */}
+        <div className="op-estado">
+          <span className={`veredicto veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span>
+          {o.confirmacion ? (
+            <span
+              className={`op-confianza ${o.confirmacion === 'confirmado' ? 'op-confianza-alta' : 'op-confianza-media'}`}
+              title={
+                o.confirmacion === 'confirmado'
+                  ? `Demanda sostenida en ${o.scansConDemanda} scans`
+                  : `Solo ${o.scansConDemanda} scan(s) con demanda${o.madurando ? ' · se escanea a diario solo' : ''}`
+              }
+            >
+              {o.confirmacion === 'confirmado' ? `✓ confirmado · ${o.scansConDemanda} scans` : `preliminar · ${o.scansConDemanda} scans`}
+            </span>
+          ) : null}
+          {cot ? (
+            <span
+              className={`op-cotizacion ${cot.viable === false || cot.cierra === false ? 'mal' : 'bien'}`}
+              title={cot.exwUsd ? `EXW cotizado US$ ${cot.exwUsd}` : 'Costo puesto en Chile anotado'}
+            >
+              {cot.cierra === false
+                ? `✗ el proveedor se pasó (máx US$ ${o.exwMaximoUsd})`
+                : cot.margenClp != null
+                  ? `✓ cotizado · deja ${fmtPrecio(cot.margenClp)}/u (${Math.round(cot.margenPct)}%)`
+                  : '✓ cotizado'}
+            </span>
+          ) : (
+            <span className="op-cotizacion pendiente">sin cotizar</span>
+          )}
+          {o.etapaCompra && o.etapaCompra !== 'evaluando' ? (
+            <span className="etapa-mini" title={o.notaEtapa ?? 'Etapa del embudo de compra'}>
+              {o.etapaCompra.replace(/-/g, ' ')}
+            </span>
+          ) : null}
+          {o.listingListo ? <span className="op-listing">listing ✓</span> : null}
+          {mismaCompraQue ? (
+            <span className="op-listing" title="Mismo producto de fábrica: un solo pedido cubre ambos nichos">
+              🔁 misma compra que “{mismaCompraQue}”
+            </span>
+          ) : null}
+          {Number.isFinite(o.shareJugadaPct) && o.shareJugadaPct < 50 ? (
+            <span
+              className="op-confianza op-confianza-media"
+              title={`El top mezcla familias; la jugada recomendada concentra el ${o.shareJugadaPct}% de las reseñas${o.keywordJugada ? ` — se aísla con "${o.keywordJugada}"` : ''}`}
+            >
+              jugada {o.shareJugadaPct}% del top
+            </span>
+          ) : null}
         </div>
 
         {o.condiciones ? <p className="op-condicion">condición: {o.condiciones}</p> : null}
@@ -141,8 +193,6 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
               {o.inversionEstimadaUsd != null ? ` (~US$ ${fmtNum(o.inversionEstimadaUsd)})` : ''}
             </span>
           ) : null}
-          {o.ventanaImportacion ? <span>ventana: {o.ventanaImportacion}</span> : null}
-          {o.estacionalidad?.tipo === 'todo_el_año' ? <span>demanda todo el año</span> : null}
           {o.fechaScan ? <span>scan {fmtFecha(o.fechaScan)}</span> : null}
         </div>
       </div>
@@ -150,8 +200,7 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
   )
 }
 
-// Nichos que miden el MISMO mercado que la carta líder (solape de SKUs):
-// colapsados bajo ella, con absorber (pausar, reversible) o mantener aparte.
+// Nichos que miden el MISMO mercado que la carta líder (solape de SKUs)
 function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) {
   const [abierta, setAbierta] = useState(false)
   const [ocupado, setOcupado] = useState(false)
@@ -180,38 +229,43 @@ function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) 
     }
   }
 
-  const etiqueta = (m) =>
-    porKeyword.get(m.keyword)?.esJugadaDelLider
-      ? `${m.keyword} (jugada medida aparte)`
-      : `${m.keyword} (${m.solapePct}% compartido)`
-
   return (
     <div className="familia">
       <button className="familia-toggle" onClick={() => setAbierta(!abierta)}>
-        {abierta ? '▾' : '▸'} {miembros.length === 1 ? '1 nicho mide' : `${miembros.length} nichos miden`} este
-        mismo mercado: {miembros.map(etiqueta).join(' · ')}
+        {abierta ? '▾' : '▸'} {miembros.length === 1 ? '1 nicho mide' : `${miembros.length} nichos miden`} este mismo
+        mercado: {miembros.map((m) => m.keyword).join(' · ')}
       </button>
       {abierta ? (
         <ul className="familia-lista">
           {miembros.map((m) => {
             const o = porKeyword.get(m.keyword)
             const esJugada = o?.esJugadaDelLider
+            const nv = o?.nivelBusqueda?.nivel
             return (
               <li key={m.keyword}>
                 <button className="enlace-boton" onClick={() => o && onAbrir(o.nichoId)}>
                   {m.keyword}
                 </button>{' '}
+                {nv ? <span className={`chip-busqueda ${NIVELES[nv]?.clase ?? ''}`}>{NIVELES[nv]?.texto}</span> : null}{' '}
                 <span className="plan-motivo">
                   {m.solapePct}% del top compartido · score {o?.score ?? '—'}
-                  {esJugada ? ' · sub-nicho de jugada (medición a propósito)' : ''}
+                  {esJugada ? ' · sub-nicho de jugada' : ''}
                 </span>{' '}
-                <button className="boton-secundario boton-mini" onClick={() => absorber(m)} disabled={ocupado}
-                        title="Pausa este nicho (reversible): libera cupo y deja de pagar scans duplicados">
+                <button
+                  className="boton-secundario boton-mini"
+                  onClick={() => absorber(m)}
+                  disabled={ocupado}
+                  title="Pausa este nicho (reversible): deja de pagar scans duplicados"
+                >
                   absorber
                 </button>{' '}
                 {!esJugada ? (
-                  <button className="enlace-boton" onClick={() => mantenerAparte(m)} disabled={ocupado}
-                          title="Falso positivo: son mercados distintos, no volver a agruparlos">
+                  <button
+                    className="enlace-boton"
+                    onClick={() => mantenerAparte(m)}
+                    disabled={ocupado}
+                    title="Falso positivo: son mercados distintos"
+                  >
                     mantener aparte
                   </button>
                 ) : null}
@@ -224,16 +278,24 @@ function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) 
   )
 }
 
+const FILTROS = [
+  ['comprables', 'Comprables ahora', (o) => ['ahora', 'ultimo-mes', 'pronto', 'sin-temporada'].includes(o.ventana?.estado ?? 'sin-temporada')],
+  ['buscados', 'Solo búsqueda alta', (o) => o.nivelBusqueda?.nivel === 'alto'],
+  ['confirmados', 'Confirmados', (o) => o.confirmacion === 'confirmado'],
+  ['cotizados', 'Ya cotizados', (o) => Boolean(o.cotizacion)],
+  ['arreglar', 'Keyword por arreglar', (o) => o.nivelBusqueda?.nivel === 'renombrar'],
+]
+
 export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
+  const [activos, setActivos] = useState([])
 
   const cargar = useCallback(() => {
     api
       .oportunidades()
       .then(setDatos)
       .catch((err) => setError(err.message))
-    // absorber cambia estados de nicho: el sidebar también debe refrescarse
     alCambiarNichos?.()
   }, [alCambiarNichos])
 
@@ -244,35 +306,67 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   if (error) return <main><p className="error-bloque">Error: {error}</p></main>
   if (!datos) return <main><Cargando texto="Cargando oportunidades…" /></main>
 
+  const todas = [...datos.oportunidades].sort(compararOportunidades)
+  const filtrosActivos = FILTROS.filter(([id]) => activos.includes(id))
+  const visibles = todas.filter((o) => filtrosActivos.every(([, , fn]) => fn(o)))
+
+  const cuenta = (fn) => todas.filter(fn).length
+  const porArreglar = cuenta((o) => o.nivelBusqueda?.nivel === 'renombrar')
+  const sinMedir = cuenta((o) => !o.nivelBusqueda?.nivel)
+
   return (
     <main>
       <div className="reporte-encabezado">
         <div>
           <h2>Oportunidades</h2>
           <p className="reporte-fecha">
-            Los nichos con veredicto de entrada, rankeados para decidir a cuál ponerle plata primero.
+            Ordenadas por lo que decide la compra: primero si <strong>la gente busca</strong> esa keyword,
+            después <strong>cuándo hay que pedir</strong>, y al final el score.
           </p>
         </div>
       </div>
 
+      <div className="op-resumen">
+        <span><b>{cuenta((o) => o.nivelBusqueda?.nivel === 'alto')}</b> con búsqueda alta</span>
+        <span><b>{cuenta((o) => ['ahora', 'ultimo-mes'].includes(o.ventana?.estado))}</b> con ventana abierta</span>
+        <span><b>{cuenta((o) => o.confirmacion === 'confirmado')}</b> confirmados</span>
+        <span><b>{cuenta((o) => Boolean(o.cotizacion))}</b> cotizados</span>
+        {porArreglar ? <span className="op-resumen-aviso"><b>{porArreglar}</b> con la keyword por arreglar</span> : null}
+        {sinMedir ? <span className="op-resumen-aviso"><b>{sinMedir}</b> sin medir la búsqueda</span> : null}
+      </div>
 
-      {!datos.oportunidades.length ? (
+      <div className="chips op-filtros">
+        {FILTROS.map(([id, etiqueta, fn]) => (
+          <button
+            key={id}
+            className={activos.includes(id) ? 'chip activo' : 'chip'}
+            aria-pressed={activos.includes(id)}
+            onClick={() => setActivos((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id]))}
+          >
+            {etiqueta} <span className="op-filtro-n">{cuenta(fn)}</span>
+          </button>
+        ))}
+        {activos.length ? (
+          <button className="enlace-boton" onClick={() => setActivos([])}>
+            limpiar
+          </button>
+        ) : null}
+      </div>
+
+      {!todas.length ? (
         <p className="vacio">
-          Todavía no hay nichos con veredicto de entrada. El radar y los análisis van llenando este
-          panel solos.
+          Todavía no hay nichos con veredicto de entrada. El radar y los análisis van llenando este panel solos.
         </p>
+      ) : !visibles.length ? (
+        <p className="vacio">Ninguna oportunidad pasa los filtros.</p>
       ) : (
         <div className="op-lista">
           {(() => {
-            // el primer nicho de cada clave de producto (mayor score) es el dueño
-            // de la compra; los siguientes llevan el chip "misma compra que".
-            // Los miembros de una familia (mismo mercado) no ocupan carta propia:
-            // viven colapsados bajo su líder.
             const dueno = new Map()
-            const porKeyword = new Map(datos.oportunidades.map((o) => [o.keyword, o]))
+            const porKeyword = new Map(todas.map((o) => [o.keyword, o]))
             let rank = 0
-            return datos.oportunidades.map((o) => {
-              if (o.familiaLider) return null // colapsado bajo el líder
+            return visibles.map((o) => {
+              if (o.familiaLider) return null // colapsado bajo su líder
               rank++
               let mismaCompraQue = null
               if (o.productoClave) {
@@ -301,9 +395,10 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
       <Criterios />
 
       <p className="nota">
-        Ranking por score con desempate por demanda. "EXW máx" es lo más que puedes pagar en China (precio ex-fábrica)
-        para que el margen cierre al precio sugerido; la inversión estimada es EXW máx × pedido de
-        prueba. Abre la carta para ver el análisis completo, el simulador y el listing.
+        "EXW máx" es lo más que puedes pagar en China (precio ex-fábrica) para que el margen cierre al precio
+        sugerido. La ventana sale del pico de temporada menos el lead time de importación (~2 meses desde que
+        pagas hasta tener stock vendible en Full). Abre una carta para ver la familia de búsqueda, el análisis
+        completo y el simulador.
       </p>
     </main>
   )

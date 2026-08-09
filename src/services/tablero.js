@@ -12,6 +12,7 @@ import { calcularMargen } from './margen.js'
 import { comisionMlExacta, categoriaDominante } from './comisionesMl.js'
 import { topSkusPorKeyword, agruparFamilias } from './familias.js'
 import { puntajeBusqueda, explicar } from './nivelBusqueda.js'
+import { ventanaDeCompra } from './ventana.js'
 
 // Margen estimado si compras al EXW que cotizó el proveedor, con los mismos
 // supuestos estándar de la tabla del análisis (volumen 0.003 m³/u, marítimo).
@@ -256,6 +257,13 @@ export async function tableroOportunidades({ todos = false } = {}) {
       tramites: Array.isArray(analisis.tramites)
         ? analisis.tramites
         : detectarTramites([...(analisis.riesgos ?? []), n.radarInfo?.riesgo]),
+      // CUÁNDO se compra, calculado (pico menos lead time). Es lo que ordena la
+      // mesa junto con el nivel de búsqueda: un nicho de score alto con la
+      // ventana cerrada no se puede comprar y no puede ir arriba.
+      ventana: ventanaDeCompra({
+        ventanaCompra: analisis.ventanaCompra,
+        estacionalidad: n.radarInfo?.estacionalidad,
+      }),
       ventanaImportacion: n.radarInfo?.ventanaImportacion ?? null,
       estacionalidad: n.radarInfo?.estacionalidad ?? null,
       condiciones: analisis.veredicto === 'entrar_con_condiciones' ? (analisis.resumen ?? null) : null,
