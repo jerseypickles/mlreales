@@ -110,9 +110,17 @@ function extraerSenal(snapshots, snapshotsPrevios, campo, { depurar = false } = 
         delta += d
       }
       senal.delta = delta
-      senal.periodoDias = redondear(dias, 1)
-      senal.porDia = redondear(delta / dias, 1)
+      senal.periodoDias = redondear(dias, 2)
       senal.itemsComparables = pares.length
+      // una tasa por día exige una ventana de al menos un día: contra un scan de
+      // hace una hora, delta 0 no es "no vende" (el piso serían ~600 ventas/día)
+      // y delta 1 tampoco es "vende 600" — en ambos casos la ventana no resuelve
+      if (dias >= scoring.depuracionDelta.ventanaMinTasaDias) {
+        senal.porDia = redondear(delta / dias, 1)
+      } else {
+        senal.porDia = null
+        senal.ventanaInsuficiente = true
+      }
       if (saltosFiltrados || duplicadosCatalogo) {
         senal.deltaBruto = deltaBruto
         senal.saltosFiltrados = saltosFiltrados
@@ -149,11 +157,13 @@ function extraerSenalPreguntas(snapshots, snapshotsPrevios) {
   }
   if (!comparables || !fechaPrevia) return null
   const dias = Math.max((new Date(snapshots[0].fecha) - new Date(fechaPrevia)) / 86_400_000, 1 / 24)
+  const resuelve = dias >= scoring.depuracionDelta.ventanaMinTasaDias
   return {
     nuevas: nuevas.size,
-    periodoDias: redondear(dias, 1),
-    porDia: redondear(nuevas.size / dias, 1),
+    periodoDias: redondear(dias, 2),
+    porDia: resuelve ? redondear(nuevas.size / dias, 1) : null,
     itemsComparables: comparables,
+    ...(resuelve ? {} : { ventanaInsuficiente: true }),
   }
 }
 

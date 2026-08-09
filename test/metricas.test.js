@@ -136,6 +136,29 @@ test('calcularDemanda: totales y delta entre scans', () => {
   assert.equal(d.volumenVentasEstimado, 700)
 })
 
+test('calcularDemanda: una ventana de minutos no publica tasa (ni 0 ni inflada)', () => {
+  // caso pastillas freno 9-ago: el cron de maduración escaneó y una hora después
+  // corrió un re-scan manual. Con 1 h de ventana el piso de detección son ~600
+  // ventas/día: el 0 no es "no vende" y un +1 no es "vende 600" — no hay tasa.
+  const fechaPrevia = new Date('2026-08-09T02:00:00Z')
+  const fechaActual = new Date('2026-08-09T03:00:00Z')
+  const actuales = Array.from({ length: 5 }, (_, i) => ({ sku: `S${i}`, numReviews: 100, fecha: fechaActual }))
+  const previos = Array.from({ length: 5 }, (_, i) => ({ sku: `S${i}`, numReviews: 100, fecha: fechaPrevia }))
+
+  const quieto = calcularDemanda(actuales, previos, { minItems: 1 })
+  assert.equal(quieto.reviews.ventanaInsuficiente, true)
+  assert.equal(quieto.reviews.porDia, null)
+  assert.equal(quieto.ventasEstimadasPorDia, null, 'un 0 de resolución no puede viajar como medición')
+
+  const conVenta = calcularDemanda(
+    actuales.map((s, i) => (i === 0 ? { ...s, numReviews: 101 } : s)),
+    previos,
+    { minItems: 1 },
+  )
+  assert.equal(conVenta.reviews.delta, 1, 'el delta crudo se conserva como hecho')
+  assert.equal(conVenta.ventasEstimadasPorDia, null, 'pero no se extrapola a ~600/día')
+})
+
 test('calcularDemanda: primer scan sin previos', () => {
   const d = calcularDemanda([{ sku: 'A', vendidos: 200, fecha: new Date('2026-07-16') }], null, { minItems: 1 })
   assert.equal(d.vendidos.total, 200)

@@ -98,7 +98,9 @@ export function Resumen({ reporte, productos, nichoId, nicho, porMarcaVehiculo }
                 : (m.demanda.ventasEstimadasPorDia ?? '—')
             }
             detalle={
-              m.demanda.ventasEstimadasPorDia == null
+              m.demanda.reviews?.ventanaInsuficiente
+                ? `ventana de ${Math.round((m.demanda.reviews.periodoDias ?? 0) * 24)} h entre scans: no resuelve una tasa diaria`
+                : m.demanda.ventasEstimadasPorDia == null
                 ? 'el delta requiere 2 scans con detalle'
                 : m.demanda.base === 'reviews'
                   ? `reseñas nuevas × factor · canasta ${m.demanda.reviews?.itemsComparables ?? '—'}${

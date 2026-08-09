@@ -44,5 +44,9 @@ export const scoring = {
     // "0" por pura resolución. Comparar contra el scan de hace ≥N días baja el
     // piso de detección a ~25/N ventas/día y el cero vuelve a significar algo.
     ventanaMinDias: 3,
+    // por debajo de esto no se publica tasa/día: un re-scan manual encima del
+    // automático deja ventanas de minutos, y ahí tanto el 0 como el positivo
+    // son ruido de resolución, no medición
+    ventanaMinTasaDias: 1,
   },
 }
