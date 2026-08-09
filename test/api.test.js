@@ -98,6 +98,15 @@ test('reporte e historia sobre datos de un scan', async () => {
   assert.equal(reporte.topProductos[0].sku, 'MLC45499727')
   assert.equal(reporte.topProductos[0].esFull, true)
 
+  // el score no puede quedar solo dentro de metricas: el sidebar, el tablero y
+  // la cadencia del programador leen el campo de nivel superior, y un nicho
+  // "sin puntuar" se escanea a diario para siempre (caso pastillas freno)
+  assert.equal(
+    reporte.scoreOportunidad,
+    reporte.metricas.scoreOportunidad,
+    'el score del reporte tiene que coincidir con el de metricas',
+  )
+
   // segunda llamada devuelve el reporte ya persistido
   const segunda = await fetch(`${baseUrl}/api/nichos/${nicho._id}/reporte`)
   const cuerpo2 = await segunda.json()

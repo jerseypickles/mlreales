@@ -283,8 +283,23 @@ router.get(
         metricas: calculado.metricas,
         topProductos: calculado.topProductos,
         topSellers: calculado.topSellers,
+        // sin esta línea el score quedaba SOLO dentro de metricas y el campo
+        // que lee todo el sistema —sidebar, tablero, y el programador para
+        // decidir la cadencia— se guardaba en null. El nicho quedaba "sin
+        // puntuar" para siempre y por eso corría a diario sin necesidad
+        // (caso pastillas freno: score 52 calculado, invisible, escaneando
+        // todos los días).
+        scoreOportunidad: calculado.metricas.scoreOportunidad,
       })
       reporte = doc.toObject()
+    }
+
+    // auto-reparación de los reportes que ya quedaron con el score perdido:
+    // el dato está calculado dentro de metricas, solo hay que subirlo
+    if (reporte.scoreOportunidad == null && reporte.metricas?.scoreOportunidad != null) {
+      reporte.scoreOportunidad = reporte.metricas.scoreOportunidad
+      await Reporte.updateOne({ _id: reporte._id }, { $set: { scoreOportunidad: reporte.scoreOportunidad } })
+      console.log(`[nichos] "${nicho.keyword}": score ${reporte.scoreOportunidad} recuperado de metricas`)
     }
 
     // un scan nuevo crea un reporte sin análisis: entregar el último análisis
