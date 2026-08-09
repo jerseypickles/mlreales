@@ -30,15 +30,19 @@ test('la ventana futura baja el nicho aunque el score sea alto', () => {
   assert.equal(clasificarNicho(n), 'aunNo')
 })
 
-test('keyword mal escrita: grupo propio, porque el producto SÍ se busca', () => {
-  // "set snorkel" no existe pero "snorkel" tiene 10 búsquedas vivas: eso se
-  // arregla renombrando, no descartando
+test('keyword mal escrita NO baja al nicho: el producto se sigue pudiendo comprar', () => {
+  // el error que hubo que revertir: "manguera extensible" (92, cotizada, en su
+  // último mes para pedir) desapareció del grupo de compra por un aviso de
+  // keyword. El aviso viaja al lado, no la esconde.
   const n = nicho({
     ventana: abierta,
-    ultimoReporte: { scoreOportunidad: 82 },
-    nivelBusqueda: { nivel: 'renombrar', keywordSugerida: 'snorkel' },
+    exwCotizadoUsd: 2.1,
+    ultimoReporte: { scoreOportunidad: 92 },
+    nivelBusqueda: { nivel: 'renombrar', keywordSugerida: 'manguera jardin' },
   })
-  assert.equal(clasificarNicho(n), 'renombrar')
+  assert.equal(clasificarNicho(n), 'decidir')
+  // sin cotizar sigue siendo comprable esta temporada
+  assert.equal(clasificarNicho({ ...n, exwCotizadoUsd: undefined }), 'comprar')
 })
 
 test('nadie busca la keyword: fuera del embudo aunque el análisis diga entrar', () => {

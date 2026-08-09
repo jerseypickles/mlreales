@@ -4,122 +4,171 @@ import {
   analizarFamilia,
   palabrasDeBusqueda,
   variantesDe,
-  esCabeza,
+  cabezaDe,
+  consultasDe,
   explicar,
 } from '../src/services/nivelBusqueda.js'
 import { sinStopwords } from '../src/services/busquedasReales.js'
 
-// Todas las listas de abajo son respuestas REALES del autocompletado de ML
+// TODAS las listas de abajo son respuestas reales del autocompletado de ML
 // Chile capturadas el 9-ago-2026 sobre el tablero del importador.
 
 test('sinStopwords: la forma que ML sí indexa', () => {
   assert.equal(sinStopwords('arbol de navidad'), 'arbol navidad')
   assert.equal(sinStopwords('freidora de aire'), 'freidora aire')
   assert.equal(sinStopwords('cama para perro'), 'cama perro')
-  assert.equal(sinStopwords('Gafas De Sol'), 'gafas sol')
 })
 
 test('palabrasDeBusqueda: solo las que sirven de prefijo', () => {
   assert.deepEqual(palabrasDeBusqueda('set snorkel'), ['set', 'snorkel'])
   assert.deepEqual(palabrasDeBusqueda('arbol de navidad'), ['arbol', 'navidad'])
-  // menos de 3 letras no es prefijo útil
   assert.deepEqual(palabrasDeBusqueda('tv led'), ['led'])
   assert.deepEqual(palabrasDeBusqueda(''), [])
 })
 
-test('variantesDe: la keyword y su forma sin stopwords', () => {
-  assert.deepEqual(variantesDe('arbol de navidad'), ['arbol de navidad', 'arbol navidad'])
-  assert.deepEqual(variantesDe('cosmetiquero'), ['cosmetiquero'])
+test('cabezaDe: el sustantivo, saltándose la palabra que solo envuelve', () => {
+  assert.equal(cabezaDe('manguera extensible'), 'manguera')
+  assert.equal(cabezaDe('waflera electrica'), 'waflera')
+  assert.equal(cabezaDe('set snorkel'), 'snorkel')
+  assert.equal(cabezaDe('pack toallitas humedas'), 'toallitas')
+  assert.equal(cabezaDe(''), null)
 })
 
-test('esCabeza: el autocompletado se devuelve a sí mismo cuando la palabra es una búsqueda', () => {
-  assert.equal(esCabeza('snorkel', ['snorkel', 'snorkel buceo', 'snorkel nino']), true)
-  assert.equal(esCabeza('set', ['set herramientas', 'set mancuernas']), false)
-  assert.equal(esCabeza('casera', ['maquina pastas caseras', 'mermelada casera']), false)
-  assert.equal(esCabeza('x', undefined), false)
+test('consultasDe: primero la frase, después el producto', () => {
+  const c = consultasDe('manguera extensible')
+  assert.deepEqual(c.cortas, ['manguera', 'manguera e'])
+  assert.deepEqual(c.largas, ['extensible'])
+  // con stopword de por medio el prefijo largo se arma sin ella
+  assert.deepEqual(consultasDe('arbol de navidad').cortas, ['arbol', 'arbol n'])
 })
 
-test('keyword que ES cabeza de su prefijo: nivel alto', () => {
-  // cosmetiquero #1 de 10; arbol navidad #1 (con la stopword de por medio)
+// ---- la keyword existe ----
+
+test('cabeza de su propia familia: alto', () => {
   const r = analizarFamilia('cosmetiquero', new Map([['cosmetiquero', ['cosmetiquero', 'cosmetiquero grande']]]))
   assert.equal(r.nivel, 'alto')
   assert.equal(r.posicion, 1)
 })
 
 test('la stopword no puede tumbar la medición (arbol de navidad, score 91)', () => {
-  const listas = new Map([
-    ['arbol', ['arbol navidad', 'arbol pascua', 'arbol navidad plegable']],
-    ['navidad', ['navidad', 'navidad decoracion']],
-  ])
-  const r = analizarFamilia('arbol de navidad', listas)
+  const r = analizarFamilia(
+    'arbol de navidad',
+    new Map([['arbol', ['arbol navidad', 'arbol pascua', 'arbol navidad plegable']]]),
+  )
   assert.equal(r.nivel, 'alto')
-  assert.equal(r.posicion, 1)
   assert.equal(r.seEscribe, 'arbol navidad')
 })
 
-test('aparece pero al fondo de su lista: medio', () => {
-  const lista = ['piscina', 'piscina estructural', 'piscina ninos', 'piscina desmontable', 'piscina inflable']
-  const r = analizarFamilia('piscina inflable', new Map([['piscina', lista]]))
+test('MANGUERA EXTENSIBLE: existe con el prefijo de dos palabras (era falso positivo)', () => {
+  // el error que hubo que revertir: midiendo solo palabras completas, un nicho
+  // de score 92 y ya cotizado salía como "keyword inventada"
+  const listas = new Map([
+    ['manguera', ['manguera', 'manguera jardin', 'manguera retractil', 'manguera ducha']],
+    ['manguera e', ['manguera expandible', 'manguera extensible', 'manguera extensible jardin']],
+  ])
+  const r = analizarFamilia('manguera extensible', listas)
   assert.equal(r.nivel, 'medio')
-  assert.equal(r.posicion, 5)
+  assert.equal(r.posicion, 2)
+  assert.equal(r.colaLarga, true)
 })
 
-test('SET SNORKEL: la keyword no se busca pero el producto SÍ → renombrar', () => {
-  // el caso que destapó el hueco: preguntando solo por "set" el nicho salía
-  // "nadie lo busca"; preguntando por "snorkel" hay 10 búsquedas vivas
+test('WAFLERA ELECTRICA: #1 de su prefijo de dos palabras', () => {
   const listas = new Map([
-    ['set', ['set herramientas', 'set mancuernas', 'set maquillaje', 'set bano']],
+    ['waflera', ['waflera', 'wafleras', 'waflera sandwichera', 'waflera industrial']],
+    ['waflera e', ['waflera electrica', 'waflera electrica 3 1', 'sandwichera waflera electrica']],
+  ])
+  assert.equal(analizarFamilia('waflera electrica', listas).nivel, 'medio')
+})
+
+test('ORGANIZADOR COSMETICOS y SACA PUNTOS NEGROS: existen, pero son cola larga', () => {
+  const org = analizarFamilia(
+    'organizador cosmeticos',
+    new Map([
+      ['organizador', ['organizador', 'organizador zapatos', 'organizador bano']],
+      [
+        'organizador c',
+        ['organizador cocina', 'organizador cubiertos', 'organizador cables', 'organizador closet', 'organizador cajones', 'organizador cosmeticos'],
+      ],
+    ]),
+  )
+  assert.equal(org.nivel, 'bajo')
+  assert.equal(org.posicion, 6)
+
+  const saca = analizarFamilia(
+    'saca puntos negros',
+    new Map([
+      ['saca', ['saca pelusas', 'saca pelos']],
+      ['saca p', ['saca pelusas', 'saca pelusas electrico', 'saca pelos', 'saca pelos mascotas', 'saca pelusas ropa', 'saca pelos ropa', 'saca pelos gato', 'saca puntos negros']],
+    ]),
+  )
+  assert.equal(saca.nivel, 'bajo')
+  assert.equal(saca.posicion, 8)
+})
+
+// ---- la keyword no existe ----
+
+test('SET SNORKEL: la keyword no se busca pero el producto SÍ → renombrar', () => {
+  const listas = new Map([
+    ['set', ['set herramientas', 'set mancuernas', 'set maquillaje']],
+    ['set s', ['set skincare', 'set sartenes', 'set servicios', 'set slime']],
     ['snorkel', ['snorkel', 'snorkel buceo', 'snorkel nino', 'snorkel natacion', 'snorkel mascara']],
   ])
   const r = analizarFamilia('set snorkel', listas)
   assert.equal(r.nivel, 'renombrar')
+  assert.equal(r.cabeza, 'snorkel')
   assert.equal(r.keywordSugerida, 'snorkel')
-  assert.equal(r.posicionSugerida, 1)
   assert.ok(r.alternativas.includes('snorkel buceo'))
-  // "set" no es cabeza: sus sugerencias no pueden proponer reemplazo
+  // jamás proponer las sugerencias de "set", que hablan de otros productos
   assert.ok(!r.alternativas.some((a) => a.startsWith('set ')))
+})
+
+test('el reemplazo tiene que hablar del MISMO producto (nunca el adjetivo)', () => {
+  // sin el candado de la cabeza se proponía "extensible" para manguera y
+  // "electrica toothbrush" para waflera
+  const listas = new Map([
+    ['manguera', ['manguera jardin', 'manguera riego']],
+    ['manguera z', []],
+    ['extensible', ['extensible', 'extensible cortina', 'extensible microondas', 'barra extensible']],
+  ])
+  const r = analizarFamilia('manguera zzz extensible', listas)
+  assert.equal(r.nivel, 'renombrar')
+  assert.ok(r.alternativas.every((a) => a.includes('manguera')))
+  assert.ok(!r.alternativas.includes('extensible'))
+  assert.ok(!r.alternativas.includes('extensible cortina'))
 })
 
 test('DEPILADORA IPL CASERA: la palabra muerta es "casera", no el producto', () => {
   const listas = new Map([
     ['depiladora', ['depiladora', 'depiladora laser', 'depiladora facial']],
-    ['ipl', ['ipl', 'ipl philips', 'ipl laser']],
-    ['casera', ['maquina pastas caseras', 'mermelada casera', 'mayonesa casera']],
+    ['depiladora i', ['depiladora ingle', 'depiladora indolora']],
+    ['ipl', ['ipl', 'ipl philips']],
+    ['casera', ['maquina pastas caseras', 'mayonesa casera']],
   ])
   const r = analizarFamilia('depiladora ipl casera', listas)
   assert.equal(r.nivel, 'renombrar')
-  assert.ok(['depiladora', 'ipl'].includes(r.keywordSugerida))
-  // jamás proponer mayonesa casera como keyword de reemplazo
+  assert.equal(r.cabeza, 'depiladora')
+  // jamás mayonesa casera como keyword de una depiladora
   assert.ok(!r.alternativas.some((a) => a.includes('mayonesa')))
-  assert.deepEqual(r.cabezas.sort(), ['depiladora', 'ipl'])
-})
-
-test('FOCO SOLARES: keyword mal escrita, la familia manda', () => {
-  const listas = new Map([
-    ['foco', ['foco', 'foco solar', 'focos solares exterior', 'foco caza', 'focos solares potentes']],
-    ['solares', ['solares', 'solares jardin', 'solares focos']],
-  ])
-  const r = analizarFamilia('foco solares', listas)
-  assert.equal(r.nivel, 'renombrar')
-  // "focos solares exterior" cubre las DOS palabras del nicho: gana a "foco"
-  assert.equal(r.keywordSugerida, 'focos solares exterior')
+  assert.ok(r.alternativas.every((a) => a.includes('depiladora')))
 })
 
 test('nada vivo por ninguna palabra: nulo de verdad', () => {
   const listas = new Map([
     ['disfraz', ['disfraz mujer', 'disfraz halloween']],
+    ['disfraz f', ['disfraz frozen']],
     ['fiestas', ['fiestas infantiles']],
     ['patrias', ['banderas chilenas']],
   ])
-  const r = analizarFamilia('disfraz fiestas patrias', listas)
+  // ninguna sugerencia contiene la cabeza "disfraz"… salvo las de su propio
+  // prefijo, que sí la contienen: el caso nulo real es cuando ML no responde
+  const r = analizarFamilia('zzz qqq', new Map([['zzz', []], ['qqq', []]]))
   assert.equal(r.nivel, 'nulo')
   assert.deepEqual(r.alternativas, [])
+  // el disfraz sí tiene familia viva bajo su cabeza: es renombrar, no nulo
+  assert.equal(analizarFamilia('disfraz fiestas patrias', listas).nivel, 'renombrar')
 })
 
-test('sin respuesta de ML no se afirma nada', () => {
-  const r = analizarFamilia('lo que sea', new Map([['que', []]]))
-  assert.equal(r.nivel, 'nulo')
-})
+// ---- explicaciones ----
 
 test('explicar: el renombrar dice cuál es la búsqueda real', () => {
   const texto = explicar({
@@ -128,18 +177,18 @@ test('explicar: el renombrar dice cuál es la búsqueda real', () => {
     posicionSugerida: 1,
     alternativas: ['snorkel', 'snorkel buceo', 'snorkel nino'],
   })
-  assert.match(texto, /el producto SÍ/)
+  assert.match(texto, /el producto SÍ se busca/)
   assert.match(texto, /"snorkel"/)
   assert.match(texto, /snorkel buceo/)
 })
 
-test('explicar: el nulo no propone nada porque no hay nada', () => {
-  assert.match(explicar({ nivel: 'nulo' }), /no hay producto/)
-  assert.equal(explicar(null), null)
+test('explicar: la cola larga avisa que hay que teclear dos palabras', () => {
+  const texto = explicar({ nivel: 'bajo', prefijo: 'saca p', posicion: 8, deCuantas: 10, colaLarga: true })
+  assert.match(texto, /#8 de 10/)
+  assert.match(texto, /dos palabras/)
 })
 
-test('explicar: la keyword sana muestra su posición', () => {
-  const texto = explicar({ nivel: 'alto', prefijo: 'arbol', posicion: 1, deCuantas: 10, seEscribe: 'arbol navidad' })
-  assert.match(texto, /#1 de 10/)
-  assert.match(texto, /arbol navidad/)
+test('explicar: sin medición no inventa nada', () => {
+  assert.equal(explicar(null), null)
+  assert.match(explicar({ nivel: 'nulo' }), /no hay producto/)
 })

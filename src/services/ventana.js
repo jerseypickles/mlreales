@@ -14,11 +14,22 @@ const MESES_ES = {
   julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
 }
 
-// Entre pagar en China y tener stock vendible en Full pasan 50-70 días
-// (producción + 35-50 de mar + internación + ingreso a Full). Comprar 4 meses
-// antes del pico llega holgado; 2 meses antes llega justo al arranque.
-export const LEAD_MAX_MESES = 4
-export const LEAD_MIN_MESES = 2
+// CUÁNTO ANTES DEL PICO HAY QUE PEDIR.
+//
+// El reloj arranca cuando se le paga al proveedor en China, no cuando zarpa:
+// producción + 35-50 días de mar + internación + ingreso a Full = 50-70 días
+// (~2 a 2,5 meses) antes de tener la primera unidad vendible.
+//
+//   pedir a pico−4  →  el stock llega ~1,5 meses ANTES del pico (holgado, y
+//                      alcanza a juntar reseñas y ranking antes de la ola)
+//   pedir a pico−2  →  el stock llega justo cuando el pico arranca (o unos
+//                      días después, si el tránsito se va a los 70 días)
+//   pedir a pico−1  →  no alcanza: llega con el pico corriendo
+//
+// Ajustables sin tocar código (LEAD_COMPRA_MAX_MESES / LEAD_COMPRA_MIN_MESES):
+// el lead real lo sabe el importador con su forwarder, no este archivo.
+export const LEAD_MAX_MESES = Number(process.env.LEAD_COMPRA_MAX_MESES) || 4
+export const LEAD_MIN_MESES = Number(process.env.LEAD_COMPRA_MIN_MESES) || 2
 
 export const mesChile = (fecha = new Date()) =>
   fecha.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' }).slice(0, 7)
@@ -46,12 +57,15 @@ export function inicioDelPico(mesesPico) {
 function estadoDesde(absHoy, desde, hasta) {
   if (absHoy > hasta) return null // esta ocurrencia ya no alcanza
   if (absHoy >= desde) return absHoy === hasta ? 'ultimo-mes' : 'ahora'
-  return hasta - absHoy <= LEAD_MAX_MESES + 1 && desde - absHoy <= 2 ? 'pronto' : 'futura'
+  return desde - absHoy <= 2 ? 'pronto' : 'futura'
 }
 
 // Devuelve la ventana accionable del nicho, o null si no hay señal de temporada.
 // `ventanaCompra` (la que declara el analista) manda sobre el cálculo.
-export function ventanaDeCompra({ ventanaCompra = null, estacionalidad = null } = {}, { hoy = new Date() } = {}) {
+export function ventanaDeCompra(
+  { ventanaCompra = null, estacionalidad = null } = {},
+  { hoy = new Date(), leadMax = LEAD_MAX_MESES, leadMin = LEAD_MIN_MESES } = {},
+) {
   const absHoy = aAbsoluto(mesChile(hoy))
 
   // 1. lo que dictó el analista, si viene y no venció
@@ -84,8 +98,8 @@ export function ventanaDeCompra({ ventanaCompra = null, estacionalidad = null } 
   const anioHoy = Math.floor((absHoy - 1) / 12)
   for (let k = 0; k <= 2; k++) {
     const pico = (anioHoy + k) * 12 + inicio
-    const desde = pico - LEAD_MAX_MESES
-    const hasta = pico - LEAD_MIN_MESES
+    const desde = pico - leadMax
+    const hasta = pico - leadMin
     const estado = estadoDesde(absHoy, desde, hasta)
     if (!estado) continue
     return {
@@ -98,6 +112,8 @@ export function ventanaDeCompra({ ventanaCompra = null, estacionalidad = null } 
       mesesAl: Math.max(0, desde - absHoy),
       // el pico de esta temporada ya no se alcanza: la ventana es la del ciclo siguiente
       perdioLaTemporada: k > 0 || undefined,
+      // para que la UI pueda explicar de dónde sale la fecha sin adivinar
+      leadMeses: { min: leadMin, max: leadMax },
       motivo: null,
     }
   }

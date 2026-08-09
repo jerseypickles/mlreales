@@ -16,11 +16,14 @@ export function clasificarNicho(n) {
   const fuera = n.veredicto === 'no_entrar' || n.estado === 'pausado' || n.etapaCompra === 'descartado'
   if (fuera) return n.estado === 'pausado' && n.revisarEl ? 'vuelven' : 'fuera'
 
-  // nadie escribe esa búsqueda: el listado que mide no lo ve ningún comprador.
-  // Se marca y se baja, nunca se pausa solo — descartar es del importador.
-  // "renombrar" es distinto de "nulo": el PRODUCTO se busca, la keyword está
-  // mal ("set snorkel" no existe, "snorkel" tiene 10 búsquedas vivas).
-  if (n.nivelBusqueda?.nivel === 'renombrar') return 'renombrar'
+  // nadie escribe esa búsqueda NI NADA PARECIDO: el listado que mide no lo ve
+  // ningún comprador. Se marca y se baja, nunca se pausa solo — descartar es
+  // del importador.
+  // OJO: "renombrar" NO baja al nicho. El producto se busca, solo la keyword
+  // está mal, así que sigue siendo comprable y se queda en su grupo con el
+  // aviso al lado. Degradarlo escondió "manguera extensible" (score 92, ya
+  // cotizada y en su último mes para pedir) — el error contrario al que se
+  // quería evitar.
   if (n.nivelBusqueda?.nivel === 'nulo') return 'sinBusqueda'
 
   if (!DE_ENTRADA.has(n.veredicto) || n.madurando) return 'midiendo'
@@ -58,12 +61,6 @@ export const GRUPOS = [
     titulo: '⏳ Midiendo',
     abierto: false,
     ayuda: 'Sin veredicto firme todavía: el sistema los escanea solo hasta juntar la serie.',
-  },
-  {
-    id: 'renombrar',
-    titulo: '✏️ Keyword mal escrita',
-    abierto: false,
-    ayuda: 'El producto SÍ se busca, pero con otra palabra: la keyword del nicho no existe en el autocompletado de ML. Mide la búsqueda real de un clic.',
   },
   {
     id: 'aunNo',

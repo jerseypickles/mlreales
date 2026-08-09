@@ -95,6 +95,17 @@ test('una ventana del analista ya vencida cae al cálculo del pico', () => {
   assert.equal(v.estado, 'ahora')
 })
 
+test('el lead time se puede correr sin tocar código', () => {
+  // si el forwarder tarda más, la ventana entera se adelanta
+  const conLeadLargo = ventanaDeCompra(estacional('diciembre'), { hoy: HOY, leadMax: 5, leadMin: 3 })
+  assert.equal(conLeadLargo.desde, '2026-07')
+  assert.equal(conLeadLargo.hasta, '2026-09')
+  assert.deepEqual(conLeadLargo.leadMeses, { min: 3, max: 5 })
+  // con lead más largo, un pico de octubre YA no se alcanza desde agosto
+  const apretado = ventanaDeCompra(estacional('octubre'), { hoy: HOY, leadMax: 5, leadMin: 3 })
+  assert.equal(apretado.perdioLaTemporada, true)
+})
+
 test('mesChile: el mes en hora de Chile, no en UTC', () => {
   // 02:00 UTC del 1-sep = 22:00 del 31-ago en Chile
   assert.equal(mesChile(new Date('2026-09-01T02:00:00Z')), '2026-08')
