@@ -442,7 +442,7 @@ export async function analizarNicho(nicho) {
   await reporte.save()
 
   const { registrarGasto } = await import('./gastos.js')
-  await registrarGasto(nicho._id, costoUsd)
+  await registrarGasto(nicho._id, costoUsd, 'ia')
 
   // rechazo por ventana estacional → el nicho se auto-agenda para volver a
   // evaluación en el mes declarado (el programador lo reactiva, siempre semanal)

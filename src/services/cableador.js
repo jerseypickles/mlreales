@@ -146,7 +146,7 @@ export async function cablearPropiosAuto() {
     llm = await pedirJSON({ system: SYSTEM_CABLEADOR, user: bloques.slice(0, 1), schema: SCHEMA_KEYWORDS, maxTokens: 2000 })
   }
   const { datos, costoUsd } = llm
-  await registrarGasto(null, costoUsd)
+  await registrarGasto(null, costoUsd, 'ia')
   const keywordPorSku = new Map((datos.keywords ?? []).map((k) => [k.sku, k.keyword]))
 
   for (const p of conTitulo) {

@@ -216,7 +216,7 @@ export async function auditarPropio(propio) {
       { pollMs: 10_000, timeoutMs: 10 * 60_000, conMeta: true },
     )
     costoActorUsd = r.costoUsd
-    await registrarGasto(nicho._id, costoActorUsd)
+    await registrarGasto(nicho._id, costoActorUsd, 'apify')
     porSku = indexarDetallesPorSku(r.items, objetivos).porSku
   } catch (err) {
     // sin detalle igual hay auditoría (títulos/precios/reviews del scan),
@@ -443,7 +443,7 @@ export async function auditarPropio(propio) {
       modelo: config.llmModelAnalista,
     })
   }
-  await registrarGasto(nicho._id, llm.costoUsd)
+  await registrarGasto(nicho._id, llm.costoUsd, 'ia')
 
   // validación mecánica del arranque: si alguna propuesta parte con una frase
   // que NADIE busca, se rehace UNA vez con la lista en la cara (el prompt solo
@@ -471,7 +471,7 @@ export async function auditarPropio(propio) {
           maxTokens: 12_000,
           modelo: config.llmModelAnalista,
         })
-        await registrarGasto(nicho._id, correccion.costoUsd)
+        await registrarGasto(nicho._id, correccion.costoUsd, 'ia')
         llm.costoUsd += correccion.costoUsd
         llm.datos = correccion.datos
       } catch (err) {

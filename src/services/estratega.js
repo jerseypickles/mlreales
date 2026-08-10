@@ -179,7 +179,7 @@ export async function generarInformeEstratega() {
   const doc = await InformeEstratega.create({ informe, modelo, costoUsd })
 
   const { registrarGasto } = await import('./gastos.js')
-  await registrarGasto(null, costoUsd)
+  await registrarGasto(null, costoUsd, 'ia')
 
   return doc
 }

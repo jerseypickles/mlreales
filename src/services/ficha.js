@@ -114,7 +114,7 @@ export async function revisarFicha(propio) {
       modelo: config.llmModelAnalista,
     })
   }
-  await registrarGasto(propio.nichoId ?? null, llm.costoUsd)
+  await registrarGasto(propio.nichoId ?? null, llm.costoUsd, 'ia')
 
   const ficha = {
     generadoEl: new Date(),

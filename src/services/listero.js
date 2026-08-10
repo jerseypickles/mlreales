@@ -152,7 +152,7 @@ export async function generarListing(nicho) {
   await Nicho.updateOne({ _id: nicho._id }, { $set: { listingDraft: listing } })
 
   const { registrarGasto } = await import('./gastos.js')
-  await registrarGasto(nicho._id, costoUsd)
+  await registrarGasto(nicho._id, costoUsd, 'ia')
 
   return listing
 }

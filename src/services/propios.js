@@ -100,7 +100,7 @@ export async function escanearPropios({ soloOficial = false } = {}) {
       { pollMs: 10_000, timeoutMs: 10 * 60_000, conMeta: true },
     )
     costoUsd = r.costoUsd
-    await registrarGasto(null, costoUsd)
+    await registrarGasto(null, costoUsd, 'apify')
     porSku = indexarDetallesPorSku(r.items, sinOficial.map((p) => p.sku)).porSku
   }
 

@@ -54,11 +54,16 @@ export function crearApp() {
   })
 
   // gasto del mes vs techo: cuando gastado >= presupuesto, programador y radar se detienen solos
-  app.get('/api/gastos', async (_req, res) => {
+  app.get('/api/gastos', async (req, res) => {
     const gastadoUsd = await gastoDelMes()
     const { saldoApify } = await import('../services/apify.js')
     const apify = await saldoApify().catch(() => null)
-    res.json({ mes: mesActual(), gastadoUsd, presupuestoUsd: config.presupuestoUsdMes, apify })
+    // desglose diario IA vs scraping: el total del mes suma los dos y no
+    // permitía responder cuánto cuesta la IA por sí sola
+    const { gastoPorDia } = await import('../services/gastos.js')
+    const dias = Math.min(90, Math.max(1, Number(req.query.dias) || 30))
+    const porDia = await gastoPorDia({ dias }).catch(() => null)
+    res.json({ mes: mesActual(), gastadoUsd, presupuestoUsd: config.presupuestoUsdMes, apify, porDia })
   })
 
   app.use('/api/nichos', rutasNichos)
