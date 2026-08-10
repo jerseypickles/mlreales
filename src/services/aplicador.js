@@ -11,6 +11,59 @@ export function tienePlaceholder(texto) {
   return PLACEHOLDER.test(String(texto ?? ''))
 }
 
+// Cambia el PRECIO de una publicación propia. Va aparte de aplicarCambiosPropio
+// porque no nace de la auditoría: es una decisión comercial del importador, y
+// con el envío de Full escalonado ($829 bajo $9.990, $1.040 hasta $19.989,
+// $3.250 desde ahí) mover el precio mueve el margen de forma no lineal.
+//
+// Sobre una publicación sin stock el cambio igual sirve: ML la reactiva sola
+// cuando llega mercadería a Full, y lo hace al precio que esté guardado.
+export async function aplicarPrecioPropio(propio, precioClp) {
+  if (!(await hayCuentaMeli())) {
+    throw Object.assign(new Error('sin cuenta de Mercado Libre conectada'), { status: 503 })
+  }
+  if (!Number.isFinite(precioClp) || precioClp <= 0 || Math.round(precioClp) !== precioClp) {
+    throw Object.assign(new Error('precio inválido: entero en pesos, mayor que 0'), { status: 400 })
+  }
+  const idMl = propio.itemIdMl ?? propio.sku
+  if (!/^MLC\d+$/.test(idMl)) {
+    throw Object.assign(
+      new Error(`el sku ${idMl} no es un item id de publicación (MLC…): no se puede escribir por la API`),
+      { status: 409 },
+    )
+  }
+
+  const antes = await meliGet(`/items/${idMl}`).catch(() => null)
+  const anterior = Number.isFinite(antes?.price) ? antes.price : null
+  if (anterior === precioClp) {
+    return { ok: true, sinCambio: true, precio: precioClp, estadoMl: antes?.status ?? null }
+  }
+
+  const r = await meliPut(`/items/${idMl}`, { price: precioClp })
+  const nuevo = Number.isFinite(r?.price) ? r.price : precioClp
+
+  // el historial es la serie que la lupa usa para medir el efecto del cambio:
+  // sin registrarlo, la subida de precio queda como un salto sin explicación
+  propio.historialPrecios.push({
+    fecha: new Date(),
+    anterior,
+    nuevo,
+    motivo: 'cambio de precio desde el tablero',
+  })
+  if (propio.historialPrecios.length > 20) propio.historialPrecios = propio.historialPrecios.slice(-20)
+  await propio.save()
+
+  return {
+    ok: true,
+    precio: nuevo,
+    anterior,
+    estadoMl: r?.status ?? antes?.status ?? null,
+    // sin stock la publicación sigue pausada: el precio queda listo para
+    // cuando ML la reactive, pero hoy nadie la ve
+    sinStock: (antes?.available_quantity ?? 0) === 0,
+  }
+}
+
 export async function aplicarCambiosPropio(propio, { titulo, descripcion, atributos }) {
   if (!(await hayCuentaMeli())) {
     throw Object.assign(new Error('sin cuenta de Mercado Libre conectada'), { status: 503 })

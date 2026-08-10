@@ -141,10 +141,13 @@ function Seccion({ icono: Icono, titulo, resumen, tono, children, abiertaPorDefe
 // producto. Es la pregunta que el importador hace de verdad: "¿en cuánto me
 // tiene que llegar para que esto valga la pena?". El techo se muestra aunque
 // todavía no haya costo cargado — sirve para decidir la compra.
-function GananciaUnidad({ p, onGuardarCosto }) {
+function GananciaUnidad({ p, onGuardarCosto, onCambiarPrecio }) {
   const e = p.economiaUnidad
   const [costo, setCosto] = useState(p.costoUnitarioClp ?? '')
   const [guardando, setGuardando] = useState(false)
+  const [editandoPrecio, setEditandoPrecio] = useState(false)
+  const [precio, setPrecio] = useState('')
+  const [aplicando, setAplicando] = useState(false)
   useEffect(() => {
     setCosto(p.costoUnitarioClp ?? '')
   }, [p.costoUnitarioClp])
@@ -160,10 +163,55 @@ function GananciaUnidad({ p, onGuardarCosto }) {
     }
   }
 
+  async function aplicarPrecio(ev) {
+    ev.preventDefault()
+    setAplicando(true)
+    try {
+      await onCambiarPrecio(p, Number(precio))
+      setEditandoPrecio(false)
+    } finally {
+      setAplicando(false)
+    }
+  }
+
   const g = e.gananciaClp
   return (
     <div className="pc-ganancia" onClick={(ev) => ev.stopPropagation()}>
-      <div className="gan-titulo">Por cada venta a {fmtPrecio(e.precioClp)}</div>
+      {editandoPrecio ? (
+        <form className="gan-precio-form" onSubmit={aplicarPrecio}>
+          <label>nuevo precio</label>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            autoFocus
+            value={precio}
+            onChange={(ev) => setPrecio(ev.target.value)}
+            placeholder={String(e.precioClp)}
+          />
+          <button type="submit" className="boton-secundario boton-chico" disabled={aplicando || !precio}>
+            {aplicando ? 'aplicando…' : 'aplicar en ML'}
+          </button>
+          <button type="button" className="boton-plano boton-chico" onClick={() => setEditandoPrecio(false)}>
+            cancelar
+          </button>
+        </form>
+      ) : (
+        <div className="gan-titulo">
+          Por cada venta a {fmtPrecio(e.precioClp)}
+          <button
+            type="button"
+            className="gan-cambiar"
+            title="Cambiar el precio en Mercado Libre"
+            onClick={() => {
+              setPrecio(String(e.precioClp))
+              setEditandoPrecio(true)
+            }}
+          >
+            cambiar
+          </button>
+        </div>
+      )}
       <ul className="gan-desglose">
         <li>
           <span>comisión ML{e.comisionPct ? ` ${e.comisionPct}%` : ''}</span>
@@ -220,7 +268,7 @@ function GananciaUnidad({ p, onGuardarCosto }) {
   )
 }
 
-function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto }) {
+function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio }) {
   const d = deltas(p.mediciones)
   const a = p.auditoria
   const generando =
@@ -342,7 +390,7 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
         ))}
       </div>
 
-      <GananciaUnidad p={p} onGuardarCosto={onGuardarCosto} />
+      <GananciaUnidad p={p} onGuardarCosto={onGuardarCosto} onCambiarPrecio={onCambiarPrecio} />
 
       <div className="pc-optimizador">
         <span className="propio-optimizacion-marca">
@@ -1018,6 +1066,32 @@ export function MisProductos() {
     }
   }
 
+  // escribe el precio EN Mercado Libre (no es un campo local): se confirma
+  // antes porque lo ve el comprador en cuanto ML lo procesa
+  async function cambiarPrecio(p, precioClp) {
+    setError(null)
+    if (!Number.isFinite(precioClp) || precioClp <= 0) {
+      setError('precio inválido')
+      return
+    }
+    const actual = p.economiaUnidad?.precioClp
+    if (!confirm(`¿Cambiar el precio en Mercado Libre de ${fmtPrecio(actual)} a ${fmtPrecio(precioClp)}?\n\n${p.titulo ?? p.sku}`)) {
+      return
+    }
+    try {
+      const { resultado } = await api.cambiarPrecio(p._id, precioClp)
+      if (resultado?.sinStock) {
+        setAviso(
+          `Precio actualizado a ${fmtPrecio(resultado.precio)}. La publicación está pausada por falta de stock: ` +
+            'ML la reactivará a este precio cuando llegue mercadería a Full.',
+        )
+      }
+      cargar()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   async function autoCablear() {
     setOcupado(true)
     setError(null)
@@ -1189,6 +1263,7 @@ export function MisProductos() {
               onAuditar={auditar}
               onVerAuditoria={(x) => setAuditoriaDe(x._id)}
               onGuardarCosto={guardarCosto}
+              onCambiarPrecio={cambiarPrecio}
             />
           ))}
         </div>

@@ -65,6 +65,7 @@ export const api = {
   auditarPropio: (id) => pedir(`/api/propios/${id}/auditar`, { method: 'POST' }),
   autoCablearPropios: () => pedir('/api/propios/auto-cablear', { method: 'POST' }),
   aplicarPropio: (id, cambios) => pedir(`/api/propios/${id}/aplicar`, json(cambios)),
+  cambiarPrecio: (id, precioClp) => pedir(`/api/propios/${id}/precio`, json({ precioClp })),
   revisarFicha: (id) => pedir(`/api/propios/${id}/ficha`, { method: 'POST' }),
   optimizarPropios: () => pedir('/api/propios/optimizar', { method: 'POST' }),
   estratega: () => pedir('/api/estratega'),

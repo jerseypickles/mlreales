@@ -420,6 +420,20 @@ router.post(
   }),
 )
 
+// Cambiar el precio de venta en Mercado Libre. Escritura sobre el item propio
+// (scope Publicación), con el cambio anotado en el historial de precios para
+// que la lupa pueda medir su efecto en visitas y ventas.
+router.post(
+  '/:id/precio',
+  manejar(async (req, res) => {
+    const propio = await ProductoPropio.findById(req.params.id)
+    if (!propio) return res.status(404).json({ error: 'producto propio no encontrado' })
+    const precioClp = Number(req.body?.precioClp)
+    const { aplicarPrecioPropio } = await import('../../services/aplicador.js')
+    res.json({ resultado: await aplicarPrecioPropio(propio, precioClp) })
+  }),
+)
+
 // Revisar la ficha técnica (Características) contra la categoría ML y los
 // ganadores: propone correcciones aplicables por API
 router.post(
