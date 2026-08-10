@@ -13,6 +13,62 @@ import { obtenerColas } from '../../jobs/queues.js'
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 
+// Qué pasa con UNA venta al precio de HOY: precio − lo que cobra ML − costo.
+// Deliberadamente NO usa los cargos facturados: esos son de ventas pasadas y si
+// el precio cambió (las brochas subieron de $1.795 a $2.890 el 9-ago) dividir
+// cargos viejos por unidades viejas infla la ganancia. Los cargos reales
+// responden "cuánto gané"; esto responde "cuánto gano por cada venta ahora".
+async function economiaUnidad(propio) {
+  const ultima = (propio.mediciones ?? []).at(-1) ?? null
+  const precioClp = propio.promoMl?.activa?.precio ?? ultima?.precioEfectivo ?? ultima?.precio ?? null
+  if (!Number.isFinite(precioClp) || precioClp <= 0) return null
+
+  const { comisionMlExacta } = await import('../../services/comisionesMl.js')
+  const { costoEnvioFull, dimensionesDeItem, DIMENSIONES_POR_DEFECTO } = await import('../../services/envioFull.js')
+
+  const tipoPublicacion = propio.envioMl?.tipoPublicacion ?? null
+  const com = await comisionMlExacta({ precioClp, categoriaId: propio.categoriaMl, tipoPublicacion }).catch(() => null)
+  const comisionClp = Number.isFinite(com?.pct)
+    ? Math.round((com.pct / 100) * precioClp + (com.cargoFijoClp ?? 0))
+    : null
+
+  // solo Full paga el cargo por envío de ML; colecta/Flex se despachan distinto
+  const esFull = propio.envioMl?.logistica === 'fulfillment'
+  const declaradas = dimensionesDeItem({ shipping: { dimensions: propio.envioMl?.dimensiones ?? null } })
+  const env = esFull
+    ? await costoEnvioFull({
+        precioClp,
+        dimensiones: declaradas ?? DIMENSIONES_POR_DEFECTO,
+        tipoPublicacion: tipoPublicacion ?? 'gold_pro',
+      }).catch(() => null)
+    : null
+  const envioClp = Number.isFinite(env?.clp) ? Math.round(env.clp) : null
+
+  if (comisionClp === null && envioClp === null) return null
+  const mlTotalClp = (comisionClp ?? 0) + (envioClp ?? 0)
+  const quedaParaProductoClp = precioClp - mlTotalClp
+  const costoClp = Number.isFinite(propio.costoUnitarioClp) ? propio.costoUnitarioClp : null
+  const gananciaClp = costoClp === null ? null : quedaParaProductoClp - costoClp
+
+  return {
+    precioClp,
+    comisionClp,
+    comisionPct: Number.isFinite(com?.pct) ? com.pct : null,
+    envioClp,
+    // sin dimensiones declaradas la tarifa sale de una caja chica supuesta: el
+    // tramo de precio manda, pero conviene decirlo en pantalla
+    envioSupuesto: esFull && !declaradas,
+    esFull,
+    mlTotalClp,
+    mlPct: Math.round((mlTotalClp / precioClp) * 1000) / 10,
+    quedaParaProductoClp,
+    costoClp,
+    gananciaClp,
+    gananciaPct: gananciaClp === null ? null : Math.round((gananciaClp / precioClp) * 1000) / 10,
+    faltaEnvio: esFull && envioClp === null,
+  }
+}
+
 // Registrar un producto propio por URL de ML y medirlo al tiro
 router.post(
   '/',
@@ -102,6 +158,7 @@ router.get(
         conversion7d,
         margen30d,
         cargosMl30d: cargosItem,
+        economiaUnidad: await economiaUnidad(p).catch(() => null),
         impacto: evaluarImpacto(p),
       })
     }

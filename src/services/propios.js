@@ -174,6 +174,10 @@ export async function escanearPropios({ soloOficial = false } = {}) {
         logistica,
         flex: (oficial.tags ?? []).includes('self_service_in') || logistica === 'self_service',
         envioGratis: oficial.shipping.free_shipping === true,
+        // dimensiones declaradas ("30x20x10,500"): con ellas el costo de envío
+        // Full se consulta exacto; sin ellas se usa la caja chica por defecto
+        dimensiones: oficial.shipping.dimensions ?? null,
+        tipoPublicacion: oficial.listing_type_id ?? null,
         fecha,
       }
     }

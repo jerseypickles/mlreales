@@ -137,7 +137,83 @@ function Seccion({ icono: Icono, titulo, resumen, tono, children, abiertaPorDefe
   )
 }
 
-function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria }) {
+// Qué pasa con CADA venta al precio de hoy, y cuánto queda para pagar el
+// producto. Es la pregunta que el importador hace de verdad: "¿en cuánto me
+// tiene que llegar para que esto valga la pena?". El techo se muestra aunque
+// todavía no haya costo cargado — sirve para decidir la compra.
+function GananciaUnidad({ p, onGuardarCosto }) {
+  const e = p.economiaUnidad
+  const [costo, setCosto] = useState(p.costoUnitarioClp ?? '')
+  const [guardando, setGuardando] = useState(false)
+  useEffect(() => {
+    setCosto(p.costoUnitarioClp ?? '')
+  }, [p.costoUnitarioClp])
+  if (!e) return null
+
+  async function guardar(ev) {
+    ev.preventDefault()
+    setGuardando(true)
+    try {
+      await onGuardarCosto(p, costo === '' ? null : Number(costo))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  const g = e.gananciaClp
+  return (
+    <div className="pc-ganancia" onClick={(ev) => ev.stopPropagation()}>
+      <div className="gan-titulo">Por cada venta a {fmtPrecio(e.precioClp)}</div>
+      <ul className="gan-desglose">
+        <li>
+          <span>comisión ML{e.comisionPct ? ` ${e.comisionPct}%` : ''}</span>
+          <b>{e.comisionClp != null ? `−${fmtPrecio(e.comisionClp)}` : 'sin dato'}</b>
+        </li>
+        {e.esFull ? (
+          <li>
+            <span>envío Full{e.envioSupuesto ? ' (caja estimada)' : ''}</span>
+            <b>{e.envioClp != null ? `−${fmtPrecio(e.envioClp)}` : 'sin dato'}</b>
+          </li>
+        ) : null}
+        <li className="gan-queda">
+          <span>te queda</span>
+          <b>{fmtPrecio(e.quedaParaProductoClp)}</b>
+        </li>
+      </ul>
+      <form className="gan-costo" onSubmit={guardar}>
+        <label htmlFor={`costo-${p._id}`}>llegó a</label>
+        <input
+          id={`costo-${p._id}`}
+          type="number"
+          min="0"
+          step="1"
+          placeholder="costo puesto en bodega"
+          value={costo}
+          onChange={(ev) => setCosto(ev.target.value)}
+        />
+        <button type="submit" className="boton-secundario boton-chico" disabled={guardando}>
+          {guardando ? '…' : 'guardar'}
+        </button>
+      </form>
+      {g === null ? (
+        <p className="gan-vacio">
+          Escribe en cuánto te llegó puesto en bodega de ML (producto + flete + internación + despacho).
+          Tienes <b>{fmtPrecio(e.quedaParaProductoClp)}</b> de techo: sobre eso, cada venta pierde plata.
+        </p>
+      ) : (
+        <div className={`gan-resultado ${g < 0 ? 'gan-mal' : 'gan-bien'}`}>
+          <span>{g < 0 ? 'pierdes por unidad' : 'ganancia por unidad'}</span>
+          <b>
+            {fmtPrecio(g)}
+            {e.gananciaPct != null ? ` · ${e.gananciaPct}%` : ''}
+          </b>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto }) {
   const d = deltas(p.mediciones)
   const a = p.auditoria
   const generando =
@@ -258,6 +334,8 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
           </div>
         ))}
       </div>
+
+      <GananciaUnidad p={p} onGuardarCosto={onGuardarCosto} />
 
       <div className="pc-fable">
         <span className="propio-optimizacion-marca">
@@ -436,7 +514,9 @@ function PanelPropio({ propio, onCerrar, onGuardarCosto }) {
           </button>
         </form>
         <p className="panel-meta">
-          Con el costo real por unidad, cada venta calcula su margen: precio − comisión ML exacta − costo.
+          Con el costo real por unidad, cada venta calcula su margen: precio − comisión ML − <b>cargo por
+          envío de Full</b> − costo. El envío no es menor: en un producto de ticket bajo pesa más que la
+          comisión, y sobre $19.990 ML lo triplica.
         </p>
         <div className="panel-graficos">
           <MiniSerie titulo="Vendidos acumulados (real)" puntos={serie('vendidos')} alto={110} />
@@ -919,6 +999,18 @@ export function MisProductos() {
     }
   }
 
+  // costo real puesto en bodega: el dato que solo el importador conoce, y el
+  // único que falta para que la ganancia por venta deje de ser un techo
+  async function guardarCosto(p, costo) {
+    setError(null)
+    try {
+      await api.ajustarPropio(p._id, { costoUnitarioClp: costo })
+      cargar()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   async function autoCablear() {
     setOcupado(true)
     setError(null)
@@ -1089,6 +1181,7 @@ export function MisProductos() {
               onCablear={cablearNicho}
               onAuditar={auditar}
               onVerAuditoria={(x) => setAuditoriaDe(x._id)}
+              onGuardarCosto={guardarCosto}
             />
           ))}
         </div>
@@ -1106,18 +1199,7 @@ export function MisProductos() {
       </p>
 
       {abierto ? (
-        <PanelPropio
-          propio={abierto}
-          onCerrar={() => setAbierto(null)}
-          onGuardarCosto={async (p, costo) => {
-            try {
-              await api.ajustarPropio(p._id, { costoUnitarioClp: costo })
-              cargar()
-            } catch (err) {
-              setError(err.message)
-            }
-          }}
-        />
+        <PanelPropio propio={abierto} onCerrar={() => setAbierto(null)} onGuardarCosto={guardarCosto} />
       ) : null}
       {(() => {
         // el panel lee del listado fresco: si se re-audita, se actualiza solo

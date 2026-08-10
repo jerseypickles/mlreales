@@ -21,18 +21,26 @@ export function elegirClasica(filas) {
 const cache = new Map()
 const TTL_MS = 24 * 3600e3
 
-export async function comisionMlExacta({ precioClp, categoriaId = null }) {
+// tipoPublicacion: para MIS productos hay que cobrar la comisión del tipo real
+// del item (los de la cuenta son gold_pro, 17%), no la de la Clásica que asume
+// el modelo de margen para nichos que todavía no existen.
+export async function comisionMlExacta({ precioClp, categoriaId = null, tipoPublicacion = null }) {
   try {
     if (!Number.isFinite(precioClp) || precioClp <= 0) return null
     if (!(await hayCuentaMeli())) return null
-    const banda = Math.max(1000, Math.round(precioClp / 5000) * 5000)
-    const clave = `${categoriaId ?? 'x'}|${banda}`
+    // banda fina bajo $10.000: ahí vive el cargo fijo por publicación barata y
+    // redondear a $5.000 lo cruzaba de tramo. Sobre eso la comisión es plana.
+    const paso = precioClp < 10_000 ? 1000 : 5000
+    const banda = Math.max(1000, Math.round(precioClp / paso) * paso)
+    const clave = `${categoriaId ?? 'x'}|${banda}|${tipoPublicacion ?? 'clasica'}`
     const hit = cache.get(clave)
     if (hit && Date.now() - hit.el < TTL_MS) return hit.valor
     const params = new URLSearchParams({ price: String(banda) })
     if (categoriaId) params.set('category_id', categoriaId)
     const filas = await meliGet(`/sites/MLC/listing_prices?${params.toString()}`)
-    const clasica = elegirClasica(filas)
+    const lista = Array.isArray(filas) ? filas : []
+    const clasica =
+      (tipoPublicacion ? lista.find((f) => f.listing_type_id === tipoPublicacion) : null) ?? elegirClasica(filas)
     const valor =
       clasica && Number.isFinite(clasica.sale_fee_details?.percentage_fee)
         ? {

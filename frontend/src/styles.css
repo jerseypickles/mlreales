@@ -3986,6 +3986,91 @@ section {
 }
 .pc-fable .selector-nicho { padding: 4px 8px; font-size: 12px; max-width: 190px; }
 
+/* Ganancia por unidad: precio − lo que cobra ML − costo puesto en bodega.
+   El techo ("te queda") se muestra aunque no haya costo cargado. */
+.pc-ganancia {
+  margin: 0 0 12px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tinta) 2.5%, var(--superficie));
+  border: 1px solid var(--borde);
+}
+.gan-titulo {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tinta-3);
+  margin-bottom: 7px;
+}
+.gan-desglose { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+.gan-desglose li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2.5px 0;
+  color: var(--tinta-2);
+}
+.gan-desglose b { font-variant-numeric: tabular-nums; color: var(--tinta); font-weight: 600; }
+.gan-queda {
+  margin-top: 4px;
+  padding-top: 6px !important;
+  border-top: 1px solid var(--borde);
+  font-weight: 600;
+  color: var(--tinta) !important;
+}
+.gan-costo { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
+.gan-costo label {
+  font-size: 12px;
+  color: var(--tinta-2);
+  white-space: nowrap;
+}
+.gan-costo input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 9px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--superficie);
+  color: var(--tinta);
+}
+.gan-costo input:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
+.gan-vacio {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--tinta-2);
+}
+.gan-vacio b { font-variant-numeric: tabular-nums; color: var(--tinta); }
+.gan-resultado {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 9px;
+  padding: 7px 11px;
+  border-radius: 9px;
+  font-size: 12.5px;
+}
+.gan-resultado b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.gan-bien {
+  background: color-mix(in srgb, #16a34a 10%, var(--superficie));
+  border: 1px solid color-mix(in srgb, #16a34a 26%, var(--borde));
+  color: #15803d;
+}
+.gan-mal {
+  background: color-mix(in srgb, #dc2626 10%, var(--superficie));
+  border: 1px solid color-mix(in srgb, #dc2626 26%, var(--borde));
+  color: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  .gan-bien { color: #4ade80; }
+  .gan-mal { color: #f87171; }
+}
+
 /* Secciones plegables (Radix) */
 .seccion-plegable { margin-top: 8px; border: 1px solid var(--borde); border-radius: 12px; overflow: hidden; }
 .seccion-cabeza {
