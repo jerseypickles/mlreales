@@ -245,7 +245,7 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
         <div className="aviso-maduracion" role="status">
           <strong>⏳ Esperando maduración — {scans.conDemanda}/5 scans con demanda.</strong> Este análisis es
           preliminar (dictado con los primeros datos): todo indica que este producto se podría comprar, pero el
-          veredicto que vale lo dicta Fable al completar la serie — el sistema lo escanea a diario solo. No
+          veredicto que vale lo dicta Opus 5 al completar la serie — el sistema lo escanea a diario solo. No
           cotices ni compres con esta versión.
         </div>
       ) : null}

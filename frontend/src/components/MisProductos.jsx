@@ -118,7 +118,7 @@ function CarteraNicho({ c }) {
 
 // Tarjeta de producto (rediseño 8-ago): la altura estaba fuera de control con
 // 5 bloques apilados. Ahora manda la jerarquía: identidad + KPIs + la acción de
-// Fable siempre visibles; lupa, promoción y surtido viven en secciones
+// Opus 5 siempre visibles; lupa, promoción y surtido viven en secciones
 // colapsables (Radix: accesibles y animadas) que se abren cuando decides mirar.
 function Seccion({ icono: Icono, titulo, resumen, tono, children, abiertaPorDefecto = false }) {
   const [abierta, setAbierta] = useState(abiertaPorDefecto)
@@ -344,10 +344,10 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
 
       <GananciaUnidad p={p} onGuardarCosto={onGuardarCosto} />
 
-      <div className="pc-fable">
+      <div className="pc-optimizador">
         <span className="propio-optimizacion-marca">
           <Sparkles aria-hidden="true" />
-          Fable
+          Opus 5
         </span>
         <select
           className="selector-nicho"
@@ -380,10 +380,10 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
         ) : (
           <button
             className="boton-secundario boton-chico"
-            title={a?.estado === 'error' ? `la anterior falló: ${a.error}` : 'Fable lee título, descripción, ficha y fotos reales de los peces gordos'}
+            title={a?.estado === 'error' ? `la anterior falló: ${a.error}` : 'Opus 5 lee título, descripción, ficha y fotos reales de los peces gordos'}
             onClick={() => onAuditar(p)}
           >
-            {a?.estado === 'error' ? 'reintentar optimización' : 'optimizar con Fable'}
+            {a?.estado === 'error' ? 'reintentar optimización' : 'optimizar con Opus 5'}
           </button>
         )}
       </div>
@@ -565,7 +565,7 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando, o
           <div>
             <h3>{propio.titulo ?? propio.sku}</h3>
             <p className="panel-meta">
-              Fable leyó el título, la descripción, la ficha
+              Opus 5 leyó el título, la descripción, la ficha
               {a.fotosAnalizadas ? ' y las fotos reales' : ''} de los {a.competidores?.length ?? 0} peces
               gordos de “{a.keyword}” y los comparó con tu publicación · {fmtFecha(a.generadoEl)} · US${' '}
               {a.costoUsd?.toFixed(2) ?? '—'}
@@ -593,7 +593,7 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando, o
         ) : null}
 
         <section>
-          <h4>Los peces gordos que Fable leyó</h4>
+          <h4>Los peces gordos que Opus 5 leyó</h4>
           <div className="tabla-envoltura">
             <table>
               <thead>
@@ -807,7 +807,7 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando, o
           <div className="listing-seccion-encabezado">
             <h4>Características (ficha técnica)</h4>
             <button className="copiar" disabled={revisandoFicha} onClick={() => onRevisarFicha(propio)}>
-              {revisandoFicha ? 'Revisando…' : a.ficha ? 'Revisar de nuevo' : 'Revisar ficha con Fable'}
+              {revisandoFicha ? 'Revisando…' : a.ficha ? 'Revisar de nuevo' : 'Revisar ficha con Opus 5'}
             </button>
           </div>
           {a.ficha ? (
@@ -862,7 +862,7 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando, o
             </>
           ) : (
             <p className="vacio">
-              Fable compara tus Características contra lo que la categoría define y lo que los ganadores
+              Opus 5 compara tus Características contra lo que la categoría define y lo que los ganadores
               llenan — y las corrige por API.
             </p>
           )}
@@ -1087,7 +1087,7 @@ export function MisProductos() {
     try {
       await api.auditarPropio(p._id)
       setAviso(
-        'Fable está leyendo el título, la descripción, la ficha y las fotos de los peces gordos del nicho — la optimización aparece aquí en 2-5 minutos.',
+        'Opus 5 está leyendo el título, la descripción, la ficha y las fotos de los peces gordos del nicho — la optimización aparece aquí en 2-5 minutos.',
       )
       cargar()
     } catch (err) {
@@ -1200,7 +1200,7 @@ export function MisProductos() {
         no estás ganando, muestra el precio que la ganaría. "Ingresos 30d" suma tus órdenes pagadas
         reales. La chapa "real" marca ventas del período medidas por ML; la cifra con ~ es la
         estimación por reseñas (~{FACTOR_VENTAS} por reseña nueva). Cablea un nicho del tablero y
-        "optimizar con Fable" lee el título, la descripción, la ficha y las fotos reales de los
+        "optimizar con Opus 5" lee el título, la descripción, la ficha y las fotos reales de los
         peces gordos del listado (los que más han vendido) y te dice dónde estás fallando, con
         títulos, descripción y plan de fotos listos para pegar.
       </p>

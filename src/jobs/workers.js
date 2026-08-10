@@ -394,7 +394,7 @@ export async function procesarCalcularMetricas(job) {
 
   // análisis IA automático: primer reporte con score, score que se movió ≥10
   // puntos, o GRADUACIÓN de maduración — al juntar los scans que confirman,
-  // Fable debe re-dictar el veredicto con la serie completa (un nicho que
+  // el analista debe re-dictar el veredicto con la serie completa (un nicho que
   // madura con el análisis del scan #1 vigente no le sirve a nadie)
   let analisisEncolado = false
   let motivoAnalisis = null

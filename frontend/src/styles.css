@@ -2072,7 +2072,7 @@ section {
   font-size: 12.5px;
 }
 
-/* tarjetas de Mis productos: qué es / qué mide / qué dice Fable */
+/* tarjetas de Mis productos: qué es / qué mide / qué dice el optimizador */
 
 .propios-lista {
   display: flex;
@@ -3690,7 +3690,7 @@ section {
   .propio-card:hover { transform: none; }
 }
 
-/* Franja Fable */
+/* Franja del optimizador */
 .propio-optimizacion {
   border-top: none;
   border-radius: 12px;
@@ -3884,7 +3884,7 @@ section {
 
 /* ============================================================
    Mis productos v2 (8-ago): jerarquía sobre scroll — identidad,
-   KPIs y la acción de Fable visibles; el detalle se despliega.
+   KPIs y la acción del optimizador visible; el detalle se despliega.
    ============================================================ */
 .propio-card { padding: 16px 18px 14px; }
 
@@ -3973,8 +3973,8 @@ section {
 .kpi-mal .kpi-v { color: var(--peligro); }
 .kpi-aviso { background: color-mix(in srgb, #f59e0b 10%, var(--superficie)); }
 
-/* Franja Fable: la acción, siempre visible */
-.pc-fable {
+/* Franja del optimizador: la acción, siempre visible */
+.pc-optimizador {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -3984,7 +3984,7 @@ section {
   border: 1px solid color-mix(in srgb, var(--acento) 18%, var(--borde));
   padding: 9px 12px;
 }
-.pc-fable .selector-nicho { padding: 4px 8px; font-size: 12px; max-width: 190px; }
+.pc-optimizador .selector-nicho { padding: 4px 8px; font-size: 12px; max-width: 190px; }
 
 /* Ganancia por unidad: precio − lo que cobra ML − costo puesto en bodega.
    El techo ("te queda") se muestra aunque no haya costo cargado. */

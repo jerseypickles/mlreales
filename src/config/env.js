@@ -21,10 +21,15 @@ export const config = {
   maxPagesBusqueda: Number(process.env.APIFY_SEARCH_MAX_PAGES) || 2,
   nivel2Activo: process.env.NIVEL2_ACTIVO !== 'false',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
-  llmModel: process.env.LLM_MODEL || 'claude-opus-4-8',
-  // el analista decide dónde va la plata: corre en el modelo más capaz, con
-  // degradación automática al modelo base si no está disponible (llm.js)
-  llmModelAnalista: process.env.LLM_MODEL_ANALISTA || 'claude-fable-5',
+  llmModel: process.env.LLM_MODEL || 'claude-opus-5',
+  // El analista decide dónde va la plata, así que corre en el modelo más
+  // capaz. Desde el 10-ago-2026 es el mismo Opus 5 que el resto del proyecto:
+  // antes era Fable 5, que cuesta el doble por token ($10/$50 por millón
+  // contra $5/$25) y cuyos clasificadores a veces declinaban nichos benignos.
+  // Se mantiene como variable aparte para poder subir SOLO el análisis a otro
+  // modelo sin tocar el resto (LLM_MODEL_ANALISTA); si difiere del base,
+  // llm.js degrada solo cuando el premium no está disponible.
+  llmModelAnalista: process.env.LLM_MODEL_ANALISTA || 'claude-opus-5',
   // % del EXW máximo que se muestra al proveedor como precio objetivo (ancla)
   exwObjetivoPct: Number(process.env.EXW_OBJETIVO_PCT) || 80,
   // radar autónomo: descubre nichos por temporada/tendencia y los escanea solo

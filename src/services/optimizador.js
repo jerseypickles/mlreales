@@ -13,7 +13,7 @@ import { llmDisponible } from './llm.js'
 
 const DIAS_REAUDITORIA = Number(process.env.OPTIMIZADOR_DIAS) || 7
 
-// ¿Por qué este producto necesita una pasada de Fable ahora?
+// ¿Por qué este producto necesita una pasada del optimizador ahora?
 export function motivoDeAuditar(propio, { dias = DIAS_REAUDITORIA, ahora = new Date() } = {}) {
   const a = propio.auditoria
   if (!a || a.estado === 'error') return 'sin auditoría previa'

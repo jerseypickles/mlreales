@@ -18,12 +18,16 @@ function obtenerCliente() {
   return cliente
 }
 
-// US$ por millón de tokens [entrada, salida] según modelo
+// US$ por millón de tokens [entrada, salida] según modelo, del tarifario
+// oficial. Alimenta gastoDelMes y con eso el corte por presupuesto: un precio
+// equivocado acá no se nota hasta que el mes cierra con el doble.
 const PRECIOS = {
-  'claude-fable-5': [10, 50],
+  'claude-opus-5': [5, 25],
   'claude-opus-4-8': [5, 25],
+  'claude-fable-5': [10, 50], // se conserva por si se vuelve con LLM_MODEL_ANALISTA
+  'claude-sonnet-5': [3, 15], // tarifa desde el 1-sep-2026 (hasta ahí, 2/10)
 }
-const precioDe = (modelo) => PRECIOS[modelo] ?? PRECIOS['claude-opus-4-8']
+const precioDe = (modelo) => PRECIOS[modelo] ?? PRECIOS['claude-opus-5']
 
 function costoDe(respuesta, modelo) {
   const [entrada, salida] = precioDe(modelo)
@@ -35,8 +39,10 @@ function costoDe(respuesta, modelo) {
 }
 
 // Llamada con salida estructurada (JSON garantizado por output_config.format).
-// `modelo` permite subir una llamada puntual (ej: el analista corre en Fable 5);
-// si ese modelo rechaza o falla, se reintenta solo con el modelo base.
+// `modelo` permite subir una llamada puntual a un modelo distinto del base; si
+// ese modelo rechaza o falla, se reintenta solo con el base. Hoy análisis y
+// base son el mismo Opus 5, así que estas ramas quedan inertes — se conservan
+// porque LLM_MODEL_ANALISTA puede volver a separarlos sin tocar código.
 export async function pedirJSON({ system, user, schema, maxTokens = 8000, modelo }) {
   const anthropic = obtenerCliente()
   const modeloPedido = modelo ?? config.llmModel
@@ -55,8 +61,8 @@ export async function pedirJSON({ system, user, schema, maxTokens = 8000, modelo
   let modeloUsado = modeloPedido
   try {
     respuesta = await llamar(modeloPedido)
-    // los clasificadores de Fable 5 pueden declinar contenido benigno: el
-    // modelo base responde la misma solicitud
+    // un modelo premium puede declinar contenido benigno (le pasaba a Fable 5
+    // con nichos inofensivos): el modelo base responde la misma solicitud
     if (respuesta.stop_reason === 'refusal' && modeloPedido !== config.llmModel) {
       console.error(`[llm] ${modeloPedido} rechazó la solicitud: reintentando con ${config.llmModel}`)
       modeloUsado = config.llmModel
