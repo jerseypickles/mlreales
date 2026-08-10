@@ -35,6 +35,22 @@ import {
   encolarScanNicho,
 } from './queues.js'
 
+// Reparte la manada. Los nichos maduran juntos y por eso vencen juntos: el
+// 10-ago había 46 de 50 cayendo en 3 días, justo los últimos del ciclo de
+// Apify y con US$36 de margen. Sin techo la manada se come el tope, el actor
+// empieza a rechazar y cada job quema sus reintentos.
+//
+// El que más tiempo lleva esperando pasa primero, así el que se difiere es el
+// que menos lo necesita. Diferir no atrasa nada real: un nicho semanal medido
+// el día 8 en vez del 7 no cambia ninguna decisión de compra — el tope de
+// Apify sí.
+export function repartirScans({ vencidos, yaHoy, techo }) {
+  const ordenados = [...vencidos].sort((a, b) => b.atraso - a.atraso)
+  const cupo = Math.max(0, techo - yaHoy)
+  const aEncolar = ordenados.slice(0, cupo)
+  return { aEncolar, diferidos: ordenados.length - aEncolar.length }
+}
+
 export async function procesarScanNicho(job) {
   const nicho = await Nicho.findById(job.data.nichoId)
   if (!nicho) throw new Error(`Nicho ${job.data.nichoId} no existe`)
@@ -655,7 +671,7 @@ export async function procesarProgramadorScans() {
     [...candidatosMaduracion.filter(esCarteraMadurando), ...exploracionEnCupo].map((n) => String(n._id)),
   )
 
-  let encolados = 0
+  const vencidos = []
   let sinScore = 0
   for (const nicho of nichos) {
     const id = String(nicho._id)
@@ -668,6 +684,21 @@ export async function procesarProgramadorScans() {
     const umbral = nuncaPuntuo || madurando ? umbrales.diario : umbrales.semanal
     if (ahora - ultimo < umbral) continue
     if (nuncaPuntuo) sinScore++
+    vencidos.push({ nicho, madurando, atraso: ahora - ultimo - umbral })
+  }
+  // ventana MÓVIL de 24 h, no día calendario: reparte de forma continua y no
+  // depende del huso (ni del cambio de hora de Chile)
+  const yaHoy = await Nicho.countDocuments({ ultimoScanEl: { $gte: new Date(ahora - 86_400e3) } })
+  const { aEncolar, diferidos } = repartirScans({ vencidos, yaHoy, techo: config.scansMaxDia })
+  if (diferidos > 0) {
+    console.log(
+      `[programador] techo de 24 h alcanzado (${yaHoy}/${config.scansMaxDia}): ${diferidos} nicho(s) esperan turno, ` +
+        `${aEncolar.length} encolados (el más atrasado primero)`,
+    )
+  }
+
+  let encolados = 0
+  for (const { nicho, madurando } of aEncolar) {
     await encolarScanNicho(nicho._id, {
       motivo: madurando ? 'maduracion' : 'programado',
       jobId: `prog-${nicho._id}-${Math.floor(ahora / (3 * 3600e3))}`,
@@ -692,7 +723,17 @@ export async function procesarProgramadorScans() {
     vueltasTemporada++
   }
 
-  return { activos: nichos.length, encolados, sinScore, madurando: madurandoTotal, vueltasTemporada, propiosEncolados: Boolean(propioVencidoPre) }
+  // `diferidos` va en el resultado a propósito: un techo que recorta en
+  // silencio se lee como "ya está todo medido" cuando no lo está
+  return {
+    activos: nichos.length,
+    encolados,
+    diferidos,
+    sinScore,
+    madurando: madurandoTotal,
+    vueltasTemporada,
+    propiosEncolados: Boolean(propioVencidoPre),
+  }
 }
 
 export async function procesarScanPropios(job) {

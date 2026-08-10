@@ -80,6 +80,12 @@ export const config = {
   screeningScoreMin: Number(process.env.SCREENING_SCORE_MIN) || 45,
   // techo de gasto mensual (Apify + LLM): al alcanzarlo, programador y radar dejan de encolar
   presupuestoUsdMes: Number(process.env.PRESUPUESTO_USD_MES) || 40,
+  // Techo de scans en una ventana móvil de 24 h. Los nichos maduran en manada
+  // y por eso vencen en manada: el 10-ago había 46 de 50 cayendo en 3 días,
+  // los últimos del ciclo de Apify y con US$36 de margen. Esto la reparte —
+  // un nicho semanal escaneado el día 8 en vez del 7 no cambia ninguna
+  // decisión de compra, y el tope de Apify sí.
+  scansMaxDia: Number(process.env.SCANS_MAX_DIA) || 12,
   // API oficial de ML (OAuth, cuenta del propio vendedor) — opcionales: sin
   // ellas el resto del sistema funciona y /api/meli/conectar responde 503
   meliAppId: process.env.MELI_APP_ID || null,
