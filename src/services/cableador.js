@@ -5,7 +5,7 @@ import { pedirJSON, llmDisponible } from './llm.js'
 import { posicionesRecientes } from './propios.js'
 import { keywordReal, palabrasClave } from './busquedasReales.js'
 import { encolarScanNicho } from '../jobs/queues.js'
-import { registrarGasto, gastoDelMes } from './gastos.js'
+import { registrarGasto, presupuesto } from './gastos.js'
 
 // Cableado automático propio → nicho, en escalera de costo:
 // 1) el producto ya rankea en un listado trackeado → ese nicho, gratis
@@ -175,8 +175,9 @@ export async function cablearPropiosAuto() {
       continue
     }
 
-    // crear nicho nuevo = scans recurrentes de actor: respeta el techo mensual
-    if ((await gastoDelMes()) >= config.presupuestoUsdMes) {
+    // crear nicho nuevo = scans recurrentes de actor: respeta el techo de
+    // scraping (interno + saldo real de Apify), no solo el contador interno
+    if ((await presupuesto()).scraping.agotado) {
       resultados.push({ sku: p.sku, titulo: p.titulo, accion: 'presupuesto', keyword })
       continue
     }

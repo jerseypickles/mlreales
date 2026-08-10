@@ -2,7 +2,7 @@ import { config } from '../config/env.js'
 import { ProductoPropio } from '../models/ProductoPropio.js'
 import { Nicho } from '../models/Nicho.js'
 import { Snapshot } from '../models/Snapshot.js'
-import { gastoDelMes } from './gastos.js'
+import { presupuesto } from './gastos.js'
 import { llmDisponible } from './llm.js'
 
 // Optimizador automático de Mis productos: lo que hasta ahora se apretaba a
@@ -29,10 +29,9 @@ export function motivoDeAuditar(propio, { dias = DIAS_REAUDITORIA, ahora = new D
 
 export async function optimizarPropios({ encolarAuditoria, motivo = 'programado' } = {}) {
   if (!llmDisponible()) return { omitido: true, motivo: 'IA no configurada' }
-  const gastado = await gastoDelMes()
-  if (gastado >= config.presupuestoUsdMes) {
-    return { omitido: true, motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)})` }
-  }
+  // la auditoría de listing gasta actor + IA: la frena el techo de scraping
+  const { scraping } = await presupuesto()
+  if (scraping.agotado) return { omitido: true, motivo: scraping.motivo }
 
   const acciones = { cableados: 0, auditorias: 0, fichas: 0, saltados: [] }
 
@@ -49,7 +48,7 @@ export async function optimizarPropios({ encolarAuditoria, motivo = 'programado'
   for (const propio of propios) {
     const razon = motivoDeAuditar(propio)
     if (!razon) continue
-    if ((await gastoDelMes()) >= config.presupuestoUsdMes) {
+    if ((await presupuesto()).scraping.agotado) {
       acciones.saltados.push({ sku: propio.sku, motivo: 'presupuesto agotado' })
       continue
     }
@@ -76,7 +75,8 @@ export async function revisarFichasPendientes() {
   let revisadas = 0
   for (const propio of propios) {
     if (propio.auditoria?.ficha) continue
-    if ((await gastoDelMes()) >= config.presupuestoUsdMes) break
+    // revisar la ficha es LLM puro (no toca el actor): techo de IA
+    if ((await presupuesto()).ia.agotado) break
     try {
       const { revisarFicha } = await import('./ficha.js')
       await revisarFicha(propio)

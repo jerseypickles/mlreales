@@ -433,6 +433,10 @@ export async function analizarNicho(nicho) {
     ...analisis,
     generadoEl: new Date(),
     modelo,
+    // el costo de ESTA llamada, no solo sumado al contador: sin esto el gasto
+    // de IA por nicho no se puede auditar hacia atrás (fue justo lo que faltó
+    // para saber cuánto costaban los análisis de foco solares)
+    costoUsd,
     // veredicto dictado con la serie de maduración completa (no con la foto
     // del primer scan): la UI lo marca para que se sepa qué tan sólido es
     esGraduacion: serieDemanda.length >= config.maduracionScans || undefined,

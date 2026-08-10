@@ -60,10 +60,11 @@ export function crearApp() {
     const apify = await saldoApify().catch(() => null)
     // desglose diario IA vs scraping: el total del mes suma los dos y no
     // permitía responder cuánto cuesta la IA por sí sola
-    const { gastoPorDia } = await import('../services/gastos.js')
+    const { gastoPorDia, iaPorNicho } = await import('../services/gastos.js')
     const dias = Math.min(90, Math.max(1, Number(req.query.dias) || 30))
     const porDia = await gastoPorDia({ dias }).catch(() => null)
-    res.json({ mes: mesActual(), gastadoUsd, presupuestoUsd: config.presupuestoUsdMes, apify, porDia })
+    const iaNichos = await iaPorNicho().catch(() => null)
+    res.json({ mes: mesActual(), gastadoUsd, presupuestoUsd: config.presupuestoUsdMes, apify, porDia, iaNichos })
   })
 
   app.use('/api/nichos', rutasNichos)

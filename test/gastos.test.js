@@ -2,7 +2,14 @@ import test, { before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
-import { registrarGasto, gastoDelMes, gastoPorDia, mesActual, diaActual } from '../src/services/gastos.js'
+import {
+  registrarGasto,
+  gastoDelMes,
+  gastoPorDia,
+  decidirPresupuesto,
+  mesActual,
+  diaActual,
+} from '../src/services/gastos.js'
 import { Nicho } from '../src/models/Nicho.js'
 
 let mongod
@@ -48,6 +55,44 @@ test('el promedio diario de IA se calcula sobre los días CON gasto', async () =
   const { totales } = await gastoPorDia({ dias: 30 })
   assert.equal(totales.diasConGasto, 1)
   assert.equal(Math.round(totales.promedioIaPorDiaActivo * 100), 35)
+})
+
+test('el freno de scraping se dispara con el saldo REAL de Apify, no solo el interno', () => {
+  // el caso exacto que motivó el cambio: contador interno en US$40,51 de
+  // US$150 (no frena nada) mientras Apify va al 86% de su tope real
+  const real = decidirPresupuesto({
+    gastadoUsd: 40.51,
+    techoUsd: 150,
+    apify: { topeUsd: 250, gastadoUsd: 213.85, cicloHasta: '2026-08-15T23:59:59.999Z' },
+  })
+  assert.equal(real.ia.agotado, false, 'el interno está lejos del techo')
+  assert.equal(real.scraping.agotado, false, '86% todavía no llega al 90%')
+
+  const alTope = decidirPresupuesto({
+    gastadoUsd: 40.51,
+    techoUsd: 150,
+    apify: { topeUsd: 250, gastadoUsd: 240, cicloHasta: '2026-08-15T23:59:59.999Z' },
+  })
+  assert.equal(alTope.scraping.agotado, true, 'Apify al 96% corta el scraping')
+  assert.match(alTope.scraping.motivo, /Apify al 96%/)
+  assert.equal(alTope.ia.agotado, false, 'el tope de Apify NO frena la IA: no gasta actor')
+})
+
+test('el contador interno agotado frena las DOS cosas', () => {
+  const p = decidirPresupuesto({ gastadoUsd: 150, techoUsd: 150, apify: { topeUsd: 250, gastadoUsd: 10 } })
+  assert.equal(p.ia.agotado, true)
+  assert.equal(p.scraping.agotado, true)
+  assert.match(p.ia.motivo, /presupuesto mensual agotado/)
+})
+
+test('sin saldo de Apify se sigue midiendo con el contador interno', () => {
+  // detener el tablero porque su API no respondió sería peor que el problema
+  const p = decidirPresupuesto({ gastadoUsd: 40, techoUsd: 150, apify: null })
+  assert.equal(p.apify, null)
+  assert.equal(p.scraping.agotado, false)
+  // un tope nulo tampoco puede leerse como "agotado"
+  const sinTope = decidirPresupuesto({ gastadoUsd: 40, techoUsd: 150, apify: { topeUsd: null, gastadoUsd: 999 } })
+  assert.equal(sinTope.scraping.agotado, false)
 })
 
 test('registrarGasto exige clasificar la fuente', async () => {

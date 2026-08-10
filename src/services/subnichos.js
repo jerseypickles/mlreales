@@ -1,7 +1,7 @@
 import { Nicho } from '../models/Nicho.js'
 import { keywordReal } from './busquedasReales.js'
 import { encolarScanNicho } from '../jobs/queues.js'
-import { gastoDelMes } from './gastos.js'
+import { presupuesto } from './gastos.js'
 import { config } from '../config/env.js'
 
 // Cierra el hoyo keyword ≠ jugada: el ranking de ML mezcla familias de
@@ -25,9 +25,10 @@ export async function crearSubNichoDeJugada(nicho, analisis) {
     return null
   }
 
-  const gastado = await gastoDelMes()
-  if (gastado >= config.presupuestoUsdMes) {
-    console.log(`[jugada] presupuesto mensual agotado: no se mide "${candidata}"`)
+  // el subnicho nace y se escanea con actor: techo de scraping
+  const { scraping } = await presupuesto()
+  if (scraping.agotado) {
+    console.log(`[jugada] ${scraping.motivo}: no se mide "${candidata}"`)
     return null
   }
 

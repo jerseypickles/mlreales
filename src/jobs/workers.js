@@ -14,9 +14,8 @@ import { scoring } from '../config/scoring.js'
 import { analizarNicho } from '../services/analista.js'
 import { sugerirNichos, palabrasSaturadas } from '../services/sugeridor.js'
 import { keywordReal, palabrasClave } from '../services/busquedasReales.js'
-import { registrarGasto, gastoDelMes } from '../services/gastos.js'
+import { registrarGasto, presupuesto } from '../services/gastos.js'
 import { escanearPropios, importarMisItems } from '../services/propios.js'
-import { saldoApify } from '../services/apify.js'
 import { elegirObjetivosDetalle } from '../services/seleccionDetalle.js'
 import { capturarTendencias, movimientosRecientes, lineasEnAlza } from '../services/tendencias.js'
 import { ProductoPropio } from '../models/ProductoPropio.js'
@@ -469,10 +468,10 @@ export async function procesarAnalisisNicho(job) {
 export async function procesarRadar() {
   if (!llmDisponible()) return { omitido: true, motivo: 'sin ANTHROPIC_API_KEY' }
 
-  const gastado = await gastoDelMes()
-  if (gastado >= config.presupuestoUsdMes) {
-    return { omitido: true, motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})` }
-  }
+  // el radar crea nichos nuevos, y cada nicho nuevo son scans de actor
+  // recurrentes: se frena con el techo de scraping, no solo con el interno
+  const { scraping } = await presupuesto()
+  if (scraping.agotado) return { omitido: true, motivo: scraping.motivo }
 
   // techo de nichos EN EVALUACIÓN: los que avanzaron en el embudo de compra
   // (cotizando/pedido/vendiendo) ya son negocio y no ocupan cupo de
@@ -598,29 +597,12 @@ export async function procesarProgramadorScans() {
     )
   }
 
-  const gastado = await gastoDelMes()
-  if (gastado >= config.presupuestoUsdMes) {
-    return {
-      omitido: true,
-      motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})`,
-      propiosEncolados: Boolean(propioVencidoPre),
-    }
-  }
-
-  // guardián del muro: saldo REAL de Apify (su ciclo va del 16 al 15, no es el
-  // mes calendario del contador interno) — frenar al 90% en vez de chocar con
-  // 3 reintentos quemados por job como el 2-ago
-  try {
-    const saldo = await saldoApify()
-    if (saldo.topeUsd && saldo.gastadoUsd >= saldo.topeUsd * 0.9) {
-      return {
-        omitido: true,
-        motivo: `Apify al ${Math.round((saldo.gastadoUsd / saldo.topeUsd) * 100)}% del tope real (US$ ${saldo.gastadoUsd.toFixed(0)} de ${saldo.topeUsd})`,
-        propiosEncolados: Boolean(propioVencidoPre),
-      }
-    }
-  } catch (err) {
-    console.warn(`[programador] saldo Apify no disponible: ${err.message}`)
+  // contador interno + saldo REAL de Apify (su ciclo va del 16 al 15, no es el
+  // mes calendario del interno) — frenar al 90% en vez de chocar con 3
+  // reintentos quemados por job como el 2-ago
+  const { scraping } = await presupuesto()
+  if (scraping.agotado) {
+    return { omitido: true, motivo: scraping.motivo, propiosEncolados: Boolean(propioVencidoPre) }
   }
   const nichos = await Nicho.find({ estado: 'activo' }).lean()
 
@@ -714,10 +696,11 @@ export async function procesarProgramadorScans() {
 }
 
 export async function procesarScanPropios(job) {
-  const gastado = await gastoDelMes()
   // con el techo alcanzado se mide igual, pero SOLO por la API oficial ($0):
-  // el actor de respaldo (pagado) espera al presupuesto del próximo mes
-  const soloOficial = job?.data?.soloOficial === true || gastado >= config.presupuestoUsdMes
+  // el actor de respaldo (pagado) espera al próximo ciclo. Mira el techo de
+  // scraping porque lo que se corta es el actor, no la API de ML.
+  const { scraping } = await presupuesto()
+  const soloOficial = job?.data?.soloOficial === true || scraping.agotado
   // la pasada completa diaria además reconoce sola publicaciones nuevas del
   // vendedor (el botón Importar queda solo para forzarlo a mano)
   if (!soloOficial) {
@@ -812,10 +795,10 @@ export async function procesarNivelBusqueda(job) {
 // priorizadas. Respeta el techo de presupuesto como todo gasto de IA.
 export async function procesarEstratega() {
   if (!llmDisponible()) return { omitido: true, motivo: 'IA no configurada (falta ANTHROPIC_API_KEY)' }
-  const gastado = await gastoDelMes()
-  if (gastado >= config.presupuestoUsdMes) {
-    return { omitido: true, motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})` }
-  }
+  // el estratega es LLM puro: que Apify esté en su tope no es razón para no
+  // correrlo, así que mira el techo de IA y no el de scraping
+  const { ia } = await presupuesto()
+  if (ia.agotado) return { omitido: true, motivo: ia.motivo }
   const { generarInformeEstratega } = await import('../services/estratega.js')
   const doc = await generarInformeEstratega()
   return { generadoEl: doc.generadoEl, modelo: doc.modelo, costoUsd: doc.costoUsd, acciones: doc.informe.acciones?.length ?? 0 }

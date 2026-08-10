@@ -7,7 +7,7 @@ import { Snapshot } from '../../models/Snapshot.js'
 import { extraerSkuDeUrl, posicionesRecientes } from '../../services/propios.js'
 import { ventasPorItem } from '../../services/ventasMl.js'
 import { llmDisponible } from '../../services/llm.js'
-import { gastoDelMes } from '../../services/gastos.js'
+import { presupuesto } from '../../services/gastos.js'
 import { obtenerColas } from '../../jobs/queues.js'
 
 const router = Router()
@@ -378,11 +378,11 @@ router.post(
     if (!(await Snapshot.exists({ keyword: nicho.keyword }))) {
       return res.status(409).json({ error: `el nicho "${nicho.keyword}" no tiene scans todavía; corre un scan primero` })
     }
-    const gastado = await gastoDelMes()
-    if (gastado >= config.presupuestoUsdMes) {
-      return res.status(409).json({
-        error: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes}): la auditoría gasta actor + IA`,
-      })
+    // la auditoría gasta actor + IA: mira el techo de scraping, que además del
+    // contador interno consulta el saldo real del ciclo de Apify
+    const { scraping } = await presupuesto()
+    if (scraping.agotado) {
+      return res.status(409).json({ error: `${scraping.motivo}: la auditoría gasta actor + IA` })
     }
     // una auditoría "generando" por más de 30 min es un job perdido (deploy en
     // el medio): no debe bloquear el relanzamiento para siempre
