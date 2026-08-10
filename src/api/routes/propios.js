@@ -18,6 +18,25 @@ const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).
 // el precio cambió (las brochas subieron de $1.795 a $2.890 el 9-ago) dividir
 // cargos viejos por unidades viejas infla la ganancia. Los cargos reales
 // responden "cuánto gané"; esto responde "cuánto gano por cada venta ahora".
+// El tipo de publicación decide la comisión (gold_pro/Premium 17% vs
+// gold_special/Clásica 13%): cobrar la equivocada se come 4 puntos del precio.
+// El scan lo guarda, pero hasta que corra se pregunta una vez y se cachea —
+// esta ruta la refresca el dashboard cada 30 s y no puede pagar una llamada
+// por producto por refresco.
+const cacheTipo = new Map()
+const TTL_TIPO_MS = 6 * 3600e3
+async function tipoPublicacionDe(propio) {
+  const guardado = propio.envioMl?.tipoPublicacion
+  if (guardado) return guardado
+  const id = propio.itemIdMl ?? propio.sku
+  const hit = cacheTipo.get(id)
+  if (hit && Date.now() - hit.el < TTL_TIPO_MS) return hit.valor
+  const { itemOficialSeguro } = await import('../../services/meli.js')
+  const valor = (await itemOficialSeguro(id))?.listing_type_id ?? null
+  cacheTipo.set(id, { valor, el: Date.now() })
+  return valor
+}
+
 async function economiaUnidad(propio) {
   const ultima = (propio.mediciones ?? []).at(-1) ?? null
   const precioClp = propio.promoMl?.activa?.precio ?? ultima?.precioEfectivo ?? ultima?.precio ?? null
@@ -26,7 +45,7 @@ async function economiaUnidad(propio) {
   const { comisionMlExacta } = await import('../../services/comisionesMl.js')
   const { costoEnvioFull, dimensionesDeItem, DIMENSIONES_POR_DEFECTO } = await import('../../services/envioFull.js')
 
-  const tipoPublicacion = propio.envioMl?.tipoPublicacion ?? null
+  const tipoPublicacion = await tipoPublicacionDe(propio).catch(() => null)
   const com = await comisionMlExacta({ precioClp, categoriaId: propio.categoriaMl, tipoPublicacion }).catch(() => null)
   const comisionClp = Number.isFinite(com?.pct)
     ? Math.round((com.pct / 100) * precioClp + (com.cargoFijoClp ?? 0))

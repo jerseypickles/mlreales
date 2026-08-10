@@ -174,7 +174,14 @@ function GananciaUnidad({ p, onGuardarCosto }) {
             <span>envío Full{e.envioSupuesto ? ' (caja estimada)' : ''}</span>
             <b>{e.envioClp != null ? `−${fmtPrecio(e.envioClp)}` : 'sin dato'}</b>
           </li>
-        ) : null}
+        ) : (
+          // sin Full el cargo de despacho existe igual pero ML no lo tarifica
+          // acá: decirlo, o el techo se lee como si fuera completo
+          <li className="gan-ojo">
+            <span>envío</span>
+            <b>no incluido (no es Full)</b>
+          </li>
+        )}
         <li className="gan-queda">
           <span>te queda</span>
           <b>{fmtPrecio(e.quedaParaProductoClp)}</b>

@@ -4013,6 +4013,7 @@ section {
   color: var(--tinta-2);
 }
 .gan-desglose b { font-variant-numeric: tabular-nums; color: var(--tinta); font-weight: 600; }
+.gan-ojo b { color: var(--tinta-3); font-weight: 500; font-style: italic; }
 .gan-queda {
   margin-top: 4px;
   padding-top: 6px !important;
