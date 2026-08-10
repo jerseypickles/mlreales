@@ -185,6 +185,20 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     await propio.save()
   }
 
+  // lo que ML cobra de verdad por cada venta (comisión + envío + Product Ads).
+  // Va solo en la pasada COMPLETA, no en el ciclo de 45 min: el endpoint de
+  // facturación acepta 5 requests por minuto y sus montos se mueven por
+  // período, no por hora.
+  let cargos = null
+  if (!soloOficial) {
+    try {
+      const { sincronizarCargosMl } = await import('./cargosMl.js')
+      cargos = await sincronizarCargosMl()
+    } catch (err) {
+      console.warn(`[scan-propios] cargos de ML no sincronizados: ${err.message}`)
+    }
+  }
+
   // ventas reales de la cuenta (orders): mismas pasadas diarias que el scan
   let ordenes = null
   try {
@@ -193,7 +207,13 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     console.warn(`[scan-propios] sincronizar órdenes falló: ${err.message}`)
   }
 
-  return { propios: propios.length, medidos, costoUsd, ordenesNuevas: ordenes?.nuevas ?? null }
+  return {
+    propios: propios.length,
+    medidos,
+    costoUsd,
+    ordenesNuevas: ordenes?.nuevas ?? null,
+    cargosMl: cargos?.guardados ?? null,
+  }
 }
 
 // Posición orgánica más reciente del producto en algún listado que el sistema

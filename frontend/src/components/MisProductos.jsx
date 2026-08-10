@@ -81,6 +81,28 @@ function CarteraNicho({ c }) {
           </div>
         ))}
       </div>
+      {c.cargosMl30d ? (
+        <div className="cartera-cargos">
+          <span className="cartera-cargos-tit">Lo que ML cobró en este nicho (30d)</span>
+          <span>
+            comisión <b>{fmtPrecio(c.cargosMl30d.comisionClp)}</b>
+          </span>
+          <span>
+            envío <b>{fmtPrecio(c.cargosMl30d.envioClp)}</b>
+          </span>
+          {c.cargosMl30d.adsClp ? (
+            <span>
+              publicidad <b>{fmtPrecio(c.cargosMl30d.adsClp)}</b>
+            </span>
+          ) : null}
+          <span className="cartera-cargos-total">
+            total <b>{fmtPrecio(c.cargosMl30d.totalClp)}</b>
+            {c.cargosMl30d.ingresos30d > 0
+              ? ` · ${Math.round((c.cargosMl30d.totalClp / c.cargosMl30d.ingresos30d) * 100)}% de tus ingresos`
+              : ''}
+          </span>
+        </div>
+      ) : null}
       {c.lecciones.map((l, i) => {
         const Icono = ICONO[l.tipo] ?? Sparkles
         return (
@@ -153,6 +175,23 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
       v: p.margen30d ? fmtPrecio(p.margen30d.margenClp) : p.ventas30d ? 'falta costo' : '—',
       Icono: PiggyBank,
       tono: p.margen30d ? (p.margen30d.margenClp < 0 ? 'mal' : 'bien') : p.ventas30d ? 'aviso' : null,
+      ayuda: p.margen30d
+        ? `Base: ${p.margen30d.base ?? '—'}\ningresos ${fmtPrecio(p.ventas30d?.ingresosClp)}\n− ML ${fmtPrecio(p.margen30d.cargosMlClp ?? p.margen30d.comisionClp)}\n− costo ${fmtPrecio(p.margen30d.costoClp)}`
+        : 'Carga el costo por unidad (clic en la tarjeta) para ver el margen real',
+    },
+    // lo que ML cobra DE VERDAD: comisión + envío + ads, del detalle de facturación
+    {
+      k: 'ML cobra 30d',
+      v: p.cargosMl30d ? fmtPrecio(p.cargosMl30d.totalClp) : '—',
+      Icono: Percent,
+      tono: p.cargosMl30d && p.ventas30d?.ingresosClp
+        ? p.cargosMl30d.totalClp / p.ventas30d.ingresosClp > 0.5
+          ? 'mal'
+          : 'aviso'
+        : null,
+      ayuda: p.cargosMl30d
+        ? `comisión ${fmtPrecio(p.cargosMl30d.comisionClp)}\nenvío ${fmtPrecio(p.cargosMl30d.envioClp)}\npublicidad ${fmtPrecio(p.cargosMl30d.adsClp)}\n${p.cargosMl30d.lineas} línea(s) facturadas`
+        : 'Se sincroniza a diario desde el detalle de facturación de ML',
     },
     { k: 'Stock', v: fmtNum(d?.ultima?.stock), Icono: Package, tono: d?.ultima?.stock <= 3 ? 'aviso' : null },
     {
@@ -206,8 +245,8 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
       </header>
 
       <div className="pc-kpis" onClick={() => onAbrir(p)}>
-        {kpis.map(({ k, v, extra, Icono, tono }) => (
-          <div key={k} className={`kpi${tono ? ` kpi-${tono}` : ''}`}>
+        {kpis.map(({ k, v, extra, Icono, tono, ayuda }) => (
+          <div key={k} className={`kpi${tono ? ` kpi-${tono}` : ''}`} title={ayuda}>
             <span className="kpi-k">
               <Icono aria-hidden="true" />
               {k}

@@ -44,6 +44,10 @@ router.get(
     const { comisionMlExacta } = await import('../../services/comisionesMl.js')
     const { calibracionFactor } = await import('../../services/calibracion.js')
     const { VentaMl } = await import('../../models/VentaMl.js')
+    // lo que ML cobra DE VERDAD por cada venta (comisión + envío + ads), leído
+    // del detalle de facturación y cableado por item
+    const { cargosPorItem, cargosSinItem } = await import('../../services/cargosMl.js')
+    const cargos = await cargosPorItem({ dias: 30 }).catch(() => new Map())
 
     const lista = []
     for (const p of propios) {
@@ -55,17 +59,38 @@ router.get(
       const conversion7d =
         v7?.unidades && visitas7 > 0 ? Math.min(100, Math.round((v7.unidades / visitas7) * 1000) / 10) : null
 
-      // margen real 30d: ingresos − comisión ML exacta − costo puesto en bodega
+      // margen real 30d: ingresos − lo que cobra ML − costo puesto en bodega.
+      // Si hay cargos REALES facturados se usan esos; si no, se cae a la
+      // comisión del tarifario (que ignora el cargo por envío y por eso
+      // sobrestimaba el margen en productos de ticket bajo).
+      const cargosItem = cargos.get(p.itemIdMl ?? p.sku) ?? null
       let margen30d = null
-      if (v30?.unidades > 0 && p.costoUnitarioClp != null && p.categoriaMl) {
-        const com = await comisionMlExacta({
-          precioClp: v30.ingresosClp / v30.unidades,
-          categoriaId: p.categoriaMl,
-        }).catch(() => null)
-        if (Number.isFinite(com?.pct)) {
-          const comisionClp = Math.round((com.pct / 100) * v30.ingresosClp + (com.cargoFijoClp ?? 0) * v30.unidades)
-          const costoClp = Math.round(p.costoUnitarioClp * v30.unidades)
-          margen30d = { margenClp: v30.ingresosClp - comisionClp - costoClp, comisionClp, costoClp }
+      if (v30?.unidades > 0 && p.costoUnitarioClp != null) {
+        const costoClp = Math.round(p.costoUnitarioClp * v30.unidades)
+        if (cargosItem) {
+          margen30d = {
+            margenClp: v30.ingresosClp - cargosItem.totalClp - costoClp,
+            cargosMlClp: cargosItem.totalClp,
+            comisionClp: cargosItem.comisionClp,
+            envioClp: cargosItem.envioClp,
+            adsClp: cargosItem.adsClp,
+            costoClp,
+            base: 'cargos reales de ML',
+          }
+        } else if (p.categoriaMl) {
+          const com = await comisionMlExacta({
+            precioClp: v30.ingresosClp / v30.unidades,
+            categoriaId: p.categoriaMl,
+          }).catch(() => null)
+          if (Number.isFinite(com?.pct)) {
+            const comisionClp = Math.round((com.pct / 100) * v30.ingresosClp + (com.cargoFijoClp ?? 0) * v30.unidades)
+            margen30d = {
+              margenClp: v30.ingresosClp - comisionClp - costoClp,
+              comisionClp,
+              costoClp,
+              base: 'comisión estimada del tarifario (sin cargo por envío)',
+            }
+          }
         }
       }
 
@@ -76,6 +101,7 @@ router.get(
         ventas7d: v7,
         conversion7d,
         margen30d,
+        cargosMl30d: cargosItem,
         impacto: evaluarImpacto(p),
       })
     }
@@ -130,7 +156,25 @@ router.get(
           { demandaNichoDia: rep?.metricas?.demanda?.ventasEstimadasPorDia ?? null },
         )
         if (c) {
-          carteras[nichoId] = { keyword: nicho?.keyword ?? null, ...c }
+          // POR NICHO: lo que ML cobró de verdad por los productos cableados acá
+          const delNicho = hermanos.reduce(
+            (acc, p) => {
+              const g = p.cargosMl30d
+              if (!g) return acc
+              acc.comisionClp += g.comisionClp
+              acc.envioClp += g.envioClp
+              acc.adsClp += g.adsClp
+              acc.totalClp += g.totalClp
+              return acc
+            },
+            { comisionClp: 0, envioClp: 0, adsClp: 0, totalClp: 0 },
+          )
+          const ingresos30d = hermanos.reduce((s, p) => s + (p.ventas30d?.ingresosClp ?? 0), 0)
+          carteras[nichoId] = {
+            keyword: nicho?.keyword ?? null,
+            ...c,
+            cargosMl30d: delNicho.totalClp ? { ...delNicho, ingresos30d } : null,
+          }
           // el hecho "este nicho vende" pasa a la memoria de largo plazo,
           // anclado a su categoría de ML (idempotente: actualiza la evidencia)
           if (c.ventasDia > 0 && nicho) {
@@ -150,7 +194,14 @@ router.get(
     }
 
     const todasLasVentas = await VentaMl.find().lean().catch(() => [])
-    res.json({ propios: lista, carteras, calibracion: calibracionFactor(propios, todasLasVentas) })
+    res.json({
+      propios: lista,
+      carteras,
+      // cargos que no cuelgan de una venta (Product Ads, cargos de cuenta): no
+      // se pueden imputar a un producto pero se pagan igual
+      cargosSinImputar: await cargosSinItem({ dias: 30 }).catch(() => []),
+      calibracion: calibracionFactor(propios, todasLasVentas),
+    })
   }),
 )
 

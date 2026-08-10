@@ -4072,6 +4072,32 @@ section {
 .cartera-tit { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .cartera-dato { color: var(--tinta-3); font-variant-numeric: tabular-nums; text-align: right; }
 .cartera-dato b { color: var(--tinta); font-size: 13px; }
+/* lo que ML cobró de verdad en el nicho: comisión + envío + publicidad */
+.cartera-cargos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 16px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, #f59e0b 7%, var(--superficie));
+  border: 1px solid color-mix(in srgb, #d97706 22%, var(--borde));
+  font-size: 12px;
+  color: var(--tinta-2);
+}
+.cartera-cargos b { font-variant-numeric: tabular-nums; color: var(--tinta); }
+.cartera-cargos-tit {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #b45309;
+  width: 100%;
+}
+@media (prefers-color-scheme: dark) { .cartera-cargos-tit { color: #fbbf24; } }
+.cartera-cargos-total { margin-left: auto; font-weight: 600; }
+
 .cartera-leccion {
   display: flex;
   align-items: flex-start;
