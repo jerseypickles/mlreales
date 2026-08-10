@@ -279,8 +279,10 @@ export async function tableroOportunidades({ todos = false } = {}) {
       etapaCompraEl: n.etapaCompraEl ?? null,
       notaEtapa: n.notaEtapa ?? null,
       resumen: analisis.resumen ?? null,
-      // los campos del proveedor: el rfq acotado (services/rfq.js) manda;
-      // si no existe, lo que traiga el análisis
+      // Campos del proveedor. Los llenaba un pase de LLM para la planilla de
+      // cotización; esa planilla se retiró (nunca se usó) y el pase con ella,
+      // así que hoy salen del análisis. `productoClave` sí sigue vivo: es lo
+      // que une dos nichos en una sola compra (unir/separar en Oportunidades).
       nichoIngles: n.rfq?.nichoIngles ?? analisis.nichoIngles ?? null,
       productoIngles: n.rfq?.productoIngles ?? rec.productoIngles ?? null,
       productoClave: n.rfq?.productoClave ?? null,

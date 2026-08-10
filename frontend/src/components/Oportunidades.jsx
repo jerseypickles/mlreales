@@ -53,7 +53,88 @@ function Hecho({ etiqueta, children }) {
   )
 }
 
-function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
+// Etapas del embudo de compra (espejo de ETAPAS_COMPRA en el backend)
+const ETAPAS = ['evaluando', 'cotizando', 'pedido', 'vendiendo', 'en-espera', 'descartado']
+
+// El precio que pide el proveedor, editable acá. Antes vivía solo en la
+// planilla; como la decisión se toma en esta mesa, el dato se anota donde se
+// mira. El techo (EXW máximo) va al lado: sin él, un número suelto no dice nada.
+function Cotizacion({ o, onRecargar }) {
+  const cot = o.cotizacion
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState(cot?.exwUsd ?? '')
+  const [guardando, setGuardando] = useState(false)
+
+  async function guardar(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    setGuardando(true)
+    try {
+      await api.ajustarNicho(o.nichoId, { exwCotizadoUsd: valor === '' ? null : Number(valor) })
+      setEditando(false)
+      onRecargar()
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (editando) {
+    return (
+      <form className="op-cot-form" onSubmit={guardar} onClick={(e) => e.stopPropagation()}>
+        <label>EXW US$</label>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          autoFocus
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+          placeholder={o.exwMaximoUsd ? `máx ${o.exwMaximoUsd}` : 'por unidad'}
+        />
+        <button type="submit" className="boton-secundario boton-chico" disabled={guardando}>
+          {guardando ? '…' : 'ok'}
+        </button>
+        <button
+          type="button"
+          className="boton-plano boton-chico"
+          onClick={(e) => {
+            e.stopPropagation()
+            setValor(cot?.exwUsd ?? '')
+            setEditando(false)
+          }}
+        >
+          cancelar
+        </button>
+      </form>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      className={`op-cotizacion op-cot-boton ${cot ? (cot.viable === false || cot.cierra === false ? 'mal' : 'bien') : 'pendiente'}`}
+      title={
+        cot?.exwUsd
+          ? `El proveedor pide US$ ${cot.exwUsd} por unidad${o.exwMaximoUsd ? ` · tu techo es US$ ${o.exwMaximoUsd}` : ''} — clic para cambiarlo`
+          : `Anota lo que pide el proveedor${o.exwMaximoUsd ? ` (tu techo: US$ ${o.exwMaximoUsd})` : ''}`
+      }
+      onClick={(e) => {
+        e.stopPropagation()
+        setEditando(true)
+      }}
+    >
+      {!cot
+        ? 'sin cotizar'
+        : cot.cierra === false
+          ? `✗ el proveedor se pasó (máx US$ ${o.exwMaximoUsd})`
+          : cot.margenClp != null
+            ? `✓ cotizado · deja ${fmtPrecio(cot.margenClp)}/u (${Math.round(cot.margenPct)}%)`
+            : '✓ cotizado'}
+    </button>
+  )
+}
+
+function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
   const flecha = o.tendenciaVentas ? FLECHA[o.tendenciaVentas] : null
   const nb = o.nivelBusqueda
   const nivel = nb?.nivel ? NIVELES[nb.nivel] : null
@@ -156,25 +237,24 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue }) {
               {o.confirmacion === 'confirmado' ? `✓ confirmado · ${o.scansConDemanda} scans` : `preliminar · ${o.scansConDemanda} scans`}
             </span>
           ) : null}
-          {cot ? (
-            <span
-              className={`op-cotizacion ${cot.viable === false || cot.cierra === false ? 'mal' : 'bien'}`}
-              title={cot.exwUsd ? `EXW cotizado US$ ${cot.exwUsd}` : 'Costo puesto en Chile anotado'}
-            >
-              {cot.cierra === false
-                ? `✗ el proveedor se pasó (máx US$ ${o.exwMaximoUsd})`
-                : cot.margenClp != null
-                  ? `✓ cotizado · deja ${fmtPrecio(cot.margenClp)}/u (${Math.round(cot.margenPct)}%)`
-                  : '✓ cotizado'}
-            </span>
-          ) : (
-            <span className="op-cotizacion pendiente">sin cotizar</span>
-          )}
-          {o.etapaCompra && o.etapaCompra !== 'evaluando' ? (
-            <span className="etapa-mini" title={o.notaEtapa ?? 'Etapa del embudo de compra'}>
-              {o.etapaCompra.replace(/-/g, ' ')}
-            </span>
-          ) : null}
+          <Cotizacion o={o} onRecargar={onRecargar} />
+          <select
+            className="etapa-select"
+            value={o.etapaCompra ?? 'evaluando'}
+            title={o.notaEtapa ?? 'Etapa del embudo de compra'}
+            onClick={(e) => e.stopPropagation()}
+            onChange={async (e) => {
+              e.stopPropagation()
+              await api.ajustarNicho(o.nichoId, { etapaCompra: e.target.value })
+              onRecargar()
+            }}
+          >
+            {ETAPAS.map((et) => (
+              <option key={et} value={et}>
+                {et.replace(/-/g, ' ')}
+              </option>
+            ))}
+          </select>
           {o.listingListo ? <span className="op-listing">listing ✓</span> : null}
           {mismaCompraQue ? (
             <span className="op-listing" title="Mismo producto de fábrica: un solo pedido cubre ambos nichos">
@@ -382,7 +462,13 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
               }
               return (
                 <div key={o.nichoId}>
-                  <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} />
+                  <CartaOportunidad
+                    o={o}
+                    rank={rank}
+                    onAbrir={onAbrirNicho}
+                    mismaCompraQue={mismaCompraQue}
+                    onRecargar={cargar}
+                  />
                   {o.familiaMiembros?.length ? (
                     <FamiliaColapsada
                       miembros={o.familiaMiembros}

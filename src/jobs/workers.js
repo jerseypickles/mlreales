@@ -19,7 +19,6 @@ import { escanearPropios, importarMisItems } from '../services/propios.js'
 import { saldoApify } from '../services/apify.js'
 import { elegirObjetivosDetalle } from '../services/seleccionDetalle.js'
 import { capturarTendencias, movimientosRecientes, lineasEnAlza } from '../services/tendencias.js'
-import { generarRfqPendientes } from '../services/rfq.js'
 import { ProductoPropio } from '../models/ProductoPropio.js'
 import { llmDisponible } from '../services/llm.js'
 import {
@@ -31,12 +30,10 @@ import {
   COLA_PROGRAMADOR,
   COLA_PROPIOS,
   COLA_TENDENCIAS,
-  COLA_RFQ,
   COLA_ESTRATEGA,
   crearConexionRedis,
   obtenerColas,
   encolarScanNicho,
-  encolarRfq,
 } from './queues.js'
 
 export async function procesarScanNicho(job) {
@@ -463,21 +460,7 @@ export async function procesarAnalisisNicho(job) {
     }
   }
 
-  // veredicto de entrada → acotar campos del proveedor solo (agrupa por ventana)
-  if (analisis.veredicto !== 'no_entrar') await encolarRfq()
-
   return { veredicto: analisis.veredicto, pausado }
-}
-
-// Acotado RFQ: campos del proveedor en inglés para la planilla, sin regenerar
-// análisis. El servicio decide si hay pendientes; si no, no gasta.
-export async function procesarRfq() {
-  if (!llmDisponible()) return { omitido: true, motivo: 'sin ANTHROPIC_API_KEY' }
-  const gastado = await gastoDelMes()
-  if (gastado >= config.presupuestoUsdMes) {
-    return { omitido: true, motivo: `presupuesto mensual agotado (US$ ${gastado.toFixed(2)} de ${config.presupuestoUsdMes})` }
-  }
-  return generarRfqPendientes()
 }
 
 // Radar autónomo: pide sugerencias por temporada/tendencia, crea los nichos
@@ -913,18 +896,13 @@ export function iniciarWorkers() {
       maxStalledCount: 3, // la pasada dura ~1 min; un deploy en medio no debe botarla
     },
   )
-  const workerRfq = new Worker(COLA_RFQ, procesarRfq, {
-    connection: crearConexionRedis(),
-    concurrency: 1,
-    maxStalledCount: 3,
-  })
   const workerEstratega = new Worker(COLA_ESTRATEGA, procesarEstratega, {
     connection: crearConexionRedis(),
     concurrency: 1,
     maxStalledCount: 3, // una llamada LLM larga; un deploy en medio no debe botarla
   })
 
-  for (const worker of [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios, workerTendencias, workerRfq, workerEstratega]) {
+  for (const worker of [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios, workerTendencias, workerEstratega]) {
     worker.on('failed', (job, err) => {
       console.error(`[${worker.name}] job ${job?.id} (intento ${job?.attemptsMade}) falló: ${err.message}`)
     })
@@ -934,5 +912,5 @@ export function iniciarWorkers() {
     worker.on('error', (err) => console.error(`[${worker.name}] error de worker:`, err.message))
   }
 
-  return [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios, workerTendencias, workerRfq, workerEstratega]
+  return [workerScan, workerDetalle, workerMetricas, workerAnalisis, workerRadar, workerProgramador, workerPropios, workerTendencias, workerEstratega]
 }

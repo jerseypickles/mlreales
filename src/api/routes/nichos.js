@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { config } from '../../config/env.js'
 import { Nicho } from '../../models/Nicho.js'
 import { Reporte } from '../../models/Reporte.js'
-import { encolarScanNicho, encolarRfq, obtenerColas } from '../../jobs/queues.js'
+import { encolarScanNicho, obtenerColas } from '../../jobs/queues.js'
 import { generarReporteNicho, obtenerProductosUltimoScan } from '../../services/metricas.js'
 import { analizarNicho } from '../../services/analista.js'
 import { generarListing } from '../../services/listero.js'
@@ -478,8 +478,6 @@ router.post(
         nicho.estado = 'pausado'
         await nicho.save()
       }
-      // veredicto de entrada → acotar los campos del proveedor solo
-      if (analisis.veredicto !== 'no_entrar') await encolarRfq()
       res.json({ analisis })
     } catch (err) {
       if (err.status) return res.status(err.status).json({ error: err.message })

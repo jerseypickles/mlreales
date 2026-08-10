@@ -26,8 +26,10 @@ const nichoSchema = new mongoose.Schema({
   familiaAparte: { type: [String], default: [] },
   // último borrador de listing generado con IA (títulos, ficha, descripción…)
   listingDraft: { type: mongoose.Schema.Types.Mixed, default: null },
-  // campos en inglés para la hoja de cotización al proveedor (rfq.js):
-  // { nichoIngles, productoIngles, especificacion, desdeAnalisis, generadoEl }
+  // Lo que sobrevive de la hoja de cotización al proveedor (retirada: era un
+  // Excel de ida sin retorno y nunca se usó). Sigue vivo `productoClave`, que
+  // agrupa nichos surtidos por el MISMO producto de fábrica — lo fija el
+  // usuario con unir/separar en Oportunidades: { productoClave, claveManual }
   rfq: { type: mongoose.Schema.Types.Mixed, default: null },
   // experiencia real del importador con este nicho ("ya vendimos esta paleta,
   // X unidades en Y meses"): el analista la pesa por sobre lo que infiera

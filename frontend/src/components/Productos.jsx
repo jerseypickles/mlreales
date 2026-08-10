@@ -4,7 +4,7 @@ import { Badge, IconoExterno, RepSeller, Cargando } from './ui.jsx'
 import { MiniSerie } from './graficos.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 import { Planilla } from './Planilla.jsx'
-import { COLUMNAS_PRODUCTO } from './PlanillaGlobal.jsx'
+import { COLUMNAS_PRODUCTO } from './columnasProducto.jsx'
 
 // orden por columna con clic en el encabezado (nulos siempre al final);
 // posición parte ascendente, el resto parte con "más alto primero"

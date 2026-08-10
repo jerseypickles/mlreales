@@ -10,7 +10,6 @@ export const COLA_RADAR = 'radar'
 export const COLA_PROGRAMADOR = 'programador-scans'
 export const COLA_PROPIOS = 'scan-propios'
 export const COLA_TENDENCIAS = 'tendencias-busqueda'
-export const COLA_RFQ = 'rfq-proveedor'
 export const COLA_ESTRATEGA = 'estratega'
 
 // Criterio Fase 1: 3 intentos con backoff exponencial (5s, 10s, 20s) y el job
@@ -48,7 +47,6 @@ export function obtenerColas() {
       propios: new Queue(COLA_PROPIOS, { connection, defaultJobOptions: { ...opcionesJob, attempts: 1 } }),
       // la pasada tolera 403 por prefijo internamente; reintentar completa solo repite ráfagas
       tendencias: new Queue(COLA_TENDENCIAS, { connection, defaultJobOptions: { ...opcionesJob, attempts: 1 } }),
-      rfq: new Queue(COLA_RFQ, { connection, defaultJobOptions: { ...opcionesJob, attempts: 1 } }),
       // una llamada LLM cara: sin reintentos automáticos (el cron de la próxima
       // semana o el botón manual la repiten si falló)
       estratega: new Queue(COLA_ESTRATEGA, { connection, defaultJobOptions: { ...opcionesJob, attempts: 1 } }),
@@ -60,15 +58,6 @@ export function obtenerColas() {
 
 export async function encolarScanNicho(nichoId, { motivo = 'manual', jobId } = {}) {
   return obtenerColas().scanNicho.add('scan', { nichoId: String(nichoId), motivo }, jobId ? { jobId } : undefined)
-}
-
-// Acotado RFQ con espera de 2 min y jobId por ventana de 30 min: varios
-// análisis seguidos se agrupan en una sola llamada al LLM.
-export async function encolarRfq() {
-  const ventana = Math.floor(Date.now() / (30 * 60e3))
-  return obtenerColas()
-    .rfq.add('acotar', {}, { delay: 2 * 60e3, jobId: `rfq-${ventana}` })
-    .catch(() => null) // jobId duplicado en la ventana = ya hay una pasada agendada
 }
 
 // Cron nativo de BullMQ: el radar (semanal) y el programador de scans (cada 30 min).
@@ -140,7 +129,6 @@ export async function cerrarColas() {
       colas.programador.close(),
       colas.propios.close(),
       colas.tendencias.close(),
-      colas.rfq.close(),
       colas.estratega.close(),
     ]),
     new Promise((resolver) => setTimeout(resolver, 3000)),

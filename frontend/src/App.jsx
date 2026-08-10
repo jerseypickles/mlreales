@@ -8,7 +8,6 @@ import { Listing } from './components/Listing.jsx'
 import { MisProductos } from './components/MisProductos.jsx'
 import { Publicidad } from './components/Publicidad.jsx'
 import { Oportunidades } from './components/Oportunidades.jsx'
-import { PlanillaGlobal } from './components/PlanillaGlobal.jsx'
 import { Radar } from './components/Sugerencias.jsx'
 import { Busqueda } from './components/Busqueda.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
@@ -753,12 +752,6 @@ export default function App() {
             Nichos
           </button>
           <button
-            className={vista === 'planilla' ? 'seccion activa' : 'seccion'}
-            onClick={() => setVista('planilla')}
-          >
-            Planilla
-          </button>
-          <button
             className={vista === 'propios' ? 'seccion activa' : 'seccion'}
             onClick={() => setVista('propios')}
           >
@@ -781,13 +774,6 @@ export default function App() {
             setVista('nichos')
           }}
           alCambiarNichos={cargarNichos}
-        />
-      ) : vista === 'planilla' ? (
-        <PlanillaGlobal
-          onAbrirNicho={(id) => {
-            setSeleccionado(id)
-            setVista('nichos')
-          }}
         />
       ) : vista === 'propios' ? (
         <MisProductos />

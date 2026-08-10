@@ -2,7 +2,7 @@ import { validarEnv, config } from './config/env.js'
 import { conectarMongo, desconectarMongo } from './db/mongo.js'
 import { crearApp } from './api/app.js'
 import { iniciarWorkers } from './jobs/workers.js'
-import { obtenerColas, cerrarColas, registrarProgramados, encolarRfq } from './jobs/queues.js'
+import { obtenerColas, cerrarColas, registrarProgramados } from './jobs/queues.js'
 import { diaChile, prefijosSemilla } from './services/tendencias.js'
 import { TendenciaBusqueda } from './models/TendenciaBusqueda.js'
 import { limpiarEscapesGuardados } from './services/limpiezaEscapes.js'
@@ -15,9 +15,6 @@ console.log('[mongo] conectado')
 
 obtenerColas()
 await registrarProgramados()
-// acotado RFQ al arrancar (el servicio no gasta si no hay pendientes): los
-// análisis que llegaron entre deploys no quedan sin campos de proveedor
-await encolarRfq()
 // reparar textos guardados con escapes doble-codificados (no bloquea el arranque)
 limpiarEscapesGuardados().catch((err) => console.error('[limpieza] falló:', err.message))
 // sonda one-shot del endpoint oficial de reseñas (ver services/sondaReviews.js):

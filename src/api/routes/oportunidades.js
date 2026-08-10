@@ -2,8 +2,7 @@ import { Router } from 'express'
 import { Nicho } from '../../models/Nicho.js'
 import { cambiosPorEtapa, ETAPAS_COMPRA } from '../../services/oportunidades.js'
 import { tableroOportunidades } from '../../services/tablero.js'
-import { generarRfqPendientes, claveRespaldo } from '../../services/rfq.js'
-import { llmDisponible } from '../../services/llm.js'
+import { claveRespaldo } from '../../services/claveCompra.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -20,8 +19,7 @@ router.get(
   }),
 )
 
-// Avanza varios nichos de etapa de una vez (ej: los incluidos en una descarga
-// de planilla pasan a "cotizando")
+// Avanza varios nichos de etapa de una vez
 router.post(
   '/avanzar',
   manejar(async (req, res) => {
@@ -82,20 +80,6 @@ router.post(
       )
     }
     res.json({ separados: nichos.length })
-  }),
-)
-
-// Acota con IA los campos del proveedor (inglés, specs limpias) para los nichos
-// que no los tengan al día — una sola llamada barata, sin regenerar análisis
-router.post(
-  '/rfq',
-  manejar(async (req, res) => {
-    if (!llmDisponible()) {
-      return res.status(503).json({ error: 'IA no configurada: falta ANTHROPIC_API_KEY en el entorno' })
-    }
-    // forzar: regenerar todo el tablero (botón manual tras una mala traducción)
-    const resultado = await generarRfqPendientes({ forzar: req.body?.forzar === true })
-    res.json(resultado)
   }),
 )
 

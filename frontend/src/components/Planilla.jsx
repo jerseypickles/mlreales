@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { aCsvExcel, descargarCsv } from '../lib/csv.js'
-import { descargarXlsx } from '../lib/xlsx.js'
 
 // Grilla estilo hoja de cálculo, reutilizable.
 // columna: { clave, titulo, tipo: 'texto'|'numero'|'bool', render?(fila), csv?(fila),
@@ -58,8 +57,6 @@ export function Planilla({
   columnas,
   filas,
   nombreArchivo = 'planilla.csv',
-  hojaXlsx,
-  formatoDescarga = 'csv', // 'csv' | 'xlsx'
   onDescarga, // callback con las filas visibles tras una descarga exitosa
   onFilaClick,
   filaKey,
@@ -73,7 +70,6 @@ export function Planilla({
   const [orden, setOrden] = useState(null) // { clave, dir: 1|-1 }
   const [filtros, setFiltros] = useState({})
   const [busqueda, setBusqueda] = useState('')
-  const [descargando, setDescargando] = useState(false)
 
   // en pantalla: todo menos las columnas que existen solo para la descarga
   const colsPantalla = useMemo(() => columnas.filter((c) => !c.soloDescarga), [columnas])
@@ -127,18 +123,8 @@ export function Planilla({
 
   async function descargar() {
     // soloVista = contexto interno en pantalla que NO viaja en la descarga
-    // (ej: veredicto/confianza en la hoja que se le manda al proveedor)
     const exportables = columnas.filter((c) => !c.soloVista)
-    if (formatoDescarga === 'xlsx') {
-      setDescargando(true)
-      try {
-        await descargarXlsx({ nombreArchivo, hoja: hojaXlsx, columnas: exportables, filas: visibles })
-      } finally {
-        setDescargando(false)
-      }
-    } else {
-      descargarCsv(nombreArchivo, aCsvExcel(visibles, exportables))
-    }
+    descargarCsv(nombreArchivo, aCsvExcel(visibles, exportables))
     if (onDescarga) await onDescarga(visibles)
   }
 
@@ -181,10 +167,8 @@ export function Planilla({
           />
         ) : null}
         {acciones}
-        <button className="boton-secundario" onClick={descargar} disabled={!visibles.length || descargando}>
-          {descargando
-            ? 'Generando…'
-            : `⬇ Descargar ${formatoDescarga === 'xlsx' ? 'Excel' : 'CSV'} (${visibles.length})`}
+        <button className="boton-secundario" onClick={descargar} disabled={!visibles.length}>
+          ⬇ Descargar CSV ({visibles.length})
         </button>
       </div>
 
