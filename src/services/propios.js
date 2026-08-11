@@ -211,12 +211,23 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     console.warn(`[scan-propios] sincronizar órdenes falló: ${err.message}`)
   }
 
+  // documento tributario de cada venta: es lo que hace que la posición de IVA
+  // sea la suma de boletas reales y no el bruto dividido por 1,19
+  let boletas = null
+  try {
+    const { sincronizarBoletas } = await import('./boletasMl.js')
+    boletas = await sincronizarBoletas()
+  } catch (err) {
+    console.warn(`[scan-propios] boletas no sincronizadas: ${err.message}`)
+  }
+
   return {
     propios: propios.length,
     medidos,
     costoUsd,
     ordenesNuevas: ordenes?.nuevas ?? null,
     cargosMl: cargos?.guardados ?? null,
+    boletas: boletas?.traidas ?? null,
   }
 }
 

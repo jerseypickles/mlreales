@@ -45,7 +45,7 @@ export function Contabilidad() {
   if (error) return <main className="contabilidad"><p className="error-bloque">Error: {error}</p></main>
   if (!datos) return <main className="contabilidad"><Cargando texto="Cargando la posición del mes…" /></main>
 
-  const { periodo, ventas, cargosMl, debito, creditoMl } = datos
+  const { periodo, ventas, cargosMl, debito, creditoMl, emision } = datos
 
   return (
     <main className="contabilidad">
@@ -68,12 +68,26 @@ export function Contabilidad() {
               valor={fmtPrecio(ventas.brutoClp)}
             />
             <Fila etiqueta="Neto" detalle="bruto ÷ 1,19" valor={fmtPrecio(ventas.netoClp)} />
-            <Fila etiqueta="IVA débito" valor={fmtPrecio(debito.clp)} tono="debito" />
+            <Fila etiqueta="IVA débito" detalle={debito.base} valor={fmtPrecio(debito.clp)} tono="debito" />
           </ul>
+          {emision ? (
+            <p className="cont-nota cont-nota-ok">
+              <FileText aria-hidden="true" />
+              <span>
+                Las {emision.tipo?.toLowerCase() ?? 'boleta'}s las emite <b>{emision.emisorNombre}</b> (RUT{' '}
+                {emision.emisorRut}) con sus propios folios, pero llevan el mensaje legal{' '}
+                <b>“por cuenta y orden de {emision.porCuentaDe}”</b>. Es un mandato de facturación: la venta
+                es tuya y <b>este débito es tuyo</b> — ML solo emite en tu nombre.
+              </span>
+            </p>
+          ) : null}
           <p className="cont-nota">
             <AlertTriangle aria-hidden="true" />
-            En órdenes Full <b>la boleta la emite Mercado Libre</b>, no tú: tu débito ya va informado al
-            SII por esa vía. Confírmalo en tu cuenta antes de usarlo para declarar.
+            <span>
+              Falta confirmar que esas boletas aparezcan en <b>tu</b> Registro de Ventas del SII. Es lo
+              primero que hay que mirar al cargar el RCV: si no están, el débito estaría informado bajo
+              otro RUT y habría que corregirlo.
+            </span>
           </p>
         </section>
 

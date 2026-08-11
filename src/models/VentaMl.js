@@ -17,6 +17,11 @@ const ventaMlSchema = new mongoose.Schema({
       precioUnitClp: Number,
     },
   ],
+  // Documento tributario de la venta, traído de ML (services/boletasMl.js).
+  // En Full lo emite MercadoLibre Chile con sus folios pero "por cuenta y
+  // orden de" el vendedor: la venta y el débito son del vendedor. Trae el
+  // desglose fiscal exacto, así que el IVA del período no se estima.
+  boleta: { type: mongoose.Schema.Types.Mixed, default: null },
   guardadoEl: { type: Date, default: Date.now },
 })
 

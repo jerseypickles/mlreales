@@ -33,7 +33,23 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
   const ordenes = await VentaMl.find({ fecha: { $gte: desde, $lt: hasta } }).lean()
   const brutoVentas = ordenes.reduce((s, o) => s + (o.totalClp ?? 0), 0)
   const unidades = ordenes.reduce((s, o) => s + (o.items ?? []).reduce((u, i) => u + (i.cantidad ?? 0), 0), 0)
+
+  // Débito REAL: la suma del IVA que declara cada boleta emitida, no el bruto
+  // dividido por 1,19. Coinciden al peso (verificado 10-ago), pero el
+  // documento es la fuente y el cálculo solo el respaldo mientras falten
+  // boletas por sincronizar.
+  const conBoleta = ordenes.filter((o) => Number.isFinite(o.boleta?.ivaClp))
+  const ivaDeBoletas = conBoleta.reduce((s, o) => s + o.boleta.ivaClp, 0)
+  const brutoConBoleta = conBoleta.reduce((s, o) => s + (o.boleta.brutoClp ?? o.totalClp ?? 0), 0)
+  // lo que aún no tiene documento se estima, para no subdeclarar el período
+  const estimadoDelResto = desglosarIva(brutoVentas - brutoConBoleta).ivaClp
+
   const ventas = { ...desglosarIva(brutoVentas), unidades, ordenes: ordenes.length }
+  const debitoBase = conBoleta.length
+    ? { clp: Math.round(ivaDeBoletas + estimadoDelResto), boletas: conBoleta.length, sinBoleta: ordenes.length - conBoleta.length }
+    : { clp: ventas.ivaClp, boletas: 0, sinBoleta: ordenes.length }
+  // quién emite: el mandato es lo que hace que este débito sea del vendedor
+  const muestra = conBoleta[0]?.boleta ?? null
 
   // cargos de ML del período: comisión, envío y publicidad. Los anulados en
   // factura no son costo y por lo tanto tampoco generan crédito.
@@ -45,7 +61,24 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
     periodo,
     ventas,
     cargosMl,
-    debito: { clp: ventas.ivaClp },
+    debito: {
+      ...debitoBase,
+      base: debitoBase.boletas
+        ? `${debitoBase.boletas} boleta(s) emitidas${debitoBase.sinBoleta ? ` + ${debitoBase.sinBoleta} estimada(s)` : ''}`
+        : 'estimado del bruto (boletas sin sincronizar)',
+    },
+    // El documento lo emite ML con sus folios, pero "por cuenta y orden de" la
+    // empresa: la venta es del vendedor y el débito también. Se muestra en
+    // pantalla porque es la diferencia entre "ML me compró" y "ML facturó por
+    // mí", que cambia por completo cómo se declara.
+    emision: muestra
+      ? {
+          tipo: muestra.tipo,
+          emisorNombre: muestra.emisorNombre,
+          emisorRut: muestra.emisorRut,
+          porCuentaDe: muestra.porCuentaDe,
+        }
+      : null,
     // supuesto explícito y todavía sin confirmar: que los montos que ML factura
     // vienen con IVA incluido. Se resuelve leyendo la factura del período
     // cuando cierre; hasta entonces el número es referencial.

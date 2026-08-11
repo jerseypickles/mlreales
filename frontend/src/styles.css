@@ -4568,6 +4568,11 @@ section {
   color: var(--tinta-2);
 }
 .cont-nota svg { flex: none; width: 15px; height: 15px; margin-top: 1px; color: var(--tinta-3); }
+.cont-nota-ok {
+  background: color-mix(in srgb, var(--exito) 8%, var(--superficie));
+  border: 1px solid color-mix(in srgb, var(--exito) 24%, var(--borde));
+}
+.cont-nota-ok svg { color: var(--exito-tinta); }
 .cont-nota-alerta {
   background: color-mix(in srgb, #f59e0b 9%, var(--superficie));
   border: 1px solid color-mix(in srgb, #d97706 24%, var(--borde));
