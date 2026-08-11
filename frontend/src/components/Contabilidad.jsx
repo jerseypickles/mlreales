@@ -60,16 +60,27 @@ export function Contabilidad() {
 
       <div className="cont-grid">
         <section className="cont-caja">
-          <h3>Débito fiscal · lo que generan tus ventas</h3>
+          <h3>Débito fiscal · documentos emitidos</h3>
           <ul className="iva-lista">
             <Fila
-              etiqueta="Ventas del período en ML"
-              detalle={`${ventas.unidades} unidad(es) en ${ventas.ordenes} orden(es)`}
-              valor={fmtPrecio(ventas.brutoClp)}
+              etiqueta="Bruto documentado"
+              detalle={debito.base}
+              valor={fmtPrecio(debito.brutoClp)}
             />
-            <Fila etiqueta="Neto" detalle="bruto ÷ 1,19" valor={fmtPrecio(ventas.netoClp)} />
-            <Fila etiqueta="IVA débito" detalle={debito.base} valor={fmtPrecio(debito.clp)} tono="debito" />
+            <Fila etiqueta="Neto" valor={fmtPrecio(debito.netoClp)} />
+            <Fila etiqueta="IVA débito" valor={fmtPrecio(debito.clp)} tono="debito" />
           </ul>
+          <p className="cont-nota">
+            <AlertTriangle aria-hidden="true" />
+            <span>
+              Ojo con la diferencia contra tus ventas: en el período se cerraron{' '}
+              <b>{ventas.ordenes} órdenes por {fmtPrecio(ventas.brutoClp)}</b>. No calza con lo documentado
+              y está bien que no calce — <b>una boleta puede cubrir varias órdenes</b> del mismo carro, y
+              un carro que cruza el fin de mes se factura en un período y sus órdenes caen en el otro.
+              Para declarar manda la <b>fecha de emisión</b>, que es lo que muestra este cuadro.
+              {ventas.sinBoleta ? ` Quedan ${ventas.sinBoleta} orden(es) sin documento sincronizado.` : ''}
+            </span>
+          </p>
           {emision ? (
             <p className="cont-nota cont-nota-ok">
               <FileText aria-hidden="true" />

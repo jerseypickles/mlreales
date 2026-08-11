@@ -30,26 +30,46 @@ export function rangoDelMes(periodo) {
 export async function posicionIva({ periodo = mesActual() } = {}) {
   const { desde, hasta } = rangoDelMes(periodo)
 
+  // VISTA COMERCIAL: las órdenes cerradas en el período. Es lo que se vendió.
   const ordenes = await VentaMl.find({ fecha: { $gte: desde, $lt: hasta } }).lean()
   const brutoVentas = ordenes.reduce((s, o) => s + (o.totalClp ?? 0), 0)
   const unidades = ordenes.reduce((s, o) => s + (o.items ?? []).reduce((u, i) => u + (i.cantidad ?? 0), 0), 0)
+  const sinBoleta = ordenes.filter((o) => !o.boleta?.invoiceId).length
+  const ventas = { ...desglosarIva(brutoVentas), unidades, ordenes: ordenes.length, sinBoleta }
 
-  // Débito REAL: la suma del IVA que declara cada boleta emitida, no el bruto
-  // dividido por 1,19. Coinciden al peso (verificado 10-ago), pero el
-  // documento es la fuente y el cálculo solo el respaldo mientras falten
-  // boletas por sincronizar.
-  const conBoleta = ordenes.filter((o) => Number.isFinite(o.boleta?.ivaClp))
-  const ivaDeBoletas = conBoleta.reduce((s, o) => s + o.boleta.ivaClp, 0)
-  const brutoConBoleta = conBoleta.reduce((s, o) => s + (o.boleta.brutoClp ?? o.totalClp ?? 0), 0)
-  // lo que aún no tiene documento se estima, para no subdeclarar el período
-  const estimadoDelResto = desglosarIva(brutoVentas - brutoConBoleta).ivaClp
+  // VISTA TRIBUTARIA: los documentos EMITIDOS en el período, cada uno contado
+  // una sola vez. Dos correcciones sobre lo obvio, ambas medidas el 10-ago:
+  //
+  //  1. Una boleta puede cubrir VARIAS órdenes (compras de un mismo carro:
+  //     51 de 52 órdenes traían tag pack_order y 3 boletas cubrían más de una).
+  //     Sumar por orden duplicaba el IVA: daba $26.966 donde eran $22.287.
+  //  2. El corte va por fecha de EMISIÓN, no por fecha de la orden. Un pack que
+  //     cruza el fin de mes se factura en un período y sus órdenes caen en el
+  //     otro — por eso el bruto de las boletas de agosto ($139.507) no calza
+  //     con el de las órdenes de agosto ($119.911).
+  //
+  // El débito del período es lo primero, no lo segundo.
+  const conDocumento = await VentaMl.find({ 'boleta.emitidaEl': { $gte: desde, $lt: hasta } })
+    .select('boleta')
+    .lean()
+  const porFactura = new Map()
+  for (const v of conDocumento) {
+    if (v.boleta?.invoiceId && !porFactura.has(v.boleta.invoiceId)) porFactura.set(v.boleta.invoiceId, v.boleta)
+  }
+  const documentos = [...porFactura.values()]
+  const ivaDocumentos = documentos.reduce((s, b) => s + (b.ivaClp ?? 0), 0)
+  const brutoDocumentos = documentos.reduce((s, b) => s + (b.brutoClp ?? 0), 0)
 
-  const ventas = { ...desglosarIva(brutoVentas), unidades, ordenes: ordenes.length }
-  const debitoBase = conBoleta.length
-    ? { clp: Math.round(ivaDeBoletas + estimadoDelResto), boletas: conBoleta.length, sinBoleta: ordenes.length - conBoleta.length }
-    : { clp: ventas.ivaClp, boletas: 0, sinBoleta: ordenes.length }
+  const debitoBase = documentos.length
+    ? {
+        clp: Math.round(ivaDocumentos),
+        documentos: documentos.length,
+        brutoClp: Math.round(brutoDocumentos),
+        netoClp: Math.round(brutoDocumentos - ivaDocumentos),
+      }
+    : { clp: ventas.ivaClp, documentos: 0, brutoClp: brutoVentas, netoClp: ventas.netoClp }
   // quién emite: el mandato es lo que hace que este débito sea del vendedor
-  const muestra = conBoleta[0]?.boleta ?? null
+  const muestra = documentos[0] ?? null
 
   // cargos de ML del período: comisión, envío y publicidad. Los anulados en
   // factura no son costo y por lo tanto tampoco generan crédito.
@@ -63,9 +83,9 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
     cargosMl,
     debito: {
       ...debitoBase,
-      base: debitoBase.boletas
-        ? `${debitoBase.boletas} boleta(s) emitidas${debitoBase.sinBoleta ? ` + ${debitoBase.sinBoleta} estimada(s)` : ''}`
-        : 'estimado del bruto (boletas sin sincronizar)',
+      base: debitoBase.documentos
+        ? `${debitoBase.documentos} documento(s) emitido(s) en el período`
+        : 'estimado del bruto (documentos sin sincronizar)',
     },
     // El documento lo emite ML con sus folios, pero "por cuenta y orden de" la
     // empresa: la venta es del vendedor y el débito también. Se muestra en

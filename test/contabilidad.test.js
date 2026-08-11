@@ -41,6 +41,23 @@ test('rangoDelMes: el mes empieza a medianoche en Chile, no en UTC', () => {
   assert.ok(ventaDe31Julio2200 < desde, 'esa venta NO es de agosto')
 })
 
+test('una boleta que cubre varias órdenes se cuenta UNA vez', () => {
+  // medido el 10-ago: 51 de 52 órdenes traían tag pack_order y 3 boletas
+  // cubrían más de una. Sumar por orden daba $26.966 donde eran $22.287.
+  const ventas = [
+    { boleta: { invoiceId: 'A', ivaClp: 589, brutoClp: 3685 } },
+    { boleta: { invoiceId: 'A', ivaClp: 589, brutoClp: 3685 } }, // misma boleta, otra orden
+    { boleta: { invoiceId: 'B', ivaClp: 1743, brutoClp: 10922 } },
+    { boleta: { invoiceId: 'B', ivaClp: 1743, brutoClp: 10922 } },
+    { boleta: { invoiceId: 'B', ivaClp: 1743, brutoClp: 10922 } },
+  ]
+  const porFactura = new Map()
+  for (const v of ventas) if (!porFactura.has(v.boleta.invoiceId)) porFactura.set(v.boleta.invoiceId, v.boleta)
+  const iva = [...porFactura.values()].reduce((s, b) => s + b.ivaClp, 0)
+  assert.equal(porFactura.size, 2)
+  assert.equal(iva, 589 + 1743, 'sumar por orden habría dado 6.407')
+})
+
 test('rangoDelMes: diciembre cierra en enero del año siguiente', () => {
   const { desde, hasta } = rangoDelMes('2026-12')
   assert.equal(desde.toISOString(), '2026-12-01T04:00:00.000Z')
