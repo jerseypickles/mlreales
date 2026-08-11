@@ -420,6 +420,19 @@ router.post(
   }),
 )
 
+// Traer los documentos tributarios de las ventas. Va aparte del scan diario
+// para poder correrlo y diagnosticarlo solo: la pasada completa hace muchas
+// cosas antes (actor, cargos con pausas de 13 s) y no deja distinguir lento de
+// roto. Responde con el conteo, no encola.
+router.post(
+  '/boletas',
+  manejar(async (req, res) => {
+    const { sincronizarBoletas } = await import('../../services/boletasMl.js')
+    const dias = Math.min(365, Math.max(1, Number(req.query.dias) || 60))
+    res.json(await sincronizarBoletas({ dias, max: Number(req.query.max) || 200 }))
+  }),
+)
+
 // Cambiar el precio de venta en Mercado Libre. Escritura sobre el item propio
 // (scope Publicación), con el cambio anotado en el historial de precios para
 // que la lupa pueda medir su efecto en visitas y ventas.

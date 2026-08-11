@@ -61,6 +61,7 @@ export async function sincronizarBoletas({ dias = 60, max = 200 } = {}) {
 
   let traidas = 0
   let sinDocumento = 0
+  const errores = []
   for (const venta of pendientes) {
     try {
       const f = await meliGet(`/users/${me.id}/invoices/orders/${venta.orderId}`)
@@ -69,16 +70,20 @@ export async function sincronizarBoletas({ dias = 60, max = 200 } = {}) {
         sinDocumento++
         continue
       }
+      // Mixed: asignar el objeto no siempre marca el path como sucio, y un
+      // save() silencioso que no persiste es el peor de los fallos — no avisa
       venta.boleta = boleta
+      venta.markModified('boleta')
       await venta.save()
       traidas++
     } catch (err) {
       // 404 = la orden todavía no tiene documento emitido (ML lo emite con
       // algo de retraso). No es error: se reintenta en la próxima pasada.
-      if (!/404/.test(err.message)) console.warn(`[boletas] ${venta.orderId}: ${err.message}`)
+      if (!/404/.test(err.message)) errores.push(`${venta.orderId}: ${err.message}`)
       sinDocumento++
     }
     await esperar(PAUSA_MS)
   }
-  return { pendientes: pendientes.length, traidas, sinDocumento }
+  if (errores.length) console.warn(`[boletas] ${errores.length} con error: ${errores.slice(0, 3).join(' | ')}`)
+  return { pendientes: pendientes.length, traidas, sinDocumento, errores: errores.slice(0, 5) }
 }
