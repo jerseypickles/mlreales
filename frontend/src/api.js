@@ -42,6 +42,7 @@ export const api = {
   simularMargen: (entrada) => pedir('/api/margen', json(entrada)),
   parametrosMargen: () => pedir('/api/margen/parametros'),
   gastos: () => pedir('/api/gastos'),
+  contabilidad: (periodo) => pedir(`/api/contabilidad${periodo ? `?periodo=${periodo}` : ''}`),
   generarListing: (id) => pedir(`/api/nichos/${id}/listing`, { method: 'POST' }),
   listarPropios: () => pedir('/api/propios'),
   tendencias: (dias) => pedir(`/api/tendencias${dias ? `?dias=${dias}` : ''}`),

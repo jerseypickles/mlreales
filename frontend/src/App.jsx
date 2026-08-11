@@ -10,7 +10,9 @@ import { Publicidad } from './components/Publicidad.jsx'
 import { Oportunidades } from './components/Oportunidades.jsx'
 import { Radar } from './components/Sugerencias.jsx'
 import { Busqueda } from './components/Busqueda.jsx'
+import { Contabilidad } from './components/Contabilidad.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
+import { Radar as RadarIcono, Landmark } from 'lucide-react'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
 import { GRUPOS, agruparNichos, anidarFamilias } from './lib/sidebar.js'
 
@@ -690,12 +692,42 @@ function Candado() {
   )
 }
 
+// Riel de mundos, a la derecha. Icono + etiqueta corta: con dos entradas el
+// icono solo ya sería un acertijo, y esto va a crecer.
+const MUNDOS = [
+  { id: 'inteligencia', titulo: 'Inteligencia', Icono: RadarIcono, ayuda: 'Nichos, búsqueda, oportunidades y tus publicaciones' },
+  { id: 'contabilidad', titulo: 'Contabilidad', Icono: Landmark, ayuda: 'Posición de IVA: débito de ventas contra crédito de importaciones y gastos' },
+]
+
+function RielMundos({ mundo, onCambiar }) {
+  return (
+    <nav className="riel" aria-label="Áreas del sistema">
+      {MUNDOS.map(({ id, titulo, Icono, ayuda }) => (
+        <button
+          key={id}
+          className={`riel-boton${mundo === id ? ' activo' : ''}`}
+          onClick={() => onCambiar(id)}
+          title={ayuda}
+          aria-current={mundo === id ? 'page' : undefined}
+        >
+          <Icono aria-hidden="true" />
+          <span>{titulo}</span>
+        </button>
+      ))}
+    </nav>
+  )
+}
+
 export default function App() {
   const [nichos, setNichos] = useState([])
   const [seleccionado, setSeleccionado] = useState(null)
   const [errorLista, setErrorLista] = useState(null)
   const [bloqueada, setBloqueada] = useState(false)
   const [vista, setVista] = useState('oportunidades')
+  // Los dos mundos del sistema. Son trabajos distintos: uno decide QUÉ traer,
+  // el otro lleva la plata de lo ya traído. Se cambian con el riel de la
+  // derecha, no con las pestañas de arriba, justamente para que no se mezclen.
+  const [mundo, setMundo] = useState('inteligencia')
 
   useEffect(() => {
     const alBloquear = () => {
@@ -727,7 +759,8 @@ export default function App() {
   if (bloqueada) return <Candado />
 
   return (
-    <div className="app">
+    <div className="app con-riel">
+      <RielMundos mundo={mundo} onCambiar={setMundo} />
       <header>
         <div className="marca">
           <span className="marca-icono" aria-hidden="true">
@@ -735,10 +768,14 @@ export default function App() {
           </span>
           <div className="marca-texto">
             <h1>MELI Intel</h1>
-            <span className="subtitulo">inteligencia de nichos · mercadolibre.cl</span>
+            <span className="subtitulo">
+              {mundo === 'contabilidad'
+                ? 'contabilidad · IVA y costos reales'
+                : 'inteligencia de nichos · mercadolibre.cl'}
+            </span>
           </div>
         </div>
-        <nav className="secciones" aria-label="Secciones">
+        <nav className="secciones" aria-label="Secciones" hidden={mundo !== 'inteligencia'}>
           <button
             className={vista === 'oportunidades' ? 'seccion activa' : 'seccion'}
             onClick={() => setVista('oportunidades')}
@@ -767,7 +804,9 @@ export default function App() {
         <VentasChip />
         <PresupuestoChip />
       </header>
-      {vista === 'oportunidades' ? (
+      {mundo === 'contabilidad' ? (
+        <Contabilidad />
+      ) : vista === 'oportunidades' ? (
         <Oportunidades
           onAbrirNicho={(id) => {
             setSeleccionado(id)

@@ -4449,6 +4449,145 @@ section {
 .etapa-select:hover { border-color: var(--acento); }
 .etapa-select:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 
+/* ── Riel de mundos (derecha) ──────────────────────────────────────────── */
+
+.app.con-riel { padding-right: 84px; }
+
+.riel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 8px;
+  background: color-mix(in srgb, var(--tinta) 3%, var(--superficie));
+  border-left: 1px solid var(--borde);
+}
+
+.riel-boton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 4px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: none;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+  color: var(--tinta-3);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.riel-boton svg { width: 21px; height: 21px; }
+.riel-boton:hover { color: var(--tinta); background: color-mix(in srgb, var(--tinta) 5%, transparent); }
+.riel-boton.activo {
+  color: var(--acento);
+  background: var(--acento-tenue);
+  border-color: color-mix(in srgb, var(--acento) 28%, transparent);
+}
+.riel-boton:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+
+@media (max-width: 720px) {
+  .app.con-riel { padding-right: 0; padding-bottom: 68px; }
+  .riel {
+    top: auto;
+    left: 0;
+    width: auto;
+    flex-direction: row;
+    justify-content: center;
+    padding: 6px 8px;
+    border-left: none;
+    border-top: 1px solid var(--borde);
+  }
+  .riel-boton { flex: 1; max-width: 140px; }
+}
+
+/* ── Contabilidad: posición de IVA ─────────────────────────────────────── */
+
+.contabilidad { padding: 22px 26px 40px; }
+.cont-cabeza h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 19px;
+}
+.cont-cabeza h2 svg { width: 21px; height: 21px; color: var(--acento); }
+.cont-periodo { margin: 3px 0 0; color: var(--tinta-3); font-size: 12.5px; }
+
+.cont-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  margin: 18px 0;
+}
+.cont-caja {
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-g, 14px);
+  background: var(--superficie);
+  box-shadow: var(--sombra-1);
+  padding: 16px 18px;
+}
+.cont-caja h3 { margin: 0 0 12px; font-size: 13.5px; }
+
+.iva-lista { list-style: none; margin: 0; padding: 0; }
+.iva-fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--borde);
+  font-size: 13px;
+}
+.iva-fila:last-child { border-bottom: none; }
+.iva-fila b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.iva-etiqueta { display: flex; flex-direction: column; color: var(--tinta-2); }
+.iva-etiqueta small { color: var(--tinta-3); font-size: 11px; margin-top: 1px; }
+.iva-debito b { color: var(--peligro); font-size: 15px; }
+.iva-credito b { color: var(--exito-tinta); font-size: 15px; }
+
+.cont-nota {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tinta) 3%, var(--superficie));
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tinta-2);
+}
+.cont-nota svg { flex: none; width: 15px; height: 15px; margin-top: 1px; color: var(--tinta-3); }
+.cont-nota-alerta {
+  background: color-mix(in srgb, #f59e0b 9%, var(--superficie));
+  border: 1px solid color-mix(in srgb, #d97706 24%, var(--borde));
+}
+.cont-nota-alerta svg { color: #b45309; }
+@media (prefers-color-scheme: dark) { .cont-nota-alerta svg { color: #fbbf24; } }
+
+.cont-falta {
+  border: 1px dashed var(--borde-fuerte);
+  border-radius: var(--radio-g, 14px);
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--acento) 3%, var(--superficie));
+}
+.cont-falta h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 13.5px; }
+.cont-falta h3 svg { width: 17px; height: 17px; color: var(--acento); }
+.cont-falta p { margin: 0 0 10px; font-size: 13px; line-height: 1.55; color: var(--tinta-2); }
+.cont-falta .boton-secundario { display: inline-flex; align-items: center; gap: 7px; }
+.cont-falta .boton-secundario svg { width: 15px; height: 15px; }
+.cont-pie { margin: 12px 0 0; font-size: 11.5px; color: var(--tinta-3); line-height: 1.5; }
+
 /* ── Familia de búsqueda, dentro del nicho ─────────────────────────────── */
 
 .busqueda-panel {

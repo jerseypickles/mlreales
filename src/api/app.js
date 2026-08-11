@@ -67,6 +67,18 @@ export function crearApp() {
     res.json({ mes: mesActual(), gastadoUsd, presupuestoUsd: config.presupuestoUsdMes, apify, porDia, iaNichos })
   })
 
+  // Posición de IVA del mes. Panel de gestión, NO una declaración: no existe
+  // API para presentar ni pagar el F29.
+  app.get('/api/contabilidad', async (req, res, next) => {
+    try {
+      const { posicionIva } = await import('../services/contabilidad.js')
+      const periodo = /^\d{4}-\d{2}$/.test(req.query.periodo ?? '') ? req.query.periodo : undefined
+      res.json(await posicionIva({ periodo }))
+    } catch (err) {
+      next(err)
+    }
+  })
+
   app.use('/api/nichos', rutasNichos)
   app.use('/api/productos', rutasProductos)
   app.use('/api/propios', rutasPropios)
