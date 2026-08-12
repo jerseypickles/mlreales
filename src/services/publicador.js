@@ -48,7 +48,10 @@ export async function publicarEnMl({
     buying_mode: 'buy_it_now',
     condition: 'new',
     listing_type_id: tipoPublicacion,
-    pictures: imagenes.map((url) => ({ source: url })),
+    // una foto puede venir como URL pública o como id ya subido a ML (las
+    // fotos locales del importador se suben antes a /pictures/items y acá
+    // entran por id — ML rechaza rutas de archivo como source)
+    pictures: imagenes.map((img) => (/^https?:\/\//i.test(img) ? { source: img } : { id: img })),
     attributes: atributos,
   })
 

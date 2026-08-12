@@ -6,3 +6,4 @@ dist/
 .claude/
 .playwright-mcp/
 *.png
+fotos/
