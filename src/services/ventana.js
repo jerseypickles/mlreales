@@ -63,10 +63,22 @@ function estadoDesde(absHoy, desde, hasta) {
 // Devuelve la ventana accionable del nicho, o null si no hay señal de temporada.
 // `ventanaCompra` (la que declara el analista) manda sobre el cálculo.
 export function ventanaDeCompra(
-  { ventanaCompra = null, estacionalidad = null } = {},
+  { ventanaCompra = null, estacionalidad = null, curvaAnual = null } = {},
   { hoy = new Date(), leadMax = LEAD_MAX_MESES, leadMin = LEAD_MIN_MESES } = {},
 ) {
   const absHoy = aAbsoluto(mesChile(hoy))
+
+  // 0. LA CURVA MEDIDA MANDA. `estacionalidad` la escribe la IA de memoria; la
+  // curva son 5 años de búsquedas chilenas reales (services/estacionalidad.js).
+  // Solo pisa al analista cuando el nicho es estacional de verdad: si la curva
+  // dice "todo el año", la ventana deja de estorbar y no hay pico que perseguir.
+  if (curvaAnual?.clasificacion === 'todo-el-año') {
+    return { fuente: 'curva-medida', tipo: 'todo_el_año', estado: 'sin-temporada', desde: null, hasta: null, mesesAl: 0 }
+  }
+  if (curvaAnual?.clasificacion === 'estacional' && curvaAnual.mesPico) {
+    const v = ventanaDesdePico(curvaAnual.mesPico, absHoy, leadMax, leadMin)
+    if (v) return { ...v, fuente: 'curva-medida', ratioPico: curvaAnual.ratioPico ?? null }
+  }
 
   // 1. lo que dictó el analista, si viene y no venció
   const desdeA = aAbsoluto(ventanaCompra?.desde)
@@ -94,10 +106,17 @@ export function ventanaDeCompra(
   const inicio = inicioDelPico(estacionalidad?.mesesPico)
   if (!inicio) return null
 
-  // 3. la próxima ocurrencia del pico a la que TODAVÍA se llega
+  return ventanaDesdePico(inicio, absHoy, leadMax, leadMin)
+}
+
+// Del mes pico a la ventana de compra: se busca la próxima ocurrencia del pico
+// a la que TODAVÍA se llega con el lead time de importación. Lo comparten la
+// curva medida y la estacionalidad inferida — la diferencia entre ambas es de
+// dónde sale el mes pico, no cómo se calcula la ventana.
+function ventanaDesdePico(mesPico, absHoy, leadMax, leadMin) {
   const anioHoy = Math.floor((absHoy - 1) / 12)
   for (let k = 0; k <= 2; k++) {
-    const pico = (anioHoy + k) * 12 + inicio
+    const pico = (anioHoy + k) * 12 + mesPico
     const desde = pico - leadMax
     const hasta = pico - leadMin
     const estado = estadoDesde(absHoy, desde, hasta)

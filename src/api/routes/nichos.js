@@ -123,13 +123,29 @@ router.get(
       { $project: { ultimoAnalisis: 0, listingDraft: 0, rfq: 0, contextoUsuario: 0, conteoDemanda: 0 } },
     ])
 
+    // la silueta real de 5 años por keyword (services/estacionalidad.js). Una
+    // consulta para todo el sidebar: la curva no caduca.
+    const curvaPorKeyword = new Map()
+    try {
+      const { CurvaEstacional } = await import('../../models/CurvaEstacional.js')
+      const curvas = await CurvaEstacional.find({ 'curva.11': { $exists: true } })
+        .select('keyword mesPico nombreMesPico ratioPico clasificacion')
+        .lean()
+      for (const c of curvas) curvaPorKeyword.set(c.keyword, c)
+    } catch {
+      // sin curvas el sidebar funciona igual, con la estacionalidad del radar
+    }
+
     for (const n of nichos) {
-      // CUÁNDO se compra: la ventana que declaró el analista, y si no la hay
-      // (solo 2 de 80 nichos la traían), la calculada desde los meses pico del
-      // radar. Es el criterio que ordena el sidebar por sobre el score.
+      // CUÁNDO se compra. Manda la CURVA MEDIDA si existe; si no, la ventana que
+      // declaró el analista, y si tampoco (solo 2 de 80 nichos la traían), la
+      // calculada desde los meses pico que el radar infirió. Es el criterio que
+      // ordena el sidebar por sobre el score.
+      n.curvaAnual = curvaPorKeyword.get(n.keyword) ?? null
       n.ventana = ventanaDeCompra({
         ventanaCompra: n.ventanaCompra,
         estacionalidad: n.radarInfo?.estacionalidad,
+        curvaAnual: n.curvaAnual,
       })
       // frase lista para el tooltip: por qué este nicho tiene (o no) búsquedas
       if (n.nivelBusqueda) n.nivelBusqueda.explicacion = explicar(n.nivelBusqueda)

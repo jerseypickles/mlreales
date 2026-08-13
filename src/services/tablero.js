@@ -155,6 +155,20 @@ export async function tableroOportunidades({ todos = false } = {}) {
       }),
   )
 
+  // LA FORMA DEL AÑO, medida (Google Trends, ver services/estacionalidad.js).
+  // Una sola consulta para todo el tablero: la curva no caduca. Si un nicho no
+  // la tiene, la tarjeta lo dice — nunca se inventa un pico.
+  const curvaPorKeyword = new Map()
+  try {
+    const { CurvaEstacional } = await import('../models/CurvaEstacional.js')
+    const curvas = await CurvaEstacional.find({ 'curva.11': { $exists: true } })
+      .select('keyword curva mesPico nombreMesPico ratioPico clasificacion promedio')
+      .lean()
+    for (const c of curvas) curvaPorKeyword.set(c.keyword, c)
+  } catch {
+    // sin curvas medidas el tablero funciona igual, con la estacionalidad del radar
+  }
+
   const oportunidades = []
   for (const n of filas) {
     const docAnalisis = n.conAnalisis?.[0]
@@ -228,7 +242,20 @@ export async function tableroOportunidades({ todos = false } = {}) {
       score: ultimo?.scoreOportunidad ?? docAnalisis.scoreOportunidad ?? null,
       fechaScan: ultimo?.fecha ?? null,
       mediana: ultimo?.metricas?.precio?.mediana ?? null,
+      // LO CONTADO va primero y LO DERIVADO va marcado. `ventasDia` es delta de
+      // reseñas × factor 25 — un factor que la calibración propia desmiente (54
+      // ventas reales dieron 3 reseñas: factor 18) y que en 41 de 367 mediciones
+      // produjo saltos de 5x o más. La tarjeta muestra el conteo real y deja la
+      // estimación plegada con su aritmética a la vista.
+      resenasNuevas: ultimo?.metricas?.demanda?.reviews?.delta ?? null,
+      canasta: ultimo?.metricas?.demanda?.reviews?.itemsComparables ?? null,
+      ventanaDias: ultimo?.metricas?.demanda?.reviews?.periodoDias ?? null,
+      saltosFiltrados:
+        (ultimo?.metricas?.demanda?.reviews?.saltosFiltrados ?? 0) +
+          (ultimo?.metricas?.demanda?.reviews?.duplicadosCatalogo ?? 0) || null,
+      preguntasNuevas: ultimo?.metricas?.demanda?.preguntas?.nuevas ?? null,
       ventasDia: ultimo?.metricas?.demanda?.ventasEstimadasPorDia ?? null,
+      factorEstimacion: 25,
       tendenciaVentas: tendencia,
       scansConDemanda,
       confirmacion: confirmacionVeredicto(scansConDemanda, tendencia),
@@ -269,7 +296,11 @@ export async function tableroOportunidades({ todos = false } = {}) {
       ventana: ventanaDeCompra({
         ventanaCompra: analisis.ventanaCompra,
         estacionalidad: n.radarInfo?.estacionalidad,
+        curvaAnual: curvaPorKeyword.get(n.keyword),
       }),
+      // silueta real de 5 años: es lo que dibuja el minigráfico y lo que
+      // permite leer un cero como valle de temporada en vez de como muerte
+      curvaAnual: curvaPorKeyword.get(n.keyword) ?? null,
       ventanaImportacion: n.radarInfo?.ventanaImportacion ?? null,
       estacionalidad: n.radarInfo?.estacionalidad ?? null,
       condiciones: analisis.veredicto === 'entrar_con_condiciones' ? (analisis.resumen ?? null) : null,

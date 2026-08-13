@@ -111,3 +111,35 @@ test('mesChile: el mes en hora de Chile, no en UTC', () => {
   assert.equal(mesChile(new Date('2026-09-01T02:00:00Z')), '2026-08')
   assert.equal(mesChile(new Date('2026-09-01T13:00:00Z')), '2026-09')
 })
+
+test('ventanaDeCompra: la curva medida manda sobre la estacionalidad inferida', () => {
+  const hoy = new Date('2026-08-12T12:00:00Z')
+
+  // caso partidor batería: la IA lo leyó como invernal y lo mandó a cuarentena
+  // hasta 2027; la curva real da ratio 1,34 = se mueve los 12 meses
+  const todoElAno = ventanaDeCompra(
+    {
+      estacionalidad: { tipo: 'estacional', mesesPico: ['junio', 'julio'] },
+      curvaAnual: { clasificacion: 'todo-el-año', mesPico: 7, ratioPico: 1.34 },
+    },
+    { hoy },
+  )
+  assert.equal(todoElAno.estado, 'sin-temporada', 'sin pico real, la ventana deja de estorbar')
+  assert.equal(todoElAno.fuente, 'curva-medida')
+
+  // caso quitasol: curva medida con pico en enero (ratio 4,52)
+  const estacional = ventanaDeCompra(
+    { curvaAnual: { clasificacion: 'estacional', mesPico: 1, ratioPico: 4.52 } },
+    { hoy },
+  )
+  assert.equal(estacional.fuente, 'curva-medida')
+  assert.equal(estacional.pico, '2027-01')
+  assert.equal(estacional.ratioPico, 4.52)
+
+  // sin curva medida se conserva el camino de siempre
+  const sinCurva = ventanaDeCompra(
+    { ventanaCompra: { desde: '2026-08', hasta: '2026-11', motivo: 'x' } },
+    { hoy },
+  )
+  assert.equal(sinCurva.fuente, 'analisis')
+})

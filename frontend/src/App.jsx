@@ -155,7 +155,16 @@ function chipVentana(n) {
   }
   const v = n.ventana
   if (!v || v.estado === 'sin-temporada') return null
-  const pico = v.pico ? ` · pico ${fmtMes(v.pico)}` : ''
+  // de dónde sale la fecha: la curva son 5 años de búsquedas reales, la
+  // estacionalidad la infirió la IA. La diferencia importa cuando hay que
+  // gastar un contenedor, así que se dice en el tooltip.
+  const medida = v.fuente === 'curva-medida'
+  const origen = medida
+    ? ` · MEDIDO en 5 años de búsquedas (pico ${v.ratioPico}× el promedio)`
+    : v.fuente === 'analisis'
+      ? ' · fecha dictada por el análisis'
+      : ' · temporada estimada por IA, sin medir'
+  const pico = (v.pico ? ` · pico ${fmtMes(v.pico)}` : '') + origen
   if (v.estado === 'ultimo-mes') {
     return { clase: 'ahora', texto: `último mes para pedir`, icono: '🔥', ayuda: `Comprando este mes llega justo al pico${pico}` }
   }

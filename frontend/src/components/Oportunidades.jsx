@@ -53,6 +53,37 @@ function Hecho({ etiqueta, children }) {
   )
 }
 
+const MESES_CORTOS = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
+
+// LA FORMA DEL AÑO de un vistazo. Índice 0-100 de Google Trends relativo a la
+// PROPIA keyword: sirve para comparar diciembre contra julio del mismo
+// producto, jamás un producto contra otro. Por eso no lleva eje ni números.
+function CurvaAno({ curva }) {
+  if (!curva?.curva?.length) return null
+  const max = Math.max(...curva.curva) || 1
+  const mesHoy = new Date().getMonth()
+  return (
+    <div className="curva-ano" title={`Pico en ${curva.nombreMesPico} · ${curva.ratioPico}× el promedio del año (Google Trends, 5 años)`}>
+      <div className="curva-barras">
+        {curva.curva.map((v, i) => (
+          <span
+            key={i}
+            className={`curva-barra${i === mesHoy ? ' curva-hoy' : ''}`}
+            style={{ height: `${Math.max(6, Math.round((100 * v) / max))}%` }}
+          >
+            <i>{MESES_CORTOS[i]}</i>
+          </span>
+        ))}
+      </div>
+      <span className="curva-pie">
+        {curva.clasificacion === 'estacional'
+          ? `pico ${curva.nombreMesPico} · ${curva.ratioPico}× el promedio`
+          : 'se vende todo el año'}
+      </span>
+    </div>
+  )
+}
+
 // Etapas del embudo de compra (espejo de ETAPAS_COMPRA en el backend)
 const ETAPAS = ['evaluando', 'cotizando', 'pedido', 'vendiendo', 'en-espera', 'descartado']
 
@@ -209,18 +240,42 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
         <div className="op-hechos">
           <Hecho etiqueta="vender a">{o.precioVentaClp ? fmtPrecio(o.precioVentaClp) : null}</Hecho>
           <Hecho etiqueta="EXW máx">{o.exwMaximoUsd != null ? `US$ ${o.exwMaximoUsd}` : null}</Hecho>
-          <Hecho etiqueta="demanda">
-            {o.ventasDia != null ? (
-              <>
-                ~{fmtNum(Math.round(o.ventasDia))} ventas/día{' '}
+          {/* LO CONTADO, no lo derivado: reseñas nuevas es un entero exacto que
+              entrega ML. La estimación de ventas/día (delta × factor 25) va
+              plegada al pie con su aritmética, porque el factor está sin
+              calibrar y produjo saltos de 5x en 41 mediciones. */}
+          <Hecho etiqueta="se mueve">
+            {o.resenasNuevas != null && o.ventanaDias ? (
+              <span
+                title={`${o.resenasNuevas} reseñas nuevas en ${o.ventanaDias} días, contadas sobre ${o.canasta} productos del top${
+                  o.saltosFiltrados ? ` · ${o.saltosFiltrados} saltos de catálogo descartados` : ''
+                }`}
+              >
+                +{fmtNum(o.resenasNuevas)} reseñas / {o.ventanaDias}d{' '}
                 {flecha ? <span className={`delta ${flecha[1]}`}>{flecha[0]}</span> : null}
-              </>
+                {o.saltosFiltrados ? <span className="op-sucio" title="hubo saltos de catálogo filtrados">⚠</span> : null}
+              </span>
             ) : null}
           </Hecho>
           <Hecho etiqueta="mediana">{o.mediana ? fmtPrecio(o.mediana) : null}</Hecho>
           <Hecho etiqueta="Full">{o.pctFull != null ? `${Math.round(o.pctFull)}%` : null}</Hecho>
           <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
         </div>
+
+        <CurvaAno curva={o.curvaAnual} />
+
+        {/* la estimación existe pero no manda: plegada y con su aritmética a la
+            vista, para que nadie la confunda con una medición */}
+        {o.ventasDia != null && o.resenasNuevas != null ? (
+          <details className="op-estimacion">
+            <summary>estimación de ventas</summary>
+            <span>
+              {fmtNum(o.resenasNuevas)} reseñas ÷ {o.ventanaDias} días × factor {o.factorEstimacion ?? 25} ≈{' '}
+              <strong>{fmtNum(Math.round(o.ventasDia))}/día</strong>. El factor no está calibrado — la medición
+              propia (54 ventas reales → 3 reseñas) sugiere 18, no 25.
+            </span>
+          </details>
+        ) : null}
 
         {/* fila 3: en qué estado está la decisión */}
         <div className="op-estado">
