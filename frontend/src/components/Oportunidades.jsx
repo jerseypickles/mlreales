@@ -120,13 +120,22 @@ function CurvaAno({ curva }) {
 // Etapas del embudo de compra (espejo de ETAPAS_COMPRA en el backend)
 const ETAPAS = ['evaluando', 'cotizando', 'pedido', 'vendiendo', 'en-espera', 'descartado']
 
-// El precio que pide el proveedor, editable acá. Antes vivía solo en la
-// planilla; como la decisión se toma en esta mesa, el dato se anota donde se
-// mira. El techo (EXW máximo) va al lado: sin él, un número suelto no dice nada.
+// LO QUE TE CUESTA LA UNIDAD PUESTA EN CHILE, editable acá.
+//
+// Antes esto pedía el EXW del proveedor en dólares, heredado de la planilla de
+// cotización que ya se retiró. El importador lo dijo derecho: "eso de cotizar
+// no sirve, llevamos los costos desde mis productos" — y en agosto ya había
+// pedido el cambio ("solo pondremos el precio a que nos llegó el producto
+// puesto en Chile, es más fácil de calcular"). El campo se creó entonces pero
+// la tarjeta nunca se cambió, y por eso 24 nichos tenían EXW y solo 1 costo.
+//
+// El costo puesto en Chile permite margen REAL sin estimar flete ni cubicaje:
+// precio − comisión ML − costo. Los EXW viejos quedan como histórico y se
+// muestran solo para recordar que falta el dato bueno.
 function Cotizacion({ o, onRecargar }) {
   const cot = o.cotizacion
   const [editando, setEditando] = useState(false)
-  const [valor, setValor] = useState(cot?.exwUsd ?? '')
+  const [valor, setValor] = useState(cot?.costoPuestoClp ?? '')
   const [guardando, setGuardando] = useState(false)
 
   async function guardar(e) {
@@ -134,7 +143,7 @@ function Cotizacion({ o, onRecargar }) {
     e.stopPropagation()
     setGuardando(true)
     try {
-      await api.ajustarNicho(o.nichoId, { exwCotizadoUsd: valor === '' ? null : Number(valor) })
+      await api.ajustarNicho(o.nichoId, { costoPuestoClp: valor === '' ? null : Number(valor) })
       setEditando(false)
       onRecargar()
     } finally {
@@ -145,15 +154,15 @@ function Cotizacion({ o, onRecargar }) {
   if (editando) {
     return (
       <form className="op-cot-form" onSubmit={guardar} onClick={(e) => e.stopPropagation()}>
-        <label>EXW US$</label>
+        <label>puesto en Chile $</label>
         <input
           type="number"
           min="0"
-          step="0.01"
+          step="1"
           autoFocus
           value={valor}
           onChange={(e) => setValor(e.target.value)}
-          placeholder={o.exwMaximoUsd ? `máx ${o.exwMaximoUsd}` : 'por unidad'}
+          placeholder="por unidad, ya en Chile"
         />
         <button type="submit" className="boton-secundario boton-chico" disabled={guardando}>
           {guardando ? '…' : 'ok'}
@@ -163,7 +172,7 @@ function Cotizacion({ o, onRecargar }) {
           className="boton-plano boton-chico"
           onClick={(e) => {
             e.stopPropagation()
-            setValor(cot?.exwUsd ?? '')
+            setValor(cot?.costoPuestoClp ?? '')
             setEditando(false)
           }}
         >
@@ -178,22 +187,28 @@ function Cotizacion({ o, onRecargar }) {
       type="button"
       className={`op-cotizacion op-cot-boton ${cot ? (cot.viable === false || cot.cierra === false ? 'mal' : 'bien') : 'pendiente'}`}
       title={
-        cot?.exwUsd
-          ? `El proveedor pide US$ ${cot.exwUsd} por unidad${o.exwMaximoUsd ? ` · tu techo es US$ ${o.exwMaximoUsd}` : ''} — clic para cambiarlo`
-          : `Anota lo que pide el proveedor${o.exwMaximoUsd ? ` (tu techo: US$ ${o.exwMaximoUsd})` : ''}`
+        cot?.costoPuestoClp
+          ? `Te cuesta ${fmtPrecio(cot.costoPuestoClp)} por unidad ya puesto en Chile — clic para cambiarlo`
+          : cot?.exwUsd
+            ? `EXW histórico US$ ${cot.exwUsd}. Anota el costo puesto en Chile para calcular margen real — clic para escribirlo`
+            : 'Anota lo que te cuesta cada unidad ya puesta en Chile (con flete e internación): con eso el sistema calcula el margen real'
       }
       onClick={(e) => {
         e.stopPropagation()
         setEditando(true)
       }}
     >
+      {/* el importador retiró el flujo de EXW: el costo que lleva es el puesto
+          en Chile, que es el que permite calcular margen sin estimar flete */}
       {!cot
-        ? 'sin cotizar'
-        : cot.cierra === false
-          ? `✗ el proveedor se pasó (máx US$ ${o.exwMaximoUsd})`
+        ? 'sin costo'
+        : cot.costoPuestoClp == null
+          ? `EXW US$ ${cot.exwUsd} · falta costo puesto`
           : cot.margenClp != null
-            ? `✓ cotizado · deja ${fmtPrecio(cot.margenClp)}/u (${Math.round(cot.margenPct)}%)`
-            : '✓ cotizado'}
+            ? cot.margenClp > 0
+              ? `✓ deja ${fmtPrecio(cot.margenClp)}/u (${Math.round(cot.margenPct)}%)`
+              : `✗ pierde ${fmtPrecio(Math.abs(cot.margenClp))}/u a ese precio`
+            : `✓ ${fmtPrecio(cot.costoPuestoClp)}/u puesto`}
     </button>
   )
 }
