@@ -35,6 +35,18 @@ const experimentoAdsSchema = new mongoose.Schema({
   inicioEl: { type: Date, required: true },
   finEl: Date,
   baseline: ventana,
+  // El día del cambio queda partido en dos regímenes: ML reporta por día
+  // completo, así que sin esto el día 1 mezcla las horas viejas con las nuevas.
+  // Guardando lo acumulado en el instante del cambio, ese día se vuelve medible
+  // por resta en vez de descartable.
+  corteDiaCambio: {
+    fecha: String,
+    prints: Number,
+    clicks: Number,
+    costo: Number,
+    unidades: Number,
+    leidoEl: Date,
+  },
   estado: { type: String, enum: ['corriendo', 'cerrado'], default: 'corriendo' },
   // conclusión escrita a mano cuando se cierra: qué se aprendió
   conclusion: String,
