@@ -182,5 +182,33 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
     schema: SCHEMA_SUGERENCIAS,
     maxTokens: 8000,
   })
+
+  // EL FILTRO QUE FALTABA. El sugeridor razona con el contexto del negocio y el
+  // autocompletado de ML, pero no veía ni el tamaño ni la dirección del mercado
+  // — lanzaba nichos correctos sobre tendencias poco atractivas, y cada uno
+  // cuesta scans y análisis durante semanas antes de que se note.
+  //
+  // Se mide ANTES de abrirlos: volumen en una sola llamada y crecimiento de los
+  // últimos años. Ojo con la doctrina: esto mide CHILE, no Mercado Libre, así
+  // que solo descarta lo que no alcanza ni para una compra (bajo 200 búsquedas
+  // al mes) y para el resto ordena. Si alguien busca eso DENTRO de ML lo sigue
+  // contestando el autocompletado, que es la fuente correcta para esa pregunta.
+  try {
+    const { medirAtractivo } = await import('./atractivoNicho.js')
+    const sugerencias = datos?.sugerencias ?? []
+    const medidas = await medirAtractivo(sugerencias.map((s) => s.keyword))
+    const porKeyword = new Map(medidas.map((m) => [m.keyword, m]))
+    datos.sugerencias = sugerencias
+      .map((s) => ({ ...s, atractivo: porKeyword.get(s.keyword) ?? null }))
+      .filter((s) => !s.atractivo || s.atractivo.suficiente)
+      .sort((a, b) => (b.atractivo?.volumen ?? 0) * (b.atractivo?.crecimiento === 'crece' ? 1.35 : 1)
+        - (a.atractivo?.volumen ?? 0) * (a.atractivo?.crecimiento === 'crece' ? 1.35 : 1))
+    datos.descartadasPorVolumen = medidas
+      .filter((m) => !m.suficiente)
+      .map((m) => ({ keyword: m.keyword, volumen: m.volumen }))
+  } catch (err) {
+    // sin medición el radar sigue proponiendo como antes: mejor a ciegas que detenido
+    console.warn(`[sugeridor] atractivo no medido: ${err.message}`)
+  }
   return datos
 }
