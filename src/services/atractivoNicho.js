@@ -1,5 +1,6 @@
 import { volumenMensual, CHILE } from './volumenBusqueda.js'
 import { candidatasMecanicas, elegirCorreccion } from './correccionKeyword.js'
+import { palabrasClave, normalizarTexto } from './busquedasReales.js'
 import { config } from '../config/env.js'
 
 // ¿VALE LA PENA ABRIR ESTE NICHO?
@@ -89,6 +90,52 @@ export function crecimientoDeSerie(puntos, { hoy = new Date() } = {}) {
   return { serie: promedios, ultimo, base: Math.round(base * 10) / 10, pct, clasificacion: clasificarCrecimiento(pct) }
 }
 
+// CÓMO SE LLAMA LA COSA DE VERDAD.
+//
+// La corrección mecánica repara la escritura pero no descubre el nombre: para
+// "scooter niño" probó todas las preposiciones y Google no reporta ninguna —
+// la palabra que existe es "scooter infantil" (260) y el mercado real es
+// "scooter electrico" (60.500). Eso es un SINÓNIMO, y la corrección mecánica se
+// niega a aplicarlos a propósito porque cambiar el sustantivo puede cambiar de
+// producto ("rizador" → "ondulador").
+//
+// Acá se DESCUBREN y se reportan, nunca se aplican solos: el radar los muestra
+// con su volumen para que decida quien mira.
+const URL_IDEAS = 'https://api.dataforseo.com/v3/keywords_data/google_ads/keywords_for_keywords/live'
+
+export function filtrarVariantes(keyword, resultados, { max = 4 } = {}) {
+  const claves = palabrasClave(keyword)
+  if (!claves.size) return []
+  return (resultados ?? [])
+    .filter((r) => {
+      if (!Number.isFinite(r?.search_volume) || r.search_volume <= 0) return false
+      if (normalizarTexto(r.keyword) === normalizarTexto(keyword)) return false
+      // debe compartir al menos una palabra de contenido: si no, es otro rubro
+      const c = palabrasClave(r.keyword)
+      return [...claves].some((p) => c.has(p))
+    })
+    .sort((a, b) => b.search_volume - a.search_volume)
+    .slice(0, max)
+    .map((r) => ({ keyword: r.keyword, volumen: r.search_volume, competencia: r.competition ?? null }))
+}
+
+async function variantesReales(keyword, { locationCode = CHILE, limite = 60 } = {}) {
+  const auth = Buffer.from(`${config.dataForSeoLogin}:${config.dataForSeoPassword}`).toString('base64')
+  const res = await fetch(URL_IDEAS, {
+    method: 'POST',
+    signal: AbortSignal.timeout(60_000),
+    headers: { authorization: `Basic ${auth}`, 'content-type': 'application/json' },
+    body: JSON.stringify([
+      { keywords: [keyword], location_code: locationCode, language_code: 'es', sort_by: 'search_volume', limit: limite },
+    ]),
+  })
+  if (!res.ok) return []
+  const datos = await res.json()
+  const tarea = datos?.tasks?.[0]
+  if (tarea?.status_code !== 20000) return []
+  return filtrarVariantes(keyword, tarea.result ?? [])
+}
+
 async function serieTrends(keyword, { locationCode = CHILE, desde = '2021-08-01' } = {}) {
   const auth = Buffer.from(`${config.dataForSeoLogin}:${config.dataForSeoPassword}`).toString('base64')
   const res = await fetch(URL_TRENDS, {
@@ -160,15 +207,53 @@ export async function medirAtractivo(keywords, { conCrecimiento = true } = {}) {
       // familia MUCHO mayor que la frase = probablemente otro mercado más
       // amplio, no el nicho propuesto. Se muestra, no se descarta: decide quien
       // mira, con el número a la vista.
+      // El volumen no describe el producto propuesto cuando: (a) la familia es
+      // desproporcionada frente a la frase, o (b) la frase no tiene NINGÚN dato
+      // y todo el volumen viene prestado del prefijo. Medido: "scooter niño" no
+      // existe y "scooter" son 18.100 — que en Chile son MOTOS, otro producto.
       familiaSospechosa:
-        familia && volumenExacto != null && familia.volumen > volumenExacto * 20 ? true : undefined,
+        familia &&
+        (volumenExacto == null
+          ? familia.keyword !== exacta
+          : familia.volumen > volumenExacto * 20)
+          ? true
+          : undefined,
       competenciaAds: dato?.competenciaAds ?? null,
       estacionalidad: dato?.clasificacion ?? null,
       mesPico: dato?.nombreMesPico ?? null,
       suficiente: volumen >= VOLUMEN_MINIMO,
     }
+    // sin dato exacto o bajo el piso: preguntar CÓMO SE LLAMA de verdad antes
+    // de descartar. Se reportan como sugerencia, jamás se aplican solas.
+    if (fila.sinDatoExacto || !fila.suficiente) {
+      // si la semilla está muerta, Google tampoco genera ideas a partir de
+      // ella (medido: "scooter niño" no expande nada). Se reintenta desde la
+      // FAMILIA, que sí tiene vida, y el filtro sigue exigiendo que la variante
+      // comparta una palabra con la keyword original.
+      let variantes = await variantesReales(exacta).catch(() => [])
+      if (!variantes.length && familia && familia.keyword !== exacta) {
+        const crudas = await variantesReales(familia.keyword).catch(() => [])
+        variantes = crudas.filter((v) => {
+          const c = palabrasClave(v.keyword)
+          return [...palabrasClave(exacta)].some((w) => c.has(w))
+        })
+      }
+      if (variantes.length) {
+        fila.variantes = variantes
+        const mejor = variantes[0]
+        if (mejor.volumen > fila.volumen) {
+          fila.sugerenciaKeyword = mejor.keyword
+          fila.volumenSugerido = mejor.volumen
+          // el atractivo se juzga con lo que existe de verdad, dejando dicho
+          // que el nicho hay que abrirlo con OTRA frase
+          fila.volumen = mejor.volumen
+          fila.suficiente = mejor.volumen >= VOLUMEN_MINIMO
+        }
+      }
+    }
+
     if (conCrecimiento && fila.suficiente) {
-      const puntos = await serieTrends(fila.volumenDeFamilia ?? exacta).catch(() => null)
+      const puntos = await serieTrends(fila.sugerenciaKeyword ?? fila.volumenDeFamilia ?? exacta).catch(() => null)
       const c = puntos ? crecimientoDeSerie(puntos) : null
       fila.crecimientoPct = c?.pct ?? null
       fila.crecimiento = c?.clasificacion ?? 'sin-medir'

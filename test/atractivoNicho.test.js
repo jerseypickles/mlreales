@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { crecimientoDeSerie, clasificarCrecimiento, puntaje, prefijosProgresivos, VOLUMEN_MINIMO } from '../src/services/atractivoNicho.js'
+import { crecimientoDeSerie, clasificarCrecimiento, puntaje, prefijosProgresivos, filtrarVariantes, VOLUMEN_MINIMO } from '../src/services/atractivoNicho.js'
 
 // serie semanal sintética: 5 años, con el último año 30% arriba del promedio
 function serie(porPeriodo, { hasta = '2026-08-01' } = {}) {
@@ -72,4 +72,22 @@ test('prefijosProgresivos: un salto, no hasta la raíz', () => {
   ])
   assert.deepEqual(prefijosProgresivos('hidrolavadora'), ['hidrolavadora'])
   assert.deepEqual(prefijosProgresivos(''), [])
+})
+
+test('filtrarVariantes: descubre el nombre real y descarta lo de otro rubro', () => {
+  // respuesta típica de keywords_for_keywords para "scooter niño"
+  const crudo = [
+    { keyword: 'scooter electrico', search_volume: 60500, competition: 'HIGH' },
+    { keyword: 'scooter infantil', search_volume: 260, competition: 'LOW' },
+    { keyword: 'scooter niño', search_volume: 0 },
+    { keyword: 'patines para niño', search_volume: 3600 }, // comparte "niño": entra
+    { keyword: 'bicicleta de montaña', search_volume: 9900 }, // no comparte nada: fuera
+    { keyword: 'monopatin', search_volume: 4400 }, // no comparte palabra: fuera
+  ]
+  const v = filtrarVariantes('scooter niño', crudo)
+  assert.equal(v[0].keyword, 'scooter electrico', 'manda el volumen')
+  assert.ok(v.some((x) => x.keyword === 'scooter infantil'), 'el sinónimo real aparece')
+  assert.ok(!v.some((x) => x.keyword === 'bicicleta de montaña'), 'sin palabra en común no entra')
+  assert.ok(!v.some((x) => x.keyword === 'scooter niño'), 'la propia no se sugiere a sí misma')
+  assert.ok(!v.some((x) => x.volumen === 0), 'las de volumen cero no sirven')
 })
