@@ -59,9 +59,33 @@ function extraerSenal(snapshots, snapshotsPrevios, campo, { depurar = false } = 
   if (!valores.length) return null
 
   const orden = [...valores].sort((a, b) => a - b)
+  // EL TOTAL TAMBIÉN VENÍA SUCIO. El delta se depura desde julio, pero el
+  // acumulado se sumaba crudo — y ahí vive el mismo artefacto: los items de
+  // CATÁLOGO muestran el agregado de todos los vendedores del producto, y dos
+  // listings hermanos repiten el conteo idéntico. Medido en "lampara para
+  // uñas": 94% de las 6.528 reseñas vienen de items de catálogo, y las dos
+  // primeras filas eran el MISMO 1.293 contado dos veces.
+  //
+  // Importa porque el score usa este total (volumenVentasEstimado): iba
+  // inflado por duplicados en todos los nichos con catálogo.
+  let total = 0
+  let duplicadosEnTotal = 0
+  const vistos = new Set()
+  for (const v of valores) {
+    if (depurar && v >= scoring.depuracionDelta.dedupeMinConteo) {
+      if (vistos.has(v)) {
+        duplicadosEnTotal++
+        continue
+      }
+      vistos.add(v)
+    }
+    total += v
+  }
+
   const senal = {
     itemsConDato: valores.length,
-    total: valores.reduce((a, b) => a + b, 0),
+    total,
+    ...(duplicadosEnTotal ? { totalBruto: valores.reduce((a, b) => a + b, 0), duplicadosEnTotal } : {}),
     mediana: redondear(percentil(orden, 50), 0),
     delta: null, // requiere >= 2 scans con el dato
     periodoDias: null,
@@ -196,6 +220,17 @@ export function calcularDemanda(
     preguntas: extraerSenalPreguntas(snapshots, snapshotsPrevios),
     ventasEstimadasPorDia,
     volumenVentasEstimado,
+    // CUÁNTO DEL LISTADO SE MIDIÓ. El conteo de reseñas solo llega en el
+    // detalle de nivel 2, que corre sobre una fracción por presupuesto: en
+    // "lampara para uñas" fueron 30 de 96 items. Sin este número, "6.528
+    // reseñas" se lee como si describiera el nicho entero.
+    coberturaReviews: reviews
+      ? {
+          itemsConDato: reviews.itemsConDato,
+          itemsDelScan: snapshots.length,
+          pct: redondear((reviews.itemsConDato / snapshots.length) * 100, 0),
+        }
+      : null,
     // resolución de la medición: 1 reseña en esta ventana = este número de
     // ventas/día — un 0 medido significa "bajo este piso", no "nadie compra"
     pisoDeteccionVentasDia:

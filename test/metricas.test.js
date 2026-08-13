@@ -475,3 +475,36 @@ test('el juez del ruido no borra: anula la tasa y guarda el crudo', () => {
   assert.equal(demanda.saltoSospechoso.valorCrudo, 35063, 'el dato crudo NO se pierde')
   assert.equal(demanda.reviews.delta, 1402, 'las reseñas contadas se conservan intactas')
 })
+
+test('calcularDemanda: el TOTAL también se depura de duplicados de catálogo', () => {
+  // caso lampara para uñas: dos listings hermanos del mismo catálogo mostraban
+  // el MISMO 1.293, y el total los sumaba dos veces. El score usa ese total,
+  // así que iba inflado en todos los nichos con catálogo.
+  const fecha = new Date('2026-08-13T12:00:00Z')
+  const snaps = [
+    { sku: 'A', numReviews: 1293, fecha },
+    { sku: 'B', numReviews: 1293, fecha }, // hermano de catálogo: no se cuenta
+    { sku: 'C', numReviews: 939, fecha },
+    { sku: 'D', numReviews: 12, fecha },
+    { sku: 'E', numReviews: 12, fecha }, // bajo el umbral: SÍ se cuenta, es normal
+  ]
+  const d = calcularDemanda(snaps, null, { minItems: 1 })
+  assert.equal(d.reviews.total, 1293 + 939 + 12 + 12, 'el 1.293 repetido entra una vez')
+  assert.equal(d.reviews.totalBruto, 3549, 'el crudo queda a la vista')
+  assert.equal(d.reviews.duplicadosEnTotal, 1)
+  assert.equal(d.reviews.itemsConDato, 5)
+})
+
+test('calcularDemanda: declara qué fracción del listado se midió', () => {
+  const fecha = new Date('2026-08-13T12:00:00Z')
+  // 30 con reseñas de 96 items del scan, como en lampara para uñas
+  const snaps = Array.from({ length: 96 }, (_, i) => ({
+    sku: `S${i}`,
+    fecha,
+    ...(i < 30 ? { numReviews: 10 + i } : {}),
+  }))
+  const d = calcularDemanda(snaps, null, { minItems: 1 })
+  assert.equal(d.coberturaReviews.itemsConDato, 30)
+  assert.equal(d.coberturaReviews.itemsDelScan, 96)
+  assert.equal(d.coberturaReviews.pct, 31, 'sin esto, el total se lee como si midiera todo')
+})
