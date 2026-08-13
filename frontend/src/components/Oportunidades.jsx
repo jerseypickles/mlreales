@@ -267,6 +267,18 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
               </span>
             ) : null}
           </Hecho>
+          {/* el dato que el juez descartó queda a la vista: si alguna vez un
+              salto era real, se tiene que poder ver */}
+          {o.saltoSospechoso ? (
+            <Hecho etiqueta="descartado">
+              <span
+                className="op-sucio"
+                title={`Se midieron ${Math.round(o.saltoSospechoso.valorCrudo)} ventas/día contra ${Math.round(o.saltoSospechoso.contra)} del scan anterior (×${o.saltoSospechoso.salto}). ${o.saltoSospechoso.motivo}`}
+              >
+                ⚠ salto ×{o.saltoSospechoso.salto} no creíble
+              </span>
+            </Hecho>
+          ) : null}
           <Hecho etiqueta="mediana">{o.mediana ? fmtPrecio(o.mediana) : null}</Hecho>
           <Hecho etiqueta="Full">{o.pctFull != null ? `${Math.round(o.pctFull)}%` : null}</Hecho>
           <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>

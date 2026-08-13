@@ -614,6 +614,55 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   const porUnidad = preciosPorUnidad({ snapshots, productosPorSku })
   if (porUnidad) metricas.precio.porUnidad = porUnidad
 
+  // EL JUEZ DEL RUIDO. El delta de reseñas produce saltos imposibles cuando ML
+  // consolida un catálogo: medido sobre el histórico, 41 de 277 comparaciones
+  // consecutivas saltan de forma que ninguna temporada explica (partidor
+  // batería llegó a ir de 118 a 35.063 en un scan). La curva anual de Google no
+  // depende de reseñas ni del scraper, así que puede arbitrar sin contaminarse.
+  //
+  // NO se borra el dato: se anula `ventasEstimadasPorDia` para que salga de la
+  // serie y del conteo de maduración —los consumidores ya filtran $ne:null— y
+  // el valor crudo queda guardado en `saltoSospechoso`. Si algún día un salto
+  // era real (un viral, un lanzamiento), se puede ver y revisar.
+  try {
+    const previo = metricas.demanda?.ventasEstimadasPorDia
+    if (previo != null) {
+      const [{ Reporte }, { CurvaEstacional }, { saltoEsCreible }] = await Promise.all([
+        import('../models/Reporte.js'),
+        import('../models/CurvaEstacional.js'),
+        import('./estacionalidad.js'),
+      ])
+      const anterior = await Reporte.findOne({
+        nichoId: nicho._id,
+        'metricas.demanda.ventasEstimadasPorDia': { $ne: null },
+      })
+        .sort({ fecha: -1 })
+        .select('fecha metricas.demanda.ventasEstimadasPorDia')
+        .lean()
+      if (anterior) {
+        const curva = await CurvaEstacional.findOne({ keyword: nicho.keyword }).select('curva').lean()
+        const veredicto = saltoEsCreible({
+          anterior: anterior.metricas.demanda.ventasEstimadasPorDia,
+          actual: previo,
+          curva: curva?.curva?.length === 12 ? curva.curva : null,
+          mesActual: new Date(ultimoSnap.fecha).getMonth() + 1,
+          mesAnterior: new Date(anterior.fecha).getMonth() + 1,
+        })
+        if (veredicto?.creible === false) {
+          metricas.demanda.saltoSospechoso = {
+            valorCrudo: previo,
+            contra: anterior.metricas.demanda.ventasEstimadasPorDia,
+            salto: veredicto.salto,
+            motivo: veredicto.motivo,
+          }
+          metricas.demanda.ventasEstimadasPorDia = null
+        }
+      }
+    }
+  } catch {
+    // sin juez el reporte sale igual: mejor un dato sin arbitrar que ninguno
+  }
+
   const topProductos = [...snapshots]
     .sort((a, b) => (a.posicion ?? Infinity) - (b.posicion ?? Infinity))
     .slice(0, 10)

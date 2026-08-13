@@ -255,6 +255,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
           (ultimo?.metricas?.demanda?.reviews?.duplicadosCatalogo ?? 0) || null,
       preguntasNuevas: ultimo?.metricas?.demanda?.preguntas?.nuevas ?? null,
       ventasDia: ultimo?.metricas?.demanda?.ventasEstimadasPorDia ?? null,
+      // el dato que el juez del ruido descartó: no se borra, se muestra marcado
+      saltoSospechoso: ultimo?.metricas?.demanda?.saltoSospechoso ?? null,
       factorEstimacion: 25,
       tendenciaVentas: tendencia,
       scansConDemanda,

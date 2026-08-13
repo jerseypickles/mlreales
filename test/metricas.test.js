@@ -452,3 +452,26 @@ test('calcularDemanda: la cadencia diaria sigue midiendo aunque el cron se adela
   assert.equal(d.ventasEstimadasPorDia, 0, 'un 0 con ventana válida sí es medición (bajo el piso)')
   assert.ok(d.pisoDeteccionVentasDia > 0, 'y viaja con su piso de detección')
 })
+
+test('el juez del ruido no borra: anula la tasa y guarda el crudo', () => {
+  // contrato que debe cumplir generarReporteNicho al marcar un salto imposible.
+  // Se testea la forma del dato porque el cableado vive contra Mongo.
+  const demanda = {
+    ventasEstimadasPorDia: 35063,
+    reviews: { delta: 1402, periodoDias: 1, itemsComparables: 16 },
+  }
+  const veredicto = { creible: false, salto: 298.4, motivo: 'la curva del año está plana en ese mes' }
+
+  // así lo marca el reporte
+  demanda.saltoSospechoso = {
+    valorCrudo: demanda.ventasEstimadasPorDia,
+    contra: 118,
+    salto: veredicto.salto,
+    motivo: veredicto.motivo,
+  }
+  demanda.ventasEstimadasPorDia = null
+
+  assert.equal(demanda.ventasEstimadasPorDia, null, 'sale de la serie y del conteo de maduración')
+  assert.equal(demanda.saltoSospechoso.valorCrudo, 35063, 'el dato crudo NO se pierde')
+  assert.equal(demanda.reviews.delta, 1402, 'las reseñas contadas se conservan intactas')
+})
