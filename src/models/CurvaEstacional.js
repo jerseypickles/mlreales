@@ -18,6 +18,14 @@ const curvaEstacionalSchema = new mongoose.Schema({
   ratioPico: Number,
   clasificacion: { type: String, enum: ['estacional', 'todo-el-año'] },
   promedio: Number,
+  // 'google-ads' = volumen absoluto de DataForSEO (fuente primaria);
+  // 'trends' = índice 0-100 de Google Trends (contraste, miente en volumen bajo)
+  fuente: { type: String, enum: ['google-ads', 'trends'], default: 'trends' },
+  // lo que Trends nunca pudo dar: el TAMAÑO, comparable entre keywords
+  busquedasMes: Number,
+  competenciaAds: String,
+  competenciaIndice: Number,
+  cpcUsd: Number,
   medidoEl: { type: Date, required: true },
   // para el cron de relleno: cuántas veces falló y cuándo fue el último intento,
   // así los que Google bloquea no se reintentan en bucle el mismo día

@@ -63,7 +63,14 @@ function CurvaAno({ curva }) {
   const max = Math.max(...curva.curva) || 1
   const mesHoy = new Date().getMonth()
   return (
-    <div className="curva-ano" title={`Pico en ${curva.nombreMesPico} · ${curva.ratioPico}× el promedio del año (Google Trends, 5 años)`}>
+    <div
+      className="curva-ano"
+      title={
+        curva.fuente === 'google-ads'
+          ? `${curva.busquedasMes?.toLocaleString('es-CL') ?? '?'} búsquedas al mes en Chile · pico en ${curva.nombreMesPico} (${curva.ratioPico}× el promedio). Volumen real de Google Ads, últimos 12 meses — comparable con otros nichos.`
+          : `Pico en ${curva.nombreMesPico} · ${curva.ratioPico}× el promedio (Google Trends, índice 0-100 relativo a esta keyword: NO comparable con otros nichos)`
+      }
+    >
       <div className="curva-barras">
         {curva.curva.map((v, i) => (
           <span
@@ -76,9 +83,12 @@ function CurvaAno({ curva }) {
         ))}
       </div>
       <span className="curva-pie">
+        {curva.busquedasMes != null ? (
+          <strong className="curva-volumen">{fmtNum(curva.busquedasMes)} búsquedas/mes</strong>
+        ) : null}
         {curva.clasificacion === 'estacional'
-          ? `pico ${curva.nombreMesPico} · ${curva.ratioPico}× el promedio`
-          : 'se vende todo el año'}
+          ? ` pico ${curva.nombreMesPico} · ${curva.ratioPico}× el promedio`
+          : ' se busca todo el año'}
       </span>
     </div>
   )

@@ -4806,3 +4806,9 @@ section {
   margin-left: 3px;
   color: var(--avisa-tinta);
 }
+/* volumen absoluto de Google Ads: es el dato comparable entre nichos, así que
+   se destaca sobre la forma (que sola no dice tamaño) */
+.curva-volumen {
+  color: var(--tinta-2);
+  font-weight: 700;
+}

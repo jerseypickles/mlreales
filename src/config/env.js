@@ -19,6 +19,10 @@ export const config = {
   // Rollback: APIFY_ACTOR_DETAILS=ecomscrape~mercadolibre-product-details-scraper
   actorDetails: process.env.APIFY_ACTOR_DETAILS || 'sourabhbgp~mercadolibre-scraper',
   maxPagesBusqueda: Number(process.env.APIFY_SEARCH_MAX_PAGES) || 2,
+  // Volumen de búsqueda absoluto de Google Ads (services/volumenBusqueda.js).
+  // El password es la clave de API de DataForSEO, no la del panel.
+  dataForSeoLogin: process.env.DATAFORSEO_LOGIN || null,
+  dataForSeoPassword: process.env.DATAFORSEO_PASSWORD || null,
   nivel2Activo: process.env.NIVEL2_ACTIVO !== 'false',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || null,
   llmModel: process.env.LLM_MODEL || 'claude-opus-5',
