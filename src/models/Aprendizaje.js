@@ -5,7 +5,7 @@ import mongoose from 'mongoose'
 // de ML: desde ahí el radar puede salir a buscar las categorías hermanas en vez
 // de adivinar keywords sueltas. Es la memoria de largo plazo del cerebro.
 const aprendizajeSchema = new mongoose.Schema({
-  tipo: { type: String, enum: ['nicho-vende', 'formato-gana', 'categoria-probada'], required: true },
+  tipo: { type: String, enum: ['nicho-vende', 'formato-gana', 'categoria-probada', 'termino-chileno'], required: true },
   keyword: { type: String, index: true },
   nichoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Nicho', default: null },
   // ancla en el árbol real de ML (no en la keyword): permite explorar hermanas

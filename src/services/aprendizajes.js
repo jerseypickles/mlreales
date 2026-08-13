@@ -80,3 +80,39 @@ export async function leccionesAprendidas() {
   const todos = await Aprendizaje.find().sort({ actualizadoEl: -1 }).limit(20).lean()
   return todos.map((a) => a.leccion)
 }
+
+// CÓMO SE DICE EN CHILE.
+//
+// El mismo producto se llama distinto acá, y el radar lo descubría una y otra
+// vez sin quedárselo. Casos medidos: "gafas de sol" 3.600 contra "lentes de
+// sol" 27.100; "rizador de pelo" 1.900 contra "ondulador de pelo" 9.900;
+// "climatizador evaporativo" 70 contra "enfriador evaporativo" 320; y
+// "scooter", que en Chile es la MOTO y no el juguete de niño.
+//
+// Cada hallazgo se guarda como lección y vuelve al prompt del sugeridor, así
+// el radar deja de proponer la palabra que nadie escribe.
+export async function registrarTerminoChileno({ propuesto, real, volumenPropuesto, volumenReal }) {
+  if (!propuesto || !real || propuesto === real) return null
+  if (!Number.isFinite(volumenReal) || volumenReal <= 0) return null
+  // solo vale la pena recordar la diferencia cuando es grande de verdad
+  const factor = volumenPropuesto > 0 ? volumenReal / volumenPropuesto : Infinity
+  if (factor < 3) return null
+
+  const veces = Number.isFinite(factor) ? `${Math.round(factor)}× más` : 'y la otra no registra búsquedas'
+  const leccion = `En Chile se busca "${real}" (${volumenReal.toLocaleString('es-CL')}/mes), no "${propuesto}" (${
+    volumenPropuesto > 0 ? `${volumenPropuesto.toLocaleString('es-CL')}/mes` : 'sin búsquedas'
+  }) — ${veces}. Usa la primera al proponer keywords.`
+
+  return Aprendizaje.findOneAndUpdate(
+    { tipo: 'termino-chileno', keyword: propuesto },
+    {
+      $set: {
+        leccion,
+        evidencia: { propuesto, real, volumenPropuesto, volumenReal, factor: Math.round(factor * 10) / 10 },
+        actualizadoEl: new Date(),
+      },
+      $setOnInsert: { primeraVezEl: new Date() },
+    },
+    { upsert: true, new: true },
+  ).catch(() => null)
+}

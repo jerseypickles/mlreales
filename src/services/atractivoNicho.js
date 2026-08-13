@@ -244,6 +244,13 @@ export async function medirAtractivo(keywords, { conCrecimiento = true } = {}) {
         if (mejor.volumen > fila.volumen) {
           fila.sugerenciaKeyword = mejor.keyword
           fila.volumenSugerido = mejor.volumen
+          // el radar se queda con el chilenismo en vez de redescubrirlo
+          import('./aprendizajes.js')
+            .then((m) => m.registrarTerminoChileno({
+              propuesto: exacta, real: mejor.keyword,
+              volumenPropuesto: volumenExacto ?? 0, volumenReal: mejor.volumen,
+            }))
+            .catch(() => {})
           // el atractivo se juzga con lo que existe de verdad, dejando dicho
           // que el nicho hay que abrirlo con OTRA frase
           fila.volumen = mejor.volumen
