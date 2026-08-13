@@ -4862,3 +4862,203 @@ section {
   right: 0;
   transform: none;
 }
+
+/* ── PUBLICIDAD ────────────────────────────────────────────────────────────
+   La lectura en plata: contribución contra gasto, no ACOS contra venta. */
+.experimento {
+  border: 1px solid var(--acento-borde);
+  background: var(--acento-tenue);
+  border-radius: var(--radio-g);
+  padding: 16px 18px;
+  margin-bottom: 18px;
+}
+/* los primeros días el "después" es ruido: el gasto responde en horas, las
+   ventas tardan. Se atenúa para que nadie lea una conclusión antes de tiempo */
+.experimento-temprano {
+  opacity: 0.85;
+  border-style: dashed;
+}
+.experimento header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.experimento h3 {
+  margin: 4px 0 0;
+  font-size: 17px;
+}
+.exp-chip {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--acento);
+}
+.exp-dias {
+  font-size: 12px;
+  color: var(--tinta-2);
+  white-space: nowrap;
+}
+.exp-hipotesis {
+  margin: 10px 0 14px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--tinta-2);
+  max-width: 78ch;
+}
+.exp-cifras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+.exp-cifra {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.exp-cifra-etq {
+  display: block;
+  font-size: 11px;
+  color: var(--tinta-3);
+  margin-bottom: 2px;
+}
+.exp-cifra strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.exp-delta {
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.exp-antes {
+  display: block;
+  font-size: 10.5px;
+  color: var(--tinta-3);
+  margin-top: 2px;
+}
+.exp-esperando {
+  font-size: 12.5px;
+  color: var(--tinta-3);
+  margin: 0;
+}
+
+.ads-campanas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.ads-campana {
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 12px 14px;
+  background: var(--superficie);
+}
+.ads-campana-pausada {
+  opacity: 0.6;
+}
+.ads-campana header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ads-estado {
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--borde);
+  color: var(--tinta-2);
+}
+.ads-estado.ads-active {
+  background: var(--exito-tenue);
+  color: var(--exito-tinta);
+}
+.ads-dials {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--tinta-3);
+}
+.ads-dials strong {
+  color: var(--tinta);
+  font-size: 14px;
+}
+/* cuánto del presupuesto se usa: si sobra, el limitante es el objetivo */
+.ads-uso {
+  position: relative;
+  height: 4px;
+  background: var(--borde);
+  border-radius: 999px;
+  margin-top: 12px;
+}
+.ads-uso > span {
+  display: block;
+  height: 100%;
+  background: var(--acento);
+  border-radius: 999px;
+}
+.ads-uso em {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  font-size: 10.5px;
+  font-style: normal;
+  color: var(--tinta-3);
+}
+
+.ads-anuncios {
+  margin-top: 26px;
+}
+.ads-nota {
+  font-size: 12px;
+  color: var(--tinta-3);
+  line-height: 1.55;
+  max-width: 86ch;
+}
+.tabla-ads td,
+.tabla-ads th {
+  font-variant-numeric: tabular-nums;
+}
+.tabla-ads .ads-titulo {
+  display: inline-block;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.tabla-ads tfoot td {
+  font-weight: 700;
+  border-top: 2px solid var(--borde-fuerte);
+}
+.tabla-ads .fila-mal {
+  background: color-mix(in srgb, var(--peligro) 5%, transparent);
+}
+.res-bien { color: var(--exito-tinta); font-weight: 700; }
+.res-mal { color: var(--peligro); font-weight: 700; }
+.ads-hold {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--avisa-tenue);
+  color: var(--avisa-tinta);
+}
+.ad-veredicto {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.ad-bien { background: var(--exito-tenue); color: var(--exito-tinta); }
+.ad-justo { background: var(--avisa-tenue); color: var(--avisa-tinta); }
+.ad-mal { background: color-mix(in srgb, var(--peligro) 12%, transparent); color: var(--peligro); }
+.ad-neutro { background: var(--borde); color: var(--tinta-3); }
