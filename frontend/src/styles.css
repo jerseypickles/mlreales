@@ -4812,3 +4812,9 @@ section {
   color: var(--tinta-2);
   font-weight: 700;
 }
+/* la frase con la que se midió en Google, cuando difiere de la del nicho */
+.curva-corregida {
+  font-style: normal;
+  color: var(--acento);
+  font-weight: 600;
+}

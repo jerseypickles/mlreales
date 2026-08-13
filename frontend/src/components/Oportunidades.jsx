@@ -86,6 +86,16 @@ function CurvaAno({ curva }) {
         {curva.busquedasMes != null ? (
           <strong className="curva-volumen">{fmtNum(curva.busquedasMes)} búsquedas/mes</strong>
         ) : null}
+        {/* la keyword del nicho nació comprimida y se mide en Google con la
+            forma buena: se declara para que el número no parezca mágico */}
+        {curva.keywordMedida && curva.keywordMedida !== curva.keyword ? (
+          <em
+            className="curva-corregida"
+            title={`El nicho se llama «${curva.keyword}» y así se sigue midiendo en Mercado Libre. En Google se midió con «${curva.keywordMedida}», que es como la gente lo escribe${curva.correccionFactor ? ` — ${curva.correccionFactor}× más búsquedas` : ''}. El nicho no se renombra para no romper su serie.`}
+          >
+            {' '}como «{curva.keywordMedida}»
+          </em>
+        ) : null}
         {/* la etiqueta tiene que calzar con lo que muestra la barra: un ratio
             de 1,5 sobre una silueta plana no es "temporada", es un bulto */}
         {curva.clasificacion === 'estacional'
