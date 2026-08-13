@@ -21,6 +21,30 @@ const URL_TRENDS = 'https://api.dataforseo.com/v3/keywords_data/google_trends/ex
 // por gusto: es el piso donde el volumen deja de sostener una compra.
 export const VOLUMEN_MINIMO = 200
 
+// LA FAMILIA, NO LA FRASE MÁS LARGA.
+//
+// Google Ads mide frases exactas, y una específica puede ser cola larga aunque
+// su familia mueva miles. Medido el 13-ago: "lampara de uñas uv" da 50
+// búsquedas y "lampara uv" 1.600; "scooter niño" no tiene dato y "scooter"
+// tiene 18.100. Juzgar el nicho por la variante más específica lo mata.
+//
+// Se prueban los prefijos progresivos (quitando calificativos por la derecha) y
+// se conserva el mayor volumen encontrado, dejando anotado con qué frase salió.
+// UN SOLO calificativo de menos, no todos. Trepar hasta la raíz cambia de
+// mercado: "lampara de uñas uv" llegaba a "lampara" (27.100 búsquedas, que
+// incluye lámparas de techo y de auto) y "beauty blender" a "beauty", que ni
+// siquiera es un producto. Con un salto se recupera la familia real —
+// "lampara de uñas" 1.300, "pestañas postizas" 8.100— sin cambiar de rubro.
+export function prefijosProgresivos(keyword, { saltos = 1 } = {}) {
+  const palabras = String(keyword ?? '').trim().split(/\s+/).filter(Boolean)
+  if (!palabras.length) return []
+  const salida = []
+  for (let n = palabras.length; n >= Math.max(1, palabras.length - saltos); n--) {
+    salida.push(palabras.slice(0, n).join(' '))
+  }
+  return salida
+}
+
 // Crecimiento del último año completo contra el promedio de los anteriores.
 export const CRECE_PCT = 15
 export const CAE_PCT = -15
@@ -96,29 +120,55 @@ export async function medirAtractivo(keywords, { conCrecimiento = true } = {}) {
   const lista = [...new Set((keywords ?? []).filter(Boolean))]
   if (!lista.length) return []
 
-  // se mide la forma BIEN ESCRITA: "rizador pelo" son 50 búsquedas y "rizador
-  // de pelo" 1.900 — juzgar el atractivo con la comprimida descarta buenos
-  const candidatas = [...new Set(lista.flatMap(candidatasMecanicas))]
+  // se mide la forma BIEN ESCRITA ("rizador pelo" 50 vs "rizador de pelo"
+  // 1.900) y también los PREFIJOS, porque una frase específica puede ser cola
+  // larga de una familia grande ("scooter niño" sin dato, "scooter" 18.100)
+  const candidatas = [...new Set(lista.flatMap((k) => [...candidatasMecanicas(k), ...prefijosProgresivos(k)]))]
   const volumenes = await volumenMensual(candidatas)
 
   const salida = []
   for (const kw of lista) {
     const vols = new Map(candidatasMecanicas(kw).map((c) => [c, volumenes.get(c)?.busquedasMes ?? 0]))
     const correccion = elegirCorreccion(kw, vols)
-    const medida = correccion?.keyword ?? kw
-    const dato = volumenes.get(medida)
-    const volumen = dato?.busquedasMes ?? 0
+    const exacta = correccion?.keyword ?? kw
+    const datoExacto = volumenes.get(exacta)
+
+    // OJO: `null` es "Google no tiene dato", NO "nadie la busca". Confundirlos
+    // descartó nichos vivos — "scooter niño" salió con 0 y su familia mueve
+    // 18.100. Solo cuenta como cero medido lo que Google reporta como 0.
+    const volumenExacto = Number.isFinite(datoExacto?.busquedasMes) ? datoExacto.busquedasMes : null
+
+    // la familia: el mayor volumen entre los prefijos, para no matar un nicho
+    // por su variante más específica
+    let familia = null
+    for (const p of prefijosProgresivos(exacta)) {
+      const v = volumenes.get(p)?.busquedasMes
+      if (Number.isFinite(v) && (!familia || v > familia.volumen)) familia = { keyword: p, volumen: v }
+    }
+
+    const volumen = Math.max(volumenExacto ?? 0, familia?.volumen ?? 0)
+    const dato = datoExacto ?? (familia ? volumenes.get(familia.keyword) : null)
     const fila = {
       keyword: kw,
-      keywordMedida: medida !== kw ? medida : null,
+      keywordMedida: exacta !== kw ? exacta : null,
       volumen,
+      volumenExacto,
+      // de qué frase salió el volumen que manda: si es la familia y no la
+      // keyword, el nicho hay que abrirlo apuntando ahí
+      volumenDeFamilia: familia && familia.volumen > (volumenExacto ?? 0) ? familia.keyword : null,
+      sinDatoExacto: volumenExacto == null,
+      // familia MUCHO mayor que la frase = probablemente otro mercado más
+      // amplio, no el nicho propuesto. Se muestra, no se descarta: decide quien
+      // mira, con el número a la vista.
+      familiaSospechosa:
+        familia && volumenExacto != null && familia.volumen > volumenExacto * 20 ? true : undefined,
       competenciaAds: dato?.competenciaAds ?? null,
       estacionalidad: dato?.clasificacion ?? null,
       mesPico: dato?.nombreMesPico ?? null,
       suficiente: volumen >= VOLUMEN_MINIMO,
     }
     if (conCrecimiento && fila.suficiente) {
-      const puntos = await serieTrends(medida).catch(() => null)
+      const puntos = await serieTrends(fila.volumenDeFamilia ?? exacta).catch(() => null)
       const c = puntos ? crecimientoDeSerie(puntos) : null
       fila.crecimientoPct = c?.pct ?? null
       fila.crecimiento = c?.clasificacion ?? 'sin-medir'

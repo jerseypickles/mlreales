@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { crecimientoDeSerie, clasificarCrecimiento, puntaje, VOLUMEN_MINIMO } from '../src/services/atractivoNicho.js'
+import { crecimientoDeSerie, clasificarCrecimiento, puntaje, prefijosProgresivos, VOLUMEN_MINIMO } from '../src/services/atractivoNicho.js'
 
 // serie semanal sintética: 5 años, con el último año 30% arriba del promedio
 function serie(porPeriodo, { hasta = '2026-08-01' } = {}) {
@@ -60,4 +60,16 @@ test('puntaje: el tamaño manda y la dirección desempata', () => {
   // bajo el piso no compite: ningún crecimiento salva 50 búsquedas al mes
   assert.equal(puntaje({ suficiente: false, volumen: 50, crecimiento: 'crece' }), -1)
   assert.equal(VOLUMEN_MINIMO, 200)
+})
+
+test('prefijosProgresivos: un salto, no hasta la raíz', () => {
+  // trepar hasta la raíz cambia de mercado: "lampara de uñas uv" llegaba a
+  // "lampara" (27.100, incluye lámparas de techo y de auto)
+  assert.deepEqual(prefijosProgresivos('lampara de uñas uv'), ['lampara de uñas uv', 'lampara de uñas'])
+  assert.deepEqual(prefijosProgresivos('scooter niño electrico'), [
+    'scooter niño electrico',
+    'scooter niño',
+  ])
+  assert.deepEqual(prefijosProgresivos('hidrolavadora'), ['hidrolavadora'])
+  assert.deepEqual(prefijosProgresivos(''), [])
 })
