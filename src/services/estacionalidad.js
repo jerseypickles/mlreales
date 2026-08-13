@@ -46,13 +46,28 @@ export function curvaMensual(timelineData) {
   return acc.map((v) => (v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0))
 }
 
-// ¿Este producto es de temporada o se vende todo el año?
+// ¿Este producto es de temporada, o se vende todo el año con un bulto?
 //
-// El umbral es sobre pico/promedio y no sobre pico/valle: un producto puede
-// tener un mes muerto por ruido y seguir siendo de venta pareja. 1.5 salió de
-// mirar casos conocidos — brochas de maquillaje da 2.11 (tiene ola de regalo en
-// diciembre aunque venda todo el año) y quitasol 2.79 (estacional puro).
-export const RATIO_ESTACIONAL = 1.5
+// TRES bandas, no dos. El corte binario en 1.5 marcaba 46 de 71 nichos como
+// "estacional" —el 65% del tablero con chip de urgencia— y ponía etiquetas
+// opuestas a curvas idénticas: toallitas húmedas (1,50) decía "último mes para
+// pedir" y freidora de aire (1,48) decía "todo el año", con siluetas casi
+// iguales. El importador lo cazó mirando el minigráfico contra la etiqueta.
+//
+// Los cortes salen de mirar las 71 curvas medidas: sobre 2,0 la silueta tiene
+// forma de verdad (quitasol █▅▂▁▁▁▁▁▁▂▃▅, árbol ▁▁▁▁▁▁▁▁▂▃█▇); entre 1,3 y 2,0
+// es plana con un bulto (toallitas ▇▅▆▅▆▆▆▆▆█▅▅); bajo 1,3 es plana.
+//
+// Solo la banda alta abre ventana de compra: en un producto de venta pareja no
+// existe "el último mes para pedir", y decirlo es mentir.
+export const RATIO_ESTACIONAL = 2.0
+export const RATIO_ALZA_SUAVE = 1.3
+
+export function clasificarPorRatio(ratio) {
+  if (ratio >= RATIO_ESTACIONAL) return 'estacional'
+  if (ratio >= RATIO_ALZA_SUAVE) return 'alza-suave'
+  return 'todo-el-año'
+}
 
 export function describirCurva(curva) {
   if (!Array.isArray(curva) || curva.length !== 12) return null
@@ -72,7 +87,7 @@ export function describirCurva(curva) {
     mesValle: mesValle + 1,
     nombreMesPico: MESES[mesPico],
     ratioPico: Math.round(ratioPico * 100) / 100,
-    clasificacion: ratioPico >= RATIO_ESTACIONAL ? 'estacional' : 'todo-el-año',
+    clasificacion: clasificarPorRatio(ratioPico),
     promedio: Math.round(promedio),
   }
 }

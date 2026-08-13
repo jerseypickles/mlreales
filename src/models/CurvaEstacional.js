@@ -16,7 +16,8 @@ const curvaEstacionalSchema = new mongoose.Schema({
   mesValle: Number,
   nombreMesPico: String,
   ratioPico: Number,
-  clasificacion: { type: String, enum: ['estacional', 'todo-el-año'] },
+  // 'alza-suave' = se vende todo el año pero con un bulto: NO abre ventana
+  clasificacion: { type: String, enum: ['estacional', 'alza-suave', 'todo-el-año'] },
   promedio: Number,
   // 'google-ads' = volumen absoluto de DataForSEO (fuente primaria);
   // 'trends' = índice 0-100 de Google Trends (contraste, miente en volumen bajo)

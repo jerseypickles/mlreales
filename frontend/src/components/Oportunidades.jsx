@@ -86,9 +86,13 @@ function CurvaAno({ curva }) {
         {curva.busquedasMes != null ? (
           <strong className="curva-volumen">{fmtNum(curva.busquedasMes)} búsquedas/mes</strong>
         ) : null}
+        {/* la etiqueta tiene que calzar con lo que muestra la barra: un ratio
+            de 1,5 sobre una silueta plana no es "temporada", es un bulto */}
         {curva.clasificacion === 'estacional'
-          ? ` pico ${curva.nombreMesPico} · ${curva.ratioPico}× el promedio`
-          : ' se busca todo el año'}
+          ? ` temporada real · pico ${curva.nombreMesPico}, ${curva.ratioPico}× el promedio`
+          : curva.clasificacion === 'alza-suave'
+            ? ` se busca todo el año · leve alza en ${curva.nombreMesPico} (${curva.ratioPico}×)`
+            : ' se busca parejo todo el año'}
       </span>
     </div>
   )

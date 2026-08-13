@@ -72,8 +72,22 @@ export function ventanaDeCompra(
   // curva son 5 años de búsquedas chilenas reales (services/estacionalidad.js).
   // Solo pisa al analista cuando el nicho es estacional de verdad: si la curva
   // dice "todo el año", la ventana deja de estorbar y no hay pico que perseguir.
-  if (curvaAnual?.clasificacion === 'todo-el-año') {
-    return { fuente: 'curva-medida', tipo: 'todo_el_año', estado: 'sin-temporada', desde: null, hasta: null, mesesAl: 0 }
+  // 'alza-suave' cuenta como venta pareja: hay un bulto en el año pero NO existe
+  // "el último mes para pedir". Marcarlo con urgencia era la mentira que el
+  // importador cazó — toallitas húmedas (ratio 1,50) gritaba urgencia con una
+  // curva visualmente plana. Se conserva el mes del bulto como información.
+  if (curvaAnual?.clasificacion === 'todo-el-año' || curvaAnual?.clasificacion === 'alza-suave') {
+    return {
+      fuente: 'curva-medida',
+      tipo: 'todo_el_año',
+      estado: 'sin-temporada',
+      desde: null,
+      hasta: null,
+      mesesAl: 0,
+      alzaSuave: curvaAnual.clasificacion === 'alza-suave' || undefined,
+      mesAlza: curvaAnual.clasificacion === 'alza-suave' ? (curvaAnual.nombreMesPico ?? null) : null,
+      ratioPico: curvaAnual.ratioPico ?? null,
+    }
   }
   if (curvaAnual?.clasificacion === 'estacional' && curvaAnual.mesPico) {
     const v = ventanaDesdePico(curvaAnual.mesPico, absHoy, leadMax, leadMin)

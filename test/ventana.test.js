@@ -143,3 +143,23 @@ test('ventanaDeCompra: la curva medida manda sobre la estacionalidad inferida', 
   )
   assert.equal(sinCurva.fuente, 'analisis')
 })
+
+test('ventanaDeCompra: un alza suave NO abre ventana de urgencia', () => {
+  const hoy = new Date('2026-08-13T12:00:00Z')
+  // toallitas húmedas: ratio 1,50 con pico en octubre. Antes esto producía
+  // "🔥 último mes para pedir" sobre una curva visualmente plana.
+  const v = ventanaDeCompra(
+    { curvaAnual: { clasificacion: 'alza-suave', mesPico: 10, nombreMesPico: 'oct', ratioPico: 1.5 } },
+    { hoy },
+  )
+  assert.equal(v.estado, 'sin-temporada', 'no existe "último mes" en un producto de venta pareja')
+  assert.equal(v.alzaSuave, true)
+  assert.equal(v.mesAlza, 'oct', 'el bulto se conserva como información, no como urgencia')
+
+  // una temporada de verdad sí la abre
+  const real = ventanaDeCompra(
+    { curvaAnual: { clasificacion: 'estacional', mesPico: 12, ratioPico: 3.94 } },
+    { hoy },
+  )
+  assert.notEqual(real.estado, 'sin-temporada')
+})

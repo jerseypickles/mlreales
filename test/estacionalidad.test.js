@@ -34,7 +34,7 @@ test('curvaMensual: promedia los puntos semanales por mes calendario', () => {
   assert.equal(curvaMensual([]), null)
 })
 
-test('describirCurva: separa estacional de todo-el-año con casos reales', () => {
+test('describirCurva: tres bandas — la etiqueta debe calzar con la silueta', () => {
   const q = describirCurva(QUITASOL)
   assert.equal(q.mesPico, 1, 'quitasol pica en enero')
   assert.equal(q.clasificacion, 'estacional')
@@ -45,6 +45,14 @@ test('describirCurva: separa estacional de todo-el-año con casos reales', () =>
   const b = describirCurva(BROCHAS)
   assert.equal(b.mesPico, 12)
   assert.equal(b.clasificacion, 'estacional')
+
+  // BANDA DEL MEDIO: curva real de toallitas húmedas (ratio 1,50). Con el corte
+  // binario viejo salía "estacional" y la tarjeta gritaba "último mes para
+  // pedir" sobre una silueta plana — la mentira que el importador cazó.
+  const TOALLITAS = [1600, 1300, 1300, 1300, 1300, 1300, 1300, 1300, 1300, 1900, 1300, 1300]
+  const t = describirCurva(TOALLITAS)
+  assert.equal(t.clasificacion, 'alza-suave', 'plana con bulto no es temporada')
+  assert.ok(t.ratioPico >= 1.3 && t.ratioPico < 2)
 
   const plana = describirCurva(Array(12).fill(50))
   assert.equal(plana.clasificacion, 'todo-el-año')
