@@ -4,8 +4,7 @@ import {
   normalizarTexto,
   palabrasClave,
   elegirMejorSugerencia,
-  UMBRAL_PARECIDO,
-} from '../src/services/busquedasReales.js'
+  UMBRAL_PARECIDO, keywordReal } from '../src/services/busquedasReales.js'
 
 test('normalizarTexto: minúsculas, sin tildes y espacios colapsados', () => {
   assert.equal(normalizarTexto('  Lámpara   SOLAR Jardín '), 'lampara solar jardin')
@@ -67,4 +66,24 @@ test('palabrasSaturadas: detecta la raíz que domina el tablero', async () => {
   assert.ok(saturadas.has('solar'))
   assert.ok(!saturadas.has('freidora'))
   assert.ok(!saturadas.has('depiladora'))
+})
+
+test('keywordReal: adopta la forma que la gente TECLEA, no la comprimida', async (t) => {
+  // El origen de las keywords inventadas: palabrasClave bota "de", así que
+  // "rizador pelo" y "rizador de pelo" empatan por raíces y antes ganaba la
+  // nuestra. Medido el 12-ago-2026 en Google Chile: 50 búsquedas/mes contra
+  // 9.900 de "ondulador de pelo". La preposición se llevaba el mercado.
+  const global_ = globalThis.fetch
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ suggested_queries: [{ q: 'rizador de pelo' }, { q: 'rizador de pelo profesional' }] }),
+  })
+  t.after(() => {
+    globalThis.fetch = global_
+  })
+
+  const r = await keywordReal('rizador pelo', { pausaMs: 0 })
+  assert.equal(r.keyword, 'rizador de pelo', 'gana la forma real del autosuggest')
+  assert.equal(r.exacta, true)
 })

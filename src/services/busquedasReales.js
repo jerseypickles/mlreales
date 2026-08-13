@@ -131,10 +131,22 @@ export async function keywordReal(candidata, { domainCode = 'CL', pausaMs = 1100
     }
     respuestas++
     for (const s of sugerencias) vistas.add(s)
-    // equivalencia por raíces: "foco solares" empata con "focos solares" y se
-    // conserva la forma de la candidata (no hay renombre que valga la pena)
-    if (sugerencias.some((s) => setsIguales(palabrasClave(s), claves))) {
-      return { keyword: normalizada, exacta: true, puntaje: 1 }
+    // Equivalencia por raíces: "foco solares" empata con "focos solares".
+    //
+    // OJO con las stopwords: palabrasClave bota "de", así que "rizador pelo" y
+    // "rizador de pelo" salen idénticas. Antes se conservaba la forma de la
+    // candidata por considerarla un renombre sin valor — y no lo es: la forma
+    // que el autosuggest devuelve es la que la gente TECLEA, y de ahí salen el
+    // título de la publicación y la medición. Medido el 12-ago-2026 contra el
+    // volumen real de Google Chile: "rizador pelo" 50 búsquedas/mes contra
+    // "ondulador de pelo" 9.900; "partidor bateria" 480 contra "partidor de
+    // bateria" 9.900. La preposición que se caía se llevaba el mercado.
+    //
+    // Ahora manda la forma REAL del autosuggest; la candidata solo sobrevive si
+    // ninguna sugerencia la iguala.
+    const gemela = sugerencias.find((s) => setsIguales(palabrasClave(s), claves))
+    if (gemela) {
+      return { keyword: normalizarTexto(gemela), exacta: true, puntaje: 1 }
     }
   }
 
