@@ -54,6 +54,10 @@ function Hecho({ etiqueta, children }) {
 }
 
 const MESES_CORTOS = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
+const MESES_LARGOS = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+]
 
 // LA FORMA DEL AÑO de un vistazo. Índice 0-100 de Google Trends relativo a la
 // PROPIA keyword: sirve para comparar diciembre contra julio del mismo
@@ -77,6 +81,11 @@ function CurvaAno({ curva }) {
             key={i}
             className={`curva-barra${i === mesHoy ? ' curva-hoy' : ''}`}
             style={{ height: `${Math.max(6, Math.round((100 * v) / max))}%` }}
+            // el valor del mes al pasar el mouse: en google-ads son búsquedas
+            // reales, en trends un índice 0-100 relativo a la propia keyword
+            data-mes={`${MESES_LARGOS[i]}: ${
+              curva.fuente === 'google-ads' ? `${fmtNum(v)} búsquedas` : `índice ${v}`
+            }`}
           >
             <i>{MESES_CORTOS[i]}</i>
           </span>
