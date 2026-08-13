@@ -209,17 +209,26 @@ export function calcularDemanda(
   if ((vendidos ?? reviews).itemsConDato < minItems) return null
 
   const factor = scoring.escalas.reviewsAVentasFactor
-  const ventasEstimadasPorDia =
-    vendidos?.porDia ?? (reviews?.porDia != null ? redondear(reviews.porDia * factor, 1) : null)
-  const volumenVentasEstimado = vendidos?.total ?? (reviews ? reviews.total * factor : null)
 
   return {
     base: vendidos ? 'vendidos' : 'reviews',
     vendidos,
     reviews,
     preguntas: extraerSenalPreguntas(snapshots, snapshotsPrevios),
-    ventasEstimadasPorDia,
-    volumenVentasEstimado,
+    // NO HAY VENTAS ACÁ, Y NO LAS VA A HABER.
+    //
+    // Hasta el 13-ago esto publicaba `ventasEstimadasPorDia` = delta de reseñas
+    // × 25 y `volumenVentasEstimado` = acumuladas × 25. Las dos son invento: el
+    // factor nunca se calibró (la medición propia daba 18 con muestra de 3), el
+    // acumulado está dominado por agregados de catálogo, y el conteo cubre una
+    // fracción del listado — en "lampara para uñas", 30 de 96 items.
+    //
+    // Decisión del importador: las ventas de ML no se pueden medir desde
+    // afuera y no se va a inventar un factor para fingir que sí. Lo que queda
+    // es lo CONTADO: reseñas nuevas en la ventana, con su canasta y su
+    // cobertura. La demanda del nicho se juzga con búsqueda real (Google) y
+    // respaldo de Full (vendedores que inmovilizaron stock).
+    resenasNuevasPorDia: reviews?.porDia ?? null,
     // CUÁNTO DEL LISTADO SE MIDIÓ. El conteo de reseñas solo llega en el
     // detalle de nivel 2, que corre sobre una fracción por presupuesto: en
     // "lampara para uñas" fueron 30 de 96 items. Sin este número, "6.528
@@ -231,25 +240,43 @@ export function calcularDemanda(
           pct: redondear((reviews.itemsConDato / snapshots.length) * 100, 0),
         }
       : null,
-    // resolución de la medición: 1 reseña en esta ventana = este número de
-    // ventas/día — un 0 medido significa "bajo este piso", no "nadie compra"
-    pisoDeteccionVentasDia:
-      reviews?.periodoDias != null ? redondear(factor / reviews.periodoDias, 0) : null,
+    // resolución de la ventana: con esta cantidad de días, el delta más chico
+    // que se puede ver es 1 reseña. Un 0 medido significa "no apareció ninguna
+    // reseña nueva en la canasta", jamás "nadie compra".
+    resolucionResenasDia:
+      reviews?.periodoDias ? redondear(1 / reviews.periodoDias, 2) : null,
   }
 }
 
 // Score 0-100 según config/scoring.js. Devuelve null si aún no hay datos de demanda.
 // `nivelBusqueda` descuenta confianza cuando la keyword medida no es la que la
 // gente escribe: el listado analizado no es el que ve el comprador.
-export function calcularScoreOportunidad({ demanda, competencia, calidad, nivelBusqueda = null }) {
-  if (!demanda || !Number.isFinite(demanda.volumenVentasEstimado)) return null
+export function calcularScoreOportunidad({
+  demanda,
+  competencia,
+  calidad,
+  nivelBusqueda = null,
+  busquedasMes = null,
+}) {
+  // LA DEMANDA SE MIDE, NO SE INVENTA.
+  //
+  // Hasta el 13-ago este componente era `reseñas acumuladas × 25`: un factor sin
+  // calibrar, sobre un acumulado dominado por agregados de catálogo, contado en
+  // una fracción del listado. Tres capas de invento apiladas.
+  //
+  // Ahora son dos mediciones directas: cuánta gente BUSCA eso en Chile (Google
+  // Ads, absoluto y comparable entre nichos) y cuántos vendedores distintos
+  // pusieron stock en FULL — que es capital ajeno inmovilizado, la evidencia
+  // más dura de que el producto rota. Ninguna se multiplica por nada.
+  if (!Number.isFinite(busquedasMes)) return null
   const { pesos, umbrales, escalas } = scoring
 
-  const componenteDemanda = clamp(
-    escalas.demandaFactorLog * Math.log10(1 + demanda.volumenVentasEstimado),
-    0,
-    100,
-  )
+  const porBusqueda = clamp(escalas.demandaFactorLog * Math.log10(1 + busquedasMes), 0, 100)
+  // el respaldo de Full sube la demanda hasta un tope: 20 vendedores con stock
+  // inmovilizado dicen más que 2, pero no infinitamente más
+  const conFull = competencia.sellersConFull ?? null
+  const respaldo = Number.isFinite(conFull) ? clamp(conFull / escalas.sellersFullPlenos, 0, 1) : 0
+  const componenteDemanda = clamp(porBusqueda * (1 + escalas.pesoRespaldoFull * respaldo), 0, 100)
   const componenteCompetencia = clamp(100 - (competencia.concentracionTop3Pct ?? 100), 0, 100)
   // misma filosofía que minItemsDemanda: con pocos productos calificados el
   // promedio no prueba nada (dos ratings 5.0 de 3 reseñas marcan "calidad 0"
@@ -298,6 +325,9 @@ export function calcularScoreOportunidad({ demanda, competencia, calidad, nivelB
 export function calcularMetricas({
   snapshots,
   productosPorSku,
+  // volumen de búsqueda real del nicho: es el componente de demanda del score
+  // desde que se eliminó el factor inventado (ver calcularScoreOportunidad)
+  busquedasMes = null,
   totalResultados = null,
   topN = 50,
   snapshotsPrevios = null,
@@ -319,6 +349,9 @@ export function calcularMetricas({
   const infoVendedor = new Map() // reputación/power seller del nivel 2, primera vista
   let oficiales = 0
   let full = 0
+  // VENDEDORES distintos con stock en Full: capital ajeno inmovilizado, que es
+  // la evidencia más dura de que el producto rota. Cuenta gente, no listings.
+  const vendedoresConFull = new Set()
   let conDatoFull = 0
   let rapido = 0
   let conVendedor = 0
@@ -330,7 +363,10 @@ export function calcularMetricas({
     // contra (mismo criterio que reviews null: sin medir ≠ cero)
     if (prod.esFull != null) {
       conDatoFull++
-      if (prod.esFull) full++
+      if (prod.esFull) {
+        full++
+        if (prod.vendedor) vendedoresConFull.add(prod.vendedor)
+      }
     }
     if (prod.envioRapido) rapido++
     if (prod.vendedor) {
@@ -388,6 +424,7 @@ export function calcularMetricas({
     concentracionTop3Pct: conVendedor > 0 ? redondear((itemsTop3 / conVendedor) * 100) : null,
     pctFull: conDatoFull > 0 ? pct(full, conDatoFull) : null,
     itemsConDatoFull: conDatoFull,
+    sellersConFull: vendedoresConFull.size,
     pctEnvioRapido: pct(rapido),
     topSellers: vendedoresOrdenados
       .slice(0, 5)
@@ -403,7 +440,7 @@ export function calcularMetricas({
   }
 
   const demanda = calcularDemanda(top, snapshotsPrevios)
-  const oportunidad = calcularScoreOportunidad({ demanda, competencia, calidad, nivelBusqueda })
+  const oportunidad = calcularScoreOportunidad({ demanda, competencia, calidad, nivelBusqueda, busquedasMes })
 
   return {
     universo: {
@@ -636,6 +673,16 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
     ? await Snapshot.find({ keyword: nicho.keyword, fecha: snapPrevio.fecha }).lean()
     : null
 
+  // el volumen de búsqueda vive en la curva estacional (una consulta, no caduca)
+  let curvaNicho = null
+  try {
+    const { CurvaEstacional } = await import('../models/CurvaEstacional.js')
+    curvaNicho = await CurvaEstacional.findOne({ keyword: nicho.keyword }).select('busquedasMes').lean()
+  } catch {
+    // sin curva el score queda null hasta que el cron la mida: mejor sin score
+    // que con uno inventado
+  }
+
   const metricas = calcularMetricas({
     snapshots,
     productosPorSku,
@@ -643,6 +690,7 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
     topN,
     snapshotsPrevios,
     nivelBusqueda: nicho.nivelBusqueda ?? null,
+    busquedasMes: curvaNicho?.busquedasMes ?? null,
   })
   const gemelos = detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPrevios })
   if (gemelos) metricas.competencia.sellersGemelos = gemelos
@@ -655,12 +703,12 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   // batería llegó a ir de 118 a 35.063 en un scan). La curva anual de Google no
   // depende de reseñas ni del scraper, así que puede arbitrar sin contaminarse.
   //
-  // NO se borra el dato: se anula `ventasEstimadasPorDia` para que salga de la
+  // NO se borra el dato: se anula la tasa de reseñas para que salga de la
   // serie y del conteo de maduración —los consumidores ya filtran $ne:null— y
   // el valor crudo queda guardado en `saltoSospechoso`. Si algún día un salto
   // era real (un viral, un lanzamiento), se puede ver y revisar.
   try {
-    const previo = metricas.demanda?.ventasEstimadasPorDia
+    const previo = metricas.demanda?.resenasNuevasPorDia
     if (previo != null) {
       const [{ Reporte }, { CurvaEstacional }, { saltoEsCreible }] = await Promise.all([
         import('../models/Reporte.js'),
@@ -669,15 +717,15 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
       ])
       const anterior = await Reporte.findOne({
         nichoId: nicho._id,
-        'metricas.demanda.ventasEstimadasPorDia': { $ne: null },
+        'metricas.demanda.resenasNuevasPorDia': { $ne: null },
       })
         .sort({ fecha: -1 })
-        .select('fecha metricas.demanda.ventasEstimadasPorDia')
+        .select('fecha metricas.demanda.resenasNuevasPorDia')
         .lean()
       if (anterior) {
         const curva = await CurvaEstacional.findOne({ keyword: nicho.keyword }).select('curva').lean()
         const veredicto = saltoEsCreible({
-          anterior: anterior.metricas.demanda.ventasEstimadasPorDia,
+          anterior: anterior.metricas.demanda.resenasNuevasPorDia,
           actual: previo,
           curva: curva?.curva?.length === 12 ? curva.curva : null,
           mesActual: new Date(ultimoSnap.fecha).getMonth() + 1,
@@ -686,11 +734,11 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
         if (veredicto?.creible === false) {
           metricas.demanda.saltoSospechoso = {
             valorCrudo: previo,
-            contra: anterior.metricas.demanda.ventasEstimadasPorDia,
+            contra: anterior.metricas.demanda.resenasNuevasPorDia,
             salto: veredicto.salto,
             motivo: veredicto.motivo,
           }
-          metricas.demanda.ventasEstimadasPorDia = null
+          metricas.demanda.resenasNuevasPorDia = null
         }
       }
     }

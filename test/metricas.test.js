@@ -132,8 +132,8 @@ test('calcularDemanda: totales y delta entre scans', () => {
   assert.equal(d.vendidos.itemsComparables, 2)
   assert.equal(d.vendidos.delta, 70) // (150-100) + (500-480)
   assert.equal(d.vendidos.periodoDias, 2)
-  assert.equal(d.ventasEstimadasPorDia, 35)
-  assert.equal(d.volumenVentasEstimado, 700)
+  assert.equal(d.vendidos.porDia, 35, 'vendidos es otra señal, con su propia tasa')
+  assert.equal(d.resenasNuevasPorDia, null, 'sin reseñas no se inventa una tasa de reseñas')
 })
 
 test('calcularDemanda: una ventana de minutos no publica tasa (ni 0 ni inflada)', () => {
@@ -148,7 +148,7 @@ test('calcularDemanda: una ventana de minutos no publica tasa (ni 0 ni inflada)'
   const quieto = calcularDemanda(actuales, previos, { minItems: 1 })
   assert.equal(quieto.reviews.ventanaInsuficiente, true)
   assert.equal(quieto.reviews.porDia, null)
-  assert.equal(quieto.ventasEstimadasPorDia, null, 'un 0 de resolución no puede viajar como medición')
+  assert.equal(quieto.resenasNuevasPorDia, null, 'un 0 de resolución no puede viajar como medición')
 
   const conVenta = calcularDemanda(
     actuales.map((s, i) => (i === 0 ? { ...s, numReviews: 101 } : s)),
@@ -156,13 +156,13 @@ test('calcularDemanda: una ventana de minutos no publica tasa (ni 0 ni inflada)'
     { minItems: 1 },
   )
   assert.equal(conVenta.reviews.delta, 1, 'el delta crudo se conserva como hecho')
-  assert.equal(conVenta.ventasEstimadasPorDia, null, 'pero no se extrapola a ~600/día')
+  assert.equal(conVenta.resenasNuevasPorDia, null, 'pero no se extrapola a una tasa')
 })
 
 test('calcularDemanda: primer scan sin previos', () => {
   const d = calcularDemanda([{ sku: 'A', vendidos: 200, fecha: new Date('2026-07-16') }], null, { minItems: 1 })
   assert.equal(d.vendidos.total, 200)
-  assert.equal(d.ventasEstimadasPorDia, null)
+  assert.equal(d.resenasNuevasPorDia, null)
 })
 
 test('calcularDemanda: un salto de catálogo imposible queda fuera del delta', () => {
@@ -236,16 +236,16 @@ test('calcularDemanda: sin ids de preguntas la señal es null', () => {
   assert.equal(d.reviews.delta, 2) // la señal de reseñas no se ve afectada
 })
 
-test('calcularDemanda: expone el piso de detección de la ventana', () => {
-  // ventana de 1 día con factor 25: una reseña = 25 ventas/día — un 0 medido
-  // significa "bajo 25/día", no "cero ventas"
+test('calcularDemanda: expone la resolución de la ventana', () => {
+  // ventana de 1 día: lo más chico que se puede ver es 1 reseña. Un 0 medido
+  // significa "no apareció ninguna reseña nueva", jamás "nadie compra".
   const d = calcularDemanda(
     [{ sku: 'A', numReviews: 10, fecha: new Date('2026-07-30T12:00:00Z') }],
     [{ sku: 'A', numReviews: 10, fecha: new Date('2026-07-29T12:00:00Z') }],
     { minItems: 1 },
   )
-  assert.equal(d.ventasEstimadasPorDia, 0)
-  assert.equal(d.pisoDeteccionVentasDia, 25)
+  assert.equal(d.resenasNuevasPorDia, 0)
+  assert.equal(d.resolucionResenasDia, 1)
 })
 
 test('calcularDemanda: la depuración no toca la señal de vendidos', () => {
@@ -284,14 +284,17 @@ test('calcularDemanda: sin vendidos usa delta de reseñas como proxy', () => {
   assert.equal(d.reviews.total, 1040)
   assert.equal(d.reviews.delta, 14) // 9 + 5
   assert.equal(d.reviews.porDia, 7)
-  assert.equal(d.ventasEstimadasPorDia, 175) // 7 reseñas/día × factor 25
-  assert.equal(d.volumenVentasEstimado, 26000) // 1040 × 25
+  // el factor 25 se eliminó: lo que viaja es el CONTEO, no una venta inventada
+  assert.equal(d.resenasNuevasPorDia, 7, 'reseñas nuevas por día, sin multiplicar')
+  assert.equal(d.ventasEstimadasPorDia, undefined, 'las ventas estimadas ya no existen')
+  assert.equal(d.volumenVentasEstimado, undefined)
 })
 
-test('calcularScoreOportunidad: composición según pesos', () => {
+test('calcularScoreOportunidad: la demanda sale de búsquedas medidas, no de un factor', () => {
   const r = calcularScoreOportunidad({
-    demanda: { volumenVentasEstimado: 10000 },
-    competencia: { concentracionTop3Pct: 40, pctFull: 10 },
+    busquedasMes: 10000, // Google Ads Chile, absoluto y comparable entre nichos
+    demanda: {},
+    competencia: { concentracionTop3Pct: 40, pctFull: 10, sellersConFull: 0 },
     calidad: { ratingPromedio: 4.0, itemsConRating: 20 }, // cobertura suficiente para medir
   })
   // demanda 20*log10(10001)≈80 · competencia 60 · calidad (4.4-4)/0.9*100≈44 · full 90
@@ -303,8 +306,25 @@ test('calcularScoreOportunidad: composición según pesos', () => {
   assert.equal(r.score, 69)
 })
 
-test('calcularScoreOportunidad: sin demanda devuelve null', () => {
-  assert.equal(calcularScoreOportunidad({ demanda: null, competencia: {}, calidad: {} }), null)
+test('calcularScoreOportunidad: sin búsquedas medidas no hay score', () => {
+  // antes bastaba con tener reseñas acumuladas: eso permitía puntuar nichos
+  // cuya demanda era pura multiplicación. Ahora exige la medición real.
+  assert.equal(calcularScoreOportunidad({ busquedasMes: null, demanda: {}, competencia: {}, calidad: {} }), null)
+})
+
+test('el respaldo de Full levanta la demanda: capital ajeno inmovilizado', () => {
+  const base = {
+    busquedasMes: 10000,
+    demanda: {},
+    calidad: { ratingPromedio: 4.0, itemsConRating: 20 },
+  }
+  const sinFull = calcularScoreOportunidad({ ...base, competencia: { concentracionTop3Pct: 40, pctFull: 0, sellersConFull: 0 } })
+  const conFull = calcularScoreOportunidad({ ...base, competencia: { concentracionTop3Pct: 40, pctFull: 0, sellersConFull: 20 } })
+  assert.ok(conFull.componentes.demanda > sinFull.componentes.demanda,
+    '20 vendedores con stock en Full dicen más que ninguno')
+  // y no crece sin techo: 20 y 40 vendedores saturan igual
+  const muchos = calcularScoreOportunidad({ ...base, competencia: { concentracionTop3Pct: 40, pctFull: 0, sellersConFull: 40 } })
+  assert.equal(muchos.componentes.demanda, conFull.componentes.demanda)
 })
 
 test('el score descuenta confianza cuando nadie busca la keyword', () => {
@@ -312,8 +332,9 @@ test('el score descuenta confianza cuando nadie busca la keyword', () => {
   // Los datos del listado son reales, así que el score no se anula — se
   // descuenta, y el bruto queda a la vista para poder auditarlo.
   const base = {
-    demanda: { volumenVentasEstimado: 10000 },
-    competencia: { concentracionTop3Pct: 40, pctFull: 10 },
+    busquedasMes: 10000,
+    demanda: {},
+    competencia: { concentracionTop3Pct: 40, pctFull: 10, sellersConFull: 0 },
     calidad: { ratingPromedio: 4.0, itemsConRating: 20 },
   }
   const sano = calcularScoreOportunidad(base)
@@ -339,8 +360,9 @@ test('el score descuenta confianza cuando nadie busca la keyword', () => {
 
 test('sin medir el nivel de búsqueda, el score no se castiga', () => {
   const base = {
-    demanda: { volumenVentasEstimado: 5000 },
-    competencia: { concentracionTop3Pct: 30, pctFull: 20 },
+    busquedasMes: 5000,
+    demanda: {},
+    competencia: { concentracionTop3Pct: 30, pctFull: 20, sellersConFull: 0 },
     calidad: { ratingPromedio: 4.1, itemsConRating: 10 },
   }
   assert.equal(
@@ -365,9 +387,9 @@ test('calcularMetricas: integra demanda y score cuando hay vendidos', () => {
     ['A4', { sku: 'A4', vendedor: 'X', esFull: false }],
     ['A5', { sku: 'A5', vendedor: 'W', esFull: false }],
   ])
-  const m = calcularMetricas({ snapshots, productosPorSku })
+  const m = calcularMetricas({ snapshots, productosPorSku, busquedasMes: 5000 })
   assert.equal(m.demanda.vendidos.total, 10000)
-  assert.equal(m.demanda.volumenVentasEstimado, 10000)
+  assert.equal(m.demanda.vendidos.porDia, null, 'un solo scan: sin delta que reportar')
   assert.ok(m.scoreOportunidad > 0)
   assert.ok(m.oportunidad.componentes.demanda > 70)
 })
@@ -375,8 +397,9 @@ test('calcularMetricas: integra demanda y score cuando hay vendidos', () => {
 test('componente calidad: pocos ratings → neutro 50, no extremos falsos', async () => {
   const { calcularScoreOportunidad } = await import('../src/services/metricas.js')
   const base = {
-    demanda: { volumenVentasEstimado: 5000 },
-    competencia: { concentracionTop3Pct: 40, pctFull: 30 },
+    busquedasMes: 5000,
+    demanda: {},
+    competencia: { concentracionTop3Pct: 40, pctFull: 30, sellersConFull: 0 },
   }
   // 3 productos con rating 4.9: evidencia fina → neutro, no "calidad 0"
   const finos = calcularScoreOportunidad({
@@ -449,8 +472,8 @@ test('calcularDemanda: la cadencia diaria sigue midiendo aunque el cron se adela
   const d = calcularDemanda(actuales, previos, { minItems: 1 })
   assert.equal(d.reviews.ventanaInsuficiente, undefined)
   assert.equal(d.reviews.porDia, 0)
-  assert.equal(d.ventasEstimadasPorDia, 0, 'un 0 con ventana válida sí es medición (bajo el piso)')
-  assert.ok(d.pisoDeteccionVentasDia > 0, 'y viaja con su piso de detección')
+  assert.equal(d.resenasNuevasPorDia, 0, 'un 0 con ventana válida sí es medición')
+  assert.ok(d.resolucionResenasDia > 0, 'y viaja con la resolución de su ventana')
 })
 
 test('el juez del ruido no borra: anula la tasa y guarda el crudo', () => {

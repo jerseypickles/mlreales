@@ -299,7 +299,7 @@ export async function analizarNicho(nicho) {
   // graduación — la sostenibilidad de la serie pesa más que el último día.
   const serie = await Reporte.find({
     nichoId: nicho._id,
-    'metricas.demanda.ventasEstimadasPorDia': { $ne: null },
+    'metricas.demanda.resenasNuevasPorDia': { $ne: null },
   })
     .sort({ fecha: -1 })
     .limit(12)
@@ -309,7 +309,7 @@ export async function analizarNicho(nicho) {
     const rv = r.metricas?.demanda?.reviews ?? {}
     return {
       fecha: new Date(r.fecha).toISOString().slice(0, 10),
-      ventasDia: r.metricas?.demanda?.ventasEstimadasPorDia ?? null,
+      ventasDia: r.metricas?.demanda?.resenasNuevasPorDia ?? null,
       medianaClp: r.metricas?.precio?.mediana ?? null,
       score: r.scoreOportunidad ?? null,
       canastaComparables: rv.itemsComparables ?? null,

@@ -8,7 +8,7 @@ import { fmtNum, fmtPrecio, fmtPct } from '../lib/formato.js'
 // ratings altos (no te diferencias por producto), calidad 100 = ratings
 // mediocres con volumen (entra con algo mejor)
 const COMPONENTES_SCORE = [
-  ['demanda', 'Demanda', 'Volumen de ventas estimado del top (reseñas × factor)'],
+  ['demanda', 'Demanda', 'Búsquedas reales al mes en Chile (Google Ads), levantada por cuántos vendedores distintos inmovilizaron stock en Full. Ya NO se estima desde reseñas × factor.'],
   ['competencia', 'Competencia', 'Espacio fuera del top 3 de sellers: 0 = mercado concentrado'],
   ['calidad', 'Calidad', 'Espacio para diferenciarte por producto: 0 = todos tienen rating ≥4.4 (se compite por precio/Full), 100 = ratings mediocres con volumen'],
   ['full', 'Full', 'Espacio sin Mercado Envíos Full: 0 = todos usan Full'],
@@ -89,26 +89,26 @@ export function Resumen({ reporte, productos, nichoId, nicho, porMarcaVehiculo }
         <ScoreHero score={m.scoreOportunidad} componentes={m.oportunidad.componentes} />
       ) : null}
       <div className="tiles">
+        {/* NO hay "ventas estimadas": las ventas de ML no se pueden medir desde
+            afuera y el factor 25 era invento. Lo que se muestra es el conteo. */}
         {m.demanda ? (
           <StatTile
-            label="Ventas estimadas/día"
-            value={
-              m.demanda.ventasEstimadasPorDia === 0 && m.demanda.pisoDeteccionVentasDia
-                ? `< ${m.demanda.pisoDeteccionVentasDia}`
-                : (m.demanda.ventasEstimadasPorDia ?? '—')
-            }
+            label="Reseñas nuevas/día"
+            value={m.demanda.resenasNuevasPorDia ?? '—'}
             detalle={
               m.demanda.reviews?.ventanaInsuficiente
-                ? `ventana de ${Math.round((m.demanda.reviews.periodoDias ?? 0) * 24)} h entre scans: no resuelve una tasa diaria`
-                : m.demanda.ventasEstimadasPorDia == null
-                ? 'el delta requiere 2 scans con detalle'
-                : m.demanda.base === 'reviews'
-                  ? `reseñas nuevas × factor · canasta ${m.demanda.reviews?.itemsComparables ?? '—'}${
+                ? `ventana de ${Math.round((m.demanda.reviews.periodoDias ?? 0) * 24)} h entre scans: no resuelve una tasa`
+                : m.demanda.resenasNuevasPorDia == null
+                  ? 'el delta requiere 2 scans con detalle'
+                  : `contadas sobre ${m.demanda.reviews?.itemsComparables ?? '—'} productos${
+                      m.demanda.coberturaReviews
+                        ? ` (${m.demanda.coberturaReviews.itemsConDato} de ${m.demanda.coberturaReviews.itemsDelScan} del scan)`
+                        : ''
+                    }${
                       (m.demanda.reviews?.saltosFiltrados ?? 0) + (m.demanda.reviews?.duplicadosCatalogo ?? 0) > 0
                         ? ` · ${(m.demanda.reviews.saltosFiltrados ?? 0) + (m.demanda.reviews.duplicadosCatalogo ?? 0)} saltos de catálogo filtrados`
                         : ''
                     }`
-                  : 'desde vendidos'
             }
           />
         ) : null}

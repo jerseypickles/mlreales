@@ -272,8 +272,8 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false, onMedirKey
         title={
           n.ultimoReporte
             ? `mediana ${fmtPrecio(n.ultimoReporte.precioMediana)}` +
-              (n.ultimoReporte.ventasEstimadasPorDia != null
-                ? ` · ~${fmtNum(Math.round(n.ultimoReporte.ventasEstimadasPorDia))} ventas/día`
+              (n.ultimoReporte.resenasNuevasPorDia != null
+                ? ` · +${fmtNum(n.ultimoReporte.resenasNuevasPorDia)} reseñas/día`
                 : '') +
               ` · último scan ${fmtFecha(n.ultimoScanEl)}`
             : n.ultimoScanEl

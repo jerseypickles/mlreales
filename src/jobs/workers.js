@@ -417,7 +417,7 @@ export async function procesarCalcularMetricas(job) {
     const ultimoAnalizado = await Reporte.findOne({ nichoId: nicho._id, analisis: { $ne: null } })
       .sort({ fecha: -1 })
       .lean()
-    const filtroDemanda = { nichoId: nicho._id, 'metricas.demanda.ventasEstimadasPorDia': { $ne: null } }
+    const filtroDemanda = { nichoId: nicho._id, 'metricas.demanda.resenasNuevasPorDia': { $ne: null } }
     const demandaAhora = await Reporte.countDocuments(filtroDemanda)
     const demandaAlAnalizar = ultimoAnalizado
       ? await Reporte.countDocuments({ ...filtroDemanda, fecha: { $lte: ultimoAnalizado.fecha } })
@@ -645,7 +645,7 @@ export async function procesarProgramadorScans() {
   ])
   const veredictoPorNicho = new Map(veredictos.map((r) => [String(r._id), r.veredicto]))
   const conDemanda = await Reporte.aggregate([
-    { $match: { nichoId: { $in: nichos.map((n) => n._id) }, 'metricas.demanda.ventasEstimadasPorDia': { $ne: null } } },
+    { $match: { nichoId: { $in: nichos.map((n) => n._id) }, 'metricas.demanda.resenasNuevasPorDia': { $ne: null } } },
     { $group: { _id: '$nichoId', n: { $sum: 1 } } },
   ])
   const demandaPorNicho = new Map(conDemanda.map((r) => [String(r._id), r.n]))

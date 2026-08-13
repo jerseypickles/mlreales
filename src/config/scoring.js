@@ -32,6 +32,11 @@ export const scoring = {
     minItemsCalidad: 5,
   },
   escalas: {
+    // respaldo de Full: con este número de vendedores distintos con stock
+    // inmovilizado se considera evidencia plena de que el producto rota
+    sellersFullPlenos: 12,
+    // cuánto puede levantar ese respaldo al componente de demanda
+    pesoRespaldoFull: 0.35,
     // demanda = min(100, factorLog * log10(1 + volumenVentasEstimado))
     // con factor 20: 10.000 ventas ≈ 80 pts; 100.000 ≈ 100 pts
     demandaFactorLog: 20,

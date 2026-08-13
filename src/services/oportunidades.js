@@ -62,8 +62,8 @@ export function confirmacionVeredicto(scansConDemanda, tendencia) {
 
 // Dirección de la demanda entre los dos últimos reportes (±15% = ruido).
 export function tendenciaVentas(ultimo, anterior) {
-  const a = ultimo?.metricas?.demanda?.ventasEstimadasPorDia
-  const b = anterior?.metricas?.demanda?.ventasEstimadasPorDia
+  const a = ultimo?.metricas?.demanda?.resenasNuevasPorDia
+  const b = anterior?.metricas?.demanda?.resenasNuevasPorDia
   if (!Number.isFinite(a) || !Number.isFinite(b) || b <= 0) return null
   const cambio = (a - b) / b
   if (cambio >= 0.15) return 'sube'

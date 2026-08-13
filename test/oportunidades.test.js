@@ -48,7 +48,8 @@ test('detectarTramites: las menciones negadas NO ponen chip (caso silla playa pl
 })
 
 test('tendenciaVentas: sube/baja/estable con umbral de ±15%', () => {
-  const rep = (v) => ({ metricas: { demanda: { ventasEstimadasPorDia: v } } })
+  // la señal es el conteo de RESEÑAS NUEVAS por día, no una venta inventada
+  const rep = (v) => ({ metricas: { demanda: { resenasNuevasPorDia: v } } })
   assert.equal(tendenciaVentas(rep(12), rep(10)), 'sube')
   assert.equal(tendenciaVentas(rep(8), rep(10)), 'baja')
   assert.equal(tendenciaVentas(rep(10.5), rep(10)), 'estable')

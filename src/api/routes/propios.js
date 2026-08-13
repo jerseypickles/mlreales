@@ -229,7 +229,7 @@ router.get(
             precioEfectivo: (p.mediciones ?? []).at(-1)?.precioEfectivo,
             esFull: p.envioMl?.logistica === 'fulfillment',
           })),
-          { demandaNichoDia: rep?.metricas?.demanda?.ventasEstimadasPorDia ?? null },
+          { demandaNichoDia: rep?.metricas?.demanda?.resenasNuevasPorDia ?? null },
         )
         if (c) {
           // POR NICHO: lo que ML cobró de verdad por los productos cableados acá

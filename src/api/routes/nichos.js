@@ -64,7 +64,7 @@ router.get(
                 _id: 0,
                 fecha: 1,
                 scoreOportunidad: 1,
-                ventasEstimadasPorDia: '$metricas.demanda.ventasEstimadasPorDia',
+                resenasNuevasPorDia: '$metricas.demanda.resenasNuevasPorDia',
                 precioMediana: '$metricas.precio.mediana',
                 sellersUnicos: '$metricas.competencia.sellersUnicos',
                 pctFull: '$metricas.competencia.pctFull',
@@ -103,7 +103,7 @@ router.get(
           from: 'reportes',
           let: { nid: '$_id' },
           pipeline: [
-            { $match: { $expr: { $eq: ['$nichoId', '$$nid'] }, 'metricas.demanda.ventasEstimadasPorDia': { $ne: null } } },
+            { $match: { $expr: { $eq: ['$nichoId', '$$nid'] }, 'metricas.demanda.resenasNuevasPorDia': { $ne: null } } },
             { $count: 'n' },
           ],
           as: 'conteoDemanda',
@@ -343,7 +343,7 @@ router.get(
     // preliminar (mismo criterio que el programador y el sidebar)
     const scansConDemanda = await Reporte.countDocuments({
       nichoId: nicho._id,
-      'metricas.demanda.ventasEstimadasPorDia': { $ne: null },
+      'metricas.demanda.resenasNuevasPorDia': { $ne: null },
     })
     const madurando =
       nicho.estado === 'activo' &&
@@ -716,7 +716,7 @@ router.get(
       score: r.scoreOportunidad ?? null,
       mediana: r.metricas?.precio?.mediana ?? null,
       reviewsTotal: r.metricas?.demanda?.reviews?.total ?? null,
-      ventasDia: r.metricas?.demanda?.ventasEstimadasPorDia ?? null,
+      ventasDia: r.metricas?.demanda?.resenasNuevasPorDia ?? null,
       pctFull: r.metricas?.competencia?.pctFull ?? null,
       sellersUnicos: r.metricas?.competencia?.sellersUnicos ?? null,
       canasta: r.metricas?.demanda?.reviews?.itemsComparables ?? null,
