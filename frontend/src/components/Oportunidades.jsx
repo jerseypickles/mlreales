@@ -117,6 +117,52 @@ function CurvaAno({ curva }) {
   )
 }
 
+// FILA DENSA: lo que se lee de un vistazo, en 40px de alto.
+//
+// La tarjeta completa mide ~300px, y con 48 nichos eso son 14.000px de scroll
+// para encontrar lo que se puede comprar hoy. Acá va solo lo que decide si
+// vale la pena abrirla; el detalle se despliega con un clic.
+function FilaCompacta({ o, rank, abierta, onAlternar }) {
+  const ven = chipVentana(o.ventana)
+  const c = o.curvaAnual
+  const max = c?.curva?.length ? Math.max(...c.curva) : 0
+  const mesHoy = new Date().getMonth()
+  return (
+    <button
+      type="button"
+      className={`op-fila${abierta ? ' op-fila-abierta' : ''}`}
+      onClick={onAlternar}
+      aria-expanded={abierta}
+    >
+      <span className="op-fila-rank">{rank}</span>
+      <span className="op-fila-kw">
+        {o.keyword}
+        {o.nivelBusqueda?.nivel === 'renombrar' ? <i className="op-fila-alerta" title="La gente escribe otra frase">keyword</i> : null}
+      </span>
+      <span className={`op-fila-score s-${o.score >= 75 ? 'alto' : o.score >= 55 ? 'medio' : 'bajo'}`}>{o.score ?? '—'}</span>
+      <span className="op-fila-vol">
+        {c?.busquedasMes ? `${fmtNum(c.busquedasMes)}/mes` : <em>sin medir</em>}
+      </span>
+      {max ? (
+        <span className="op-fila-curva" aria-hidden="true">
+          {c.curva.map((v, i) => (
+            <i key={i} className={i === mesHoy ? 'hoy' : undefined} style={{ height: `${Math.max(8, Math.round((100 * v) / max))}%` }} />
+          ))}
+        </span>
+      ) : (
+        <span className="op-fila-curva" />
+      )}
+      <span className="op-fila-ventana">
+        {ven ? <em className={`chip-ventana v-${ven.clase}`}>{ven.texto}</em> : <em className="op-fila-plano">todo el año</em>}
+      </span>
+      <span className={`op-fila-ver veredicto-${o.veredicto}`}>
+        {o.veredicto === 'entrar' ? 'entrar' : 'condiciones'}
+      </span>
+      <span className="op-fila-flecha" aria-hidden="true">{abierta ? '▾' : '▸'}</span>
+    </button>
+  )
+}
+
 // Etapas del embudo de compra (espejo de ETAPAS_COMPRA en el backend)
 const ETAPAS = ['evaluando', 'cotizando', 'pedido', 'vendiendo', 'en-espera', 'descartado']
 
@@ -547,6 +593,9 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [activos, setActivos] = useState([])
+  // una sola fila abierta a la vez: el detalle es para decidir, no para comparar
+  const [expandido, setExpandido] = useState(null)
+  const [busca, setBusca] = useState('')
 
   const cargar = useCallback(() => {
     api
@@ -565,7 +614,10 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
 
   const todas = [...datos.oportunidades].sort(compararOportunidades)
   const filtrosActivos = FILTROS.filter(([id]) => activos.includes(id))
-  const visibles = todas.filter((o) => filtrosActivos.every(([, , fn]) => fn(o)))
+  const q = busca.trim().toLowerCase()
+  const visibles = todas
+    .filter((o) => filtrosActivos.every(([, , fn]) => fn(o)))
+    .filter((o) => !q || o.keyword.toLowerCase().includes(q) || (o.titular ?? '').toLowerCase().includes(q))
 
   const cuenta = (fn) => todas.filter(fn).length
   const porArreglar = cuenta((o) => o.nivelBusqueda?.nivel === 'renombrar')
@@ -593,6 +645,18 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
       </div>
 
       <div className="chips op-filtros">
+        <div className="op-buscador">
+          <input
+            type="search"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar nicho…"
+            aria-label="Buscar entre las oportunidades"
+          />
+          {busca ? (
+            <button type="button" className="op-buscador-x" onClick={() => setBusca('')} aria-label="Limpiar búsqueda">×</button>
+          ) : null}
+        </div>
         {FILTROS.map(([id, etiqueta, fn]) => (
           <button
             key={id}
@@ -629,11 +693,22 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
               if (dueno.has(o.productoClave)) mismaCompraQue = dueno.get(o.productoClave)
               else dueno.set(o.productoClave, o.keyword)
             }
+            const abierta = expandido === o.nichoId
             return (
-              <div key={o.nichoId}>
-                <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} onRecargar={cargar} />
-                {o.familiaMiembros?.length ? (
-                  <FamiliaColapsada miembros={o.familiaMiembros} porKeyword={porKeyword} lider={o} onAbrir={onAbrirNicho} onRecargar={cargar} />
+              <div key={o.nichoId} className="op-item">
+                <FilaCompacta
+                  o={o}
+                  rank={rank}
+                  abierta={abierta}
+                  onAlternar={() => setExpandido(abierta ? null : o.nichoId)}
+                />
+                {abierta ? (
+                  <>
+                    <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} onRecargar={cargar} />
+                    {o.familiaMiembros?.length ? (
+                      <FamiliaColapsada miembros={o.familiaMiembros} porKeyword={porKeyword} lider={o} onAbrir={onAbrirNicho} onRecargar={cargar} />
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             )

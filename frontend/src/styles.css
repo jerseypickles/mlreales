@@ -5114,3 +5114,146 @@ section {
 .op-grupo .op-lista {
   margin-top: 12px;
 }
+
+/* ── FILA DENSA DE OPORTUNIDADES ──────────────────────────────────────────
+   La tarjeta completa mide ~300px y hay 48 nichos: 14.000px de scroll para
+   encontrar lo comprable hoy. La fila resume en 40px y despliega al clic. */
+.op-item + .op-item {
+  border-top: 1px solid var(--borde);
+}
+.op-fila {
+  display: grid;
+  grid-template-columns: 30px minmax(140px, 1fr) 34px 96px 76px minmax(120px, 150px) 92px 18px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px; /* objetivo táctil */
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font-size: 13px;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+.op-fila:hover {
+  background: var(--acento-tenue);
+}
+.op-fila:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: -2px;
+}
+.op-fila-abierta {
+  background: var(--acento-tenue);
+  border-left-color: var(--acento);
+}
+.op-fila-rank {
+  color: var(--tinta-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.op-fila-kw {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.op-fila-alerta {
+  margin-left: 6px;
+  font-style: normal;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--avisa-tenue);
+  color: var(--avisa-tinta);
+}
+.op-fila-score {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  border-radius: 6px;
+  padding: 1px 0;
+}
+.op-fila-score.s-alto { background: var(--exito-tenue); color: var(--exito-tinta); }
+.op-fila-score.s-medio { background: var(--avisa-tenue); color: var(--avisa-tinta); }
+.op-fila-score.s-bajo { background: var(--borde); color: var(--tinta-3); }
+.op-fila-vol {
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta-2);
+  text-align: right;
+  font-size: 12px;
+}
+.op-fila-vol em { font-style: normal; color: var(--tinta-3); font-size: 11px; }
+/* silueta del año en miniatura: forma, no números */
+.op-fila-curva {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 18px;
+}
+.op-fila-curva i {
+  flex: 1;
+  background: var(--acento-borde);
+  border-radius: 1px;
+  min-height: 2px;
+}
+.op-fila-curva i.hoy { background: var(--acento); }
+.op-fila-ventana em { font-style: normal; }
+.op-fila-plano { color: var(--tinta-3); font-size: 11.5px; }
+.op-fila-ver {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-align: right;
+}
+.op-fila-ver.veredicto-entrar { color: var(--exito-tinta); }
+.op-fila-ver.veredicto-entrar_con_condiciones { color: var(--avisa-tinta); }
+.op-fila-flecha { color: var(--tinta-3); }
+/* la tarjeta completa, cuando se despliega */
+.op-item > .op-carta {
+  margin: 4px 0 14px;
+}
+
+.op-buscador {
+  position: relative;
+  flex: 1 1 200px;
+  max-width: 280px;
+}
+.op-buscador input {
+  width: 100%;
+  padding: 6px 26px 6px 10px;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 999px;
+  background: var(--superficie);
+  color: inherit;
+  font-size: 13px;
+}
+.op-buscador input:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
+}
+.op-buscador-x {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--tinta-3);
+  font-size: 16px;
+  line-height: 1;
+}
+
+@media (max-width: 900px) {
+  .op-fila {
+    grid-template-columns: 24px minmax(100px, 1fr) 32px 70px 18px;
+  }
+  .op-fila-curva,
+  .op-fila-ventana,
+  .op-fila-ver { display: none; }
+}
