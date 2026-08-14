@@ -134,7 +134,11 @@ export function normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal } =
     cuotas: raw.installments || null,
     rating: parsearNumero(raw.produtoReviews),
     numReviews: parsearNumero(raw.numeroEvaluaciones),
-    vendidos: null, // Fase 2
+    // El badge público "+N vendidos" del listado. Venía descartado desde el
+    // día uno ("Fase 2") aunque el actor lo trae en el nivel 1 — gratis, sin
+    // pasar por el detalle. Ver senalVendidos() en metricas.js: es un balde
+    // acumulado, no una tasa, y se usa solo para comparar tamaño entre nichos.
+    vendidos: parsearNumero(raw.cantidadVendida),
     stock: null, // Fase 2
     // itemPosition del actor reinicia en cada página; el orden del dataset es la posición global
     posicion: posicionGlobal ?? parsearNumero(raw.itemPosition),

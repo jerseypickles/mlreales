@@ -122,6 +122,35 @@ function CurvaAno({ curva }) {
 // La tarjeta completa mide ~300px, y con 48 nichos eso son 14.000px de scroll
 // para encontrar lo que se puede comprar hoy. Acá va solo lo que decide si
 // vale la pena abrirla; el detalle se despliega con un clic.
+// LA TRAYECTORIA DEL TOP, en el ancho de una columna.
+//
+// Suma de los badges "+N vendidos" que ML publica en el listado. Son baldes
+// (25/50/100/500/1.000/5.000/10.000), acumulados de toda la vida de cada
+// publicación — así que el número es un PISO y jamás un ritmo. Por eso se
+// escribe con "≥" y nunca lleva "/mes" al lado.
+//
+// Compacto a propósito: entre nichos las diferencias son de órdenes de
+// magnitud (toallitas ≥543.700 contra pastillas de freno ≥3.150) y ahí el
+// redondeo grueso no confunde nada; los dígitos finos no aportarían.
+function fmtPiso(n) {
+  if (!Number.isFinite(n)) return null
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1).replace('.', ',')}k`
+  return fmtNum(n)
+}
+
+function Trayectoria({ v }) {
+  if (!v?.pisoUnidades) return <span className="op-fila-vend" />
+  return (
+    <span
+      className="op-fila-vend"
+      title={`El top del listado acumula al menos ${fmtNum(v.pisoUnidades)} unidades vendidas en toda su vida (badge "+N vendidos" de ML, medido en ${v.itemsConDato} de ${v.itemsDelScan} publicaciones). Es un piso acumulado, no un ritmo mensual.`}
+    >
+      ≥{fmtPiso(v.pisoUnidades)}
+      {v.pctCobertura != null && v.pctCobertura < 60 ? <i className="op-vend-parcial">·{v.pctCobertura}%</i> : null}
+    </span>
+  )
+}
+
 function FilaCompacta({ o, rank, abierta, onAlternar }) {
   const ven = chipVentana(o.ventana)
   const c = o.curvaAnual
@@ -143,6 +172,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar }) {
       <span className="op-fila-vol">
         {c?.busquedasMes ? `${fmtNum(c.busquedasMes)}/mes` : <em>sin medir</em>}
       </span>
+      <Trayectoria v={o.vendidosHistoricos} />
       {max ? (
         <span className="op-fila-curva" aria-hidden="true">
           {c.curva.map((v, i) => (
@@ -366,6 +396,16 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
           <Hecho etiqueta="mediana">{o.mediana ? fmtPrecio(o.mediana) : null}</Hecho>
           <Hecho etiqueta="Full">{o.pctFull != null ? `${Math.round(o.pctFull)}%` : null}</Hecho>
           <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
+          {/* acá sí va el número entero y dicho con todas sus letras: es donde
+              el importador se detiene a decidir, no la vista de barrido */}
+          {o.vendidosHistoricos?.pisoUnidades ? (
+            <Hecho etiqueta="el top vendió">
+              <span title={`Suma de los badges "+N vendidos" de ML en ${o.vendidosHistoricos.itemsConDato} de ${o.vendidosHistoricos.itemsDelScan} publicaciones del top. ML redondea a baldes (25, 50, 100, 500, 1.000...) y el badge dice "al menos", así que la suma es un piso. Es acumulado de toda la vida de cada publicación: no es un ritmo mensual.`}>
+                al menos {fmtNum(o.vendidosHistoricos.pisoUnidades)} · histórico
+                {o.vendidosHistoricos.pctCobertura != null ? ` (${o.vendidosHistoricos.pctCobertura}% del top medido)` : ''}
+              </span>
+            </Hecho>
+          ) : null}
         </div>
 
         <CurvaAno curva={o.curvaAnual} />
@@ -576,7 +616,19 @@ function GrupoOportunidades({ grupo, filas, children }) {
         <span className="op-grupo-cuenta">{filas.length}</span>
         <span className="op-grupo-sub">{grupo.sub}</span>
       </button>
-      {abierto ? <div className="op-lista">{children}</div> : null}
+      {abierto ? (
+        <div className="op-lista">
+          {/* Sin esto "≥3,1k" es un jeroglífico. Va por grupo y no una sola vez
+              arriba porque los grupos se colapsan y la lista es larga: un
+              encabezado que se fue del viewport no explica nada. */}
+          <div className="op-fila op-fila-cab" aria-hidden="true">
+            <span /><span>nicho</span><span>score</span><span>búsqueda</span>
+            <span className="op-fila-vend">vendidos</span><span>año</span>
+            <span>ventana</span><span>veredicto</span><span />
+          </div>
+          {children}
+        </div>
+      ) : null}
     </section>
   )
 }

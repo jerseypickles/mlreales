@@ -193,26 +193,66 @@ function extraerSenalPreguntas(snapshots, snapshotsPrevios) {
 
 // Demanda del nicho. ML no expone vendidos exactos (buckets congelados), así que la
 // señal continua es el conteo de reseñas (exacto, se mueve a diario): delta de
-// reseñas × factor = ventas estimadas del período — la métrica estrella.
+// EL BADGE "+N VENDIDOS" QUE ML PUBLICA EN EL LISTADO.
+//
+// Estuvo descartado en el normalizador desde el inicio ("Fase 2") aunque el
+// actor de nivel 1 ya lo traía. Sondeado el 14-ago en 5 nichos: cobertura de
+// 65% a 100% (pastillas de freno 48/48, toallitas 47/48, hidrolavadora 44/48,
+// brochas 39/48, árbol de navidad 31/48) — bastante mejor que las reseñas, que
+// dependen del detalle de nivel 2 y en "lampara para uñas" llegaron a 30 de 96.
+//
+// PERO SON BALDES. En 66 items sondeados aparecen 7 valores distintos y nada
+// más: 25, 50, 100, 500, 1.000, 5.000, 10.000. Cero valores no redondos. Es el
+// badge público, acumulado de toda la vida del listing, no una tasa.
+//
+// De ahí las dos reglas:
+//   1. NO se le saca delta ni por-día. Cruzar de balde no es una venta, es un
+//      umbral — un listing puede pasar de "+100" a "+500" en un día o en un año.
+//   2. NO alimenta el score. Sirve para lo que sí resuelve: comparar el TAMAÑO
+//      histórico entre nichos, donde la diferencia es de órdenes de magnitud
+//      (toallitas 543.700 contra pastillas de freno 3.150) y el redondeo grueso
+//      no alcanza a confundir nada.
+//
+// Y como cada balde dice "+N", la suma es un PISO medido, no una estimación:
+// el top vendió al menos eso.
+function senalVendidos(snapshots) {
+  const valores = snapshots.map((s) => s.vendidos).filter(Number.isFinite)
+  if (!valores.length) return null
+  const orden = [...valores].sort((a, b) => a - b)
+  return {
+    pisoUnidades: valores.reduce((a, b) => a + b, 0),
+    itemsConDato: valores.length,
+    itemsDelScan: snapshots.length,
+    pctCobertura: redondear((valores.length / snapshots.length) * 100, 0),
+    medianaPorItem: redondear(percentil(orden, 50), 0),
+    maximoPorItem: orden.at(-1),
+    // A DIFERENCIA DE LAS RESEÑAS, ACÁ NO SE DEDUPLICA POR VALOR REPETIDO.
+    // Allá dos filas con 1.293 son el mismo agregado de catálogo contado dos
+    // veces. Acá dos filas con "+50" son dos vendedores distintos que cayeron
+    // en el mismo balde grueso — borrarlas sería borrar competencia real.
+    // (En pastillas de freno los 48 items caben en 3 baldes; deduplicar
+    // dejaría 3 filas de 48.)
+  }
+}
+
+// reseñas nuevas en la ventana: lo único que se cuenta de verdad.
 export function calcularDemanda(
   snapshots,
   snapshotsPrevios = null,
   { minItems = scoring.umbrales.minItemsDemanda } = {},
 ) {
-  const vendidos = extraerSenal(snapshots, snapshotsPrevios, 'vendidos')
   const reviews = extraerSenal(snapshots, snapshotsPrevios, 'numReviews', { depurar: true })
-  if (!vendidos && !reviews) return null
+  if (!reviews) return null
 
   // representatividad: si la señal sale de una muestra ínfima (detalle aplicado
   // a medias por bloqueo de ML), diría "demanda 0" con cara seria — sin score
   // el pipeline espera el reintento en vez de vender un número falso
-  if ((vendidos ?? reviews).itemsConDato < minItems) return null
-
-  const factor = scoring.escalas.reviewsAVentasFactor
+  if (reviews.itemsConDato < minItems) return null
 
   return {
-    base: vendidos ? 'vendidos' : 'reviews',
-    vendidos,
+    // La base es SIEMPRE reseñas. `vendidos` existe desde el 14-ago pero es un
+    // balde acumulado: no se le puede sacar delta ni tasa (ver senalVendidos).
+    base: 'reviews',
     reviews,
     preguntas: extraerSenalPreguntas(snapshots, snapshotsPrevios),
     // NO HAY VENTAS ACÁ, Y NO LAS VA A HABER.
@@ -462,7 +502,10 @@ export function calcularMetricas({
     },
     competencia,
     calidad,
-    demanda, // null hasta que el nivel 2 aporte `vendidos`
+    // fuera de `demanda` a propósito: no es una tasa y no depende del nivel 2,
+    // así que sobrevive aunque la demanda quede en null por poca cobertura
+    vendidosHistoricos: senalVendidos(top),
+    demanda, // null mientras el detalle no traiga conteo de reseñas suficiente
     oportunidad, // { score, componentes } | null
     scoreOportunidad: oportunidad?.score ?? null,
   }
@@ -522,7 +565,10 @@ export async function obtenerProductosUltimoScan(nicho) {
     // nivel no es velocidad de venta — mejor "sin medir" que un número absurdo
     const salto = delta > Math.max(dep.pisoPorDia, dep.maxPctDia * previa.numReviews) * dias
     velocidadPorSku.set(h._id, {
-      ventasDia: salto ? null : Math.round((delta / dias) * scoring.escalas.reviewsAVentasFactor),
+      // SIN FACTOR. Hasta el 14-ago esto era `× 25` — el mismo invento que se
+      // sacó del score y del reporte, pero acá seguía vivo y se le entregaba
+      // al analista como "ventasDia" de cada producto del top50.
+      resenasNuevasDia: salto ? null : redondear(delta / dias, 2),
       reviewsDelta: delta,
       ventanaDias: Math.round(dias * 10) / 10,
       saltoCatalogo: salto || undefined,
@@ -544,7 +590,10 @@ export async function obtenerProductosUltimoScan(nicho) {
         descuentoPct: s.descuentoPct,
         rating: s.rating,
         numReviews: s.numReviews,
-        ventasDia: velocidadPorSku.get(s.sku)?.ventasDia ?? null,
+        // badge público acumulado de ML, en baldes (25/50/100/500/...): dice
+        // trayectoria del listing, NO ritmo. Ver senalVendidos().
+        vendidos: s.vendidos ?? null,
+        resenasNuevasDia: velocidadPorSku.get(s.sku)?.resenasNuevasDia ?? null,
         reviewsDelta: velocidadPorSku.get(s.sku)?.reviewsDelta ?? null,
         ventanaDias: velocidadPorSku.get(s.sku)?.ventanaDias ?? null,
         saltoCatalogo: velocidadPorSku.get(s.sku)?.saltoCatalogo ?? null,

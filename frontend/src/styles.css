@@ -5123,7 +5123,7 @@ section {
 }
 .op-fila {
   display: grid;
-  grid-template-columns: 30px minmax(140px, 1fr) 34px 96px 76px minmax(120px, 150px) 92px 18px;
+  grid-template-columns: 30px minmax(130px, 1fr) 34px 88px 72px 70px minmax(112px, 145px) 88px 18px;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -5141,6 +5141,19 @@ section {
 .op-fila:hover {
   background: var(--acento-tenue);
 }
+.op-fila-cab,
+.op-fila-cab:hover {
+  min-height: 0;
+  padding: 2px 8px 4px;
+  background: none;
+  cursor: default;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tinta-3);
+  border-bottom: 1px solid var(--borde);
+}
+.op-fila-cab .op-fila-vend { color: var(--tinta-3); font-size: 9.5px; }
 .op-fila:focus-visible {
   outline: 2px solid var(--acento);
   outline-offset: -2px;
@@ -5187,6 +5200,20 @@ section {
   font-size: 12px;
 }
 .op-fila-vol em { font-style: normal; color: var(--tinta-3); font-size: 11px; }
+/* trayectoria: piso de unidades vendidas del top. Deliberadamente más apagado
+   que el volumen de búsqueda — es evidencia de respaldo, no el criterio. */
+.op-fila-vend {
+  color: var(--tinta-2);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.op-vend-parcial {
+  font-style: normal;
+  color: var(--tinta-3);
+  font-size: 9.5px;
+}
 /* silueta del año en miniatura: forma, no números */
 .op-fila-curva {
   display: flex;
@@ -5251,7 +5278,7 @@ section {
 
 @media (max-width: 900px) {
   .op-fila {
-    grid-template-columns: 24px minmax(100px, 1fr) 32px 70px 18px;
+    grid-template-columns: 24px minmax(100px, 1fr) 32px 70px 64px 18px;
   }
   .op-fila-curva,
   .op-fila-ventana,

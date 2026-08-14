@@ -277,6 +277,10 @@ export async function tableroOportunidades({ todos = false } = {}) {
         : null,
       pctFull: ultimo?.metricas?.competencia?.pctFull ?? null,
       sellersUnicos: ultimo?.metricas?.competencia?.sellersUnicos ?? null,
+      // TRAYECTORIA: suma de los badges "+N vendidos" del top. Es un piso
+      // acumulado en baldes gruesos, no un ritmo — va acá para comparar el
+      // tamaño de un nicho contra otro, que es lo único que resuelve bien.
+      vendidosHistoricos: ultimo?.metricas?.vendidosHistoricos ?? null,
       titular: rec.titular ?? null,
       segmento: rec.segmento ?? null,
       // cuánto del top mezclado respalda la jugada, y la búsqueda que la aísla
