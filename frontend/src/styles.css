@@ -5215,6 +5215,7 @@ section {
   white-space: nowrap;
 }
 .op-fila-vend b { font-weight: 600; }
+.op-fila-vend b em { font-style: normal; font-weight: 400; color: var(--tinta-3); }
 .op-vend-barra {
   display: block;
   width: 100%;

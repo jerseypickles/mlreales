@@ -161,7 +161,11 @@ function Trayectoria({ v }) {
       className="op-fila-vend"
       title={`El top vendió al menos ${fmtNum(v.pisoUnidades)} unidades EN TODA SU VIDA — acumulado desde que se publicó cada aviso, no por mes ni por año. Suma de los badges "+N vendidos" de ML.\n\nLa barra: ${pct}% del top (${v.itemsConDato} de ${v.itemsDelScan}) vendió 25 unidades o más alguna vez. ML no muestra badge bajo 25, así que el resto nunca despegó.`}
     >
-      <b>{fmtPiso(v.pisoUnidades)}</b>
+      {/* el ≥ se queda: cada badge dice "al menos N", así que la suma es un piso.
+          Ya no carga el peso de avisar "esto no es una tasa" —de eso se encargan
+          el encabezado y la barra— pero sin él el número mentiría por exceso de
+          precisión. */}
+      <b><em>≥</em>{fmtPiso(v.pisoUnidades)}</b>
       {pct != null ? (
         <i className="op-vend-barra" aria-hidden="true">
           <i style={{ width: `${Math.max(3, pct)}%` }} className={pct < 50 ? 'flojo' : undefined} />
