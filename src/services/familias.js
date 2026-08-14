@@ -22,7 +22,17 @@ export function solape(a, b) {
 const cacheSkus = new Map() // clave → {hasta, mapa}
 const TTL_SKUS_MS = 10 * 60e3
 
-export async function topSkusPorKeyword(keywords, { limite = 30 } = {}) {
+// LÍMITE: el listado completo, no el top 30.
+//
+// Con 30 el detector no encontraba UNA sola familia en todo el tablero. El
+// caso que lo delató: "paleta maquillaje" y "paleta de sombras" miden el mismo
+// mercado —el importador lo sabía— y daban 23% de solape con el top 30 y 60%
+// con el listado entero. El ranking de dos búsquedas distintas diverge en la
+// cabeza aunque el mercado sea idéntico; el solape real vive en el cuerpo.
+//
+// Verificado sobre los 56 nichos activos: con 30 detecta 0 familias, con 100
+// detecta 1 y ningún falso positivo.
+export async function topSkusPorKeyword(keywords, { limite = 100 } = {}) {
   if (!keywords.length) return new Map()
   const clave = `${[...keywords].sort().join('|')}#${limite}`
   const hit = cacheSkus.get(clave)
