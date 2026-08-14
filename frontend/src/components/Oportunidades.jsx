@@ -138,15 +138,35 @@ function fmtPiso(n) {
   return fmtNum(n)
 }
 
+// EL NÚMERO SOLO NO SIRVE: SE LEÍA COMO TASA.
+//
+// Primera versión: "≥8,5k" en una columna llamada "vendidos", justo al lado de
+// "74.000/mes". El importador lo dijo derecho —"siento que se ve como mes o
+// anual"— y tenía razón: dos números seguidos en la misma fila se leen en la
+// misma unidad, por mucho que uno lleve "≥".
+//
+// Se arregla en tres frentes a la vez, porque uno solo no alcanzaba:
+//   · la columna se llama HISTÓRICO, que es la palabra que mata la lectura de ritmo
+//   · el número dice "el top vendió", sujeto explícito: es de las publicaciones,
+//     no del mes
+//   · debajo va una BARRA de proporción — una barra no puede leerse como
+//     unidades por tiempo, y encima muestra el dato que más vale: qué parte del
+//     top despegó (ML no pone badge bajo 25 unidades, así que la barra vacía es
+//     "casi nadie vendió nunca")
 function Trayectoria({ v }) {
   if (!v?.pisoUnidades) return <span className="op-fila-vend" />
+  const pct = v.pctCobertura ?? null
   return (
     <span
       className="op-fila-vend"
-      title={`El top del listado acumula al menos ${fmtNum(v.pisoUnidades)} unidades vendidas en toda su vida (badge "+N vendidos" de ML). Es un piso acumulado, no un ritmo mensual.\n\n${v.pctCobertura}% del top (${v.itemsConDato} de ${v.itemsDelScan}) ha vendido alguna vez 25 unidades o más — ML no muestra el badge por debajo de eso. El resto nunca despegó.`}
+      title={`El top vendió al menos ${fmtNum(v.pisoUnidades)} unidades EN TODA SU VIDA — acumulado desde que se publicó cada aviso, no por mes ni por año. Suma de los badges "+N vendidos" de ML.\n\nLa barra: ${pct}% del top (${v.itemsConDato} de ${v.itemsDelScan}) vendió 25 unidades o más alguna vez. ML no muestra badge bajo 25, así que el resto nunca despegó.`}
     >
-      ≥{fmtPiso(v.pisoUnidades)}
-      {v.pctCobertura != null && v.pctCobertura < 70 ? <i className="op-vend-parcial">·{v.pctCobertura}%</i> : null}
+      <b>{fmtPiso(v.pisoUnidades)}</b>
+      {pct != null ? (
+        <i className="op-vend-barra" aria-hidden="true">
+          <i style={{ width: `${Math.max(3, pct)}%` }} className={pct < 50 ? 'flojo' : undefined} />
+        </i>
+      ) : null}
     </span>
   )
 }
@@ -400,8 +420,8 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
               el importador se detiene a decidir, no la vista de barrido */}
           {o.vendidosHistoricos?.pisoUnidades ? (
             <Hecho etiqueta="el top vendió">
-              <span title={`Suma de los badges "+N vendidos" de ML en el top. ML redondea a baldes (25, 50, 100, 500, 1.000...) y el badge dice "al menos", así que la suma es un piso, no una estimación. Es acumulado de toda la vida de cada publicación: no es un ritmo mensual.`}>
-                al menos {fmtNum(o.vendidosHistoricos.pisoUnidades)} · histórico
+              <span title={`Suma de los badges "+N vendidos" de ML en el top. ML redondea a baldes (25, 50, 100, 500, 1.000...) y el badge dice "al menos", así que la suma es un piso, no una estimación. Cada badge cuenta desde que ESE aviso se publicó, sea hace tres meses o hace cinco años: por eso mezcla edades y no se puede convertir en ritmo.`}>
+                al menos {fmtNum(o.vendidosHistoricos.pisoUnidades)} en toda su vida
                 {o.vendidosHistoricos.pctCobertura != null ? (
                   <i
                     className="op-vend-despegue"
@@ -630,7 +650,7 @@ function GrupoOportunidades({ grupo, filas, children }) {
               encabezado que se fue del viewport no explica nada. */}
           <div className="op-fila op-fila-cab" aria-hidden="true">
             <span /><span>nicho</span><span>score</span><span>búsqueda</span>
-            <span className="op-fila-vend">vendidos</span><span>año</span>
+            <span className="op-fila-vend" title="Unidades que el top acumula desde que se publicó cada aviso. No es por mes ni por año.">histórico</span><span>año</span>
             <span>ventana</span><span>veredicto</span><span />
           </div>
           {children}

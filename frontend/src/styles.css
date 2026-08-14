@@ -5200,20 +5200,40 @@ section {
   font-size: 12px;
 }
 .op-fila-vol em { font-style: normal; color: var(--tinta-3); font-size: 11px; }
-/* trayectoria: piso de unidades vendidas del top. Deliberadamente más apagado
-   que el volumen de búsqueda — es evidencia de respaldo, no el criterio. */
+/* HISTÓRICO: unidades acumuladas del top + barra de cuánto del top despegó.
+   La barra existe para que la columna no se lea como una tasa: el número solo,
+   al lado de "74.000/mes", se leía como si fuera por mes. */
 .op-fila-vend {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
   color: var(--tinta-2);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
 }
-.op-vend-parcial {
-  font-style: normal;
-  color: var(--tinta-3);
-  font-size: 9.5px;
+.op-fila-vend b { font-weight: 600; }
+.op-vend-barra {
+  display: block;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--borde);
+  overflow: hidden;
 }
+.op-vend-barra > i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--exito-tinta);
+  opacity: 0.55;
+}
+/* menos de la mitad del top vendió alguna vez: el nicho puede ser un espejismo */
+.op-vend-barra > i.flojo { background: var(--avisa-tinta); opacity: 0.75; }
+/* en el encabezado la celda es solo texto, sin la columna flex */
+.op-fila-cab .op-fila-vend { display: block; }
 /* silueta del año en miniatura: forma, no números */
 .op-fila-curva {
   display: flex;
