@@ -215,6 +215,18 @@ function extraerSenalPreguntas(snapshots, snapshotsPrevios) {
 //
 // Y como cada balde dice "+N", la suma es un PISO medido, no una estimación:
 // el top vendió al menos eso.
+//
+// LA COBERTURA ES EL DATO, NO EL MARGEN DE ERROR. El balde más chico que
+// existe es 25 y NUNCA aparece uno menor (209 items sondeados, cero por
+// debajo): ML solo muestra el badge cuando la publicación cruzó esas 25
+// unidades. Entonces pctCobertura no es "cuánto alcancé a medir" sino
+// CUÁNTO DEL TOP HA VENDIDO ALGUNA VEZ 25 UNIDADES.
+//
+// Comprobado sobre los 47 nichos de la mesa: la cobertura correlaciona 0,75
+// con el piso (log) y ordena una escalera que un hueco de scraping no podría
+// producir — cobertura <40% ⇒ balde máximo mediano 1.000; cobertura >90% ⇒
+// balde máximo mediano 10.000. Un top con 28% de cobertura no está mal
+// medido: tiene 72% de publicaciones que nunca vendieron 25 unidades.
 function senalVendidos(snapshots) {
   const valores = snapshots.map((s) => s.vendidos).filter(Number.isFinite)
   if (!valores.length) return null

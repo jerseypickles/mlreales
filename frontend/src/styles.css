@@ -5284,3 +5284,6 @@ section {
   .op-fila-ventana,
   .op-fila-ver { display: none; }
 }
+
+/* "X% del top despegó": la cobertura del badge leída como lo que es. */
+.op-vend-despegue { font-style: normal; color: var(--tinta-3); }

@@ -143,10 +143,10 @@ function Trayectoria({ v }) {
   return (
     <span
       className="op-fila-vend"
-      title={`El top del listado acumula al menos ${fmtNum(v.pisoUnidades)} unidades vendidas en toda su vida (badge "+N vendidos" de ML, medido en ${v.itemsConDato} de ${v.itemsDelScan} publicaciones). Es un piso acumulado, no un ritmo mensual.`}
+      title={`El top del listado acumula al menos ${fmtNum(v.pisoUnidades)} unidades vendidas en toda su vida (badge "+N vendidos" de ML). Es un piso acumulado, no un ritmo mensual.\n\n${v.pctCobertura}% del top (${v.itemsConDato} de ${v.itemsDelScan}) ha vendido alguna vez 25 unidades o más — ML no muestra el badge por debajo de eso. El resto nunca despegó.`}
     >
       ≥{fmtPiso(v.pisoUnidades)}
-      {v.pctCobertura != null && v.pctCobertura < 60 ? <i className="op-vend-parcial">·{v.pctCobertura}%</i> : null}
+      {v.pctCobertura != null && v.pctCobertura < 70 ? <i className="op-vend-parcial">·{v.pctCobertura}%</i> : null}
     </span>
   )
 }
@@ -400,9 +400,16 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
               el importador se detiene a decidir, no la vista de barrido */}
           {o.vendidosHistoricos?.pisoUnidades ? (
             <Hecho etiqueta="el top vendió">
-              <span title={`Suma de los badges "+N vendidos" de ML en ${o.vendidosHistoricos.itemsConDato} de ${o.vendidosHistoricos.itemsDelScan} publicaciones del top. ML redondea a baldes (25, 50, 100, 500, 1.000...) y el badge dice "al menos", así que la suma es un piso. Es acumulado de toda la vida de cada publicación: no es un ritmo mensual.`}>
+              <span title={`Suma de los badges "+N vendidos" de ML en el top. ML redondea a baldes (25, 50, 100, 500, 1.000...) y el badge dice "al menos", así que la suma es un piso, no una estimación. Es acumulado de toda la vida de cada publicación: no es un ritmo mensual.`}>
                 al menos {fmtNum(o.vendidosHistoricos.pisoUnidades)} · histórico
-                {o.vendidosHistoricos.pctCobertura != null ? ` (${o.vendidosHistoricos.pctCobertura}% del top medido)` : ''}
+                {o.vendidosHistoricos.pctCobertura != null ? (
+                  <i
+                    className="op-vend-despegue"
+                    title={`El balde más chico de ML es 25: por debajo no muestra badge. Así que este ${o.vendidosHistoricos.pctCobertura}% (${o.vendidosHistoricos.itemsConDato} de ${o.vendidosHistoricos.itemsDelScan}) es la parte del top que vendió 25 unidades o más alguna vez. El resto nunca despegó.`}
+                  >
+                    {' · '}{o.vendidosHistoricos.pctCobertura}% del top despegó
+                  </i>
+                ) : null}
               </span>
             </Hecho>
           ) : null}
