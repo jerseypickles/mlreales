@@ -480,6 +480,61 @@ function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) 
   )
 }
 
+// GRUPOS POR COMPORTAMIENTO DE TEMPORADA.
+//
+// Una lista única de 50 nichos es scroll infinito: obliga a leer todo para
+// encontrar lo que se puede comprar hoy. Agrupando por CUÁNDO se compra, la
+// pregunta se contesta sola — arriba lo que tiene la ventana abierta, después
+// lo que se puede traer cualquier día, y al final lo que hay que esperar.
+//
+// El orden de los grupos ES la prioridad de compra.
+const GRUPOS_OP = [
+  {
+    id: 'ahora',
+    titulo: 'Comprar ahora',
+    sub: 'la ventana está abierta: pidiendo hoy el stock llega para el pico',
+    abierto: true,
+    test: (o) => ['ahora', 'ultimo-mes'].includes(o.ventana?.estado),
+  },
+  {
+    id: 'todo-el-ano',
+    titulo: 'Se venden todo el año',
+    sub: 'sin temporada que perseguir: se compran cuando convenga',
+    abierto: true,
+    test: (o) => (o.ventana?.estado ?? 'sin-temporada') === 'sin-temporada',
+  },
+  {
+    id: 'pronto',
+    titulo: 'Su ventana se acerca',
+    sub: 'todavía no toca pedir, pero falta poco',
+    abierto: false,
+    test: (o) => o.ventana?.estado === 'pronto',
+  },
+  {
+    id: 'espera',
+    titulo: 'Temporada lejana',
+    sub: 'el pico está a varios meses: no hay nada que hacer hoy',
+    abierto: false,
+    test: (o) => ['futura', 'pasada'].includes(o.ventana?.estado),
+  },
+]
+
+function GrupoOportunidades({ grupo, filas, children }) {
+  const [abierto, setAbierto] = useState(grupo.abierto)
+  if (!filas.length) return null
+  return (
+    <section className="op-grupo">
+      <button type="button" className="op-grupo-cab" onClick={() => setAbierto((v) => !v)} aria-expanded={abierto}>
+        <span className={`op-grupo-flecha${abierto ? ' abierto' : ''}`} aria-hidden="true">▸</span>
+        <h3>{grupo.titulo}</h3>
+        <span className="op-grupo-cuenta">{filas.length}</span>
+        <span className="op-grupo-sub">{grupo.sub}</span>
+      </button>
+      {abierto ? <div className="op-lista">{children}</div> : null}
+    </section>
+  )
+}
+
 const FILTROS = [
   ['comprables', 'Comprables ahora', (o) => ['ahora', 'ultimo-mes', 'pronto', 'sin-temporada'].includes(o.ventana?.estado ?? 'sin-temporada')],
   ['buscados', 'Solo búsqueda alta', (o) => o.nivelBusqueda?.nivel === 'alto'],
@@ -562,42 +617,52 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
       ) : !visibles.length ? (
         <p className="vacio">Ninguna oportunidad pasa los filtros.</p>
       ) : (
-        <div className="op-lista">
-          {(() => {
-            const dueno = new Map()
-            const porKeyword = new Map(todas.map((o) => [o.keyword, o]))
-            let rank = 0
-            return visibles.map((o) => {
-              if (o.familiaLider) return null // colapsado bajo su líder
-              rank++
-              let mismaCompraQue = null
-              if (o.productoClave) {
-                if (dueno.has(o.productoClave)) mismaCompraQue = dueno.get(o.productoClave)
-                else dueno.set(o.productoClave, o.keyword)
-              }
-              return (
-                <div key={o.nichoId}>
-                  <CartaOportunidad
-                    o={o}
-                    rank={rank}
-                    onAbrir={onAbrirNicho}
-                    mismaCompraQue={mismaCompraQue}
-                    onRecargar={cargar}
-                  />
-                  {o.familiaMiembros?.length ? (
-                    <FamiliaColapsada
-                      miembros={o.familiaMiembros}
-                      porKeyword={porKeyword}
-                      lider={o}
-                      onAbrir={onAbrirNicho}
-                      onRecargar={cargar}
-                    />
-                  ) : null}
-                </div>
-              )
-            })
-          })()}
-        </div>
+        (() => {
+          const dueno = new Map()
+          const porKeyword = new Map(todas.map((o) => [o.keyword, o]))
+          const sinLider = visibles.filter((o) => !o.familiaLider)
+          let rank = 0
+          const carta = (o) => {
+            rank++
+            let mismaCompraQue = null
+            if (o.productoClave) {
+              if (dueno.has(o.productoClave)) mismaCompraQue = dueno.get(o.productoClave)
+              else dueno.set(o.productoClave, o.keyword)
+            }
+            return (
+              <div key={o.nichoId}>
+                <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} onRecargar={cargar} />
+                {o.familiaMiembros?.length ? (
+                  <FamiliaColapsada miembros={o.familiaMiembros} porKeyword={porKeyword} lider={o} onAbrir={onAbrirNicho} onRecargar={cargar} />
+                ) : null}
+              </div>
+            )
+          }
+          const usados = new Set()
+          const secciones = GRUPOS_OP.map((g) => {
+            const filas = sinLider.filter((o) => !usados.has(o.nichoId) && g.test(o))
+            filas.forEach((o) => usados.add(o.nichoId))
+            return { grupo: g, filas }
+          })
+          const resto = sinLider.filter((o) => !usados.has(o.nichoId))
+          return (
+            <>
+              {secciones.map(({ grupo, filas }) => (
+                <GrupoOportunidades key={grupo.id} grupo={grupo} filas={filas}>
+                  {filas.map(carta)}
+                </GrupoOportunidades>
+              ))}
+              {resto.length ? (
+                <GrupoOportunidades
+                  grupo={{ id: 'resto', titulo: 'Sin temporada medida', sub: 'todavía sin curva de búsqueda: el cron la mide en los próximos días', abierto: false }}
+                  filas={resto}
+                >
+                  {resto.map(carta)}
+                </GrupoOportunidades>
+              ) : null}
+            </>
+          )
+        })()
       )}
 
       <Criterios />

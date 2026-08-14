@@ -5062,3 +5062,55 @@ section {
 .ad-justo { background: var(--avisa-tenue); color: var(--avisa-tinta); }
 .ad-mal { background: color-mix(in srgb, var(--peligro) 12%, transparent); color: var(--peligro); }
 .ad-neutro { background: var(--borde); color: var(--tinta-3); }
+
+/* ── OPORTUNIDADES AGRUPADAS POR TEMPORADA ────────────────────────────────
+   Una lista de 50 nichos obliga a leer todo para encontrar lo comprable hoy.
+   El orden de los grupos ES la prioridad de compra. */
+.op-grupo {
+  margin-bottom: 18px;
+}
+.op-grupo-cab {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 2px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--borde);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  flex-wrap: wrap;
+}
+.op-grupo-cab:hover {
+  border-bottom-color: var(--borde-fuerte);
+}
+.op-grupo-cab h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.op-grupo-flecha {
+  color: var(--tinta-3);
+  transition: transform 150ms ease;
+  display: inline-block;
+}
+.op-grupo-flecha.abierto {
+  transform: rotate(90deg);
+}
+.op-grupo-cuenta {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--acento-tenue);
+  color: var(--acento);
+}
+.op-grupo-sub {
+  font-size: 12px;
+  color: var(--tinta-3);
+  flex: 1 1 100%;
+}
+.op-grupo .op-lista {
+  margin-top: 12px;
+}
