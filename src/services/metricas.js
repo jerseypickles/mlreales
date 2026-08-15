@@ -247,6 +247,19 @@ function senalVendidos(snapshots) {
   }
 }
 
+// TARIFA DE FULL POR TRAMO, medida el 15-ago contra /users/{id}/shipping_options/free
+// para la cuenta del importador (peso facturable 2 kg):
+//   hasta $9.989 → $869,4   ·   $9.990-$19.989 → $1.079,4   ·   $19.990+ → $3.600
+// Los saltos son duros: un producto a $19.990 paga $2.520 más de envío que uno
+// a $19.989. Por eso el mejor tramo de toda la curva es $12.000-$19.989, donde
+// ML se queda con 22-23% contra el 46% que se lleva de un producto de $2.990.
+export function envioFullPorTramo(precioClp) {
+  if (!Number.isFinite(precioClp)) return 0
+  if (precioClp >= 19_990) return 3600
+  if (precioClp >= 9990) return 1079.4
+  return 869.4
+}
+
 // PROFUNDIDAD DE STOCK DEL TOP — cuánto le queda a la competencia.
 //
 // ML pone "últimas N unidades" en el listado cuando al vendedor le quedan 5 o
@@ -338,6 +351,12 @@ export function calcularScoreOportunidad({
   calidad,
   nivelBusqueda = null,
   busquedasMes = null,
+  // ratio pico/promedio de la curva anual de Google Trends (services/estacionalidad.js)
+  ratioPico = null,
+  // señal de baldes "+N vendidos": de acá sale el muro del líder
+  vendidosHistoricos = null,
+  // lo que queda de una venta a la mediana del nicho tras comisión y envío Full
+  contribucionUnidad = null,
 }) {
   // LA DEMANDA SE MIDE, NO SE INVENTA.
   //
@@ -359,26 +378,69 @@ export function calcularScoreOportunidad({
   const respaldo = Number.isFinite(conFull) ? clamp(conFull / escalas.sellersFullPlenos, 0, 1) : 0
   const componenteDemanda = clamp(porBusqueda * (1 + escalas.pesoRespaldoFull * respaldo), 0, 100)
   const componenteCompetencia = clamp(100 - (competencia.concentracionTop3Pct ?? 100), 0, 100)
-  // misma filosofía que minItemsDemanda: con pocos productos calificados el
-  // promedio no prueba nada (dos ratings 5.0 de 3 reseñas marcan "calidad 0"
-  // falso) — mejor neutro que extremo con evidencia fina
-  const rating = calidad.ratingPromedio
-  const ratingsSuficientes = (calidad.itemsConRating ?? 0) >= (umbrales.minItemsCalidad ?? 0)
-  const componenteCalidad =
-    Number.isFinite(rating) && ratingsSuficientes
-      ? clamp(
-          ((umbrales.ratingDiferenciacion - rating) / (umbrales.ratingDiferenciacion - umbrales.ratingPiso)) * 100,
-          0,
-          100,
-        )
-      : 50 // sin ratings (o muy pocos): neutro
-  const componenteFull = clamp(100 - (competencia.pctFull ?? 0), 0, 100)
+
+  // CONSTANCIA — ¿vende todo el año o solo en su pico?
+  //
+  // Usa el ratio medido con Google Trends (pico / promedio de 5 años), no la
+  // etiqueta: entre "estacional" con ratio 2,1 y otro con 5,3 hay un abismo de
+  // negocio. Un estacional te deja el capital dormido 10 meses y su stock
+  // sobrante paga bodega Full todo ese tiempo; uno plano rota 4 o 5 veces al año.
+  //
+  // Sin ratio medido queda neutro: no se castiga por no haber medido todavía.
+  const componenteConstancia = Number.isFinite(ratioPico)
+    ? clamp((escalas.ratioPlano / ratioPico) * 100, 0, 100)
+    : 50
+
+  // ENTRADA — ¿puedo entrar, y puedo diferenciarme?
+  //
+  // Dos muros distintos, ambos medidos:
+  //   · el líder: lo que lleva vendido la publicación más fuerte. En ML lo que
+  //     se acumula es POR PUBLICACIÓN (reseñas → posición → ventas → reseñas),
+  //     así que entrar a un nicho cuyo #1 lleva 50.000 unidades es escalar un
+  //     cerro con el volante girando en contra.
+  //   · el catálogo: donde todos los vendedores comparten la MISMA página, no
+  //     existe diferenciarse por fotos, título ni descripción — solo por precio
+  //     y logística. Medido en la mesa: la mayoría de los nichos son 80-100%
+  //     catálogo, y "pastillas de freno" es 0%.
+  const muro = vendidosHistoricos?.maximoPorItem
+  const porMuro = Number.isFinite(muro)
+    ? clamp(
+        100 *
+          (1 -
+            Math.log10(Math.max(muro, escalas.muroMinimo) / escalas.muroMinimo) /
+              Math.log10(escalas.muroTecho / escalas.muroMinimo)),
+        0,
+        100,
+      )
+    : 50
+  const porCatalogo = Number.isFinite(competencia.pctCatalogo) ? 100 - competencia.pctCatalogo : 50
+  const componenteEntrada = (porMuro + porCatalogo) / 2
+
+  // ECONOMÍA — ¿la venta paga lo que cuesta comprar el cliente?
+  //
+  // Full cobra un envío FIJO (~$870 bajo $9.990, $1.079 hasta $19.989, $3.600
+  // arriba — medido contra la API de ML), así que el mismo costo logístico se
+  // come el 29% de un producto de $2.990 y el 5% de uno de $19.989.
+  //
+  // Contra eso va el CAC medido en la cuenta propia: $1.717 por unidad. En
+  // brochas de $2.990 la contribución es $1.612 — comprar una venta DEJA $105
+  // en negativo, y no hay configuración de publicidad que lo arregle. En un
+  // nicho de $17.990 la misma venta deja +$12.135.
+  const componenteEconomia = Number.isFinite(contribucionUnidad)
+    ? clamp(
+        (100 * Math.log10(Math.max(contribucionUnidad / escalas.cacClp, 1))) /
+          Math.log10(escalas.cacVecesPlenas),
+        0,
+        100,
+      )
+    : 50
 
   const bruto = Math.round(
     pesos.demanda * componenteDemanda +
-      pesos.competencia * componenteCompetencia +
-      pesos.calidad * componenteCalidad +
-      pesos.full * componenteFull,
+      pesos.constancia * componenteConstancia +
+      pesos.entrada * componenteEntrada +
+      pesos.economia * componenteEconomia +
+      pesos.competencia * componenteCompetencia,
   )
 
   // un nicho que nadie busca puede sacar 82 y sentarse arriba de la lista: el
@@ -394,9 +456,10 @@ export function calcularScoreOportunidad({
       : {}),
     componentes: {
       demanda: Math.round(componenteDemanda),
+      constancia: Math.round(componenteConstancia),
+      entrada: Math.round(componenteEntrada),
+      economia: Math.round(componenteEconomia),
       competencia: Math.round(componenteCompetencia),
-      calidad: Math.round(componenteCalidad),
-      full: Math.round(componenteFull),
     },
   }
 }
@@ -413,6 +476,8 @@ export function calcularMetricas({
   topN = 50,
   snapshotsPrevios = null,
   nivelBusqueda = null,
+  // forma del año medida con Trends: alimenta el componente `constancia`
+  ratioPico = null,
 }) {
   const top = [...snapshots]
     .sort((a, b) => (a.posicion ?? Infinity) - (b.posicion ?? Infinity))
@@ -519,6 +584,12 @@ export function calcularMetricas({
       }
       return c.size ? Object.fromEntries([...c].sort((a, b) => b[1] - a[1])) : undefined
     })(),
+    // CUÁNTO DEL TOP ES CATÁLOGO. En una publicación de catálogo todos los
+    // vendedores comparten la MISMA página: mismas fotos, mismo título, misma
+    // descripción. Ahí no existe diferenciarse — ML elige ganador por precio,
+    // reputación y logística. Medido en la mesa: la mayoría de los nichos van
+    // de 80% a 100% de catálogo, y "pastillas de freno" es 0%.
+    pctCatalogo: pct(top.filter((s) => productosPorSku.get(s.sku)?.tipoListing === 'catalogo').length),
     pctEnvioRapido: pct(rapido),
     topSellers: vendedoresOrdenados
       .slice(0, 5)
@@ -534,7 +605,29 @@ export function calcularMetricas({
   }
 
   const demanda = calcularDemanda(top, snapshotsPrevios)
-  const oportunidad = calcularScoreOportunidad({ demanda, competencia, calidad, nivelBusqueda, busquedasMes })
+  const vendidosHist = senalVendidos(top)
+  // LO QUE QUEDA DE UNA VENTA AL PRECIO MEDIANO DEL NICHO.
+  //
+  // Aproximación deliberada, no contabilidad: comisión Premium (17%, verificada
+  // contra /sites/MLC/listing_prices — gold_pro 17%, gold_special 13%) más el
+  // envío Full por tramo, medido contra la API de ML para la cuenta propia.
+  // El detalle exacto por categoría vive en comisionesMl.js y margen.js; acá
+  // solo hace falta el orden de magnitud para saber si la publicidad puede
+  // pagarse en este nicho.
+  const medianaPrecio = percentil(precios, 50)
+  const contribucionUnidad = Number.isFinite(medianaPrecio)
+    ? medianaPrecio - medianaPrecio * 0.17 - envioFullPorTramo(medianaPrecio)
+    : null
+  const oportunidad = calcularScoreOportunidad({
+    demanda,
+    competencia,
+    calidad,
+    nivelBusqueda,
+    busquedasMes,
+    ratioPico,
+    vendidosHistoricos: vendidosHist,
+    contribucionUnidad,
+  })
 
   return {
     universo: {
@@ -558,7 +651,7 @@ export function calcularMetricas({
     calidad,
     // fuera de `demanda` a propósito: no es una tasa y no depende del nivel 2,
     // así que sobrevive aunque la demanda quede en null por poca cobertura
-    vendidosHistoricos: senalVendidos(top),
+    vendidosHistoricos: vendidosHist,
     // cuánto le queda a la competencia: la otra cara del vendidosHistoricos
     profundidadStock: profundidadStock(top),
     demanda, // null mientras el detalle no traiga conteo de reseñas suficiente
@@ -782,7 +875,9 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   let curvaNicho = null
   try {
     const { CurvaEstacional } = await import('../models/CurvaEstacional.js')
-    curvaNicho = await CurvaEstacional.findOne({ keyword: nicho.keyword }).select('busquedasMes').lean()
+    curvaNicho = await CurvaEstacional.findOne({ keyword: nicho.keyword })
+      .select('busquedasMes ratioPico')
+      .lean()
   } catch {
     // sin curva el score queda null hasta que el cron la mida: mejor sin score
     // que con uno inventado
@@ -796,6 +891,7 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
     snapshotsPrevios,
     nivelBusqueda: nicho.nivelBusqueda ?? null,
     busquedasMes: curvaNicho?.busquedasMes ?? null,
+    ratioPico: curvaNicho?.ratioPico ?? null,
   })
   const gemelos = detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPrevios })
   if (gemelos) metricas.competencia.sellersGemelos = gemelos

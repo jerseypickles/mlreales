@@ -71,9 +71,19 @@ APRENDE DEL HISTORIAL del importador (te lo paso con resultados):
 PORTAFOLIO DIVERSIFICADO (regla dura):
 - El tablero es un portafolio de apuestas, no un embudo: de tus keywords, máximo 2 pueden ser vecinas de nichos ya existentes; todas las demás deben abrir categorías que el tablero NO cubre todavía.
 - Te paso las verticales saturadas del tablero: ninguna keyword tuya puede contener esas palabras.
-- Recorre verticales distintas en cada pasada: cocina/electrohogar (hornos eléctricos, hervidores, sandwicheras), clima de la temporada próxima (ventilador, enfriador portátil para el verano que viene), aparatos de belleza y cuidado personal, deporte/outdoor, mascotas, bebé/niños, organización del hogar, viaje, herramientas.
+- Recorre verticales distintas en cada pasada: cocina/electrohogar (hornos eléctricos, hervidores, sandwicheras), aparatos de belleza y cuidado personal, mascotas, organización del hogar, herramientas y repuestos, salud y bienestar, oficina/tecnología del hogar, bebé/niños, deporte, viaje, y clima de la temporada próxima.
 
-Entrega 8-12 keywords variadas: prioriza adyacencias al historial, y completa con temporada próxima (comprable ya) y tendencias emergentes. Keywords cortas y naturales (2-4 palabras), tal como las tipearía un comprador chileno en el buscador — el sistema las valida contra el autocompletado real de ML y descarta las que nadie escribe, así que no inventes frases descriptivas largas.`
+TODO EL AÑO PRIMERO (regla dura, y es la que más importa):
+- MÍNIMO 6 de cada 10 keywords deben ser tipo "todo_el_año": productos que se compran los 12 meses sin depender de una fecha. Los estacionales son el COMPLEMENTO, no la base.
+- El porqué es de negocio, no de gusto: un estacional deja el capital dormido 10 meses, su stock sobrante paga bodega Full todo ese tiempo, y si se pierde la ventana hay que esperar un año entero. Un producto plano rota el capital 4 o 5 veces al año, y con un margen mucho menor rinde más. Además mantiene la cuenta vendiendo siempre, que es lo que sostiene la posición en el buscador.
+- Este tablero está desbalanceado hacia lo estacional y hay que corregirlo, así que ante la duda propone lo plano.
+
+FILTROS DE NEGOCIO (aplícalos antes de proponer):
+- TICKET: apunta a productos cuyo precio de venta en Chile esté entre $12.000 y $19.989. Full cobra un envío FIJO de ~$870-$1.079, así que en un producto de $3.000 la logística se come el 29% y en uno de $18.000 solo el 6%. Bajo $10.000 la publicidad no puede ser rentable: cuesta ~$1.700 comprar un cliente. NO propongas productos que en Chile se vendan bajo $8.000. Evita justo $19.990 y $9.990: ahí saltan las tarifas de envío.
+- DIFERENCIABLE: prefiere productos genéricos sin marca dominante, donde cada vendedor publica su propia ficha con sus propias fotos. Evita categorías donde ML arma catálogo único por modelo (electrodomésticos de marca, tecnología, productos con número de modelo), porque ahí todos comparten la misma página y solo se compite por precio.
+- LIVIANO PARA SU PRECIO: el flete desde China se paga por volumen. Prefiere valor alto en poco espacio; evita muebles, cosas infladas de aire y cajas grandes de bajo precio.
+
+Entrega 8-12 keywords variadas, con al menos 6 de cada 10 de tipo todo_el_año. Keywords cortas y naturales (2-4 palabras), tal como las tipearía un comprador chileno en el buscador — el sistema las valida contra el autocompletado real de ML y descarta las que nadie escribe, así que no inventes frases descriptivas largas.`
 
 // Pasillos donde el importador ya vende con su cuenta: la evidencia más dura
 // que existe — el radar profundiza estos en vez de solo diversificar lejos.

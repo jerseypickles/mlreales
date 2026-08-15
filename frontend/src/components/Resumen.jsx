@@ -9,9 +9,10 @@ import { fmtNum, fmtPrecio, fmtPct } from '../lib/formato.js'
 // mediocres con volumen (entra con algo mejor)
 const COMPONENTES_SCORE = [
   ['demanda', 'Demanda', 'Búsquedas reales al mes en Chile (Google Ads), levantada por cuántos vendedores distintos inmovilizaron stock en Full. Ya NO se estima desde reseñas × factor.'],
+  ['constancia', 'Constancia', 'Qué tan plano es el año (Google Trends, 5 años). 100 = vende los 12 meses y el capital rota varias veces; 25 = un pico y 10 meses de stock durmiendo y pagando bodega Full.'],
+  ['entrada', 'Entrada', 'Si se puede entrar y diferenciarse: cuánto lleva vendido el líder del nicho (en ML lo que se acumula es por publicación) y cuánto del top es catálogo, donde todos comparten la misma página y solo se compite por precio.'],
+  ['economia', 'Economía', 'Si la venta paga lo que cuesta comprar un cliente. Full cobra envío fijo (~$870-$1.079), así que en un producto de $3.000 la logística se lleva 29% y en uno de $18.000 solo 6%. 0 = la publicidad no puede ser rentable a ese precio.'],
   ['competencia', 'Competencia', 'Espacio fuera del top 3 de sellers: 0 = mercado concentrado'],
-  ['calidad', 'Calidad', 'Espacio para diferenciarte por producto: 0 = todos tienen rating ≥4.4 (se compite por precio/Full), 100 = ratings mediocres con volumen'],
-  ['full', 'Full', 'Espacio sin Mercado Envíos Full: 0 = todos usan Full'],
 ]
 
 function ScoreHero({ score, componentes }) {

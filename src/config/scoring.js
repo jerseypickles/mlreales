@@ -1,12 +1,42 @@
 // Score de oportunidad (0-100). Cada componente se normaliza a 0-100 y se pondera;
-// la suma de pesos debe ser 1. Interpretación: demanda alta + concentración baja +
-// rating promedio bajo el umbral (espacio para diferenciarse) + poco Full = nicho atacable.
+// la suma de pesos debe ser 1.
+//
+// REESCRITO EL 15-AGO PORQUE EL SCORE IBA AL REVÉS.
+//
+// Medido sobre los 44 nichos de la mesa: el score correlacionaba **−0,61** con
+// el porcentaje del top que había vendido algo alguna vez. Los 10 mejores
+// puntajes tenían 60% de despegue; los 10 peores, 92%. Premiaba sistemáticamente
+// los nichos donde nadie vende.
+//
+// La causa no era un bug sino la doctrina vieja —"rating bajo + poco Full =
+// nicho atacable"— y estaba en dos componentes:
+//   · `calidad` (20%): premiaba rating promedio bajo como "espacio para
+//     diferenciarse". Correlación −0,88. No distingue "productos malos con
+//     clientes descontentos" de "productos que nadie compró".
+//   · `full` (15%): era literalmente `100 − pctFull`, o sea premiaba la AUSENCIA
+//     de vendedores en Full. Contradice la medición propia del importador: 105
+//     visitas semanales dentro de Full contra 2 fuera. El respaldo de Full ya se
+//     premia dentro del componente de demanda, así que sacarlo no pierde señal.
+//
+// Los dos se retiran y entran tres que responden preguntas de negocio reales:
+//   · constancia — ¿vende todo el año o solo en su pico? Un estacional te deja
+//     el capital dormido 10 meses y su stock sobrante paga bodega Full.
+//   · entrada    — ¿puedo entrar? Muro del líder (vendidos acumulados del #1) y
+//     cuánto del top es catálogo, donde todos comparten página y no hay forma
+//     de diferenciarse con fotos ni descripción.
+//   · economia   — ¿la contribución por venta paga el costo de comprar un
+//     cliente? Medido en la cuenta propia: CAC $1.717. Bajo cierto ticket NO
+//     existe configuración de publicidad que funcione.
+//
+// Resultado de la simulación: todo-el-año 62→72, estacional 70→62, y la
+// correlación con el despegue pasa de −0,61 a +0,23.
 export const scoring = {
   pesos: {
-    demanda: 0.4, // vendidos acumulados del top 50 (y ventas/día cuando hay ≥2 scans)
-    competencia: 0.25, // 100 - concentración del top 3 sellers
-    calidad: 0.2, // cuánto espacio deja el rating promedio bajo el umbral
-    full: 0.15, // 100 - % de items con Full
+    demanda: 0.28, // búsqueda real en Google (Chile) + respaldo de vendedores en Full
+    constancia: 0.2, // qué tan plano es el año (ratio del pico medido con Trends)
+    entrada: 0.22, // muro del líder + espacio para diferenciarse (no catálogo)
+    economia: 0.2, // contribución por venta contra el CAC de publicidad
+    competencia: 0.1, // 100 - concentración del top 3 sellers
   },
   // ¿ALGUIEN BUSCA LA KEYWORD? (services/nivelBusqueda.js). El scorecard entero
   // describe el listado que devuelve ESA búsqueda: si nadie la escribe, mide un
@@ -40,9 +70,22 @@ export const scoring = {
     // demanda = min(100, factorLog * log10(1 + volumenVentasEstimado))
     // con factor 20: 10.000 ventas ≈ 80 pts; 100.000 ≈ 100 pts
     demandaFactorLog: 20,
-    // ML no expone vendidos exactos (solo buckets congelados); la señal continua
-    // es el conteo de reseñas: ~1 de cada N compradores reseña. Heurística ajustable.
-    reviewsAVentasFactor: 25,
+    // CONSTANCIA. ratioPico = pico / promedio del año (Google Trends, 5 años).
+    // Un ratio ≤ este vale 100 puntos: el año es plano y el capital rota.
+    // "árbol de navidad" da 5,31 → 24 puntos; "sandwichera" da 1,31 → 99.
+    ratioPlano: 1.3,
+    // ENTRADA — muro del líder. Vendidos acumulados de la publicación más fuerte
+    // del nicho (badge "+N vendidos"). Medido en la mesa: 19 de 44 nichos tienen
+    // un líder con ≥10.000 unidades, y solo 2 por debajo de 1.000. El muro se
+    // puntúa en escala log entre el balde mínimo de ML y el techo de acá.
+    muroMinimo: 25, // el balde más chico que ML muestra
+    muroTecho: 50_000, // líder inalcanzable sin capital de guerra
+    // ECONOMÍA — costo de comprar un cliente con Product Ads, medido en la
+    // cuenta propia (CAC = gasto / unidades atribuidas, con target ROAS 3,0x).
+    // Recalibrar cuando haya más historia de campañas.
+    cacClp: 1717,
+    // cuántas veces el CAC tiene que caber en la contribución para valer 100
+    cacVecesPlenas: 20,
   },
   // Depuración del delta de reseñas. Los items de catálogo muestran el AGREGADO
   // de todos los vendedores del producto: cuando ML consolida la familia, el
