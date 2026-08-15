@@ -95,6 +95,31 @@ export function calcularDescuentoPct(precio, precioAnterior) {
   return Math.round(((precioAnterior - precio) / precioAnterior) * 1000) / 10
 }
 
+// EL STOCK DEL COMPETIDOR, DICHO POR ML.
+//
+// El campo `highlight` del actor trae el badge de escasez del listado y se
+// estaba botando entero. Valores medidos en 240 items: "¡ÚLTIMA! | ÚLTIMA
+// UNIDAD" y "ÚLTIMAS 2/3/4/5 | ÚLTIMAS UNIDADES" — nunca un número mayor a 5.
+// O sea que ML lo muestra solo cuando quedan 5 o menos: la ausencia del badge
+// significa "más de 5", no "sin dato".
+//
+// Es stock AJENO, del vendedor de enfrente. No toca el inventario propio, que
+// lo lleva el importador a mano.
+//
+// El mismo campo trae además el sello de ML ("MÁS VENDIDO") y las ofertas
+// ("OFERTA IMPERDIBLE", "OFERTA RELÁMPAGO"), que se guardan aparte.
+export function parsearDestacado(valor) {
+  const s = String(valor ?? '').trim()
+  if (!s) return { unidadesRestantes: null, sello: null }
+  const up = s.toUpperCase()
+  if (up.includes('ÚLTIMA') || up.includes('ULTIMA')) {
+    const m = up.match(/ÚLTIMAS?\s*(\d+)/) ?? up.match(/ULTIMAS?\s*(\d+)/)
+    // "¡ÚLTIMA! | ÚLTIMA UNIDAD" no lleva número: es una sola
+    return { unidadesRestantes: m ? Number(m[1]) : 1, sello: null }
+  }
+  return { unidadesRestantes: null, sello: s.split('|')[0].trim() || null }
+}
+
 export function normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal } = {}) {
   if (!raw || typeof raw !== 'object') return null
   const sku = extraerSku(raw)
@@ -108,6 +133,7 @@ export function normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal } =
 
   const imagen =
     typeof raw.imgDireccion === 'string' && raw.imgDireccion.startsWith('http') ? raw.imgDireccion : null
+  const destacado = parsearDestacado(raw.highlight)
 
   const producto = {
     sku,
@@ -123,6 +149,16 @@ export function normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal } =
     esTiendaOficial: Boolean(raw.esTiendaOficial),
     esFull: envio.esFull,
     envioRapido: envio.envioRapido,
+    // COMPETENCIA QUE IMPORTA DIRECTO. Medido: 5 de 48 en brochas de maquillaje
+    // despachan desde China —el producto propio del importador, y ahí se explica
+    // parte de la presión de precio— contra 0 de 48 en pastillas de freno.
+    //
+    // El campo YA EXISTÍA pero se llenaba solo desde el nivel 2, que corre sobre
+    // una fracción del listado por presupuesto. El nivel 1 lo trae para el 100%
+    // de los items, gratis. Si después el detalle lo contradice, gana el detalle:
+    // persistencia.js lo pisa cuando el nivel 2 trae valor.
+    origenCrossBorder: Boolean(raw.esCompraInternacional),
+    origenEnvio: raw.envioDesde || null, // "China", "USA"
   }
 
   const snapshot = {
@@ -139,6 +175,10 @@ export function normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal } =
     // pasar por el detalle. Ver senalVendidos() en metricas.js: es un balde
     // acumulado, no una tasa, y se usa solo para comparar tamaño entre nichos.
     vendidos: parsearNumero(raw.cantidadVendida),
+    // 1..5 cuando ML muestra "últimas N unidades"; null = más de 5 (o sin dato).
+    // Va en el snapshot y no en el producto porque cambia en cada scan.
+    unidadesRestantes: destacado.unidadesRestantes,
+    selloMl: destacado.sello, // "MÁS VENDIDO", "OFERTA IMPERDIBLE", …
     stock: null, // Fase 2
     // itemPosition del actor reinicia en cada página; el orden del dataset es la posición global
     posicion: posicionGlobal ?? parsearNumero(raw.itemPosition),

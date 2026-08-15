@@ -16,7 +16,10 @@ const productoSchema = new mongoose.Schema({
   // logistic_type exacto de la API oficial para items de catálogo (fulfillment/xd_drop_off/…)
   logisticaMl: { type: String, default: null },
   envioRapido: { type: Boolean, default: false },
-  origenCrossBorder: { type: Boolean, default: false }, // despachado desde China (nivel 2)
+  // despacha desde el extranjero. Lo llenaba solo el nivel 2 (fracción del
+  // listado); desde el 15-ago también el nivel 1, que lo trae para el 100%
+  origenCrossBorder: { type: Boolean, default: false },
+  origenEnvio: { type: String, default: null }, // "China", "USA" (nivel 1)
   imagen: String, // thumbnail de ML (nivel 2)
   reputacionSeller: String, // ej "5_green" (nivel 2)
   powerSeller: String, // "platinum" | "gold" | "silver" (nivel 2)

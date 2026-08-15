@@ -247,6 +247,35 @@ function senalVendidos(snapshots) {
   }
 }
 
+// PROFUNDIDAD DE STOCK DEL TOP — cuánto le queda a la competencia.
+//
+// ML pone "últimas N unidades" en el listado cuando al vendedor le quedan 5 o
+// menos (medido en 240 items: los valores van de 1 a 5 y nunca más). Igual que
+// con el badge de vendidos, la AUSENCIA es información: significa "más de 5",
+// no "sin dato". Así que pctEnUltimas se lee limpio como "qué parte del top
+// está por agotarse".
+//
+// Lo que destapó al medirlo: pastillas de freno tenía 32 de 48 publicaciones
+// en últimas unidades y 97 unidades visibles en toda su primera plana, contra
+// 2 de 48 en toallitas húmedas. No es un nicho chico — es uno desabastecido, y
+// eso para un importador es lo contrario de un problema.
+//
+// unidadesVisibles suma SOLO los que muestran el badge. No es el stock del
+// nicho ni un piso de él: de los que no lo muestran no sabemos nada salvo que
+// tienen más de 5. Jamás presentarlo como "el nicho tiene N unidades".
+function profundidadStock(snapshots) {
+  const conBadge = snapshots.filter((s) => Number.isFinite(s.unidadesRestantes))
+  if (!snapshots.length) return null
+  return {
+    itemsPorAgotarse: conBadge.length,
+    itemsDelScan: snapshots.length,
+    pctEnUltimas: redondear((conBadge.length / snapshots.length) * 100, 0),
+    unidadesVisibles: conBadge.reduce((a, s) => a + s.unidadesRestantes, 0),
+    // sello propio de ML sobre el listado; "MÁS VENDIDO" es el que interesa
+    masVendidos: snapshots.filter((s) => s.selloMl === 'MÁS VENDIDO').length,
+  }
+}
+
 // reseñas nuevas en la ventana: lo único que se cuenta de verdad.
 export function calcularDemanda(
   snapshots,
@@ -477,6 +506,19 @@ export function calcularMetricas({
     pctFull: conDatoFull > 0 ? pct(full, conDatoFull) : null,
     itemsConDatoFull: conDatoFull,
     sellersConFull: vendedoresConFull.size,
+    // COMPETENCIA QUE IMPORTA DIRECTO. Antes solo lo sabía el nivel 2 sobre una
+    // fracción del listado; desde el 15-ago el nivel 1 lo trae para el 100%.
+    // Para un importador cambia la lectura del nicho: donde ya hay chinos
+    // despachando directo, la ventaja de costo puesto se evapora.
+    pctCrossBorder: pct(top.filter((s) => productosPorSku.get(s.sku)?.origenCrossBorder).length),
+    origenesCrossBorder: (() => {
+      const c = new Map()
+      for (const s of top) {
+        const o = productosPorSku.get(s.sku)?.origenEnvio
+        if (o) c.set(o, (c.get(o) ?? 0) + 1)
+      }
+      return c.size ? Object.fromEntries([...c].sort((a, b) => b[1] - a[1])) : undefined
+    })(),
     pctEnvioRapido: pct(rapido),
     topSellers: vendedoresOrdenados
       .slice(0, 5)
@@ -517,6 +559,8 @@ export function calcularMetricas({
     // fuera de `demanda` a propósito: no es una tasa y no depende del nivel 2,
     // así que sobrevive aunque la demanda quede en null por poca cobertura
     vendidosHistoricos: senalVendidos(top),
+    // cuánto le queda a la competencia: la otra cara del vendidosHistoricos
+    profundidadStock: profundidadStock(top),
     demanda, // null mientras el detalle no traiga conteo de reseñas suficiente
     oportunidad, // { score, componentes } | null
     scoreOportunidad: oportunidad?.score ?? null,

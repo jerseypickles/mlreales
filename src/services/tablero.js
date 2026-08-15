@@ -309,6 +309,10 @@ export async function tableroOportunidades({ todos = false } = {}) {
       // acumulado en baldes gruesos, no un ritmo — va acá para comparar el
       // tamaño de un nicho contra otro, que es lo único que resuelve bien.
       vendidosHistoricos: ultimo?.metricas?.vendidosHistoricos ?? null,
+      // qué parte del top está por agotarse, y quién despacha desde el extranjero
+      profundidadStock: ultimo?.metricas?.profundidadStock ?? null,
+      pctCrossBorder: ultimo?.metricas?.competencia?.pctCrossBorder ?? null,
+      origenesCrossBorder: ultimo?.metricas?.competencia?.origenesCrossBorder ?? null,
       // {publicaciones, activas, unidades30d} si ya tengo listing en este nicho
       mios: propiosPorNicho.get(String(n._id)) ?? null,
       titular: rec.titular ?? null,

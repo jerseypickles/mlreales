@@ -12,7 +12,12 @@ const snapshotSchema = new mongoose.Schema({
   cuotas: String,
   rating: Number,
   numReviews: Number,
-  vendidos: Number, // Fase 2 (nivel 2)
+  vendidos: Number, // badge público "+N vendidos", en baldes (nivel 1)
+  // "últimas N unidades" del listado: 1..5, o null si ML no lo muestra (= más
+  // de 5). Es el stock del COMPETIDOR, no el propio. Ojo strict mode: sin
+  // declararlo acá Mongoose lo descarta en silencio, como pasó con promoMl.
+  unidadesRestantes: Number,
+  selloMl: String, // "MÁS VENDIDO", "OFERTA IMPERDIBLE", "OFERTA RELÁMPAGO"
   stock: Number, // Fase 2 (nivel 2)
   posicion: Number,
   keyword: String,

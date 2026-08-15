@@ -455,6 +455,24 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
               {o.mios.unidades30d > 0 ? ` · ${o.mios.unidades30d} u. en 30 días` : ' · sin ventas en 30 días'}
             </Hecho>
           ) : null}
+          {/* cuánto le queda a la competencia. Un pct alto no es un riesgo: es
+              un nicho desabastecido, o sea una ventana para quien trae stock */}
+          {o.profundidadStock?.itemsPorAgotarse ? (
+            <Hecho etiqueta="por agotarse">
+              <span title={`${o.profundidadStock.itemsPorAgotarse} de ${o.profundidadStock.itemsDelScan} publicaciones del top muestran "últimas unidades". ML solo pone ese aviso cuando quedan 5 o menos, así que el resto tiene más de 5.\n\nEntre las avisadas quedan ${o.profundidadStock.unidadesVisibles} unidades. Eso NO es el stock del nicho: de las demás no se sabe.`}>
+                {o.profundidadStock.pctEnUltimas}% del top
+                {o.profundidadStock.pctEnUltimas >= 40 ? ' · desabastecido' : ''}
+              </span>
+            </Hecho>
+          ) : null}
+          {o.pctCrossBorder ? (
+            <Hecho etiqueta="importan directo">
+              <span title={`${Math.round(o.pctCrossBorder)}% del top despacha desde el extranjero${o.origenesCrossBorder ? ` (${Object.entries(o.origenesCrossBorder).map(([k, v]) => `${k}: ${v}`).join(', ')})` : ''}. Doble filo: prueba de que el producto se importa bien, y a la vez rival con tu misma estructura de costo.`}>
+                {Math.round(o.pctCrossBorder)}%
+                {o.origenesCrossBorder ? ` · ${Object.keys(o.origenesCrossBorder).join('/')}` : ''}
+              </span>
+            </Hecho>
+          ) : null}
           <Hecho etiqueta="mediana">{o.mediana ? fmtPrecio(o.mediana) : null}</Hecho>
           <Hecho etiqueta="Full">{o.pctFull != null ? `${Math.round(o.pctFull)}%` : null}</Hecho>
           <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
