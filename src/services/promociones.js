@@ -12,17 +12,27 @@ export async function promocionesDeItem(itemId) {
     const activa = lista.find((p) => p.status === 'started') ?? null
     const candidatas = lista.filter((p) => p.status === 'candidate')
     const oferta = candidatas.find((p) => p.type === 'PRICE_DISCOUNT') ?? null
+    const resumir = (p) => ({
+      id: p.id ?? null,
+      tipo: p.type,
+      nombre: p.name || p.type,
+      precio: p.price ?? null,
+      precioOriginal: p.original_price ?? null,
+      empiezaEl: p.start_date ?? null,
+      terminaEl: p.finish_date ?? null,
+    })
     return {
-      activa: activa
-        ? {
-            id: activa.id ?? null,
-            tipo: activa.type,
-            nombre: activa.name || activa.type,
-            precio: activa.price ?? null,
-            precioOriginal: activa.original_price ?? null,
-            terminaEl: activa.finish_date ?? null,
-          }
-        : null,
+      activa: activa ? resumir(activa) : null,
+      // PRECIOS YA COMPROMETIDOS A FUTURO. Se leía solo `started`, así que el
+      // sistema era ciego a las promociones AGENDADAS —status `pending`, que
+      // según ML es "descuento programado, todavía no activo"— y ahí hay
+      // decisiones ya tomadas: al 15-ago la lámpara tenía Black Week comprometida
+      // a $6.780 desde el 27-ago y Ofertas 9 del 9 a $6.920 desde el 2-sep,
+      // ninguna de las dos visible en el tablero.
+      //
+      // Importa para cualquier automatización de precio: subir el precio de
+      // lista con una promo agendada encima es pisar un compromiso que ya existe.
+      agendadas: lista.filter((p) => p.status === 'pending').map(resumir),
       // margen de maniobra para una oferta propia, según ML
       ofertaPropia: oferta
         ? {
