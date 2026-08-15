@@ -52,10 +52,10 @@ router.get(
     // solo lectura. `billing` entra para poder ver qué entrega ML de las
     // facturas de comisión (IVA crédito fiscal del vendedor) antes de decidir
     // si se construye la posición de IVA desde acá o desde el RCV del SII
-    if (!/^\/(items|users|user-products|reviews|categories|sites|billing|orders)\//.test(ruta)) {
+    if (!/^\/(items|users|user-products|reviews|categories|sites|billing|orders|seller-promotions)\//.test(ruta)) {
       return res.status(400).json({
         error:
-          'ruta inválida: solo /items/…, /users/…, /user-products/…, /reviews/…, /categories/…, /sites/…, /billing/…, /orders/…',
+          'ruta inválida: solo /items/…, /users/…, /user-products/…, /reviews/…, /categories/…, /sites/…, /billing/…, /orders/…, /seller-promotions/…',
       })
     }
     const { meliGet } = await import('../../services/meli.js')
