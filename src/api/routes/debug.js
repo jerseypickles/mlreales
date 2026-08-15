@@ -76,6 +76,30 @@ router.get(
   }),
 )
 
+// ¿DataForSEO responde DESDE EL SERVIDOR? Las credenciales vivían solo en el
+// equipo del importador, así que el radar podía proponer nichos y quedarse sin
+// poder medirles el volumen —que es justo el filtro que decide cuáles entran—
+// y eso solo se habría notado en la próxima pasada del radar.
+// Cuesta ~US$0,09 por llamada: sonda, no monitor.
+router.get(
+  '/volumen',
+  autorizado,
+  manejar(async (req, res) => {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+    if (q.length < 2) return res.status(400).json({ error: 'q requerida (mínimo 2 caracteres)' })
+    const { volumenMensual, hayCredenciales } = await import('../../services/volumenBusqueda.js')
+    if (!hayCredenciales()) {
+      return res.status(503).json({ error: 'faltan DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD en el entorno' })
+    }
+    const keywords = q.split('|').map((s) => s.trim()).filter(Boolean).slice(0, 20)
+    const mapa = await volumenMensual(keywords)
+    res.json({
+      credenciales: true,
+      medidas: keywords.map((k) => ({ keyword: k, ...(mapa.get(k) ?? { sinDato: true }) })),
+    })
+  }),
+)
+
 // Peso de búsqueda de frases candidatas: ?q=frase1|frase2|frase3
 router.get(
   '/peso',
