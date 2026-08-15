@@ -169,6 +169,34 @@ export async function tableroOportunidades({ todos = false } = {}) {
     // sin curvas medidas el tablero funciona igual, con la estacionalidad del radar
   }
 
+  // NICHOS DONDE YA VENDO. La mesa de compra listaba los 45 nichos como si
+  // todos fueran territorio nuevo, pero en varios ya hay publicación propia
+  // —y en uno ya hay ventas—. No es lo mismo evaluar un nicho a ciegas que
+  // uno del que tienes conversión, visitas y precio propio: ahí la decisión
+  // no es "entrar" sino "reponer" o "ampliar surtido".
+  //
+  // Misma agregación que ya alimenta el sidebar de Nichos (routes/nichos.js),
+  // reutilizada acá para que las dos vistas no se contradigan.
+  const propiosPorNicho = new Map()
+  try {
+    const { ProductoPropio } = await import('../models/ProductoPropio.js')
+    const { ventasPorItem } = await import('./ventasMl.js')
+    const propios = await ProductoPropio.find({ nichoId: { $ne: null } })
+      .select('nichoId itemIdMl sku estado estadoMl')
+      .lean()
+    const v30 = await ventasPorItem({ dias: 30 }).catch(() => new Map())
+    for (const p of propios) {
+      const clave = String(p.nichoId)
+      const acc = propiosPorNicho.get(clave) ?? { publicaciones: 0, activas: 0, unidades30d: 0 }
+      acc.publicaciones++
+      if (p.estado === 'activo' && p.estadoMl !== 'closed') acc.activas++
+      acc.unidades30d += v30.get(p.itemIdMl ?? p.sku)?.unidades ?? 0
+      propiosPorNicho.set(clave, acc)
+    }
+  } catch {
+    // sin datos de propios la mesa funciona igual, solo sin el distintivo
+  }
+
   const oportunidades = []
   for (const n of filas) {
     const docAnalisis = n.conAnalisis?.[0]
@@ -281,6 +309,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
       // acumulado en baldes gruesos, no un ritmo — va acá para comparar el
       // tamaño de un nicho contra otro, que es lo único que resuelve bien.
       vendidosHistoricos: ultimo?.metricas?.vendidosHistoricos ?? null,
+      // {publicaciones, activas, unidades30d} si ya tengo listing en este nicho
+      mios: propiosPorNicho.get(String(n._id)) ?? null,
       titular: rec.titular ?? null,
       segmento: rec.segmento ?? null,
       // cuánto del top mezclado respalda la jugada, y la búsqueda que la aísla

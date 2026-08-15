@@ -175,6 +175,37 @@ function Trayectoria({ v }) {
   )
 }
 
+// "ACÁ YA VENDO YO". La mesa listaba los 45 nichos como si todos fueran
+// territorio nuevo, pero en varios ya hay publicación propia. No es lo mismo
+// evaluar un nicho a ciegas que uno del que tienes conversión, visitas y
+// precio propio: ahí la decisión no es entrar, es reponer o ampliar surtido.
+//
+// Dos estados, porque tener publicación y vender no es lo mismo: bolsa llena y
+// verde cuando hubo unidades en 30 días, bolsa apagada cuando el listing está
+// pero no se mueve — ese segundo caso es el que más conviene ver, porque es un
+// nicho donde ya apostaste y no está rindiendo.
+function MioBadge({ mios }) {
+  if (!mios?.publicaciones) return null
+  const vende = mios.unidades30d > 0
+  const plural = mios.publicaciones === 1 ? 'publicación' : 'publicaciones'
+  return (
+    <i
+      className={`op-mio${vende ? ' vende' : ''}`}
+      title={
+        vende
+          ? `Ya vendes acá: ${mios.publicaciones} ${plural} tuya(s), ${mios.unidades30d} unidad(es) en los últimos 30 días.`
+          : `Tienes ${mios.publicaciones} ${plural} en este nicho, sin ventas en los últimos 30 días.`
+      }
+      aria-label={vende ? 'nicho propio con ventas' : 'nicho propio sin ventas recientes'}
+    >
+      <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+        <path d="M3.4 5.6h9.2l-.75 7.7a1.15 1.15 0 0 1-1.15 1.05H5.3a1.15 1.15 0 0 1-1.15-1.05z" fill="currentColor" />
+        <path d="M5.9 5.6V4.4a2.1 2.1 0 0 1 4.2 0v1.2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    </i>
+  )
+}
+
 function FilaCompacta({ o, rank, abierta, onAlternar }) {
   const ven = chipVentana(o.ventana)
   const c = o.curvaAnual
@@ -189,6 +220,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar }) {
     >
       <span className="op-fila-rank">{rank}</span>
       <span className="op-fila-kw">
+        <MioBadge mios={o.mios} />
         {o.keyword}
         {o.nivelBusqueda?.nivel === 'renombrar' ? <i className="op-fila-alerta" title="La gente escribe otra frase">keyword</i> : null}
       </span>
@@ -415,6 +447,12 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
               >
                 ⚠ salto ×{o.saltoSospechoso.salto} no creíble
               </span>
+            </Hecho>
+          ) : null}
+          {o.mios?.publicaciones ? (
+            <Hecho etiqueta="ya vendo acá">
+              {o.mios.publicaciones} public.
+              {o.mios.unidades30d > 0 ? ` · ${o.mios.unidades30d} u. en 30 días` : ' · sin ventas en 30 días'}
             </Hecho>
           ) : null}
           <Hecho etiqueta="mediana">{o.mediana ? fmtPrecio(o.mediana) : null}</Hecho>
