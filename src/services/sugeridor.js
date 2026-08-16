@@ -32,7 +32,12 @@ const SCHEMA_SUGERENCIAS = {
         properties: {
           keyword: { type: 'string', description: 'Keyword tal como se buscaría en mercadolibre.cl, en minúsculas' },
           categoria: { type: 'string' },
-          razon: { type: 'string', description: 'Por qué este nicho ahora' },
+          // acotada a propósito: los filtros de negocio que se agregaron el
+          // 15-ago (ticket, diferenciabilidad, peso) hicieron que el modelo
+          // escribiera justificaciones larguísimas y la respuesta se truncara
+          // por max_tokens con 12 sugerencias. La razón la lee una persona de
+          // paso en el sidebar, no la consume el pipeline.
+          razon: { type: 'string', description: 'Por qué este nicho ahora. MÁXIMO 2 frases, va en una fila del tablero' },
           estacionalidad: {
             type: 'object',
             additionalProperties: false,
@@ -190,7 +195,9 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
     system: SYSTEM_SUGERIDOR,
     user,
     schema: SCHEMA_SUGERENCIAS,
-    maxTokens: 8000,
+    // 8000 alcanzaba antes de los filtros de negocio; con ellos el modelo
+    // razona más por sugerencia y 12 sugerencias no cabían
+    maxTokens: 16_000,
   })
 
   // EL FILTRO QUE FALTABA. El sugeridor razona con el contexto del negocio y el
