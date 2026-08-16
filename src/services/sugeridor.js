@@ -90,6 +90,13 @@ FILTROS DE NEGOCIO (aplícalos antes de proponer):
 - DIFERENCIABLE: prefiere productos genéricos sin marca dominante, donde cada vendedor publica su propia ficha con sus propias fotos. Evita categorías donde ML arma catálogo único por modelo (electrodomésticos de marca, tecnología, productos con número de modelo), porque ahí todos comparten la misma página y solo se compite por precio.
 - LIVIANO PARA SU PRECIO: el flete desde China se paga por volumen. Prefiere valor alto en poco espacio; evita muebles, cosas infladas de aire y cajas grandes de bajo precio.
 
+COBERTURA DE VERTICALES (regla dura):
+- Cada pasada tiene que tocar AL MENOS 5 verticales distintas de la lista, y al menos 2 de ellas deben ser verticales que el tablero NO cubre todavía. Sin esto el modelo se queda dando vueltas en belleza y hogar, que es de donde ya vienen la mitad de los nichos.
+- Te paso las verticales que el tablero ya cubre: no gastes más de 2 keywords ahí.
+
+NADA DE KEYWORDS GENÉRICAS DE UNA PALABRA:
+- La keyword tiene que nombrar un PRODUCTO concreto, no una familia. "pistola" no sirve —¿de juguete, de silicona, de pintura, de calor?—, "pistola de silicona" sí. "lámpara" no, "lámpara de escritorio" sí. Una palabra suelta mide un mercado que no existe y arrastra semanas de scans antes de que se note.
+
 Entrega 8-12 keywords variadas, con al menos 6 de cada 10 de tipo todo_el_año. Keywords cortas y naturales (2-4 palabras), tal como las tipearía un comprador chileno en el buscador — el sistema las valida contra el autocompletado real de ML y descarta las que nadie escribe, así que no inventes frases descriptivas largas.`
 
 // Pasillos donde el importador ya vende con su cuenta: la evidencia más dura
