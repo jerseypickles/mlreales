@@ -754,4 +754,45 @@ router.post(
   }),
 )
 
+// BORRAR NICHOS MUERTOS. El radar genera variantes de la misma cosa —al 16-ago
+// había 8 keywords distintas para "lámpara solar", todas con cero scans, más
+// duplicados exactos de nichos vivos (depiladora ipl vs depiladora laser)— y
+// cada una ocupa cupo del propio radar, que se frena al llegar a
+// RADAR_MAX_ACTIVOS. Sin forma de borrar, la lista solo crece.
+//
+// Se borra el nicho y sus reportes. Los snapshots quedan: están indexados por
+// keyword, no por nicho, y si esa keyword vuelve a abrirse su historia sigue
+// ahí. Los productos NO se tocan porque se comparten entre nichos.
+//
+// Pide los ids en el body a propósito: borrar de a uno por URL invita a
+// scripts que barren la colección.
+router.post(
+  '/borrar',
+  manejar(async (req, res) => {
+    const ids = Array.isArray(req.body?.nichoIds) ? req.body.nichoIds : []
+    if (!ids.length) return res.status(400).json({ error: 'nichoIds requerido (arreglo)' })
+
+    const nichos = await Nicho.find({ _id: { $in: ids } }).select('keyword misProductos').lean()
+    if (!nichos.length) return res.status(404).json({ error: 'ninguno de esos nichos existe' })
+
+    // un nicho con producto propio publicado es operación, no exploración:
+    // borrarlo dejaría la publicación huérfana en Mis productos
+    const { ProductoPropio } = await import('../../models/ProductoPropio.js')
+    const conPropios = await ProductoPropio.find({ nichoId: { $in: nichos.map((n) => n._id) } })
+      .select('nichoId')
+      .lean()
+    const protegidos = new Set(conPropios.map((p) => String(p.nichoId)))
+    const borrables = nichos.filter((n) => !protegidos.has(String(n._id)))
+
+    const reportes = await Reporte.deleteMany({ nichoId: { $in: borrables.map((n) => n._id) } })
+    await Nicho.deleteMany({ _id: { $in: borrables.map((n) => n._id) } })
+
+    res.json({
+      borrados: borrables.map((n) => n.keyword),
+      reportesBorrados: reportes.deletedCount ?? 0,
+      protegidos: nichos.filter((n) => protegidos.has(String(n._id))).map((n) => n.keyword),
+    })
+  }),
+)
+
 export default router
