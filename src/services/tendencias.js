@@ -5,22 +5,53 @@ import { sugerenciasReales, palabrasClave } from './busquedasReales.js'
 // Verticales que el radar explora (espejo del prompt del sugeridor): el tracker
 // vigila estos prefijos aunque el tablero aún no tenga nichos ahí, para que una
 // búsqueda en alza se detecte antes de abrir el nicho.
+// De estas raíces sale el autocompletado que el radar mira para saber qué está
+// subiendo. Eran 12 y todas de hogar y belleza, así que el radar exploraba con
+// los ojos puestos siempre en el mismo pasillo: de los 63 nichos del tablero,
+// la mitad salieron de ahí. Se suman las verticales que faltaban —cocina,
+// ferretería, computación, calzado genérico, salud— para que el tracker las
+// vea de verdad y no por casualidad.
+//
+// Son PREFIJOS, no keywords: el autosuggest de "escurridor" muestra todo lo que
+// la gente busca alrededor, no una frase sola.
 export const SEMILLAS_VERTICALES = [
+  // hogar y electrohogar
   'freidora',
   'hervidor',
   'ventilador',
   'humidificador',
-  'plancha pelo',
-  'masajeador',
   'organizador',
+  'lampara',
+  // cocina (destapado el 16-ago: "escurridor de platos" son 6.600/mes, plano,
+  // 41% tiendas oficiales y deja $9.702 por venta — y el radar nunca lo miró)
+  'escurridor',
+  'sartenes',
+  'dispensador',
+  // ferretería y herramientas
+  'taladro',
+  'nivel laser',
+  'destornillador',
+  'extension electrica',
+  // computación de escritorio (accesorios, nunca equipos)
+  'soporte notebook',
+  'hub usb',
+  // calzado genérico: el que se compra por función y no por logo
+  'pantuflas',
+  'zuecos',
+  // salud y bienestar
+  'faja',
+  'masajeador',
+  'corrector postura',
+  // belleza, mascotas, viaje
+  'plancha pelo',
   'mochila',
   'termo',
   'fuente gato',
   'juguete perro',
-  'lampara',
 ]
 
-const MAX_PREFIJOS = 30
+// 25 semillas fijas + margen para que el tablero también aporte sus prefijos
+const MAX_PREFIJOS = 40
 
 export function diaChile(fecha = new Date()) {
   // en-CA formatea YYYY-MM-DD
@@ -34,10 +65,21 @@ export function prefijoDeKeyword(keyword) {
   return [...palabrasClave(keyword)][0] ?? null
 }
 
+// LAS SEMILLAS VAN PRIMERO, Y POR ESO EXISTEN.
+//
+// Iban después de los prefijos del tablero y todo se cortaba en 30. Con 63
+// nichos activos el tablero solo llenaba el cupo, así que las semillas —que
+// existen justamente para mirar donde el tablero NO tiene nada— casi nunca
+// entraban. El tracker terminaba explorando el mismo pasillo del que ya venían
+// los nichos, y el radar con él.
+//
+// Ahora las semillas se garantizan y el tablero llena el resto: descubrir
+// verticales nuevas es el trabajo de esta función, seguir las conocidas es un
+// beneficio secundario.
 export async function prefijosSemilla() {
   const nichos = await Nicho.find({ estado: 'activo' }).select('keyword').lean()
   const delTablero = nichos.map((n) => prefijoDeKeyword(n.keyword)).filter(Boolean)
-  return [...new Set([...delTablero, ...SEMILLAS_VERTICALES])].slice(0, MAX_PREFIJOS)
+  return [...new Set([...SEMILLAS_VERTICALES, ...delTablero])].slice(0, MAX_PREFIJOS)
 }
 
 const esperar = (ms) => new Promise((resolver) => setTimeout(resolver, ms))
