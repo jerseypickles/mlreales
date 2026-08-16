@@ -20,13 +20,42 @@ import { palabrasClave, normalizarTexto } from './busquedasReales.js'
 
 const CONECTORES = ['de', 'para', 'de la', 'del', 'con']
 
+// LA Ñ NO ES UNA TILDE, ES OTRA LETRA — Y GOOGLE LO SABE.
+//
+// `normalizarTexto` descompone y borra las marcas diacríticas, así que la ñ
+// llega a Google convertida en n. Para las tildes de vocales da lo mismo
+// (medido: "nivel laser" y "nivel láser" dan 14.800 idénticos, igual que
+// camión, colchón y lámpara), pero la ñ cambia la palabra:
+//
+//   pestanas postizas → 10/mes        pestañas postizas → 8.100/mes
+//   bano portatil     → 20/mes        baño portatil     → 8.100/mes
+//
+// Y NO se trata de "restaurar la ñ" siempre: "juguetes ninos" mide 1.900 y
+// "juguetes niños" mide 0. Por eso se generan las dos formas y gana la que
+// mida más, que es la misma regla que ya protege a las correcciones de
+// keyword — una corrección nunca puede reducir el volumen.
+//
+// Solo sustitución simple (una n por vez): alcanza para pestañas, baño, niños,
+// pañales, y evita el estallido combinatorio de palabras con varias n.
+function variantesEne(frase) {
+  const salida = []
+  for (let i = 0; i < frase.length; i++) {
+    if (frase[i] === 'n') salida.push(`${frase.slice(0, i)}ñ${frase.slice(i + 1)}`)
+  }
+  return salida
+}
+
 // Candidatas mecánicas de una keyword: la original más las variantes con
 // conector insertado en cada juntura y con la última palabra en plural/singular.
 export function candidatasMecanicas(keyword) {
   const base = normalizarTexto(keyword)
   const palabras = base.split(' ').filter(Boolean)
   const salida = new Set([base])
-  if (palabras.length < 2) return [...salida]
+  // una sola palabra no admite conectores, pero sí puede llevar ñ ("panales")
+  if (palabras.length < 2) {
+    for (const v of variantesEne(base)) salida.add(v)
+    return [...salida]
+  }
 
   for (let corte = 1; corte < palabras.length; corte++) {
     for (const con of CONECTORES) {
@@ -42,6 +71,7 @@ export function candidatasMecanicas(keyword) {
     return [[...p.slice(0, -1), otra].join(' ')]
   }
   for (const f of [...salida]) for (const v of variar(f)) salida.add(v)
+  for (const f of [...salida]) for (const v of variantesEne(f)) salida.add(v)
   return [...salida]
 }
 
