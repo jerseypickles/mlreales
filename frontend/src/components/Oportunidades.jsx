@@ -225,12 +225,15 @@ function FilaCompacta({ o, rank, abierta, onAlternar }) {
         {o.nivelBusqueda?.nivel === 'renombrar' ? <i className="op-fila-alerta" title="La gente escribe otra frase">keyword</i> : null}
       </span>
       <span className={`op-fila-score s-${o.score >= 75 ? 'alto' : o.score >= 55 ? 'medio' : 'bajo'}`}>{o.score ?? '—'}</span>
+      {/* ── GOOGLE: cuánta gente lo busca y cómo se reparte en el año ── */}
       <span className="op-fila-vol">
         {c?.busquedasMes ? `${fmtNum(c.busquedasMes)}/mes` : <em>sin medir</em>}
       </span>
-      <Trayectoria v={o.vendidosHistoricos} />
       {max ? (
-        <span className="op-fila-curva" aria-hidden="true">
+        <span
+          className="op-fila-curva"
+          title={`Forma del año según Google Trends (5 años). Pico ${c.nombreMesPico ?? '—'}, ${c.ratioPico}× sobre el promedio.`}
+        >
           {c.curva.map((v, i) => (
             <i key={i} className={i === mesHoy ? 'hoy' : undefined} style={{ height: `${Math.max(8, Math.round((100 * v) / max))}%` }} />
           ))}
@@ -238,6 +241,18 @@ function FilaCompacta({ o, rank, abierta, onAlternar }) {
       ) : (
         <span className="op-fila-curva" />
       )}
+      {/* ── MERCADO LIBRE: qué pasó de verdad en el listado ── */}
+      <Trayectoria v={o.vendidosHistoricos} />
+      <span
+        className="op-fila-full"
+        title={
+          o.pctFull != null
+            ? `${Math.round(o.pctFull)}% del top vende por Full. Full es la puerta: en la cuenta propia son 105 visitas semanales dentro contra 2 fuera. Poco Full no es hueco libre — suele ser un nicho donde nadie logró vender lo suficiente para inmovilizar stock.`
+            : 'sin medir'
+        }
+      >
+        {o.pctFull != null ? `${Math.round(o.pctFull)}%` : '—'}
+      </span>
       <span className="op-fila-ventana">
         {ven ? <em className={`chip-ventana v-${ven.clase}`}>{ven.texto}</em> : <em className="op-fila-plano">todo el año</em>}
       </span>
@@ -661,34 +676,51 @@ function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) 
 // lo que se puede traer cualquier día, y al final lo que hay que esperar.
 //
 // El orden de los grupos ES la prioridad de compra.
+// LA MESA SE ORDENA POR CONSTANCIA, NO POR LA VENTANA.
+//
+// Antes los grupos eran "comprar ahora / se venden todo el año / su ventana se
+// acerca / temporada lejana" — o sea que mandaba CUÁNDO se compra. Eso ponía un
+// árbol de navidad arriba de un producto que vende los 12 meses solo porque a
+// uno se le abría la ventana.
+//
+// El importador lo dio vuelta: quiere trabajar nichos de todo el año AUNQUE
+// ESTÉN SATURADOS. La razón es de caja, no de gusto: un estacional deja el
+// capital dormido 10 meses y su stock sobrante paga bodega Full todo ese
+// tiempo; un producto plano lo rota cuatro o cinco veces al año y mantiene la
+// cuenta vendiendo siempre, que es lo que sostiene la posición en el buscador.
+//
+// La ventana no se pierde: sigue ordenando DENTRO de los estacionales y sigue
+// mostrándose en cada fila.
+const esPlano = (o) => ['todo-el-año', 'alza-suave'].includes(o.curvaAnual?.clasificacion)
+
 const GRUPOS_OP = [
-  {
-    id: 'ahora',
-    titulo: 'Comprar ahora',
-    sub: 'la ventana está abierta: pidiendo hoy el stock llega para el pico',
-    abierto: true,
-    test: (o) => ['ahora', 'ultimo-mes'].includes(o.ventana?.estado),
-  },
   {
     id: 'todo-el-ano',
     titulo: 'Se venden todo el año',
-    sub: 'sin temporada que perseguir: se compran cuando convenga',
+    sub: 'la base del negocio: rotan el capital varias veces al año y mantienen la cuenta vendiendo siempre',
     abierto: true,
-    test: (o) => (o.ventana?.estado ?? 'sin-temporada') === 'sin-temporada',
+    test: esPlano,
+  },
+  {
+    id: 'ahora',
+    titulo: 'Estacionales con la ventana abierta',
+    sub: 'apuestas que hay que decidir hoy: pidiendo ahora el stock llega para el pico',
+    abierto: true,
+    test: (o) => !esPlano(o) && ['ahora', 'ultimo-mes'].includes(o.ventana?.estado),
   },
   {
     id: 'pronto',
-    titulo: 'Su ventana se acerca',
+    titulo: 'Estacionales que se acercan',
     sub: 'todavía no toca pedir, pero falta poco',
     abierto: false,
-    test: (o) => o.ventana?.estado === 'pronto',
+    test: (o) => !esPlano(o) && o.ventana?.estado === 'pronto',
   },
   {
     id: 'espera',
-    titulo: 'Temporada lejana',
+    titulo: 'Estacionales lejanos',
     sub: 'el pico está a varios meses: no hay nada que hacer hoy',
     abierto: false,
-    test: (o) => ['futura', 'pasada'].includes(o.ventana?.estado),
+    test: (o) => !esPlano(o),
   },
 ]
 
@@ -705,12 +737,25 @@ function GrupoOportunidades({ grupo, filas, children }) {
       </button>
       {abierto ? (
         <div className="op-lista">
-          {/* Sin esto "≥3,1k" es un jeroglífico. Va por grupo y no una sola vez
-              arriba porque los grupos se colapsan y la lista es larga: un
-              encabezado que se fue del viewport no explica nada. */}
+          {/* LAS DOS FUENTES, LADO A LADO Y ROTULADAS.
+              Google dice cuánta gente lo busca y en qué mes del año; ML dice
+              qué pasó de verdad en el listado. Antes las columnas venían
+              intercaladas (búsqueda · vendidos · curva) y no se leía de dónde
+              salía cada número. Ahora cada fuente es un bloque y el de ML va
+              sombreado para distinguirse de un vistazo.
+              El encabezado va por grupo y no una sola vez arriba porque los
+              grupos se colapsan: uno que se fue del viewport no explica nada. */}
+          <div className="op-fila op-fila-bandas" aria-hidden="true">
+            <span /><span /><span />
+            <span className="op-banda op-banda-google">Google</span>
+            <span className="op-banda op-banda-ml">Mercado Libre</span>
+            <span /><span /><span />
+          </div>
           <div className="op-fila op-fila-cab" aria-hidden="true">
-            <span /><span>nicho</span><span>score</span><span>búsqueda</span>
-            <span className="op-fila-vend" title="Unidades que el top acumula desde que se publicó cada aviso. No es por mes ni por año.">histórico</span><span>año</span>
+            <span /><span>nicho</span><span>score</span>
+            <span>búsq/mes</span><span>el año</span>
+            <span className="op-fila-vend" title="Unidades que el top acumula desde que se publicó cada aviso. No es por mes ni por año.">vendido</span>
+            <span>full</span>
             <span>ventana</span><span>veredicto</span><span />
           </div>
           {children}
