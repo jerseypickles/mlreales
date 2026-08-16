@@ -5398,3 +5398,20 @@ section {
   0%, 70%, 100% { opacity: 1; }
   85% { opacity: 0.25; }
 }
+
+/* MARCAS DE FILA DEL SIDEBAR. Cada una fue un contenedor propio hasta que el
+   sidebar llegó a nueve grupos para 81 nichos; bajarlas a chips deja leerlas
+   en el mismo barrido en vez de abrir y cerrar acordeones. */
+.chip-precio,
+.chip-dudoso,
+.chip-mudo,
+.chip-vuelve {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.chip-precio { background: var(--exito-tenue); color: var(--exito-tinta); font-weight: 600; }
+.chip-dudoso { background: var(--avisa-tenue); color: var(--avisa-tinta); }
+.chip-mudo,
+.chip-vuelve { background: var(--borde); color: var(--tinta-3); }

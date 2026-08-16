@@ -19,13 +19,31 @@ const BUSQUEDA_VIVA = new Set(['alto', 'medio'])
 export const rechazadoPeroSeBusca = (n) =>
   n.veredicto === 'no_entrar' && BUSQUEDA_VIVA.has(n.nivelBusqueda?.nivel)
 
+// CUATRO GRUPOS, NO NUEVE.
+//
+// El sidebar llegó a nueve contenedores para 81 nichos, y siete tenían filas.
+// El importador lo cortó en seco —"aquí hay mucho contenedor, mientras sea más
+// sencillo está bien"— y tiene razón: ocho de esos grupos eran matices de la
+// misma pregunta, y un matiz que necesita su propio acordeón cuesta más de lo
+// que informa.
+//
+// Las distinciones no se pierden, bajan de rango: lo que era un contenedor
+// entero ahora es una marca en la fila (tiene precio, se busca igual, vuelve tal
+// fecha, nadie lo busca). Se leen en el mismo barrido en vez de exigir abrir y
+// cerrar cajas.
+//
+// Quedan las cuatro preguntas que el importador se hace de verdad:
+//   comprar   → esto se decide ahora
+//   vendiendo → esto ya es operación, no apuesta
+//   espera    → esto vuelve solo, no lo toques
+//   fuera     → esto está descartado
 export function clasificarNicho(n) {
   if ((n.misProductos ?? 0) > 0) return 'vendiendo'
 
-  if (rechazadoPeroSeBusca(n)) return 'revisar'
-
+  // Un "no entrar" sobre una keyword que la gente SÍ busca sigue siendo dudoso,
+  // pero ya no ocupa un grupo propio: cae en `fuera` con su marca al lado.
   const fuera = n.veredicto === 'no_entrar' || n.estado === 'pausado' || n.etapaCompra === 'descartado'
-  if (fuera) return n.estado === 'pausado' && n.revisarEl ? 'vuelven' : 'fuera'
+  if (fuera) return n.estado === 'pausado' && n.revisarEl ? 'espera' : 'fuera'
 
   // nadie escribe esa búsqueda NI NADA PARECIDO: el listado que mide no lo ve
   // ningún comprador. Se marca y se baja, nunca se pausa solo — descartar es
@@ -35,69 +53,48 @@ export function clasificarNicho(n) {
   // aviso al lado. Degradarlo escondió "manguera extensible" (score 92, ya
   // cotizada y en su último mes para pedir) — el error contrario al que se
   // quería evitar.
-  if (n.nivelBusqueda?.nivel === 'nulo') return 'sinBusqueda'
+  if (n.nivelBusqueda?.nivel === 'nulo') return 'fuera'
 
-  if (!DE_ENTRADA.has(n.veredicto) || n.madurando) return 'midiendo'
+  // sin veredicto firme, o con la ventana todavía cerrada: el sistema los
+  // sigue midiendo o los despierta cuando toque. En los dos casos no hay nada
+  // que hacer hoy, que es lo único que el grupo tiene que comunicar.
+  if (!DE_ENTRADA.has(n.veredicto) || n.madurando) return 'espera'
 
   const v = n.ventana
   const abierta = !v || v.estado === 'sin-temporada' || VENTANA_ABIERTA.has(v.estado)
-  if (!abierta) return 'aunNo'
-
-  // ya hay precio del proveedor sobre la mesa: lo único que falta es decidir
-  const cotizado = Number.isFinite(n.exwCotizadoUsd) || Number.isFinite(n.costoPuestoClp)
-  return cotizado ? 'decidir' : 'comprar'
+  return abierta ? 'comprar' : 'espera'
 }
+
+// Marcas de fila: lo que antes justificaba un contenedor propio.
+export const tienePrecio = (n) => Number.isFinite(n.exwCotizadoUsd) || Number.isFinite(n.costoPuestoClp)
+export const sinBusqueda = (n) => n.nivelBusqueda?.nivel === 'nulo'
+export const madurando = (n) => Boolean(n.madurando) || !DE_ENTRADA.has(n.veredicto)
 
 export const GRUPOS = [
   {
-    id: 'decidir',
-    titulo: '🔥 Con precio · decide',
-    abierto: true,
-    ayuda: 'Ventana de compra abierta y cotización del proveedor anotada: falta tu decisión.',
-  },
-  {
     id: 'comprar',
-    titulo: '🎯 Comprar esta temporada',
+    titulo: 'Comprar',
     abierto: true,
-    ayuda: 'Ventana de compra abierta y veredicto de entrada, pero todavía sin precio del proveedor.',
+    ayuda: 'Ventana abierta y veredicto de entrada: acá se decide. Los que ya tienen precio del proveedor van marcados y ordenados primero.',
   },
   {
     id: 'vendiendo',
-    titulo: '🛒 Vendiendo · mis nichos',
+    titulo: 'Vendiendo',
     abierto: true,
-    ayuda: 'Nichos donde ya vendes con producto propio cableado: son operación, no apuesta.',
+    ayuda: 'Nichos con producto propio publicado: son operación, no apuesta.',
   },
   {
-    id: 'midiendo',
-    titulo: '⏳ Midiendo',
+    id: 'espera',
+    titulo: 'En espera',
     abierto: false,
-    ayuda: 'Sin veredicto firme todavía: el sistema los escanea solo hasta juntar la serie.',
+    ayuda: 'Midiendo, con la ventana todavía cerrada, o en cuarentena con fecha de regreso. El sistema los mueve solo: hoy no hay nada que hacer con ellos.',
   },
   {
-    id: 'revisar',
-    titulo: '🔁 Rechazados pero se buscan',
+    id: 'fuera',
+    titulo: 'Fuera',
     abierto: false,
-    ayuda: 'El analista dijo no entrar, pero la gente SÍ escribe esa búsqueda. El rechazo puede estar mal leído: quedan pendientes de un escaneo nuevo en vez de descartados.',
+    ayuda: 'No entrar, pausados, descartados a mano o sin búsqueda viva. Los marcados "se busca igual" son rechazos dudosos: la gente sí escribe esa keyword y conviene re-escanearlos antes de darlos por muertos.',
   },
-  {
-    id: 'aunNo',
-    titulo: '📅 Aún no toca',
-    abierto: false,
-    ayuda: 'Buenos, pero su ventana de compra abre más adelante. Ordenados por cuánto falta.',
-  },
-  {
-    id: 'sinBusqueda',
-    titulo: '🔇 Nadie los busca',
-    abierto: false,
-    ayuda: 'Ni la keyword ni ninguna de sus palabras tiene búsquedas vivas en ML: aquí no hay producto que medir.',
-  },
-  {
-    id: 'vuelven',
-    titulo: '♻️ Vuelven solos',
-    abierto: false,
-    ayuda: 'Descartados por temporada con fecha de regreso: el sistema los reactiva solo.',
-  },
-  { id: 'fuera', titulo: '🗑 Fuera', abierto: false, ayuda: 'No entrar, pausados o descartados a mano.' },
 ]
 
 // urgencia primero, score después
@@ -129,9 +126,23 @@ export function agruparNichos(nichos) {
 
   for (const [id, lista] of porGrupo) {
     if (id === 'vendiendo') lista.sort((a, b) => (b.misVentas30d ?? 0) - (a.misVentas30d ?? 0))
-    else if (id === 'aunNo')
-      lista.sort((a, b) => (a.ventana?.mesesAl ?? 99) - (b.ventana?.mesesAl ?? 99) || puntaje(b) - puntaje(a))
-    else if (id === 'vuelven') lista.sort((a, b) => new Date(a.revisarEl) - new Date(b.revisarEl))
+    // en "comprar" manda tener precio sobre la mesa: eso era un grupo propio y
+    // ahora es lo primero del orden, que es donde de verdad se nota
+    else if (id === 'comprar')
+      lista.sort(
+        (a, b) =>
+          Number(tienePrecio(b)) - Number(tienePrecio(a)) ||
+          urgencia(a) - urgencia(b) ||
+          puntaje(b) - puntaje(a),
+      )
+    // "en espera" junta cosas que vuelven por caminos distintos: primero las
+    // que tienen fecha de regreso, después por cuánto falta para su ventana
+    else if (id === 'espera')
+      lista.sort(
+        (a, b) =>
+          (a.ventana?.mesesAl ?? (a.revisarEl ? 99 : 50)) - (b.ventana?.mesesAl ?? (b.revisarEl ? 99 : 50)) ||
+          puntaje(b) - puntaje(a),
+      )
     else lista.sort((a, b) => urgencia(a) - urgencia(b) || puntaje(b) - puntaje(a))
   }
   return porGrupo

@@ -14,7 +14,7 @@ import { Contabilidad } from './components/Contabilidad.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
 import { Radar as RadarIcono, Landmark } from 'lucide-react'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
-import { GRUPOS, agruparNichos, anidarFamilias } from './lib/sidebar.js'
+import { GRUPOS, agruparNichos, anidarFamilias, tienePrecio, sinBusqueda, rechazadoPeroSeBusca } from './lib/sidebar.js'
 
 function PresupuestoChip() {
   const [gastos, setGastos] = useState(null)
@@ -352,6 +352,34 @@ function NichoItem({ n, seleccionado, onSeleccionar, anidado = false, onMedirKey
                   </span>
                 ) : null
               })()}
+              {/* LO QUE ANTES ERA UN CONTENEDOR ENTERO.
+                  El sidebar tenía nueve grupos para 81 nichos; ocho eran
+                  matices de la misma pregunta. Los matices bajaron a marcas de
+                  fila: se leen en el mismo barrido en vez de exigir abrir y
+                  cerrar acordeones. */}
+              {tienePrecio(n) ? (
+                <span className="chip-precio" title="Ya hay precio del proveedor anotado: lo único que falta es tu decisión.">
+                  con precio
+                </span>
+              ) : null}
+              {rechazadoPeroSeBusca(n) ? (
+                <span
+                  className="chip-dudoso"
+                  title="El analista dijo no entrar, pero la gente SÍ escribe esa búsqueda. El rechazo puede estar mal leído: conviene re-escanearlo antes de darlo por muerto."
+                >
+                  se busca igual
+                </span>
+              ) : null}
+              {sinBusqueda(n) ? (
+                <span className="chip-mudo" title="Ni la keyword ni nada parecido tiene búsquedas vivas: acá no hay producto que medir.">
+                  nadie lo busca
+                </span>
+              ) : null}
+              {n.revisarEl ? (
+                <span className="chip-vuelve" title={`En cuarentena hasta ${fmtFecha(n.revisarEl)}: el sistema lo reactiva solo cuando llegue su ventana.`}>
+                  vuelve {fmtFecha(n.revisarEl)}
+                </span>
+              ) : null}
               {n.ultimoReporte?.topMezclado ? (
                 <span
                   className="chip-mezclado"
