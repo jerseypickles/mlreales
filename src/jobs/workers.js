@@ -489,15 +489,30 @@ export async function procesarRadar() {
   const { scraping } = await presupuesto()
   if (scraping.agotado) return { omitido: true, motivo: scraping.motivo }
 
-  // techo de nichos EN EVALUACIÓN: los que avanzaron en el embudo de compra
-  // (cotizando/pedido/vendiendo) ya son negocio y no ocupan cupo de
-  // exploración — avanzar o descartar libera espacio para descubrir
-  const enEvaluacion = await Nicho.countDocuments({
+  // TECHO DE EXPLORACIÓN EN VUELO. (corregido el 16-ago)
+  //
+  // Antes contaba nichos en `etapaCompra: 'evaluando'`, que era la primera
+  // casilla del embudo de compra de la planilla de cotización. Esa planilla se
+  // retiró y nadie avanza esa casilla nunca, así que el contador solo subía: al
+  // 16-ago marcaba 32 contra un tope de 25 y el radar llevaba días sin poder
+  // descubrir nada. El importador lo dijo derecho — "evaluación ya no sirve
+  // porque no tenemos planilla".
+  //
+  // Lo que el techo debe proteger es el gasto de scraping, y el gasto lo causan
+  // los nichos que TODAVÍA SE ESTÁN MIDIENDO: un nicho graduado ya dio su
+  // veredicto y pasa a cadencia semanal. Un nicho madurando corre a diario.
+  // Así que el cupo cuenta maduración, no una etapa de un flujo muerto.
+  //
+  // El techo de presupuesto de arriba sigue siendo el freno duro.
+  const madurando = await Nicho.countDocuments({
     estado: 'activo',
-    $or: [{ etapaCompra: null }, { etapaCompra: 'evaluando' }],
+    scansConDemanda: { $lt: config.maduracionScans },
+    veredicto: { $in: ['entrar', 'entrar_con_condiciones'] },
   })
-  const cupo = Math.min(config.radarMaxNichos, Math.max(0, config.radarMaxActivos - enEvaluacion))
-  if (cupo === 0) return { omitido: true, motivo: `tope de ${config.radarMaxActivos} nichos en evaluación alcanzado` }
+  const cupo = Math.min(config.radarMaxNichos, Math.max(0, config.radarMaxActivos - madurando))
+  if (cupo === 0) {
+    return { omitido: true, motivo: `${madurando} nichos todavía madurando (tope ${config.radarMaxActivos})` }
+  }
 
   // búsquedas en alza según el autocompletado (tracker de tendencias): el
   // sugeridor prioriza demanda que ya se ve subiendo en vez de idear desde cero
