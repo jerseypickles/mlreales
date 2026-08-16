@@ -84,7 +84,7 @@ TODO EL AÑO PRIMERO (regla dura, y es la que más importa):
 - Este tablero está desbalanceado hacia lo estacional y hay que corregirlo, así que ante la duda propone lo plano.
 
 FILTROS DE NEGOCIO (aplícalos antes de proponer):
-- TICKET: apunta a productos cuyo precio de venta en Chile esté entre $12.000 y $19.989. Full cobra un envío FIJO de ~$870-$1.079, así que en un producto de $3.000 la logística se come el 29% y en uno de $18.000 solo el 6%. Bajo $10.000 la publicidad no puede ser rentable: cuesta ~$1.700 comprar un cliente. NO propongas productos que en Chile se vendan bajo $8.000. Evita justo $19.990 y $9.990: ahí saltan las tarifas de envío.
+- TICKET: el producto tiene que venderse en Chile por MÁS DE $10.000. No hay techo — mientras más caro, mejor, siempre que el flete desde China lo permita. El motivo: Full cobra un envío FIJO de ~$870-$1.079, así que en un producto de $3.000 la logística se come el 29% y en uno de $18.000 solo el 6%; y comprar un cliente con publicidad cuesta ~$1.700 medidos, o sea que bajo $10.000 la publicidad no puede ser rentable. Dato útil para elegir el precio de venta después, no para descartar: la tarifa de Full salta justo en $9.990 y otra vez en $19.990.
 - DIFERENCIABLE: prefiere productos genéricos sin marca dominante, donde cada vendedor publica su propia ficha con sus propias fotos. Evita categorías donde ML arma catálogo único por modelo (electrodomésticos de marca, tecnología, productos con número de modelo), porque ahí todos comparten la misma página y solo se compite por precio.
 - LIVIANO PARA SU PRECIO: el flete desde China se paga por volumen. Prefiere valor alto en poco espacio; evita muebles, cosas infladas de aire y cajas grandes de bajo precio.
 
