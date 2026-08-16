@@ -115,6 +115,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         keyword: 1,
         conteoDemanda: 1,
         nivelBusqueda: 1,
+        creadoEl: 1, // la mesa marca los recién descubiertos
         origen: 1,
         jugadaDe: 1,
         familiaAparte: 1,

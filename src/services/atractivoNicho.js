@@ -173,6 +173,28 @@ export async function medirAtractivo(keywords, { conCrecimiento = true } = {}) {
   const candidatas = [...new Set(lista.flatMap((k) => [...candidatasMecanicas(k), ...prefijosProgresivos(k)]))]
   const volumenes = await volumenMensual(candidatas)
 
+  // LA CURVA MEDIDA SE GUARDA. (16-ago)
+  //
+  // Se estaba midiendo y botando: nadie escribía CurvaEstacional, solo se leía.
+  // Consecuencia — los 5 nichos que el radar creó ese día entraron a la mesa
+  // sin curva, y sin curva no hay `busquedasMes` (componente demanda) ni
+  // `ratioPico` (componente constancia), así que quedaban fuera del
+  // agrupamiento por temporada que es justo el criterio del importador.
+  //
+  // Se persiste acá porque es donde el dato ya está pagado: volver a pedirlo
+  // después sería otra llamada a DataForSEO por la misma keyword.
+  try {
+    const { CurvaEstacional } = await import('../models/CurvaEstacional.js')
+    const ops = [...volumenes.values()]
+      .filter((d) => d?.keyword && Array.isArray(d.curva) && d.curva.length === 12)
+      .map((d) => ({
+        updateOne: { filter: { keyword: d.keyword }, update: { $set: d }, upsert: true },
+      }))
+    if (ops.length) await CurvaEstacional.bulkWrite(ops, { ordered: false })
+  } catch (err) {
+    console.warn(`[atractivo] curvas no guardadas: ${err.message}`)
+  }
+
   const salida = []
   for (const kw of lista) {
     const vols = new Map(candidatasMecanicas(kw).map((c) => [c, volumenes.get(c)?.busquedasMes ?? 0]))
