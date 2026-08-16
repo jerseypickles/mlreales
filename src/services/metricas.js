@@ -435,9 +435,16 @@ export function calcularScoreOportunidad({
   // Caso que lo destapó: toallitas húmedas daba entrada 4 sobre 100 con 92% de
   // catálogo y líder de ≥100.000 unidades — pero solo 26% de tiendas oficiales,
   // 22 vendedores y concentración de 29,6%. Nadie tiene tomada esa caja.
+  //
+  // Y en catálogo lo que decide es CONTRA QUIÉN peleas el precio, no cuántos
+  // son. Una tienda oficial de la marca compra al costo de fábrica y puede
+  // igualarte hasta que te aburras; un distribuidor como tú no. Por eso se mide
+  // el % de tiendas oficiales y no la concentración — la concentración ya es el
+  // componente `competencia`, y usarla acá sería el mismo número con 32% del
+  // peso total.
   const esCatalogo = Number.isFinite(competencia.pctCatalogo) && competencia.pctCatalogo >= umbrales.pctCatalogoDominante
   const componenteEntrada = esCatalogo
-    ? clamp(100 - (competencia.concentracionTop3Pct ?? 100), 0, 100)
+    ? clamp(100 - (competencia.pctTiendaOficial ?? 50), 0, 100)
     : (porMuro + porCatalogo) / 2
 
   // ECONOMÍA — ¿la venta paga lo que cuesta comprar el cliente?
