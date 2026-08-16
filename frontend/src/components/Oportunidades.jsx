@@ -206,6 +206,33 @@ function MioBadge({ mios }) {
   )
 }
 
+// RECIÉN LLEGADO. Un nicho nuevo del radar cae en medio de 44 filas que ya
+// estaban ahí ayer y se pierde. Se marca por una semana, que es más o menos lo
+// que tarda en juntar su primera serie de scans y dejar de ser una promesa.
+const DIAS_NUEVO = 7
+
+function esNuevo(creadoEl) {
+  if (!creadoEl) return false
+  return (Date.now() - new Date(creadoEl).getTime()) / 86400e3 <= DIAS_NUEVO
+}
+
+function NuevoBadge({ creadoEl }) {
+  if (!esNuevo(creadoEl)) return null
+  const dias = Math.floor((Date.now() - new Date(creadoEl).getTime()) / 86400e3)
+  return (
+    <i
+      className="op-nuevo"
+      title={
+        dias < 1
+          ? 'El radar lo descubrió hoy. Todavía está midiendo: dale unos días de serie antes de decidir nada.'
+          : `El radar lo descubrió hace ${dias} día${dias === 1 ? '' : 's'}.`
+      }
+    >
+      nuevo
+    </i>
+  )
+}
+
 function FilaCompacta({ o, rank, abierta, onAlternar }) {
   const ven = chipVentana(o.ventana)
   const c = o.curvaAnual
@@ -222,6 +249,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar }) {
       <span className="op-fila-kw">
         <MioBadge mios={o.mios} />
         {o.keyword}
+        <NuevoBadge creadoEl={o.creadoEl} />
         {o.nivelBusqueda?.nivel === 'renombrar' ? <i className="op-fila-alerta" title="La gente escribe otra frase">keyword</i> : null}
       </span>
       <span className={`op-fila-score s-${o.score >= 75 ? 'alto' : o.score >= 55 ? 'medio' : 'bajo'}`}>{o.score ?? '—'}</span>

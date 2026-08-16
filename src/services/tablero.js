@@ -315,6 +315,9 @@ export async function tableroOportunidades({ todos = false } = {}) {
       origenesCrossBorder: ultimo?.metricas?.competencia?.origenesCrossBorder ?? null,
       // {publicaciones, activas, unidades30d} si ya tengo listing en este nicho
       mios: propiosPorNicho.get(String(n._id)) ?? null,
+      // cuándo lo descubrió el radar: la mesa marca los recién llegados para
+      // que no se pierdan entre 44 filas que ya estaban ahí ayer
+      creadoEl: n.creadoEl ?? null,
       titular: rec.titular ?? null,
       segmento: rec.segmento ?? null,
       // cuánto del top mezclado respalda la jugada, y la búsqueda que la aísla

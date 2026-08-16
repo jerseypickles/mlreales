@@ -5365,3 +5365,36 @@ section {
   opacity: 0.65;
 }
 .op-mio.vende { color: var(--exito-tinta); opacity: 1; }
+
+/* "nuevo": recién descubierto por el radar. Punto vivo + texto tenue — se ve
+   al barrer la lista sin gritar más que el veredicto, que es lo que decide. */
+.op-nuevo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 6px 1px 5px;
+  border-radius: 999px;
+  background: var(--acento-tenue);
+  color: var(--acento);
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+.op-nuevo::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .op-nuevo::before { animation: op-nuevo-late 2.4s ease-in-out infinite; }
+}
+@keyframes op-nuevo-late {
+  0%, 70%, 100% { opacity: 1; }
+  85% { opacity: 0.25; }
+}
