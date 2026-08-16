@@ -252,7 +252,16 @@ function FilaCompacta({ o, rank, abierta, onAlternar }) {
         <NuevoBadge creadoEl={o.creadoEl} />
         {o.nivelBusqueda?.nivel === 'renombrar' ? <i className="op-fila-alerta" title="La gente escribe otra frase">keyword</i> : null}
       </span>
-      <span className={`op-fila-score s-${o.score >= 75 ? 'alto' : o.score >= 55 ? 'medio' : 'bajo'}`}>{o.score ?? '—'}</span>
+      {o.midiendo ? (
+        <span
+          className="op-fila-midiendo"
+          title={`Recién descubierto: lleva ${o.scansConDemanda} de ${o.scansConDemanda + o.faltanScans} scans con demanda medida. No tiene score ni veredicto todavía, y no se van a inventar — el sistema lo escanea a diario hasta juntar la serie.`}
+        >
+          {o.scansConDemanda}/{o.scansConDemanda + o.faltanScans}
+        </span>
+      ) : (
+        <span className={`op-fila-score s-${o.score >= 75 ? 'alto' : o.score >= 55 ? 'medio' : 'bajo'}`}>{o.score ?? '—'}</span>
+      )}
       {/* ── GOOGLE: cuánta gente lo busca y cómo se reparte en el año ── */}
       <span className="op-fila-vol">
         {c?.busquedasMes ? `${fmtNum(c.busquedasMes)}/mes` : <em>sin medir</em>}
@@ -284,9 +293,15 @@ function FilaCompacta({ o, rank, abierta, onAlternar }) {
       <span className="op-fila-ventana">
         {ven ? <em className={`chip-ventana v-${ven.clase}`}>{ven.texto}</em> : <em className="op-fila-plano">todo el año</em>}
       </span>
-      <span className={`op-fila-ver veredicto-${o.veredicto}`}>
-        {o.veredicto === 'entrar' ? 'entrar' : 'condiciones'}
-      </span>
+      {o.midiendo ? (
+        <span className="op-fila-ver op-fila-faltan">
+          faltan {o.faltanScans} {o.faltanScans === 1 ? 'scan' : 'scans'}
+        </span>
+      ) : (
+        <span className={`op-fila-ver veredicto-${o.veredicto}`}>
+          {o.veredicto === 'entrar' ? 'entrar' : 'condiciones'}
+        </span>
+      )}
       <span className="op-fila-flecha" aria-hidden="true">{abierta ? '▾' : '▸'}</span>
     </button>
   )
@@ -916,7 +931,25 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
                 />
                 {abierta ? (
                   <>
-                    <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} onRecargar={cargar} />
+                    {/* sin análisis no hay tarjeta que mostrar: la carta vive de
+                        recomendación, precios y riesgos que todavía no existen */}
+                    {o.midiendo ? (
+                      <div className="op-midiendo-carta">
+                        <strong>Midiendo entrabilidad · {o.scansConDemanda} de {o.scansConDemanda + o.faltanScans} scans</strong>
+                        <p>
+                          El radar lo descubrió recién y el sistema lo escanea a diario. No hay score ni
+                          veredicto porque todavía no hay serie que los sostenga, y no se van a estimar.
+                          {o.curvaAnual?.busquedasMes
+                            ? ` Lo que sí está medido: ${fmtNum(o.curvaAnual.busquedasMes)} búsquedas al mes en Chile.`
+                            : ' Falta medirle el volumen de búsqueda.'}
+                        </p>
+                        <button type="button" className="boton-secundario" onClick={(e) => { e.stopPropagation(); onAbrirNicho(o.nichoId) }}>
+                          Ver el nicho
+                        </button>
+                      </div>
+                    ) : (
+                      <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} onRecargar={cargar} />
+                    )}
                     {o.familiaMiembros?.length ? (
                       <FamiliaColapsada miembros={o.familiaMiembros} porKeyword={porKeyword} lider={o} onAbrir={onAbrirNicho} onRecargar={cargar} />
                     ) : null}

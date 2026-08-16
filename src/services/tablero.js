@@ -201,7 +201,38 @@ export async function tableroOportunidades({ todos = false } = {}) {
   for (const n of filas) {
     const docAnalisis = n.conAnalisis?.[0]
     const analisis = docAnalisis?.analisis
-    if (!analisis) continue
+    // LOS RECIÉN DESCUBIERTOS TAMBIÉN SE MUESTRAN.
+    //
+    // La mesa exigía análisis para entrar, así que un nicho nuevo del radar era
+    // invisible acá hasta juntar sus 5 scans — una semana en la que el
+    // importador no sabía que existía. Ahora aparece en su grupo desde el día
+    // uno, sin score ni veredicto (no los tiene y no se van a inventar) y
+    // diciendo cuántos scans le faltan. Misma doctrina que el sidebar de
+    // Nichos: se muestra que se está midiendo, no un número prematuro.
+    if (!analisis) {
+      if (n.estado !== 'activo') continue
+      const scans = n.conteoDemanda?.[0]?.n ?? 0
+      oportunidades.push({
+        nichoId: String(n._id),
+        keyword: n.keyword,
+        creadoEl: n.creadoEl ?? null,
+        midiendo: true,
+        scansConDemanda: scans,
+        faltanScans: Math.max(0, config.maduracionScans - scans),
+        score: null,
+        veredicto: null,
+        curvaAnual: curvaPorKeyword.get(n.keyword) ?? null,
+        ventana: ventanaDeCompra({
+          estacionalidad: n.radarInfo?.estacionalidad,
+          curvaAnual: curvaPorKeyword.get(n.keyword),
+        }),
+        nivelBusqueda: n.nivelBusqueda ?? null,
+        estado: n.estado,
+        etapaCompra: n.etapaCompra ?? 'evaluando',
+        mios: propiosPorNicho.get(String(n._id)) ?? null,
+      })
+      continue
+    }
     if (!todos && analisis.veredicto === 'no_entrar') continue
 
     const ultimo = n.ultimos?.[0]
