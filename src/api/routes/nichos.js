@@ -149,10 +149,21 @@ router.get(
       })
       // frase lista para el tooltip: por qué este nicho tiene (o no) búsquedas
       if (n.nivelBusqueda) n.nivelBusqueda.explicacion = explicar(n.nivelBusqueda)
+      // UN "NO ENTRAR" SIN SERIE TAMBIÉN ESTÁ MADURANDO. (16-ago)
+      //
+      // La condición exigía veredicto de entrada, así que un nicho al que el
+      // primer análisis le dictó no_entrar quedaba fuera de la maduración y su
+      // veredicto pasaba por firme. Caso del día: "beauty blender", creado esa
+      // mañana, no_entrar con CERO scans — el mismo error que se corrigió en el
+      // score y en la lectura del top50, pero en el otro extremo del pipeline.
+      //
+      // Madurar depende de cuánto se midió, no del signo del veredicto. El
+      // rechazo puede ser correcto —880 búsquedas/mes es poco— pero eso lo dirá
+      // la serie, no el primer vistazo. La auto-pausa sigue exigiendo serie
+      // completa, así que esto no revive nada que ya se haya graduado.
       n.madurando =
         n.estado === 'activo' &&
         n.scansConDemanda < config.maduracionScans &&
-        ['entrar', 'entrar_con_condiciones'].includes(n.veredicto) &&
         !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando')
     }
 

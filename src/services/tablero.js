@@ -234,7 +234,10 @@ export async function tableroOportunidades({ todos = false } = {}) {
       })
       continue
     }
-    if (!todos && analisis.veredicto === 'no_entrar') continue
+    // un no_entrar con serie completa sí se esconde: ya se decidió. Uno sin
+    // serie es un primer vistazo y se queda a la vista, marcado como midiendo.
+    const scansDeEste = n.conteoDemanda?.[0]?.n ?? 0
+    if (!todos && analisis.veredicto === 'no_entrar' && scansDeEste >= config.maduracionScans) continue
 
     const ultimo = n.ultimos?.[0]
     const rec = analisis.recomendacion ?? {}
@@ -320,16 +323,26 @@ export async function tableroOportunidades({ todos = false } = {}) {
       factorEstimacion: 25,
       tendenciaVentas: tendencia,
       scansConDemanda,
+      // la mesa muestra "N/5 · faltan X" en vez del score y el veredicto
+      // mientras no haya serie, igual que el sidebar de Nichos: un score de un
+      // solo scan es un número prematuro, no una medición
+      midiendo:
+        n.estado === 'activo' &&
+        scansConDemanda < config.maduracionScans &&
+        !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando'),
+      faltanScans: Math.max(0, config.maduracionScans - scansConDemanda),
       confirmacion: confirmacionVeredicto(scansConDemanda, tendencia),
       // el programador sube a diario los preliminares con veredicto de entrada
       // hasta juntar la serie: la carta lo muestra para que se sepa que corre solo
       // mismo criterio que el programador: le faltan mediciones (no confundir
       // con el preliminar por tendencia a la baja, que ya tiene serie y lo que
       // necesita es decisión, no más scans)
+      // madurar depende de cuánto se midió, no del signo del veredicto: un
+      // no_entrar dictado con cero scans es un primer vistazo, no un cierre
+      // (ver el comentario largo en routes/nichos.js)
       madurando:
         n.estado === 'activo' &&
         scansConDemanda < config.maduracionScans &&
-        ['entrar', 'entrar_con_condiciones'].includes(analisis.veredicto) &&
         !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando'),
       sellersGemelos: gemelos ? gemelos.length : null,
       gemelosDetalle: gemelos?.length
