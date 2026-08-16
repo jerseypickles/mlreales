@@ -414,7 +414,31 @@ export function calcularScoreOportunidad({
       )
     : 50
   const porCatalogo = Number.isFinite(competencia.pctCatalogo) ? 100 - competencia.pctCatalogo : 50
-  const componenteEntrada = (porMuro + porCatalogo) / 2
+
+  // EN CATÁLOGO SE ENTRA POR PRECIO, NO ACUMULANDO. (corregido el 16-ago)
+  //
+  // La primera versión castigaba doble a los nichos de catálogo: por no poder
+  // diferenciarse Y por el muro del líder. El importador lo peleó —"no todo el
+  // mundo compra top, entraremos con precio bajo del mercado"— y tenía razón,
+  // porque en catálogo el juego es OTRO, no el mismo pero más difícil:
+  //
+  //   · todos los vendedores comparten UNA página, y ML elige ganador de la
+  //     caja de compra por precio, reputación y Full. El sistema ya consulta
+  //     ese precio: /items/{id}/price_to_win (services/meli.js).
+  //   · las reseñas y los vendidos acumulados son DE LA PÁGINA. El muro del
+  //     líder no es un cerro que escalar: es historia que HEREDAS al entrar.
+  //
+  // Así que en catálogo el muro no aplica y lo que decide es cuánta gente está
+  // peleando esa caja. Fuera de catálogo sí hay que construir listado propio y
+  // vale la lógica original (muro + espacio para diferenciarse).
+  //
+  // Caso que lo destapó: toallitas húmedas daba entrada 4 sobre 100 con 92% de
+  // catálogo y líder de ≥100.000 unidades — pero solo 26% de tiendas oficiales,
+  // 22 vendedores y concentración de 29,6%. Nadie tiene tomada esa caja.
+  const esCatalogo = Number.isFinite(competencia.pctCatalogo) && competencia.pctCatalogo >= umbrales.pctCatalogoDominante
+  const componenteEntrada = esCatalogo
+    ? clamp(100 - (competencia.concentracionTop3Pct ?? 100), 0, 100)
+    : (porMuro + porCatalogo) / 2
 
   // ECONOMÍA — ¿la venta paga lo que cuesta comprar el cliente?
   //

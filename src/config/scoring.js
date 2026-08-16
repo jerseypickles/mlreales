@@ -60,6 +60,11 @@ export const scoring = {
     // items con rating para que el componente calidad sea creíble: 6 productos
     // con 5.0 de 2 reseñas no prueban que "no hay espacio" — bajo esto, neutro
     minItemsCalidad: 5,
+    // desde acá el nicho se juega en catálogo y la entrada cambia de naturaleza:
+    // se gana la caja de compra por precio en vez de construir listado propio
+    // (ver componenteEntrada en metricas.js). Medido en la mesa: los nichos van
+    // de 0% a 100% de catálogo, con muy poco en el medio.
+    pctCatalogoDominante: 60,
   },
   escalas: {
     // respaldo de Full: con este número de vendedores distintos con stock
