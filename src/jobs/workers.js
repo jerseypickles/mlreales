@@ -504,11 +504,33 @@ export async function procesarRadar() {
   // Así que el cupo cuenta maduración, no una etapa de un flujo muerto.
   //
   // El techo de presupuesto de arriba sigue siendo el freno duro.
-  const madurando = await Nicho.countDocuments({
-    estado: 'activo',
-    scansConDemanda: { $lt: config.maduracionScans },
-    veredicto: { $in: ['entrar', 'entrar_con_condiciones'] },
-  })
+  // OJO: `scansConDemanda` NO es un campo guardado — se cuenta desde los
+  // reportes con demanda medida (mismo criterio que el sidebar y el
+  // programador). La primera versión de este arreglo lo consultó como si
+  // existiera y Mongo hizo match con TODOS los documentos (un campo ausente
+  // compara como null, y null < 5 es verdadero): dio 56 madurando cuando eran 6.
+  const [{ madurando } = { madurando: 0 }] = await Nicho.aggregate([
+    { $match: { estado: 'activo' } },
+    {
+      $lookup: {
+        from: 'reportes',
+        let: { nid: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ['$nichoId', '$$nid'] },
+              'metricas.demanda.resenasNuevasPorDia': { $ne: null },
+            },
+          },
+          { $count: 'n' },
+        ],
+        as: 'conteoDemanda',
+      },
+    },
+    { $addFields: { scans: { $ifNull: [{ $first: '$conteoDemanda.n' }, 0] } } },
+    { $match: { scans: { $lt: config.maduracionScans } } },
+    { $count: 'madurando' },
+  ])
   const cupo = Math.min(config.radarMaxNichos, Math.max(0, config.radarMaxActivos - madurando))
   if (cupo === 0) {
     return { omitido: true, motivo: `${madurando} nichos todavía madurando (tope ${config.radarMaxActivos})` }
