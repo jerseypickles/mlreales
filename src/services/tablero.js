@@ -444,5 +444,58 @@ export async function tableroOportunidades({ todos = false } = {}) {
     console.warn(`[tablero] familias no calculadas: ${err.message}`)
   }
 
+  marcarConversion(oportunidades)
   return oportunidades
+}
+
+// ¿LA BÚSQUEDA DE GOOGLE SE CONVIERTE EN VENTA DENTRO DE ML?
+//
+// Dato de LECTURA, no del score — decisión explícita del importador el 17-ago.
+// Google mide intención de investigar, no de comprar en ML, y las dos cosas se
+// separan muchísimo: sobre 68 nichos la correlación entre búsquedas y unidades
+// vendidas es apenas +0,47. Una manguera de jardín se compra sin googlear (260
+// búsquedas, 14.500 unidades en su top); un aire acondicionado se googlea diez
+// veces y se termina comprando en la tienda física (60.500 búsquedas, 14.650).
+//
+// EL RATIO CRUDO NO SIRVE: correlaciona −0,56 con el precio, o sea que mide
+// sobre todo que lo barato vende más unidades (bajo $10k el ratio mediano es
+// 7,5× y sobre $40k es 0,8×). Cableado así empujaría el tablero de vuelta a los
+// productos de $3.000, donde Full se lleva el 46%.
+//
+// Por eso se compara cada nicho contra lo NORMAL DE SU TRAMO DE PRECIO: una
+// regresión log-log de ratio sobre precio, y lo que se muestra es el desvío.
+// Con eso el precio queda neutralizado (correlación −0,00) y sobrevive la señal
+// que importa (+0,45 con el % del top que despegó).
+//
+// LÍMITE CONOCIDO, y por eso no entra al score: el numerador son unidades
+// ACUMULADAS de por vida y el denominador son búsquedas de un mes. Un nicho con
+// publicaciones viejas acumula más aunque hoy venda igual, así que parte de
+// "convierte mejor" puede ser "sus listings son más antiguos". Para separarlo
+// haría falta el DELTA de vendidos entre scans, que sí sería un flujo.
+function marcarConversion(filas) {
+  const base = filas
+    .map((o) => ({
+      o,
+      precio: o.mediana,
+      ratio: (o.vendidosHistoricos?.pisoUnidades ?? 0) / (o.curvaAnual?.busquedasMes || 0),
+    }))
+    .filter((x) => Number.isFinite(x.precio) && x.precio > 0 && Number.isFinite(x.ratio) && x.ratio > 0)
+  if (base.length < 8) return // con menos, la regresión no dice nada
+
+  const xs = base.map((x) => Math.log10(x.precio))
+  const ys = base.map((x) => Math.log10(x.ratio))
+  const mx = xs.reduce((a, b) => a + b, 0) / xs.length
+  const my = ys.reduce((a, b) => a + b, 0) / ys.length
+  const pend = xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0) / xs.reduce((s, x) => s + (x - mx) ** 2, 0)
+  const inter = my - pend * mx
+
+  for (const { o, precio, ratio } of base) {
+    const esperado = 10 ** (inter + pend * Math.log10(precio))
+    o.conversion = {
+      ratio: Math.round(ratio * 10) / 10,
+      esperado: Math.round(esperado * 10) / 10,
+      // >1 convierte mejor que lo normal de su precio; <1 peor
+      factor: Math.round((ratio / esperado) * 100) / 100,
+    }
+  }
 }

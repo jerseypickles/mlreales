@@ -233,6 +233,34 @@ function NuevoBadge({ creadoEl }) {
   )
 }
 
+// ¿LA BÚSQUEDA SE CONVIERTE EN VENTA ACÁ? Es el cruce de las dos fuentes:
+// unidades vendidas en ML por cada búsqueda en Google, comparado contra lo
+// normal de su tramo de precio (el ratio crudo solo mide que lo barato vende
+// más unidades — ver marcarConversion en tablero.js).
+//
+// Se lee como múltiplo: "8,7×" convierte casi nueve veces mejor de lo que se
+// esperaría a ese precio; "÷14" convierte catorce veces peor. Es dato de
+// lectura y NO entra al score, por decisión del importador: el numerador es
+// acumulado de por vida y el denominador es de un mes, así que un top con
+// publicaciones viejas se ve mejor de lo que es.
+function Conversion({ c }) {
+  if (!c?.factor) return <span className="op-fila-conv" />
+  const bueno = c.factor >= 1
+  const texto = bueno ? `${c.factor.toFixed(1).replace('.0', '').replace('.', ',')}×` : `÷${Math.round(1 / c.factor)}`
+  return (
+    <span
+      className={`op-fila-conv${bueno ? ' bien' : ' mal'}`}
+      title={`Por cada búsqueda en Google, el top de este nicho vendió ${c.ratio} unidades. Para su precio lo normal sería ${c.esperado}.\n\n${
+        bueno
+          ? 'Convierte MEJOR de lo esperado: la gente compra esto dentro de ML sin googlearlo antes, así que su volumen de búsqueda subestima el mercado.'
+          : 'Convierte PEOR de lo esperado: se googlea bastante pero no se compra acá — puede irse a tienda física o quedarse en la investigación.'
+      }\n\nDato de lectura, no entra al score: el acumulado de ventas es de toda la vida del aviso y las búsquedas son de un mes, así que un top con publicaciones antiguas se ve mejor de lo que es.`}
+    >
+      {texto}
+    </span>
+  )
+}
+
 function FilaCompacta({ o, rank, abierta, onAlternar }) {
   const ven = chipVentana(o.ventana)
   const c = o.curvaAnual
@@ -290,6 +318,8 @@ function FilaCompacta({ o, rank, abierta, onAlternar }) {
       >
         {o.pctFull != null ? `${Math.round(o.pctFull)}%` : '—'}
       </span>
+      {/* ── EL CRUCE: ¿esa búsqueda de Google se convierte en venta acá? ── */}
+      <Conversion c={o.conversion} />
       <span className="op-fila-ventana">
         {ven ? <em className={`chip-ventana v-${ven.clase}`}>{ven.texto}</em> : <em className="op-fila-plano">todo el año</em>}
       </span>
@@ -792,6 +822,7 @@ function GrupoOportunidades({ grupo, filas, children }) {
             <span /><span /><span />
             <span className="op-banda op-banda-google">Google</span>
             <span className="op-banda op-banda-ml">Mercado Libre</span>
+            <span className="op-banda op-banda-cruce">cruce</span>
             <span /><span /><span />
           </div>
           <div className="op-fila op-fila-cab" aria-hidden="true">
@@ -799,6 +830,7 @@ function GrupoOportunidades({ grupo, filas, children }) {
             <span>búsq/mes</span><span>el año</span>
             <span className="op-fila-vend" title="Unidades que el top acumula desde que se publicó cada aviso. No es por mes ni por año.">vendido</span>
             <span>full</span>
+            <span title="Ventas en ML por búsqueda en Google, contra lo normal de su tramo de precio">convierte</span>
             <span>ventana</span><span>veredicto</span><span />
           </div>
           {children}

@@ -5124,7 +5124,7 @@ section {
 .op-fila {
   display: grid;
   /* rank · nicho · score ┊ GOOGLE: búsq + año ┊ ML: vendido + full ┊ ventana · veredicto · ▸ */
-  grid-template-columns: 26px minmax(120px, 1fr) 32px 76px 62px 72px 42px minmax(100px, 132px) 82px 16px;
+  grid-template-columns: 24px minmax(112px, 1fr) 30px 72px 56px 66px 38px 44px minmax(94px, 124px) 78px 14px;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -5436,3 +5436,18 @@ section {
 }
 .op-midiendo-carta strong { display: block; font-size: 13px; margin-bottom: 6px; }
 .op-midiendo-carta p { margin: 0 0 12px; font-size: 12.5px; color: var(--tinta-2); max-width: 68ch; line-height: 1.55; }
+
+/* CONVIERTE: el cruce de las dos fuentes. Dato de lectura, por eso va tenue —
+   no decide como el score, informa como la curva. */
+.op-fila-conv {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  border-radius: 4px;
+  padding: 2px 0;
+}
+.op-fila-conv.bien { color: var(--exito-tinta); background: var(--exito-tenue); }
+.op-fila-conv.mal { color: var(--avisa-tinta); background: var(--avisa-tenue); }
+.op-banda-cruce { grid-column: span 1; color: var(--tinta-3); }
+.op-fila-cab > span[title*="búsqueda en Google"] { font-size: 9px; }
