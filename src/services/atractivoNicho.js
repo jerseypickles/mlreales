@@ -188,9 +188,30 @@ export async function medirAtractivo(keywords, { conCrecimiento = true } = {}) {
     const ops = [...volumenes.values()]
       .filter((d) => d?.keyword && Array.isArray(d.curva) && d.curva.length === 12)
       .map((d) => ({
-        updateOne: { filter: { keyword: d.keyword }, update: { $set: d }, upsert: true },
+        updateOne: {
+          // NO PISAR UNA CURVA YA CORREGIDA. Estas candidatas son formas CRUDAS
+          // ("pastillas freno"), y varias coinciden con la keyword de un nicho
+          // cuya curva guarda a propósito la medición de la forma BUENA
+          // ("pastillas de freno", 5.400 contra 390). Escribir la cruda encima
+          // deja el nicho mostrando su volumen comprimido con un keywordMedida
+          // que ya no corresponde — pasó el 16-ago con 8 nichos.
+          filter: { keyword: d.keyword, keywordMedida: { $in: [null, d.keyword] } },
+          update: { $set: d },
+          upsert: false,
+        },
       }))
+    // los que no existían se insertan aparte: el upsert del updateOne de arriba
+    // crearía duplicados al no matchear por el filtro de keywordMedida
+    const existentes = new Set(
+      (await CurvaEstacional.find({ keyword: { $in: [...volumenes.keys()] } }).select('keyword').lean()).map(
+        (c) => c.keyword,
+      ),
+    )
+    const nuevas = [...volumenes.values()].filter(
+      (d) => d?.keyword && !existentes.has(d.keyword) && Array.isArray(d.curva) && d.curva.length === 12,
+    )
     if (ops.length) await CurvaEstacional.bulkWrite(ops, { ordered: false })
+    if (nuevas.length) await CurvaEstacional.insertMany(nuevas, { ordered: false })
   } catch (err) {
     console.warn(`[atractivo] curvas no guardadas: ${err.message}`)
   }

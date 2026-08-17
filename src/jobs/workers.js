@@ -364,8 +364,10 @@ export async function procesarScanDetalle(job) {
     console.warn(`[scan-detalle] enriquecimiento Full omitido: ${err.message}`)
   }
 
-  // recalcular el reporte ahora que hay reviews/seller/Full del nivel 2
-  await obtenerColas().calcularMetricas.add('reporte', { nichoId })
+  // recalcular el reporte ahora que hay reviews/seller/Full del nivel 2.
+  // `conDetalle` marca que ESTA es la medición completa: el screening solo
+  // puede matar un nicho con esta, nunca con la pasada rápida.
+  await obtenerColas().calcularMetricas.add('reporte', { nichoId, conDetalle: true })
 
   return { objetivos: objetivos.length, aplicados, yaMedidos: yaMedidos.size, sinMatch, sinReviews, fallidos }
 }
@@ -395,7 +397,20 @@ export async function procesarCalcularMetricas(job) {
 
   // embudo del radar: en screening el score decide — bajo el umbral se pausa sin
   // gastar LLM; sobre el umbral se gradúa a detalle completo y sigue al análisis
-  if (nicho.fase === 'screening' && reporte.metricas.scoreOportunidad != null) {
+  //
+  // EL SCREENING ESPERA LA MEDICIÓN COMPLETA. El reporte se calcula dos veces
+  // por scan: una rápida con el nivel 1 y otra cuando aterriza el detalle. La
+  // primera va sistemáticamente corta —le faltan reseñas, seller y el Full
+  // exacto— así que juzgar con ella mata nichos por un dato incompleto.
+  //
+  // Medido el 17-ago en "luces led navidad": 08:00:40 score 42 → descartado y
+  // pausado; 08:03:59 el mismo reporte con detalle daba 45, que PASA el umbral
+  // de 45 — pero el análisis ya se saltó por "nicho en estado pausado".
+  //
+  // Si el nivel 2 está apagado nunca llega la segunda pasada, así que ahí
+  // screenea la primera: es la única que va a haber.
+  const mediccionCompleta = job.data?.conDetalle === true || !config.nivel2Activo
+  if (nicho.fase === 'screening' && mediccionCompleta && reporte.metricas.scoreOportunidad != null) {
     if (reporte.metricas.scoreOportunidad < config.screeningScoreMin) {
       if (nicho.origen === 'radar' && nicho.estado === 'activo') {
         nicho.estado = 'pausado'
