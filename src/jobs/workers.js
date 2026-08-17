@@ -594,6 +594,28 @@ export async function procesarRadar() {
     }
     if (existentes.has(keyword)) continue
 
+    // FAMILIA DISFRAZADA DE PRODUCTO. Una palabra suelta que ya encabeza un
+    // nicho del tablero no es un nicho nuevo: es el paraguas del que ya está.
+    // El radar creó "pistola" teniendo "pistola de juguete" —y el scan la
+    // mandó a Pistolas y Escopetas + Armas de Aire Comprimido, otro mercado y
+    // con regulación propia—, igual que antes había creado "organizador de
+    // cocina" (6 productos distintos, dominante 25%).
+    //
+    // Se prohibió por prompt y el radar volvió a hacerlo 4 horas después, así
+    // que va en código: un instructivo pide, un filtro garantiza.
+    //
+    // El filtro es angosto a propósito: solo pega cuando la keyword es UNA
+    // palabra Y ya existe un nicho que empieza con ella. "cosmetiquero" y
+    // "secaplatos" son de una palabra y son productos concretos — esos pasan.
+    const palabras = keyword.split(' ').filter(Boolean)
+    if (palabras.length === 1) {
+      const paraguas = [...existentes].find((k) => k !== keyword && k.startsWith(`${keyword} `))
+      if (paraguas) {
+        console.log(`[radar] "${keyword}" descartada: es la familia de "${paraguas}", que ya existe`)
+        continue
+      }
+    }
+
     const nicho = await Nicho.create({
       keyword,
       origen: 'radar',
