@@ -35,10 +35,66 @@ export function formatoDimensiones({ largoCm, anchoCm, altoCm, gramos }) {
 // el item no las declara — los de Full suelen venir sin ellas.
 export function dimensionesDeItem(oficial) {
   const crudo = oficial?.shipping?.dimensions
-  if (typeof crudo !== 'string') return null
-  const m = crudo.match(/^(\d+)x(\d+)x(\d+),(\d+)$/)
-  if (!m) return null
-  return { largoCm: Number(m[1]), anchoCm: Number(m[2]), altoCm: Number(m[3]), gramos: Number(m[4]) }
+  if (typeof crudo === 'string') {
+    const m = crudo.match(/^(\d+)x(\d+)x(\d+),(\d+)$/)
+    if (m) {
+      return { largoCm: Number(m[1]), anchoCm: Number(m[2]), altoCm: Number(m[3]), gramos: Number(m[4]) }
+    }
+  }
+
+  // `shipping.dimensions` viene VACÍO en los items propios, así que el costo se
+  // cotizaba con el default de 20x10x5 y 300 g. Las medidas reales sí están,
+  // como atributos declarados al publicar (PACKAGE_* o SELLER_PACKAGE_*, ver
+  // developers.mercadolibre.cl/es_ar/items-atributos-de-envio-y-dimensiones).
+  //
+  // Medido en la lámpara: real 21,8x14x9,4 y 340 g factura 770 g contra los
+  // 300 g del default — $1.039 de envío en vez de $999. Chico en un producto
+  // plano, pero en una caja voluminosa el volumétrico se dispara.
+  const attrs = oficial?.attributes
+  if (!Array.isArray(attrs)) return null
+  const val = (...ids) => {
+    for (const id of ids) {
+      const a = attrs.find((x) => x?.id === id)
+      const v = a?.value_name ?? a?.value_struct?.number ?? null
+      if (v != null) {
+        const n = Number(String(v).replace(',', '.').match(/[\d.]+/)?.[0])
+        if (Number.isFinite(n)) return { n, unidad: String(v).toLowerCase() }
+      }
+    }
+    return null
+  }
+  const L = val('SELLER_PACKAGE_LENGTH', 'PACKAGE_LENGTH')
+  const W = val('SELLER_PACKAGE_WIDTH', 'PACKAGE_WIDTH')
+  const H = val('SELLER_PACKAGE_HEIGHT', 'PACKAGE_HEIGHT')
+  const P = val('SELLER_PACKAGE_WEIGHT', 'PACKAGE_WEIGHT')
+  if (!L || !W || !H || !P) return null
+  // el peso puede venir en kg o en g; las medidas siempre en cm
+  const gramos = P.unidad.includes('kg') ? Math.round(P.n * 1000) : Math.round(P.n)
+  return {
+    largoCm: Math.ceil(L.n),
+    anchoCm: Math.ceil(W.n),
+    altoCm: Math.ceil(H.n),
+    gramos,
+  }
+}
+
+// ¿ESTE PAQUETE ENTRA A FULL? Regla oficial de ML Chile (ayuda/15573), medida
+// sobre el EMPAQUE PRIMARIO: pesa menos de 20 kg, ningún lado supera 120 cm y
+// la suma de los tres no pasa 260 cm. Lo que excede y queda 20 días sin retirar
+// se descarta con cargo en factura.
+export const LIMITES_FULL = { gramosMax: 20_000, ladoMaxCm: 120, sumaLadosMaxCm: 260 }
+
+export function cabeEnFull({ largoCm, anchoCm, altoCm, gramos } = {}) {
+  if (![largoCm, anchoCm, altoCm, gramos].every(Number.isFinite)) return null
+  const lados = [largoCm, anchoCm, altoCm]
+  const motivos = []
+  if (gramos >= LIMITES_FULL.gramosMax) motivos.push(`pesa ${(gramos / 1000).toFixed(1)} kg (máx 20)`)
+  if (Math.max(...lados) > LIMITES_FULL.ladoMaxCm) {
+    motivos.push(`lado de ${Math.max(...lados)} cm (máx 120)`)
+  }
+  const suma = lados.reduce((a, b) => a + b, 0)
+  if (suma > LIMITES_FULL.sumaLadosMaxCm) motivos.push(`suma de lados ${suma} cm (máx 260)`)
+  return { cabe: motivos.length === 0, motivos }
 }
 
 let idVendedor = null
