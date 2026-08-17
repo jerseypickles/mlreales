@@ -509,6 +509,9 @@ export function calcularMetricas({
   nivelBusqueda = null,
   // forma del año medida con Trends: alimenta el componente `constancia`
   ratioPico = null,
+  // comisión EXACTA de la categoría dominante (listing_prices). Sin ella cae al
+  // 17% de Premium, que era el supuesto original y erra hasta 3 puntos
+  comisionPct = null,
 }) {
   const top = [...snapshots]
     .sort((a, b) => (a.posicion ?? Infinity) - (b.posicion ?? Infinity))
@@ -646,8 +649,9 @@ export function calcularMetricas({
   // solo hace falta el orden de magnitud para saber si la publicidad puede
   // pagarse en este nicho.
   const medianaPrecio = percentil(precios, 50)
+  const comision = Number.isFinite(comisionPct) ? comisionPct / 100 : 0.17
   const contribucionUnidad = Number.isFinite(medianaPrecio)
-    ? medianaPrecio - medianaPrecio * 0.17 - envioFullPorTramo(medianaPrecio)
+    ? medianaPrecio - medianaPrecio * comision - envioFullPorTramo(medianaPrecio)
     : null
   const oportunidad = calcularScoreOportunidad({
     demanda,
@@ -914,6 +918,42 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
     // que con uno inventado
   }
 
+  // COMISIÓN REAL DEL NICHO, NO UN 17% SUPUESTO.
+  //
+  // El componente `economia` del score nació con la comisión fija en 17% porque
+  // era la de los productos propios. Medido el 17-ago sobre 16 nichos: va de
+  // 14% (aire acondicionado) a 20% (árbol de navidad, piscina inflable), y 13
+  // de 16 difieren del 17%. En un producto de $20.000 son $600 por venta que el
+  // score ignoraba.
+  //
+  // La máquina ya existía —comisionMlExacta consulta /sites/MLC/listing_prices,
+  // igual que la economía de Mis productos— solo que el score no la usaba.
+  // Cache 24h adentro, así que esto no agrega llamadas por scan.
+  let comisionPct = null
+  try {
+    const cuenta = new Map()
+    for (const s of snapshots) {
+      const c = productosPorSku.get(s.sku)?.categoriaML
+      if (c) cuenta.set(c, (cuenta.get(c) ?? 0) + 1)
+    }
+    const dominante = [...cuenta.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+    const mediana = percentil(
+      snapshots.map((s) => s.precio).filter(Number.isFinite).sort((a, b) => a - b),
+      50,
+    )
+    if (dominante && Number.isFinite(mediana)) {
+      const { comisionMlExacta } = await import('./comisionesMl.js')
+      const com = await comisionMlExacta({
+        precioClp: Math.round(mediana),
+        categoriaId: dominante,
+        tipoPublicacion: 'gold_pro',
+      })
+      if (Number.isFinite(com?.pct)) comisionPct = com.pct
+    }
+  } catch (err) {
+    console.warn(`[metricas] comisión exacta no disponible para "${nicho.keyword}": ${err.message}`)
+  }
+
   const metricas = calcularMetricas({
     snapshots,
     productosPorSku,
@@ -923,6 +963,7 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
     nivelBusqueda: nicho.nivelBusqueda ?? null,
     busquedasMes: curvaNicho?.busquedasMes ?? null,
     ratioPico: curvaNicho?.ratioPico ?? null,
+    comisionPct,
   })
   const gemelos = detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPrevios })
   if (gemelos) metricas.competencia.sellersGemelos = gemelos
