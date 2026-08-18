@@ -667,9 +667,14 @@ export async function procesarProgramadorScans() {
   // DOS ciclos: uno FRECUENTE solo-oficial (una venta se ve en minutos, no al
   // día siguiente) y la pasada COMPLETA diaria (actor para lo que la API no
   // cubre). Ninguno se congela con el techo de presupuesto.
+  // contra su PROPIO reloj, no contra ultimoScanEl: ese lo pisa el ciclo de 45
+  // min y la pasada completa nunca vencía (ver ProductoPropio)
   const propioVencidoFull = await ProductoPropio.exists({
     estado: 'activo',
-    $or: [{ ultimoScanEl: null }, { ultimoScanEl: { $lt: new Date(ahora - umbrales.diario) } }],
+    $or: [
+      { ultimoScanCompletoEl: null },
+      { ultimoScanCompletoEl: { $lt: new Date(ahora - umbrales.diario) } },
+    ],
   })
   const propioVencidoPre =
     propioVencidoFull ||

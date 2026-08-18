@@ -28,6 +28,16 @@ const productoPropioSchema = new mongoose.Schema({
   // 'generando'|'ok'|'error', generadoEl, competidores, resultado, costoUsd…}
   auditoria: { type: mongoose.Schema.Types.Mixed, default: null },
   ultimoScanEl: { type: Date, default: null },
+  // RELOJ APARTE PARA LA PASADA COMPLETA. Los propios corren en dos ciclos: el
+  // frecuente de 45 min (solo API oficial, $0) y el completo diario, que además
+  // sincroniza los cargos de ML y auto-importa publicaciones nuevas.
+  //
+  // Los dos escribían `ultimoScanEl`, así que el ciclo barato reseteaba el
+  // reloj que el completo miraba para saber si le tocaba: nunca pasaban las 20
+  // horas y la pasada completa no corrió NUNCA. Se vio el 18-ago-2026 — los
+  // cargos de ML llevaban 7 días congelados y cada corrida horaria registraba
+  // "cargosMl: null". El auto-import de publicaciones nuevas tampoco corría.
+  ultimoScanCompletoEl: { type: Date, default: null },
   // cambios de título detectados por el scan diario: [{fecha, anterior, nuevo}].
   // Con la serie de visitas al lado, dice si el cambio sirvió.
   historialTitulos: { type: [mongoose.Schema.Types.Mixed], default: [] },

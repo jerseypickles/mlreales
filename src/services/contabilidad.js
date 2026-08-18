@@ -27,6 +27,70 @@ export function rangoDelMes(periodo) {
   return { desde, hasta }
 }
 
+// LO QUE ML COBRA, DESGLOSADO Y CON LAS ANULACIONES RESTANDO.
+//
+// El detalle de facturación trae dos clases de línea: los cargos y sus
+// ANULACIONES, que ML manda con código propio empezado en B y monto POSITIVO
+// (BV anula CV, BFF anula CFF, BPAD anula PADS). Sumarlas todas cuenta la
+// anulación como si fuera un costo más.
+//
+// Hasta el 18-ago-2026 esta pantalla sumaba `montoClp` de todo lo que no
+// tuviera estado BONUS_ON_BILL, y daba $348.111 donde ML facturaba $283.939:
+// $64.171 de más. El BONUS_ON_BILL tampoco había que excluirlo — ML lo cobra y
+// lo compensa con su línea B, así que el par ya se cancela solo.
+//
+// La fórmula quedó fijada contra la factura, no por criterio: sumar los cargos
+// y restar las anulaciones reproduce EXACTO el monto del período que declara
+// /billing/integration/monthly/periods (diferencia $0,0 sobre 284 líneas).
+const FAMILIA_CARGO = {
+  CV: 'comision',
+  CFF: 'envios',
+  CXD: 'envios',
+  PADS: 'publicidad',
+  CFCB: 'colecta',
+  CFWA: 'almacenamiento',
+}
+// qué cargo anula cada código de anulación
+const ANULA_A = { BV: 'CV', BFF: 'CFF', BPAD: 'PADS' }
+
+export const ETIQUETA_FAMILIA = {
+  comision: 'Comisión por venta',
+  envios: 'Envíos Full',
+  publicidad: 'Publicidad (Product Ads)',
+  colecta: 'Colecta Full',
+  almacenamiento: 'Almacenamiento Full',
+  otros: 'Otros cargos',
+}
+
+export function desglosarCargos(cargos) {
+  const familias = new Map()
+  let total = 0
+  let anulaciones = 0
+  for (const c of cargos) {
+    const monto = c.montoClp ?? 0
+    if (!Number.isFinite(monto)) continue
+    const codigoAnulado = ANULA_A[c.tipo]
+    const esAnulacion = Boolean(codigoAnulado) || String(c.tipo ?? '').startsWith('B')
+    const familia = FAMILIA_CARGO[codigoAnulado ?? c.tipo] ?? 'otros'
+    const signo = esAnulacion ? -1 : 1
+    const f = familias.get(familia) ?? { familia, etiqueta: ETIQUETA_FAMILIA[familia], clp: 0, lineas: 0 }
+    f.clp += signo * monto
+    f.lineas++
+    familias.set(familia, f)
+    total += signo * monto
+    if (esAnulacion) anulaciones += monto
+  }
+  return {
+    totalClp: Math.round(total),
+    anulacionesClp: Math.round(anulaciones),
+    lineas: cargos.length,
+    familias: [...familias.values()]
+      .map((f) => ({ ...f, clp: Math.round(f.clp) }))
+      .filter((f) => f.clp !== 0)
+      .sort((a, b) => b.clp - a.clp),
+  }
+}
+
 export async function posicionIva({ periodo = mesActual() } = {}) {
   const { desde, hasta } = rangoDelMes(periodo)
 
@@ -71,16 +135,52 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
   // quién emite: el mandato es lo que hace que este débito sea del vendedor
   const muestra = documentos[0] ?? null
 
-  // cargos de ML del período: comisión, envío y publicidad. Los anulados en
-  // factura no son costo y por lo tanto tampoco generan crédito.
-  const cargos = await CargoMl.find({ fecha: { $gte: desde, $lt: hasta }, anulado: { $ne: true } }).lean()
-  const totalCargos = cargos.reduce((s, c) => s + (c.montoClp ?? 0), 0)
-  const cargosMl = { totalClp: Math.round(totalCargos), lineas: cargos.length }
+  // cargos de ML del período, desglosados y con las anulaciones restando (ver
+  // desglosarCargos). Se traen TODAS las líneas, incluidas las BONUS_ON_BILL:
+  // su anulación viene aparte y el par se cancela solo.
+  const cargos = await CargoMl.find({ fecha: { $gte: desde, $lt: hasta } }).lean()
+  const cargosMl = desglosarCargos(cargos)
+  const ultimoCargo = cargos.reduce((max, c) => (c.guardadoEl > max ? c.guardadoEl : max), null)
+  cargosMl.sincronizadoEl = ultimoCargo ?? null
+  const totalCargos = cargosMl.totalClp
+
+  // lo que ML declara del período: sirve de cuadratura y trae la DEUDA, que es
+  // lo que todavía no descuenta de las ventas (publicidad, colecta, almacenaje)
+  //
+  // OJO CON LA VENTANA: el período de facturación de ML NO es el mes
+  // calendario — el 2026-08-01 corre del 29-jul al 25-ago. Cuadrar su monto
+  // contra los cargos del mes daría una diferencia que no es un error sino dos
+  // ventanas distintas, así que el descuadre se calcula sobre las líneas del
+  // rango de ML. Si ese descuadre no da ~0, faltan líneas por sincronizar.
+  let periodoMl = null
+  try {
+    const { periodosFacturacion } = await import('./cargosMl.js')
+    const ps = await periodosFacturacion()
+    const p = ps.find((x) => String(x.key).startsWith(periodo)) ?? null
+    if (p) {
+      const enVentana = await CargoMl.find({
+        fecha: { $gte: new Date(`${p.desde}T00:00:00Z`), $lt: new Date(`${p.hasta}T23:59:59Z`) },
+      }).lean()
+      const medido = desglosarCargos(enVentana).totalClp
+      periodoMl = {
+        totalClp: Math.round(p.montoClp ?? 0),
+        impagoClp: Math.round(p.impagoClp ?? 0),
+        desde: p.desde,
+        hasta: p.hasta,
+        estado: p.estado,
+        medidoClp: medido,
+        descuadreClp: Math.round((p.montoClp ?? 0) - medido),
+      }
+    }
+  } catch (err) {
+    console.warn(`[contabilidad] período de ML no consultado: ${err.message}`)
+  }
 
   return {
     periodo,
     ventas,
     cargosMl,
+    periodoMl,
     debito: {
       ...debitoBase,
       base: debitoBase.documentos

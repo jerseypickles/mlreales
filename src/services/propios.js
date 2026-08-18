@@ -182,6 +182,8 @@ export async function escanearPropios({ soloOficial = false } = {}) {
       }
     }
     propio.ultimoScanEl = fecha
+    // solo la pasada completa mueve su propio reloj (ver ProductoPropio)
+    if (!soloOficial) propio.ultimoScanCompletoEl = fecha
     propio.mediciones.push({ fecha, precio, precioEfectivo, numReviews, rating, stock, vendidos, visitas })
     if (propio.mediciones.length > MAX_MEDICIONES) {
       propio.mediciones = propio.mediciones.slice(-MAX_MEDICIONES)
