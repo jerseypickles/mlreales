@@ -346,7 +346,7 @@ function MarcaCotizando({ o, onRecargar }) {
         onRecargar()
       }}
     >
-      <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+      <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
         <path d="M3 2.5h7.2L13 5.3V13a.9.9 0 0 1-.9.9H3a.9.9 0 0 1-.9-.9V3.4A.9.9 0 0 1 3 2.5z"
           fill={activo ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
         <path d="M5 7.6h6M5 10.2h4" stroke={activo ? 'var(--fondo, #fff)' : 'currentColor'} strokeWidth="1.2" strokeLinecap="round" />

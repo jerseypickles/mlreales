@@ -5124,7 +5124,7 @@ section {
 .op-fila {
   display: grid;
   /* rank · nicho · score ┊ GOOGLE: búsq + año ┊ ML: vendido + full ┊ ventana · veredicto · ▸ */
-  grid-template-columns: 24px minmax(112px, 1fr) 30px 72px 56px 66px 38px 44px minmax(94px, 124px) 78px 14px;
+  grid-template-columns: 24px minmax(108px, 1fr) 30px 72px 56px 66px 38px 44px minmax(92px, 120px) 76px 30px;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -5491,13 +5491,16 @@ section {
   border-radius: 4px;
   cursor: pointer;
   color: var(--tinta-3);
-  opacity: 0.35;
-  transition: opacity 140ms ease, color 140ms ease, background-color 140ms ease;
+  /* NO bajar de acá: a 0.35 en una columna de 14px el botón era invisible y el
+     importador no lo encontró. Un control tiene que verse sin buscarlo. */
+  opacity: 0.75;
+  border: 1px solid var(--borde);
+  transition: opacity 140ms ease, color 140ms ease, background-color 140ms ease, border-color 140ms ease;
 }
-.op-fila:hover .op-marca { opacity: 0.8; }
+.op-fila:hover .op-marca { opacity: 1; border-color: var(--acento); }
 .op-marca:hover { opacity: 1; background: var(--acento-tenue); color: var(--acento); }
 .op-marca:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; opacity: 1; }
-.op-marca.activa { opacity: 1; color: var(--acento); }
+.op-marca.activa { opacity: 1; color: var(--acento); border-color: var(--acento); background: var(--acento-tenue); }
 
 /* la fila marcada se distingue del resto sin gritar: fondo tenue y filete */
 .op-fila.op-cotizando { background: var(--acento-tenue); }
