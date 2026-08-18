@@ -213,6 +213,15 @@ export async function tableroOportunidades({ todos = false } = {}) {
     if (!analisis) {
       if (n.estado !== 'activo') continue
       const scans = n.conteoDemanda?.[0]?.n ?? 0
+      // LO QUE YA SE MIDIÓ SE MUESTRA, AUNQUE NO HAYA ANÁLISIS.
+      //
+      // La primera versión de esta fila solo llevaba nombre, curva y scans, así
+      // que en la mesa aparecían con Google medido pero las columnas de ML en
+      // blanco — y el importador preguntó por qué. El dato estaba: "zapatos
+      // seguridad" ya tenía ≥48.400 vendidos, 94% de despegue y 71,4% de Full
+      // desde su primer scan. Vendidos y Full salen del nivel 1 y NO necesitan
+      // serie; lo único que la serie aporta es el score y el veredicto.
+      const met = n.ultimos?.[0]?.metricas ?? null
       oportunidades.push({
         nichoId: String(n._id),
         keyword: n.keyword,
@@ -222,6 +231,13 @@ export async function tableroOportunidades({ todos = false } = {}) {
         faltanScans: Math.max(0, config.maduracionScans - scans),
         score: null,
         veredicto: null,
+        mediana: met?.precio?.mediana ?? null,
+        vendidosHistoricos: met?.vendidosHistoricos ?? null,
+        profundidadStock: met?.profundidadStock ?? null,
+        pctFull: met?.competencia?.pctFull ?? null,
+        pctCatalogo: met?.competencia?.pctCatalogo ?? null,
+        pctCrossBorder: met?.competencia?.pctCrossBorder ?? null,
+        sellersUnicos: met?.competencia?.sellersUnicos ?? null,
         curvaAnual: curvaPorKeyword.get(n.keyword) ?? null,
         ventana: ventanaDeCompra({
           estacionalidad: n.radarInfo?.estacionalidad,
