@@ -893,7 +893,14 @@ const GRUPOS_OP = [
     titulo: 'Estacionales lejanos',
     sub: 'el pico está a varios meses: no hay nada que hacer hoy',
     abierto: false,
-    test: (o) => !esPlano(o),
+    // EXIGE CURVA MEDIDA. Antes era el cajón de todo lo que no fuera plano, así
+    // que un nicho SIN curva —recién descubierto, todavía sin medir en Google—
+    // caía acá y quedaba rotulado "estacional lejano" sin que nadie lo hubiera
+    // medido. Al 18-ago le pasaba a cinco: extractor de leche, escurridor de
+    // platos, zapatos de seguridad, medias de compresión y soporte de monitor,
+    // que resultaron ser todos de TODO EL AÑO o alza suave.
+    // Sin clasificación caen al grupo "Sin temporada medida", que dice la verdad.
+    test: (o) => !esPlano(o) && Boolean(o.curvaAnual?.clasificacion),
   },
 ]
 
