@@ -5475,3 +5475,42 @@ section {
 .op-chip-tramo.alto { background: transparent; color: var(--tinta-3); border: 1px solid var(--borde); }
 /* la fila abierta ya usa el borde para su acento: el del tramo no debe pisarlo */
 .op-fila.op-fila-abierta.op-tramo-bueno { border-left-color: var(--acento); }
+
+/* MARCA DE COTIZACIÓN. La etapa del embudo vivía dentro de la tarjeta: había
+   que abrir la fila para marcar y desde la lista no se veía cuál era cuál. Con
+   69 filas eso confunde, así que el marcador va en la fila y de un clic.
+   Escribe la misma etapaCompra de siempre — solo cambia dónde se toca. */
+.op-marca {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 3px 0;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--tinta-3);
+  opacity: 0.35;
+  transition: opacity 140ms ease, color 140ms ease, background-color 140ms ease;
+}
+.op-fila:hover .op-marca { opacity: 0.8; }
+.op-marca:hover { opacity: 1; background: var(--acento-tenue); color: var(--acento); }
+.op-marca:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; opacity: 1; }
+.op-marca.activa { opacity: 1; color: var(--acento); }
+
+/* la fila marcada se distingue del resto sin gritar: fondo tenue y filete */
+.op-fila.op-cotizando { background: var(--acento-tenue); }
+.op-fila.op-cotizando .op-fila-kw::after {
+  content: 'cotizando';
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--acento);
+  color: #fff;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 1.5px;
+}

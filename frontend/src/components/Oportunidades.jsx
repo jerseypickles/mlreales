@@ -321,16 +321,55 @@ function ChipTramo({ mediana }) {
   )
 }
 
-function FilaCompacta({ o, rank, abierta, onAlternar }) {
+// MARCA DE COTIZACIÓN, EN LA FILA Y DE UN CLIC.
+//
+// La etapa del embudo ya existía, pero vivía DENTRO de la tarjeta desplegada:
+// para marcar que estás cotizando un nicho había que abrirlo, y desde la lista
+// no se veía cuál estaba en cuál. Con 69 filas eso es justo lo que confunde —
+// "no sé cuáles estoy cotizando" fue el pedido textual del importador.
+//
+// El marcador escribe la MISMA etapaCompra de siempre, así que el sidebar de
+// Nichos, el estratega y el cupo del radar lo ven igual. Solo cambia dónde se
+// toca.
+function MarcaCotizando({ o, onRecargar }) {
+  const activo = o.etapaCompra === 'cotizando'
+  return (
+    <button
+      type="button"
+      className={`op-marca${activo ? ' activa' : ''}`}
+      title={activo ? 'Lo estás cotizando — clic para desmarcar' : 'Marcar que estás cotizando este nicho'}
+      aria-pressed={activo}
+      aria-label={activo ? 'quitar marca de cotizando' : 'marcar como cotizando'}
+      onClick={async (e) => {
+        e.stopPropagation()
+        await api.ajustarNicho(o.nichoId, { etapaCompra: activo ? 'evaluando' : 'cotizando' })
+        onRecargar()
+      }}
+    >
+      <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+        <path d="M3 2.5h7.2L13 5.3V13a.9.9 0 0 1-.9.9H3a.9.9 0 0 1-.9-.9V3.4A.9.9 0 0 1 3 2.5z"
+          fill={activo ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        <path d="M5 7.6h6M5 10.2h4" stroke={activo ? 'var(--fondo, #fff)' : 'currentColor'} strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+    </button>
+  )
+}
+
+function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
   const ven = chipVentana(o.ventana)
   const c = o.curvaAnual
   const max = c?.curva?.length ? Math.max(...c.curva) : 0
   const mesHoy = new Date().getMonth()
+  const cotizando = o.etapaCompra === 'cotizando'
   return (
-    <button
-      type="button"
-      className={`op-fila${abierta ? ' op-fila-abierta' : ''} ${claseTramo(o.mediana)}`}
+    <div
+      role="button"
+      tabIndex={0}
+      className={`op-fila${abierta ? ' op-fila-abierta' : ''}${cotizando ? ' op-cotizando' : ''} ${claseTramo(o.mediana)}`}
       onClick={onAlternar}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAlternar() }
+      }}
       aria-expanded={abierta}
     >
       <span className="op-fila-rank">{rank}</span>
@@ -393,8 +432,8 @@ function FilaCompacta({ o, rank, abierta, onAlternar }) {
           {o.veredicto === 'entrar' ? 'entrar' : 'condiciones'}
         </span>
       )}
-      <span className="op-fila-flecha" aria-hidden="true">{abierta ? '▾' : '▸'}</span>
-    </button>
+      <MarcaCotizando o={o} onRecargar={onRecargar} />
+    </div>
   )
 }
 
@@ -1021,6 +1060,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
                   rank={rank}
                   abierta={abierta}
                   onAlternar={() => setExpandido(abierta ? null : o.nichoId)}
+                  onRecargar={cargar}
                 />
                 {abierta ? (
                   <>
