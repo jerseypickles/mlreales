@@ -261,6 +261,66 @@ function Conversion({ c }) {
   )
 }
 
+// EL TRAMO DE PRECIO DONDE EL NEGOCIO EXISTE.
+//
+// Medido contra la API de envíos el 18-ago, con caja chica y comisión 17%,
+// cuánto queda de cada venta después de que ML cobra lo suyo:
+//
+//    $5.990 → 69,2%      $12.990 → 75,0%      $19.990 → 66,7%  ← precipicio
+//    $9.989 → 74,7%      $17.990 → 77,2%      $24.990 → 70,0%
+//    $9.990 → 72,6%      $19.989 → 77,8% ←    $49.990 → 76,5%
+//
+// El envío de Full es FIJO y salta en $9.990 y otra vez en $19.990, así que la
+// curva sube parejo dentro de cada tramo y se desploma al cruzarlo: un peso más
+// caro que $19.989 cuesta $2.209 de contribución.
+//
+// De ahí la banda: entre $10.000 y $19.989 se queda entre 72,6% y 77,8%, el
+// mejor rendimiento de toda la escala — mejor incluso que un producto de
+// $40.000. Bajo $10.000 el envío fijo se come el margen y la publicidad no se
+// puede pagar (CAC medido $1.717); pasando $19.990 hay que llegar a ~$50.000
+// para volver a rendir igual.
+const TRAMO = { desde: 10_000, hasta: 19_989 }
+
+function claseTramo(mediana) {
+  if (!Number.isFinite(mediana)) return ''
+  if (mediana >= TRAMO.desde && mediana <= TRAMO.hasta) return 'op-tramo-bueno'
+  if (mediana < TRAMO.desde) return 'op-tramo-bajo'
+  return 'op-tramo-alto'
+}
+
+function ChipTramo({ mediana }) {
+  if (!Number.isFinite(mediana)) return null
+  const c = claseTramo(mediana)
+  if (c === 'op-tramo-bueno') {
+    return (
+      <i
+        className="op-chip-tramo bueno"
+        title={`Mediana ${fmtPrecio(mediana)}: cae en el tramo de $10.000 a $19.989, donde queda entre 72,6% y 77,8% de cada venta después de comisión y envío Full. Es el mejor rendimiento de toda la escala.`}
+      >
+        en tramo
+      </i>
+    )
+  }
+  if (c === 'op-tramo-bajo') {
+    return (
+      <i
+        className="op-chip-tramo bajo"
+        title={`Mediana ${fmtPrecio(mediana)}: bajo $10.000 el envío fijo de Full (~$870) se come una parte grande del precio, y comprar un cliente con publicidad cuesta $1.717 medidos — bajo ese piso la publicidad no puede ser rentable.`}
+      >
+        bajo tramo
+      </i>
+    )
+  }
+  return (
+    <i
+      className="op-chip-tramo alto"
+      title={`Mediana ${fmtPrecio(mediana)}: pasando $19.990 la tarifa de Full salta de $1.040 a $3.250 y el rendimiento cae de 77,8% a 66,7%. No vuelve a rendir igual hasta cerca de $50.000. No descarta el nicho, pero el producto tiene que justificar el salto.`}
+    >
+      sobre tramo
+    </i>
+  )
+}
+
 function FilaCompacta({ o, rank, abierta, onAlternar }) {
   const ven = chipVentana(o.ventana)
   const c = o.curvaAnual
@@ -269,7 +329,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar }) {
   return (
     <button
       type="button"
-      className={`op-fila${abierta ? ' op-fila-abierta' : ''}`}
+      className={`op-fila${abierta ? ' op-fila-abierta' : ''} ${claseTramo(o.mediana)}`}
       onClick={onAlternar}
       aria-expanded={abierta}
     >
@@ -277,6 +337,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar }) {
       <span className="op-fila-kw">
         <MioBadge mios={o.mios} />
         {o.keyword}
+        <ChipTramo mediana={o.mediana} />
         <NuevoBadge creadoEl={o.creadoEl} />
         {o.nivelBusqueda?.nivel === 'renombrar' ? <i className="op-fila-alerta" title="La gente escribe otra frase">keyword</i> : null}
       </span>

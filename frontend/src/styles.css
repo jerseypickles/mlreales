@@ -5451,3 +5451,27 @@ section {
 .op-fila-conv.mal { color: var(--avisa-tinta); background: var(--avisa-tenue); }
 .op-banda-cruce { grid-column: span 1; color: var(--tinta-3); }
 .op-fila-cab > span[title*="búsqueda en Google"] { font-size: 9px; }
+
+/* EL TRAMO DE PRECIO. Medido el 18-ago: entre $10.000 y $19.989 queda 72,6%-77,8%
+   de cada venta tras comisión y envío Full — el mejor de toda la escala. Bajo
+   $10.000 el envío fijo se lo come; pasando $19.990 la tarifa salta a $3.250 y
+   cae a 66,7%. La fila se marca para no tener que ir mirando precio por precio. */
+.op-fila.op-tramo-bueno { border-left-color: var(--exito-tinta); }
+.op-fila.op-tramo-bueno .op-fila-kw { font-weight: 700; }
+.op-chip-tramo {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.op-chip-tramo.bueno { background: var(--exito-tenue); color: var(--exito-tinta); }
+.op-chip-tramo.bajo,
+.op-chip-tramo.alto { background: transparent; color: var(--tinta-3); border: 1px solid var(--borde); }
+/* la fila abierta ya usa el borde para su acento: el del tramo no debe pisarlo */
+.op-fila.op-fila-abierta.op-tramo-bueno { border-left-color: var(--acento); }
