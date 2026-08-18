@@ -963,6 +963,97 @@ const FILTROS = [
   ['arreglar', 'Keyword por arreglar', (o) => o.nivelBusqueda?.nivel === 'renombrar'],
 ]
 
+// LO QUE EL SCRAPER VIO, SIN INTERMEDIARIOS. El resto de la mesa son métricas
+// derivadas (nivel, veredicto, ventana); esto es el listado crudo de ML tal
+// como salió, en el orden en que ML lo ordena. Sirve para lo que ningún número
+// resuelve: mirar los títulos, las fotos y los precios y decidir si ese
+// producto se puede traer mejor.
+//
+// Se pide al abrir la fila, no con el tablero: son ~95 productos por nicho y
+// cargarlos para las 69 filas de una sola vez es un payload que nadie mira.
+function ProductosEscaneados({ nichoId }) {
+  const [datos, setDatos] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let vivo = true
+    api
+      .productosNicho(nichoId, 10)
+      .then((d) => vivo && setDatos(d))
+      .catch((err) => vivo && setError(err.message))
+    return () => {
+      vivo = false
+    }
+  }, [nichoId])
+
+  if (error) return <div className="prod-escaneados"><p className="prod-vacio">No se pudo traer el listado: {error}</p></div>
+  if (!datos) return <div className="prod-escaneados"><Cargando texto="Trayendo el listado de ML…" /></div>
+  if (!datos.productos?.length) return <div className="prod-escaneados"><p className="prod-vacio">El scan no dejó productos.</p></div>
+
+  return (
+    <div className="prod-escaneados">
+      <div className="prod-encabezado">
+        <strong>Lo que se escaneó en Mercado Libre</strong>
+        <span className="prod-meta">
+          primeros {datos.productos.length} de {fmtNum(datos.total)} · orden de ML · scan del {fmtFecha(datos.fechaScan)}
+        </span>
+      </div>
+
+      <ol className="prod-lista">
+        {datos.productos.map((p) => (
+          <li key={p.sku} className="prod-fila">
+            <span className="prod-pos">{p.posicion ?? '·'}</span>
+
+            {p.imagen ? (
+              <img className="prod-foto" src={p.imagen} alt="" loading="lazy" width="44" height="44" />
+            ) : (
+              <span className="prod-foto prod-foto-vacia" aria-hidden="true" />
+            )}
+
+            <div className="prod-centro">
+              {p.url ? (
+                <a className="prod-titulo" href={p.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                  {p.titulo ?? p.sku}
+                </a>
+              ) : (
+                <span className="prod-titulo">{p.titulo ?? p.sku}</span>
+              )}
+              <div className="prod-sellos">
+                {p.vendedor ? <span className="prod-vendedor" title="Vendedor">{p.vendedor}</span> : null}
+                {p.esTiendaOficial ? <span className="prod-chip chip-oficial">tienda oficial</span> : null}
+                {p.esFull ? <span className="prod-chip chip-full">Full</span> : null}
+                {p.origenCrossBorder ? <span className="prod-chip chip-cbt" title="Se despacha desde el exterior">del exterior</span> : null}
+                {p.tipoListing === 'catalogo' ? <span className="prod-chip chip-catalogo">catálogo</span> : null}
+              </div>
+            </div>
+
+            <div className="prod-numeros">
+              <span className="prod-precio">{fmtPrecio(p.precio)}</span>
+              <span className="prod-sub">
+                {/* el badge de ML es acumulado y en baldes (25/50/100/500…): dice
+                    trayectoria del listing, no ritmo. Por eso va como "+N" y no
+                    como una tasa, y al lado se muestra la velocidad medida. */}
+                {Number.isFinite(p.vendidos) ? <b title="Badge acumulado de ML, en baldes">+{fmtNum(p.vendidos)} vend.</b> : null}
+                {Number.isFinite(p.numReviews) ? (
+                  <span title="Reseñas acumuladas">
+                    {Number.isFinite(p.vendidos) ? ' · ' : ''}
+                    {fmtNum(p.numReviews)} reseñas
+                  </span>
+                ) : null}
+              </span>
+              {Number.isFinite(p.resenasNuevasDia) && p.resenasNuevasDia > 0 ? (
+                <span className="prod-velocidad" title={`${p.reviewsDelta} reseñas nuevas en ${p.ventanaDias} días. Reseñas, no ventas: son lo contado, sin factor.`}>
+                  {p.resenasNuevasDia} reseñas/día
+                </span>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
@@ -1098,6 +1189,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
                     ) : (
                       <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} onRecargar={cargar} />
                     )}
+                    <ProductosEscaneados nichoId={o.nichoId} />
                     {o.familiaMiembros?.length ? (
                       <FamiliaColapsada miembros={o.familiaMiembros} porKeyword={porKeyword} lider={o} onAbrir={onAbrirNicho} onRecargar={cargar} />
                     ) : null}

@@ -30,7 +30,7 @@ export const api = {
   listarNichos: () => pedir('/api/nichos'),
   crearNicho: (keyword) => pedir('/api/nichos', json({ keyword })),
   reporte: (id) => pedir(`/api/nichos/${id}/reporte`),
-  productosNicho: (id) => pedir(`/api/nichos/${id}/productos`),
+  productosNicho: (id, limite) => pedir(`/api/nichos/${id}/productos${limite ? `?limite=${limite}` : ''}`),
   escanear: (id) => pedir(`/api/nichos/${id}/scan`, { method: 'POST' }),
   ajustarNicho: (id, cambios) => pedir(`/api/nichos/${id}`, { ...json(cambios), method: 'PATCH' }),
   historia: (sku) => pedir(`/api/productos/${sku}/historia`),

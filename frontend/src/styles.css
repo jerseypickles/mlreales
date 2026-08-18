@@ -5516,3 +5516,125 @@ section {
   text-transform: uppercase;
   vertical-align: 1.5px;
 }
+
+/* ---- Listado crudo de ML dentro de una fila abierta de Oportunidades ---- */
+/* Denso a propósito: son 10 filas que se barren de un vistazo, no tarjetas. */
+.prod-escaneados {
+  margin: 10px 0 0;
+  padding: 12px 14px 8px;
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+.prod-encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.prod-encabezado strong { font-size: 13px; color: var(--tinta); }
+.prod-meta { font-size: 11.5px; color: var(--tinta-3); }
+.prod-vacio { margin: 0; font-size: 12.5px; color: var(--tinta-2); }
+
+.prod-lista { list-style: none; margin: 0; padding: 0; }
+.prod-fila {
+  display: grid;
+  grid-template-columns: 22px 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--borde);
+}
+.prod-fila:first-child { border-top: 0; }
+
+.prod-pos {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta-3);
+  text-align: right;
+}
+.prod-foto {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+}
+.prod-foto-vacia { display: block; }
+
+.prod-centro { min-width: 0; }
+.prod-titulo {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--tinta);
+  text-decoration: none;
+  /* dos líneas y corta: los títulos de ML son larguísimos y a propósito */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+a.prod-titulo { cursor: pointer; transition: color 180ms ease; }
+a.prod-titulo:hover { color: var(--acento); text-decoration: underline; }
+a.prod-titulo:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; border-radius: 3px; }
+
+.prod-sellos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+}
+.prod-vendedor {
+  font-size: 11px;
+  color: var(--tinta-3);
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prod-chip {
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.chip-oficial { background: var(--acento-tenue); color: var(--acento); border-color: var(--acento-borde); }
+.chip-full { background: var(--exito-tenue); color: var(--exito-tinta); }
+.chip-cbt { background: var(--avisa-tenue); color: var(--avisa-tinta); }
+.chip-catalogo { background: var(--superficie); color: var(--tinta-2); border-color: var(--borde-fuerte); }
+
+.prod-numeros {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  text-align: right;
+}
+.prod-precio {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tinta);
+  font-variant-numeric: tabular-nums;
+}
+.prod-sub { font-size: 11px; color: var(--tinta-2); white-space: nowrap; }
+.prod-velocidad { font-size: 10.5px; color: var(--exito-tinta); white-space: nowrap; }
+
+@media (max-width: 620px) {
+  .prod-fila { grid-template-columns: 18px 36px minmax(0, 1fr); }
+  .prod-foto { width: 36px; height: 36px; }
+  /* el precio se va a una fila propia bajo el título en vez de comprimirlo */
+  .prod-numeros {
+    grid-column: 2 / -1;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    justify-content: flex-start;
+    text-align: left;
+  }
+}

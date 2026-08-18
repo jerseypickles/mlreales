@@ -466,7 +466,16 @@ router.get(
     const vista = await obtenerProductosUltimoScan(nicho)
     if (!vista) return res.status(404).json({ error: 'aún no hay scans completados para este nicho' })
 
-    res.json({ fechaScan: vista.fechaScan, total: vista.productos.length, productos: vista.productos })
+    // `limite` es para la vista de la mesa: al abrir un nicho en Oportunidades
+    // se muestran los primeros 10 tal como los ordena ML, no los ~95 del scan.
+    // En ese modo se sacan las preguntas, que son el campo pesado (listas de
+    // texto por producto) y no se usan en esa lista.
+    const limite = Math.min(Number(req.query.limite) || 0, vista.productos.length)
+    const productos = limite
+      ? vista.productos.slice(0, limite).map(({ preguntas, ...resto }) => resto)
+      : vista.productos
+
+    res.json({ fechaScan: vista.fechaScan, total: vista.productos.length, productos })
   }),
 )
 
