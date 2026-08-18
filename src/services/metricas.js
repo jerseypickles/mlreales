@@ -54,6 +54,63 @@ const clamp = (n, min, max) => Math.min(max, Math.max(min, n))
 // depurar (solo reseñas): filtra los artefactos de los agregados de catálogo
 // — saltos de nivel imposibles y conteos duplicados entre listings hermanos —
 // que de otro modo se multiplican por el factor 25 (ver scoring.depuracionDelta).
+// UNA LECTURA QUE BAJA ES SCRAPEO FALLIDO, NO UN CERO.
+//
+// Las reseñas son acumulativas: nunca bajan. Cuando el scan lee menos que antes
+// —casi siempre 0— es que ML no entregó el dato, y guardarlo como número crea
+// un fantasma DOS scans después: la lectura buena que viene detrás se compara
+// contra el 0 y aparece como si el producto hubiera ganado todo su historial de
+// golpe. Medido el 18-ago en "manguera extensible": un item con serie real
+// 120 → 121 (una reseña en dos semanas) figuraba con 16,5 reseñas/día porque el
+// scan del 7-ago lo había leído en 0.
+//
+// El filtro de saltos de catálogo no lo atajaba: su techo es
+// max(pisoPorDia, maxPctDia × anterior) y con anterior = 0 el segundo término
+// se anula, así que el salto pasaba por debajo del piso.
+//
+// Alcance al detectarlo: 785 lecturas imposibles sobre 604 productos, 21% de
+// ellas caídas a exactamente 0. Contaminaba el delta del nicho, que es la
+// demanda que alimenta el score y la serie de maduración.
+//
+// La regla es la propiedad del dato, no un umbral elegido: se recorre la serie
+// de cada SKU en orden y se descarta todo lo que quede por debajo del máximo ya
+// visto. Descartar es poner null (= "no medido"), nunca 0.
+function podarRetrocesos(serieAsc) {
+  const malas = new Set()
+  let techo = -Infinity
+  for (const m of serieAsc) {
+    if (!Number.isFinite(m.n)) continue
+    if (m.n < techo) malas.add(+m.fecha)
+    else techo = m.n
+  }
+  return malas
+}
+
+async function anularReviewsFallidas(grupos) {
+  const vivos = grupos.filter((g) => Array.isArray(g) && g.length)
+  const skus = [...new Set(vivos.flat().map((s) => s.sku))]
+  if (!skus.length) return 0
+
+  const series = await Snapshot.aggregate([
+    { $match: { sku: { $in: skus }, numReviews: { $ne: null } } },
+    { $sort: { fecha: 1 } },
+    { $group: { _id: '$sku', serie: { $push: { fecha: '$fecha', n: '$numReviews' } } } },
+  ])
+  const malasPorSku = new Map(series.map((s) => [s._id, podarRetrocesos(s.serie)]))
+
+  let anulados = 0
+  for (const grupo of vivos) {
+    for (const snap of grupo) {
+      if (!Number.isFinite(snap.numReviews)) continue
+      if (malasPorSku.get(snap.sku)?.has(+snap.fecha)) {
+        snap.numReviews = null
+        anulados++
+      }
+    }
+  }
+  return anulados
+}
+
 function extraerSenal(snapshots, snapshotsPrevios, campo, { depurar = false } = {}) {
   const valores = snapshots.map((s) => s[campo]).filter(Number.isFinite)
   if (!valores.length) return null
@@ -736,6 +793,14 @@ export async function obtenerProductosUltimoScan(nicho) {
   const velocidadPorSku = new Map()
   const dep = scoring.depuracionDelta
   for (const h of historial) {
+    // misma poda que en el reporte del nicho: una lectura que retrocede es
+    // scrapeo fallido, y compararse contra ella inventa velocidad (ver
+    // anularReviewsFallidas). La serie viene de más nueva a más vieja.
+    const malas = podarRetrocesos(
+      [...h.mediciones].reverse().map((m) => ({ fecha: m.fecha, n: m.numReviews })),
+    )
+    h.mediciones = h.mediciones.filter((m) => !malas.has(+m.fecha))
+    if (!h.mediciones.length) continue
     const [ultima, ...resto] = h.mediciones
     // misma ventana mínima que el delta del nicho (resolución); si la serie es
     // nueva, cae a ≥12h para no quedarse ciego
@@ -905,6 +970,14 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   const snapshotsPrevios = snapPrevio
     ? await Snapshot.find({ keyword: nicho.keyword, fecha: snapPrevio.fecha }).lean()
     : null
+
+  // antes de medir nada: las lecturas de reseñas que retroceden son scrapeos
+  // fallidos y se anulan, para que la buena que viene detrás no se lea como un
+  // salto de demanda (ver anularReviewsFallidas)
+  const reviewsAnuladas = await anularReviewsFallidas([snapshots, snapshotsPrevios])
+  if (reviewsAnuladas) {
+    console.log(`[metricas] "${nicho.keyword}": ${reviewsAnuladas} lecturas de reseñas descartadas por retroceder`)
+  }
 
   // el volumen de búsqueda vive en la curva estacional (una consulta, no caduca)
   let curvaNicho = null
