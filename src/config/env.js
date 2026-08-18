@@ -68,7 +68,15 @@ export const config = {
   optimizadorCron: process.env.OPTIMIZADOR_CRON || '15 9 * * 2',
   // maduración de cartera: un nicho con veredicto de entrada corre a scan
   // diario hasta juntar N reportes con demanda medida (la película, no la foto)
-  maduracionScans: Number(process.env.MADURACION_SCANS) || 5,
+  //
+  // 5 → 3 el 18-ago-2026, con la medición al lado. Sobre los 12 nichos con 8+
+  // scans, leyendo el PROMEDIO de la serie el veredicto acierta 81% tanto con 3
+  // como con 5 mediciones; el score no converge nunca (oscila ±5 pts para
+  // siempre), así que el 4° y el 5° scan no compraban precisión — compraban
+  // cinco días de demora y bloqueaban el radar por el tope de madurando. La
+  // condición para que 3 alcance es leer el nivel, no el último valor: eso está
+  // en nivelScore() de services/tablero.js, donde está el detalle.
+  maduracionScans: Number(process.env.MADURACION_SCANS) || 3,
   // cupo de nichos madurando a diario a la vez (los de mayor score primero):
   // el resto entra a medida que los confirmados liberan lugar
   maduracionMax: Number(process.env.MADURACION_MAX) || 8,

@@ -111,9 +111,28 @@ export async function tableroOportunidades({ todos = false } = {}) {
       },
     },
     {
+      // SERIE de scores. Medido el 18-ago sobre los 12 nichos con 8+ scans: el
+      // score NO converge — oscila ±5 pts alrededor de un nivel para siempre
+      // (foco solares: 69 61 72 70 73 79 70 76). Leer el último valor acierta
+      // el veredicto 64-69% de las veces; leer el promedio de la serie, 81%.
+      // Por eso el tablero rankea por NIVEL, no por la última medición.
+      $lookup: {
+        from: 'reportes',
+        let: { nid: '$_id' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$nichoId', '$$nid'] }, scoreOportunidad: { $ne: null } } },
+          { $sort: { fecha: -1 } },
+          { $limit: 8 },
+          { $project: { _id: 0, s: '$scoreOportunidad' } },
+        ],
+        as: 'serieScore',
+      },
+    },
+    {
       $project: {
         keyword: 1,
         conteoDemanda: 1,
+        serieScore: 1,
         nivelBusqueda: 1,
         creadoEl: 1, // la mesa marca los recién descubiertos
         origen: 1,
@@ -318,7 +337,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       veredicto: analisis.veredicto,
       confianza: analisis.confianza ?? null,
       veredictoDeSerie: analisis.esGraduacion === true || undefined,
-      score: ultimo?.scoreOportunidad ?? docAnalisis.scoreOportunidad ?? null,
+      ...nivelScore(n.serieScore, ultimo?.scoreOportunidad ?? docAnalisis.scoreOportunidad ?? null),
       fechaScan: ultimo?.fecha ?? null,
       mediana: ultimo?.metricas?.precio?.mediana ?? null,
       // LO CONTADO va primero y LO DERIVADO va marcado. `ventasDia` es delta de
@@ -462,6 +481,36 @@ export async function tableroOportunidades({ todos = false } = {}) {
 
   marcarConversion(oportunidades)
   return oportunidades
+}
+
+// EL SCORE ES UNA MEDICIÓN CON RUIDO, NO UN VALOR.
+//
+// Medido el 18-ago-2026 sobre los 12 nichos con 8 o más scans: el score nunca
+// converge. Oscila ±5 puntos alrededor de un nivel estable y se queda ahí para
+// siempre — foco solares dio 69 61 72 70 73 79 70 76, piscina inflable 77 79 80
+// 83 76 73 87 69. No le faltan mediciones: la medición misma vibra.
+//
+// La consecuencia es contraintuitiva y por eso vale escribirla. Leyendo el
+// ÚLTIMO valor, el veredicto del scan 5 acierta MENOS que el del scan 3 (64% vs
+// 69%): cada scan nuevo es otro tiro al aire, y el último tiro no sabe más que
+// el anteúltimo. Leyendo el PROMEDIO de la serie sube a 81%, y ahí 3 scans
+// acierta exactamente igual que 5 (81% ambos, error de 2,3 vs 1,4 puntos —
+// diferencia que cae dentro del propio ruido).
+//
+// Por eso: el tablero rankea por nivel, y la maduración baja de 5 scans a 3.
+// Los dos scans que se ahorran no compraban precisión, compraban demora.
+//
+// `dispersion` se expone para que la mesa pueda mostrar cuánto vibra el nicho:
+// un 72 firme y un 72 que rebota entre 58 y 88 no son la misma apuesta.
+function nivelScore(serie, respaldo) {
+  const s = (serie ?? []).map((r) => r.s).filter(Number.isFinite)
+  if (!s.length) return { score: respaldo, scoreUltimo: respaldo, dispersion: null }
+  const nivel = Math.round(s.reduce((a, b) => a + b, 0) / s.length)
+  return {
+    score: nivel,
+    scoreUltimo: s[0], // la serie viene ordenada de más nueva a más vieja
+    dispersion: s.length >= 3 ? Math.max(...s) - Math.min(...s) : null,
+  }
 }
 
 // ¿LA BÚSQUEDA DE GOOGLE SE CONVIERTE EN VENTA DENTRO DE ML?

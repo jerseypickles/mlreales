@@ -554,10 +554,18 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
         <span className="op-rank">#{rank}</span>
         {o.madurando ? (
           <span className="mini-madurando mini-madurando-carta" title="Midiendo entrabilidad: el veredicto firme llega al completar la serie">
-            {o.scansConDemanda}/5
+            {o.scansConDemanda}/{o.scansConDemanda + (o.faltanScans ?? 0)}
           </span>
         ) : o.score != null ? (
-          <ScoreRing valor={o.score} size={44} grosor={4.5} />
+          <span
+            title={
+              o.dispersion != null
+                ? `Nivel ${o.score}: promedio de la serie de scans, no la última medición. El score de un scan suelto vibra ±5 puntos, así que leer el último valor acierta el veredicto 64-69% de las veces y leer el nivel, 81%. Este nicho se movió ${o.dispersion} puntos entre su scan más alto y el más bajo${o.scoreUltimo != null ? ` (el último midió ${o.scoreUltimo})` : ''}.`
+                : `Nivel ${o.score} sobre 100.`
+            }
+          >
+            <ScoreRing valor={o.score} size={44} grosor={4.5} />
+          </span>
         ) : null}
       </div>
 
