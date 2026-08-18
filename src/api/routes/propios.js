@@ -447,6 +447,32 @@ router.post(
   }),
 )
 
+// BAJARSE DE UNA PROMOCIÓN. Subir el precio de lista NO desinscribe de las
+// campañas: ML solo borra los PRICE_DISCOUNT. El 17-ago, tras subir cuatro
+// productos a $3.990, seguían comprometidos a Black Week $2.109 (27-ago) y a
+// 9 del 9 $2.751-$2.840 (2-sep) — precios aceptados cuando valían $2.290 y
+// $2.990, o sea que el producto habría quedado MÁS barato que antes de subirlo.
+router.post(
+  '/:id/promocion/salir',
+  manejar(async (req, res) => {
+    const propio = await ProductoPropio.findById(req.params.id)
+    if (!propio) return res.status(404).json({ error: 'producto propio no encontrado' })
+    const { promotionType, promotionId, offerId } = req.body ?? {}
+    if (!promotionType) return res.status(400).json({ error: 'promotionType requerido' })
+    const idMl = propio.itemIdMl ?? propio.sku
+    const params = new URLSearchParams({ promotion_type: promotionType, app_version: 'v2' })
+    if (promotionId) params.set('promotion_id', promotionId)
+    if (offerId) params.set('offer_id', offerId)
+    const { meliDelete } = await import('../../services/meli.js')
+    try {
+      await meliDelete(`/seller-promotions/items/${idMl}?${params.toString()}`)
+      res.json({ ok: true, keyword: propio.titulo, promotionType, promotionId: promotionId ?? null })
+    } catch (err) {
+      res.status(err.status ?? 502).json({ error: err.message })
+    }
+  }),
+)
+
 // Revisar la ficha técnica (Características) contra la categoría ML y los
 // ganadores: propone correcciones aplicables por API
 router.post(

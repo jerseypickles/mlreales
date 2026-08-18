@@ -150,6 +150,15 @@ export async function meliPost(ruta, body) {
   return meliFetch(ruta, { method: 'POST', body })
 }
 
+// Bajarse de una promoción (seller-promotions). ML NO borra las inscripciones a
+// campañas cuando sube el precio de lista —eso solo pasa con PRICE_DISCOUNT—,
+// así que las de Black Week y 9 del 9 sobrevivieron a la subida del 17-ago con
+// los precios viejos: las pistolas iban a caer a $2.109 el 27-ago, más barato
+// que antes de subirlas.
+export async function meliDelete(ruta) {
+  return meliFetch(ruta, { method: 'DELETE' })
+}
+
 export async function estadoMeli() {
   const cuenta = await MeliCuenta.findOne().lean()
   if (!cuenta) return { conectado: false, configurado: meliConfigurado() }
