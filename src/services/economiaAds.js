@@ -91,6 +91,13 @@ export async function economiaPorAnuncio(porItem, propios) {
       venta: Math.round(venta),
       unidades,
       clicks: Number(m.clicks) || 0,
+      // la vitrina: foto, link y campaña vienen del mismo payload del anuncio y
+      // son lo que deja mostrar el producto como producto en la mesa
+      foto: ad.foto ?? null,
+      permalink: ad.permalink ?? null,
+      campanaId: ad.campanaId ?? null,
+      creadoEl: ad.creadoEl ?? null,
+      impresiones: Number(m.prints) || 0,
       roasReal,
       ...(eco ?? {}),
       // la contribución que ESTE anuncio generó, contra lo que costó: es el

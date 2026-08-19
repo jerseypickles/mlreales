@@ -5715,3 +5715,181 @@ a.prod-titulo:focus-visible { outline: 2px solid var(--acento); outline-offset: 
   color: var(--tinta-3);
 }
 .cont-pie svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+/* ══ Publicidad ═══════════════════════════════════════════════════════════ */
+/* Denso arriba (las cifras que se barren de un vistazo), aireado abajo (el
+   producto, que se mira uno por uno). Los sellos son los de ML a propósito:
+   es el idioma con que el importador ya lee su panel. */
+
+.ads-tablero {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 1px;
+  background: var(--borde);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-g);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.ads-cifra {
+  background: var(--superficie);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ads-cifra span { font-size: 11px; color: var(--tinta-3); text-transform: lowercase; }
+.ads-cifra strong { font-size: 19px; font-variant-numeric: tabular-nums; color: var(--tinta); line-height: 1.15; }
+.ads-cifra-bien strong { color: var(--exito-tinta); }
+.ads-cifra-mal strong { color: var(--peligro); }
+
+/* ── campañas: objetivo vs real, que es todo lo que se puede mover ── */
+.ads-camps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.ads-camp {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 12px 14px;
+}
+.ads-camp-off { opacity: 0.55; }
+.ads-camp header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ads-camp header strong { font-size: 13px; color: var(--tinta); }
+.ads-estado {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--superficie-2);
+  color: var(--tinta-3);
+  border: 1px solid var(--borde);
+}
+.ads-camp-roas { display: flex; gap: 18px; margin-bottom: 10px; }
+.ads-camp-roas div { display: flex; flex-direction: column; gap: 1px; }
+.ads-camp-roas span { font-size: 10.5px; color: var(--tinta-3); }
+.ads-camp-roas b { font-size: 17px; font-variant-numeric: tabular-nums; color: var(--tinta); }
+.ads-camp-pie { display: flex; flex-direction: column; gap: 5px; }
+.ads-camp-pie > span { font-size: 11px; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+.ads-barra { height: 4px; background: var(--superficie-2); border-radius: 999px; overflow: hidden; }
+.ads-barra span { display: block; height: 100%; background: var(--acento); border-radius: 999px; }
+.ads-barra .ads-barra-full { background: var(--avisa-tinta); }
+
+/* ── el producto ── */
+.ads-seccion-cabeza { margin-bottom: 10px; }
+.ads-seccion-cabeza h3 { margin: 0 0 3px; font-size: 14px; }
+.ads-seccion-cabeza p { margin: 0; font-size: 12px; color: var(--tinta-2); line-height: 1.5; max-width: 76ch; }
+
+.ads-lista { list-style: none; margin: 0; padding: 0; }
+.ads-fila {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 12px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  margin-bottom: 6px;
+}
+.ads-fila-mal { border-color: var(--peligro); }
+
+.ads-foto {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+}
+.ads-foto-vacia { display: block; }
+
+.ads-ficha { min-width: 0; }
+.ads-nombre {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--tinta);
+  text-decoration: none;
+}
+a.ads-nombre { cursor: pointer; transition: color 180ms ease; }
+a.ads-nombre:hover { color: var(--acento); text-decoration: underline; }
+a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; border-radius: 3px; }
+
+.ads-sellos { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.ads-sello {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sello-vendido { background: #fef3c7; color: #92400e; }
+.sello-ingreso { background: var(--exito-tenue); color: var(--exito-tinta); }
+.sello-visto { background: #ede9fe; color: #5b21b6; }
+.sello-retorno { background: var(--acento-tenue); color: var(--acento); }
+.sello-nuevo { background: #cffafe; color: #155e75; }
+.sello-alerta { background: #fee2e2; color: #b91c1c; }
+.sello-campana { background: var(--superficie-2); color: var(--tinta-3); font-weight: 500; text-transform: none; letter-spacing: 0; }
+
+@media (prefers-color-scheme: dark) {
+  .sello-vendido { background: #78350f; color: #fde68a; }
+  .sello-visto { background: #4c1d95; color: #ddd6fe; }
+  .sello-nuevo { background: #164e63; color: #a5f3fc; }
+  .sello-alerta { background: #7f1d1d; color: #fecaca; }
+}
+
+/* el embudo: vistas → clics → ventas, en una sola columna angosta */
+.ads-embudo {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(58px, auto));
+  gap: 2px 14px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ads-embudo b { font-size: 13px; color: var(--tinta); grid-row: 1; }
+.ads-embudo span { font-size: 10px; color: var(--tinta-3); grid-row: 2; }
+
+.ads-plata { display: flex; align-items: center; gap: 16px; text-align: right; }
+.ads-plata > div { display: flex; flex-direction: column; gap: 1px; }
+.ads-plata span { font-size: 10px; color: var(--tinta-3); }
+.ads-plata b { font-size: 13px; color: var(--tinta); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ads-plata em { font-style: normal; color: var(--tinta-3); font-weight: 400; }
+.ads-resultado b { font-size: 14px; }
+.res-bien { color: var(--exito-tinta); }
+.res-mal { color: var(--peligro); }
+
+.ad-veredicto {
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.ad-bien { background: var(--exito-tenue); color: var(--exito-tinta); }
+.ad-justo { background: var(--avisa-tenue); color: var(--avisa-tinta); }
+.ad-mal { background: #fee2e2; color: #b91c1c; }
+.ad-neutro { background: var(--superficie-2); color: var(--tinta-3); }
+@media (prefers-color-scheme: dark) { .ad-mal { background: #7f1d1d; color: #fecaca; } }
+
+.ads-detalle { margin-top: 10px; border: 1px solid var(--borde); border-radius: 8px; background: var(--superficie-2); font-size: 12.5px; }
+.ads-detalle summary { padding: 8px 10px; cursor: pointer; color: var(--tinta-2); }
+.ads-detalle summary:hover { color: var(--tinta); }
+.ads-detalle > div { padding: 0 10px 10px; }
+.ads-detalle p { margin: 0 0 7px; color: var(--tinta-2); line-height: 1.55; max-width: 72ch; }
+.ads-detalle p:last-child { margin-bottom: 0; }
+
+@media (max-width: 900px) {
+  .ads-fila { grid-template-columns: 44px minmax(0, 1fr); }
+  .ads-foto { width: 44px; height: 44px; }
+  .ads-embudo, .ads-plata { grid-column: 1 / -1; justify-content: flex-start; text-align: left; }
+  .ads-embudo { grid-template-columns: repeat(3, 1fr); }
+  .ads-plata { flex-wrap: wrap; gap: 12px; }
+}

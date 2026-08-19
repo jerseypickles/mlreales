@@ -1,22 +1,28 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
-import { fmtNum, fmtPrecio } from '../lib/formato.js'
+import { fmtPrecio } from '../lib/formato.js'
 
 // PUBLICIDAD, LEÍDA EN PLATA.
 //
 // El panel de ML compara el gasto contra la VENTA y de ahí saca ACOS y ROAS.
 // Ese número no dice si ganas: lo que decide es la CONTRIBUCIÓN (precio −
-// comisión − envío Full), que ML no conoce. Por eso su recomendador llegó a
-// sugerir bajar el objetivo a 1,8x cuando el equilibrio de cuatro de los seis
-// productos está por encima de eso incluso regalando la mercadería.
+// comisión − envío Full), que ML no conoce. Por eso su recomendador sugiere
+// subir el presupuesto a $18.297 para traer 28 ventas, que al ticket medio de
+// $3.726 son $7.026 de publicidad por cada venta: ROAS marginal 0,53x.
 //
 // Este tab responde otra pregunta: cuánta contribución generó cada anuncio y
 // cuánto costó. Y como el costo de la mercadería no está cargado, todo lo que
 // se muestra es el TECHO — el resultado real es peor, nunca mejor.
+//
+// Los SELLOS son los de ML (más vendido, mayor ingreso, más visto) porque son
+// el idioma con el que el importador ya lee su panel. La diferencia es que acá
+// cada sello convive con el resultado en plata, que es lo que ML no muestra:
+// un producto puede ser el más visto y estar perdiendo margen en cada venta.
 
 const fmtX = (v) => (Number.isFinite(v) ? `${Math.round(v * 100) / 100}x` : '—')
 const fmtPct = (v) => (Number.isFinite(v) ? `${Math.round(v)}%` : '—')
+const fmtMiles = (v) => (Number.isFinite(v) ? v.toLocaleString('es-CL') : '—')
 
 const VEREDICTOS = {
   escalar: { clase: 'ad-bien', texto: 'rinde' },
@@ -27,218 +33,222 @@ const VEREDICTOS = {
   'sin-datos': { clase: 'ad-neutro', texto: 'sin datos' },
 }
 
-// Un número grande con su etiqueta y, si corresponde, cuánto cambió.
-function Cifra({ etiqueta, valor, antes, ayuda, invertido = false, sufijo = '' }) {
-  let delta = null
-  if (Number.isFinite(antes) && Number.isFinite(valor) && antes !== 0) {
-    const pct = Math.round(((valor - antes) / Math.abs(antes)) * 100)
-    if (pct !== 0) {
-      // en gasto y CPC subir es malo; en unidades y ROAS subir es bueno
-      const bueno = invertido ? pct < 0 : pct > 0
-      delta = { pct, clase: bueno ? 'delta-sube' : 'delta-baja' }
+// Los sellos se calculan sobre lo que se está mirando, no son absolutos: "más
+// vendido" quiere decir el más vendido DE ESTA ventana. Por eso se recalculan
+// al cambiar de período en vez de guardarse.
+function sellosDe(filas) {
+  const porSello = new Map()
+  const lider = (fn, minimo = 0) => {
+    let mejor = null
+    for (const f of filas) {
+      const v = fn(f)
+      if (!Number.isFinite(v) || v <= minimo) continue
+      if (!mejor || v > fn(mejor)) mejor = f
     }
+    return mejor?.id ?? null
   }
+  const marcar = (id, sello) => {
+    if (!id) return
+    porSello.set(id, [...(porSello.get(id) ?? []), sello])
+  }
+  marcar(lider((f) => f.unidades), { texto: 'más vendido', clase: 'sello-vendido' })
+  marcar(lider((f) => f.venta), { texto: 'mayor ingreso', clase: 'sello-ingreso' })
+  marcar(lider((f) => f.impresiones), { texto: 'más visto', clase: 'sello-visto' })
+  marcar(lider((f) => (f.unidades > 0 ? f.roasReal : null)), { texto: 'mejor retorno', clase: 'sello-retorno' })
+  const hace30 = Date.now() - 30 * 86400e3
+  for (const f of filas) {
+    if (f.creadoEl && new Date(f.creadoEl).getTime() > hace30) {
+      marcar(f.id, { texto: 'nuevo', clase: 'sello-nuevo' })
+    }
+    if (f.gasto > 0 && !f.unidades) marcar(f.id, { texto: 'no vende', clase: 'sello-alerta' })
+  }
+  return porSello
+}
+
+function Cifra({ etiqueta, valor, ayuda, tono }) {
   return (
-    <div className="exp-cifra" title={ayuda}>
-      <span className="exp-cifra-etq">{etiqueta}</span>
-      <strong>
-        {valor ?? '—'}
-        {sufijo}
-      </strong>
-      {delta ? (
-        <span className={`exp-delta ${delta.clase}`}>
-          {delta.pct > 0 ? '+' : ''}
-          {delta.pct}%
-        </span>
-      ) : Number.isFinite(antes) ? (
-        <span className="exp-antes">antes {antes}{sufijo}</span>
-      ) : null}
+    <div className={`ads-cifra${tono ? ` ads-cifra-${tono}` : ''}`} title={ayuda}>
+      <span>{etiqueta}</span>
+      <strong>{valor}</strong>
     </div>
   )
 }
 
-// EL EXPERIMENTO. Un cambio a la vez, con su antes congelado: el objetivo de
-// ROAS es un dial por campaña con varios productos adentro, así que si se mueve
-// el dial y a la vez se prenden anuncios, después nadie sabe qué causó qué.
-function Experimento({ exp }) {
-  if (!exp) return null
-  const a = exp.baseline ?? {}
-  const b = exp.ahora ?? {}
-  const listo = exp.diasCorridos >= a.dias
-  // ML paga por clic, así que el gasto responde en horas; las ventas tardan.
-  // Antes de un par de días el "después" es ruido y hay que decirlo.
-  const temprano = exp.diasCorridos < 2
-
+// Las tres campañas como diales, que es lo único que se puede mover: ML no
+// expone puja por producto, solo presupuesto y ROAS objetivo POR CAMPAÑA. Por
+// eso separar productos en campañas distintas es la única forma de tratarlos
+// distinto, y por eso esta tarjeta muestra objetivo y real uno al lado del otro.
+function Campanas({ campanas, dias }) {
+  const vivas = campanas.filter((c) => c.estado === 'active')
+  const pausadas = campanas.filter((c) => c.estado !== 'active')
+  const tarjeta = (c) => {
+    const m = c.metricas ?? {}
+    const objetivo = c.roasObjetivo ?? (c.acosObjetivo ? 100 / c.acosObjetivo : null)
+    const real = m.cost > 0 ? m.total_amount / m.cost : null
+    const gastoDia = m.cost ? m.cost / dias : 0
+    const usoPct = c.presupuestoDiario ? Math.round((gastoDia / c.presupuestoDiario) * 100) : null
+    const cumple = real != null && objetivo != null ? real >= objetivo : null
+    return (
+      <article className={`ads-camp${c.estado !== 'active' ? ' ads-camp-off' : ''}`} key={c.id}>
+        <header>
+          <strong>{c.nombre}</strong>
+          {c.estado !== 'active' ? <span className="ads-estado">pausada</span> : null}
+        </header>
+        <div className="ads-camp-roas">
+          <div title="El dial que le pediste a ML. Más alto = más exigente = gasta menos.">
+            <span>objetivo</span>
+            <b>{fmtX(objetivo)}</b>
+          </div>
+          <div title="Lo que efectivamente devolvió cada peso. Si supera al objetivo, le sobra margen.">
+            <span>real</span>
+            <b className={cumple === false ? 'res-mal' : cumple ? 'res-bien' : ''}>{fmtX(real)}</b>
+          </div>
+        </div>
+        <div className="ads-camp-pie">
+          <span>
+            {fmtPrecio(Math.round(gastoDia))}/día de {fmtPrecio(c.presupuestoDiario)}
+          </span>
+          {usoPct != null ? (
+            <div
+              className="ads-barra"
+              title={
+                usoPct >= 100
+                  ? 'Gasta por sobre el tope: con estrategia de rentabilidad ML lo supera cuando encuentra conversiones que cumplen el objetivo.'
+                  : 'Si no llega al tope, el limitante no es la plata sino el objetivo de ROAS.'
+              }
+            >
+              <span className={usoPct >= 100 ? 'ads-barra-full' : ''} style={{ width: `${Math.min(100, usoPct)}%` }} />
+            </div>
+          ) : null}
+        </div>
+      </article>
+    )
+  }
   return (
-    <section className={`experimento${temprano ? ' experimento-temprano' : ''}`}>
-      <header>
-        <div>
-          <span className="exp-chip">experimento en curso</span>
-          <h3>
-            ROAS objetivo {exp.valorAntes}x → <strong>{exp.valorDespues}x</strong>
-          </h3>
-        </div>
-        <span className="exp-dias">
-          día {exp.diasCorridos} de {a.dias ?? 7}
-          {listo ? ' · listo para leer' : temprano ? ' · aún es ruido' : ''}
-        </span>
-      </header>
-
-      <p className="exp-hipotesis">{exp.hipotesis}</p>
-
-      {b.costo ? (
-        <div className="exp-cifras">
-          <Cifra etiqueta="ROAS real" valor={b.roasReal} antes={a.roasReal} sufijo="x"
-            ayuda="Venta atribuida ÷ gasto. Es el resultado, no el objetivo que le pediste a ML." />
-          <Cifra etiqueta="gasto/día" valor={Math.round(b.costo / Math.max(1, b.dias))}
-            antes={Math.round(a.costo / Math.max(1, a.dias))} invertido
-            ayuda="Si el dial gobierna la selectividad, bajarlo tiene que subir esto." />
-          <Cifra etiqueta="unidades" valor={b.unidades} antes={a.unidades}
-            ayuda="Unidades atribuidas a la publicidad en la ventana" />
-          <Cifra etiqueta="CPC" valor={Math.round(b.cpc)} antes={Math.round(a.cpc)} invertido
-            ayuda="Costo por clic promedio. ML cobra a segundo precio: pagas lo mínimo para ganarle al siguiente." />
-          <Cifra etiqueta="clics" valor={b.clicks} antes={a.clicks}
-            ayuda="Más clics con el mismo presupuesto = entraste a más subastas" />
-          <Cifra etiqueta="ACOS" valor={Math.round(b.acos)} antes={Math.round(a.acos)} invertido sufijo="%"
-            ayuda="Gasto ÷ venta. Ojo: compara contra la venta, no contra tu margen." />
-        </div>
-      ) : (
-        <p className="exp-esperando">
-          Todavía sin datos en la ventana nueva. El gasto responde en horas; las ventas tardan unos días.
-        </p>
-      )}
+    <section className="ads-camps">
+      {vivas.map(tarjeta)}
+      {pausadas.map(tarjeta)}
     </section>
   )
 }
 
-// Cada anuncio contra SU propio equilibrio, no contra un ACOS parejo. El
-// equilibrio sale del precio real, la comisión exacta de su categoría y la
-// tarifa Full escalonada — todo sondeado en vivo, nada estimado.
-function TablaAnuncios({ economia }) {
+// Un producto por fila, con su foto y sus sellos a la izquierda y la plata a la
+// derecha. El orden es por RESULTADO (contribución menos gasto), no por gasto
+// ni por ingreso: es la única columna que dice si el anuncio te dejó algo.
+function Productos({ economia, campanas }) {
   const filas = Object.entries(economia ?? {})
     .map(([id, e]) => ({ id, ...e }))
     .filter((f) => f.gasto > 0 || f.unidades > 0)
     .sort((a, b) => (b.resultado ?? -1e9) - (a.resultado ?? -1e9))
   if (!filas.length) return null
 
-  const total = filas.reduce(
-    (acc, f) => ({
-      gasto: acc.gasto + (f.gasto ?? 0),
-      contribucion: acc.contribucion + (f.contribucionGenerada ?? 0),
-      unidades: acc.unidades + (f.unidades ?? 0),
-    }),
-    { gasto: 0, contribucion: 0, unidades: 0 },
-  )
-  const neto = total.contribucion - total.gasto
+  const sellos = sellosDe(filas)
+  const nombreCampana = new Map((campanas ?? []).map((c) => [c.id, c.nombre]))
 
   return (
-    <section className="ads-anuncios">
-      <h3>Anuncio por anuncio, en plata</h3>
-      <p className="ads-nota">
-        El <strong>equilibrio</strong> es el ROAS bajo el cual ese anuncio destruye margen. Sale del precio real
-        menos comisión exacta y envío Full — pero <strong>antes del costo de la mercadería</strong>, que no está
-        cargado. Es el techo: el resultado real es peor, nunca mejor.
-      </p>
-      <div className="tabla-envoltura">
-        <table className="tabla-ads">
-          <thead>
-            <tr>
-              <th>Anuncio</th>
-              <th className="num">precio</th>
-              <th className="num">gasto</th>
-              <th className="num">unid</th>
-              <th className="num">ROAS real</th>
-              <th className="num">equilibrio</th>
-              <th className="num">contribución</th>
-              <th className="num">resultado</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filas.map((f) => {
-              const v = VEREDICTOS[f.veredicto?.estado] ?? VEREDICTOS['sin-datos']
-              return (
-                <tr key={f.id} className={f.resultado < 0 ? 'fila-mal' : undefined}>
-                  <td>
-                    <span className="ads-titulo">{f.titulo ?? f.id}</span>
-                    {f.estado === 'hold' ? <span className="ads-hold" title="ML lo tiene en pausa">hold</span> : null}
-                  </td>
-                  <td className="num">{f.precio ? fmtPrecio(f.precio) : '—'}</td>
-                  <td className="num">{fmtPrecio(f.gasto)}</td>
-                  <td className="num">{f.unidades || '—'}</td>
-                  <td className="num">{fmtX(f.roasReal)}</td>
-                  <td className="num" title={f.contribucion ? `Contribución ${fmtPrecio(f.contribucion)}/u (${fmtPct(f.contribucionPct)} del precio)` : ''}>
-                    {fmtX(f.roas)}
-                  </td>
-                  <td className="num">{f.contribucionGenerada != null ? fmtPrecio(f.contribucionGenerada) : '—'}</td>
-                  <td className={`num ${f.resultado > 0 ? 'res-bien' : f.resultado < 0 ? 'res-mal' : ''}`}>
-                    {f.resultado != null ? `${f.resultado > 0 ? '+' : ''}${fmtPrecio(f.resultado)}` : '—'}
-                  </td>
-                  <td>
-                    <span className={`ad-veredicto ${v.clase}`} title={f.veredicto?.texto}>{v.texto}</span>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={2}>TOTAL</td>
-              <td className="num">{fmtPrecio(total.gasto)}</td>
-              <td className="num">{total.unidades}</td>
-              <td colSpan={2}></td>
-              <td className="num">{fmtPrecio(Math.round(total.contribucion))}</td>
-              <td className={`num ${neto > 0 ? 'res-bien' : 'res-mal'}`}>
-                {neto > 0 ? '+' : ''}
-                {fmtPrecio(Math.round(neto))}
-              </td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
+    <section className="ads-productos">
+      <div className="ads-seccion-cabeza">
+        <h3>Producto por producto</h3>
+        <p>
+          Ordenados por <strong>resultado</strong>: la contribución que generaron menos lo que costaron. Los
+          sellos son los de ML; la columna de resultado es la que ML no muestra.
+        </p>
       </div>
-      <p className="ads-nota">
-        El <strong>resultado</strong> es contribución generada menos gasto. Es lo más cerca de la ganancia que se
-        puede calcular sin conocer el costo de la mercadería — y sigue siendo un techo.
-      </p>
-    </section>
-  )
-}
 
-function Campanas({ campanas }) {
-  return (
-    <section className="ads-campanas">
-      {campanas.map((c) => {
-        const m = c.metricas ?? {}
-        const roas = m.cost > 0 ? m.total_amount / m.cost : null
-        const gastoDia = m.cost ? Math.round(m.cost / 30) : 0
-        const usoPct = c.presupuestoDiario ? Math.min(100, Math.round((gastoDia / c.presupuestoDiario) * 100)) : null
-        return (
-          <div className={`ads-campana${c.estado !== 'active' ? ' ads-campana-pausada' : ''}`} key={c.id}>
-            <header>
-              <strong>{c.nombre}</strong>
-              <span className={`ads-estado ads-${c.estado}`}>{c.estado}</span>
-            </header>
-            <div className="ads-dials">
-              <span title="El dial que gobierna cuán agresivo puja ML. No es una promesa de resultado.">
-                objetivo <strong>{fmtX(c.roasObjetivo ?? (c.acosObjetivo ? 100 / c.acosObjetivo : null))}</strong>
-              </span>
-              <span title="Lo que efectivamente devolvió cada peso invertido">
-                real <strong className={roas && c.roasObjetivo && roas < c.roasObjetivo ? 'res-mal' : ''}>{fmtX(roas)}</strong>
-              </span>
-              <span title="Presupuesto diario autorizado. Si no se gasta, el limitante no es la plata sino el objetivo.">
-                presupuesto <strong>{fmtPrecio(c.presupuestoDiario)}</strong>
-              </span>
-            </div>
-            {usoPct != null ? (
-              <div className="ads-uso" title={`Usa ${usoPct}% del presupuesto autorizado`}>
-                <span style={{ width: `${usoPct}%` }} />
-                <em>{usoPct}% del presupuesto usado</em>
+      <ul className="ads-lista">
+        {filas.map((f) => {
+          const v = VEREDICTOS[f.veredicto?.estado] ?? VEREDICTOS['sin-datos']
+          const ctr = f.impresiones ? (f.clicks / f.impresiones) * 100 : null
+          const conv = f.clicks ? (f.unidades / f.clicks) * 100 : null
+          const misSellos = sellos.get(f.id) ?? []
+          return (
+            <li key={f.id} className={f.resultado < 0 ? 'ads-fila ads-fila-mal' : 'ads-fila'}>
+              {f.foto ? (
+                <img className="ads-foto" src={f.foto} alt="" loading="lazy" width="52" height="52" />
+              ) : (
+                <span className="ads-foto ads-foto-vacia" aria-hidden="true" />
+              )}
+
+              <div className="ads-ficha">
+                {f.permalink ? (
+                  <a className="ads-nombre" href={f.permalink} target="_blank" rel="noreferrer">
+                    {f.titulo ?? f.id}
+                  </a>
+                ) : (
+                  <span className="ads-nombre">{f.titulo ?? f.id}</span>
+                )}
+                <div className="ads-sellos">
+                  {misSellos.map((s) => (
+                    <span key={s.texto} className={`ads-sello ${s.clase}`}>
+                      {s.texto}
+                    </span>
+                  ))}
+                  {f.campanaId && nombreCampana.has(f.campanaId) ? (
+                    <span className="ads-sello sello-campana">{nombreCampana.get(f.campanaId)}</span>
+                  ) : null}
+                  {f.estado === 'hold' ? (
+                    <span className="ads-sello sello-alerta" title="ML lo tiene detenido: pausado o sin stock">
+                      detenido
+                    </span>
+                  ) : null}
+                </div>
               </div>
-            ) : null}
-          </div>
-        )
-      })}
+
+              <div className="ads-embudo" title="Cuántos lo vieron, cuántos entraron y cuántos compraron">
+                <b>{fmtMiles(f.impresiones)}</b>
+                <span>vistas</span>
+                <b>{fmtMiles(f.clicks)}</b>
+                <span>clics · {fmtPct(ctr)}</span>
+                <b>{f.unidades || '—'}</b>
+                <span>ventas{conv != null ? ` · ${fmtPct(conv)}` : ''}</span>
+              </div>
+
+              <div className="ads-plata">
+                <div>
+                  <span>facturó</span>
+                  <b>{fmtPrecio(f.venta)}</b>
+                </div>
+                <div>
+                  <span>gastó</span>
+                  <b>{fmtPrecio(f.gasto)}</b>
+                </div>
+                <div title={f.roas ? `Su equilibrio es ${fmtX(f.roas)}: bajo eso destruye margen` : ''}>
+                  <span>ROAS</span>
+                  <b>
+                    {fmtX(f.roasReal)}
+                    {f.roas ? <em> / {fmtX(f.roas)}</em> : null}
+                  </b>
+                </div>
+                <div className="ads-resultado">
+                  <span>resultado</span>
+                  <b className={f.resultado > 0 ? 'res-bien' : f.resultado < 0 ? 'res-mal' : ''}>
+                    {f.resultado != null ? `${f.resultado > 0 ? '+' : ''}${fmtPrecio(f.resultado)}` : '—'}
+                  </b>
+                </div>
+                <span className={`ad-veredicto ${v.clase}`} title={f.veredicto?.texto}>
+                  {v.texto}
+                </span>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+
+      <details className="ads-detalle">
+        <summary>Cómo se calcula el resultado y por qué es un techo</summary>
+        <div>
+          <p>
+            El <strong>equilibrio</strong> (el segundo número de la columna ROAS) es el retorno bajo el cual ese
+            anuncio destruye margen. Sale del precio real, la comisión exacta de su categoría y la tarifa Full
+            escalonada, todo consultado en vivo.
+          </p>
+          <p>
+            El <strong>resultado</strong> es la contribución generada menos el gasto — lo más cerca de la ganancia
+            que se puede calcular <strong>sin el costo de la mercadería</strong>, que sigue sin cargarse. Por eso
+            es el techo: el resultado real es peor, nunca mejor.
+          </p>
+        </div>
+      </details>
     </section>
   )
 }
@@ -263,14 +273,26 @@ export function Publicidad() {
   if (error) return <main><p className="error-inline">{error}</p></main>
   if (!datos) return <Cargando texto="Leyendo campañas de Product Ads…" />
 
+  const filas = Object.values(datos.economia ?? {})
+  const tot = filas.reduce(
+    (a, f) => ({
+      gasto: a.gasto + (f.gasto ?? 0),
+      venta: a.venta + (f.venta ?? 0),
+      unidades: a.unidades + (f.unidades ?? 0),
+      contribucion: a.contribucion + (f.contribucionGenerada ?? 0),
+    }),
+    { gasto: 0, venta: 0, unidades: 0, contribucion: 0 },
+  )
+  const neto = tot.contribucion - tot.gasto
+  const ticket = tot.unidades ? tot.venta / tot.unidades : null
+
   return (
     <main>
       <div className="reporte-encabezado">
         <div>
-          <h2>Publicidad · Product Ads</h2>
+          <h2>Publicidad</h2>
           <p className="reporte-fecha">
             ML mide el gasto contra la venta; acá se mide contra la contribución, que es lo que decide si ganas.
-            La escritura por API está cerrada, así que los cambios se aplican en el panel de ML.
           </p>
         </div>
         <div className="segmentado">
@@ -282,9 +304,22 @@ export function Publicidad() {
         </div>
       </div>
 
-      <Experimento exp={datos.experimento} />
-      <Campanas campanas={datos.campanas ?? []} />
-      <TablaAnuncios economia={datos.economia} />
+      <section className="ads-tablero">
+        <Cifra etiqueta="facturado" valor={fmtPrecio(Math.round(tot.venta))} ayuda="Venta atribuida a la publicidad en la ventana" />
+        <Cifra etiqueta="gastado" valor={fmtPrecio(Math.round(tot.gasto))} ayuda="Lo que ML cobró por los clics" />
+        <Cifra etiqueta="ROAS" valor={fmtX(tot.gasto ? tot.venta / tot.gasto : null)} ayuda="Facturado ÷ gastado. Es el promedio, no el margen: las impresiones se compran de la mejor a la peor." />
+        <Cifra etiqueta="unidades" valor={fmtMiles(tot.unidades)} ayuda="Unidades vendidas atribuidas a la publicidad" />
+        <Cifra etiqueta="ticket medio" valor={ticket ? fmtPrecio(Math.round(ticket)) : '—'} ayuda="Facturado ÷ unidades. Es contra este número que hay que juzgar cuánto pagar por una venta nueva." />
+        <Cifra
+          etiqueta="resultado"
+          valor={`${neto > 0 ? '+' : ''}${fmtPrecio(Math.round(neto))}`}
+          tono={neto > 0 ? 'bien' : 'mal'}
+          ayuda="Contribución generada menos gasto, antes del costo de la mercadería. Es un techo."
+        />
+      </section>
+
+      <Campanas campanas={datos.campanas ?? []} dias={dias} />
+      <Productos economia={datos.economia} campanas={datos.campanas} />
     </main>
   )
 }

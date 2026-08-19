@@ -52,7 +52,23 @@ export async function adsPorItem({ dias = 30 } = {}) {
   const porItem = new Map()
   for (const ad of r?.results ?? []) {
     const id = ad.item_id ?? ad.id
-    if (id) porItem.set(id, { titulo: ad.title ?? null, estado: ad.status ?? null, metricas: ad.metrics ?? {} })
+    if (!id) continue
+    porItem.set(id, {
+      titulo: ad.title ?? null,
+      estado: ad.status ?? null,
+      metricas: ad.metrics ?? {},
+      // la ficha del anuncio: ML ya las manda en el mismo payload y se
+      // descartaban. Son las que permiten mostrar el producto como producto
+      // (foto, link, precio) y no como un id.
+      foto: ad.thumbnail ? ad.thumbnail.replace(/^http:/, 'https:') : null,
+      permalink: ad.permalink ?? null,
+      precio: ad.price ?? null,
+      campanaId: ad.campaign_id ?? null,
+      creadoEl: ad.date_created ?? null,
+      tipoPublicacion: ad.listing_type_id ?? null,
+      esCatalogo: ad.catalog_listing ?? null,
+      ganaBuyBox: ad.buy_box_winner ?? null,
+    })
   }
   return porItem
 }
