@@ -129,6 +129,24 @@ export function ventanaDeCompra(
 // dónde sale el mes pico, no cómo se calcula la ventana.
 function ventanaDesdePico(mesPico, absHoy, leadMax, leadMin) {
   const anioHoy = Math.floor((absHoy - 1) / 12)
+
+  // PERDER LA TEMPORADA ES QUE EL PICO SIGA POR DELANTE Y YA NO SE LLEGUE.
+  //
+  // Esto marcaba `perdioLaTemporada` con solo mirar k > 0, o sea cada vez que
+  // el cálculo saltaba al pico del año siguiente. Para un pico de ENERO eso es
+  // el caso normal —se pide en sept-nov del año anterior, siempre— y quedaban
+  // rotulados como atrasados 12 nichos veraniegos cuya ventana abre el mes que
+  // viene: kayak, cooler, carpa, snorkel, quitasol, colchoneta y compañía.
+  //
+  // La distinción real: si el pico de ESTE ciclo ya ocurrió, no se perdió nada,
+  // simplemente pasó y viene el siguiente. Se perdió cuando el pico todavía
+  // está por delante pero su ventana de pedido se cerró — parrilla eléctrica el
+  // 19-ago-2026: pico en septiembre (Fiestas Patrias) y ventana cerrada en
+  // julio. Ese caso sí cambia la decisión, porque hay un pico visible que no se
+  // puede surtir por mar.
+  const picoDeEsteCiclo = anioHoy * 12 + mesPico
+  const picoPorDelante = picoDeEsteCiclo >= absHoy
+
   for (let k = 0; k <= 2; k++) {
     const pico = (anioHoy + k) * 12 + mesPico
     const desde = pico - leadMax
@@ -143,8 +161,9 @@ function ventanaDesdePico(mesPico, absHoy, leadMax, leadMin) {
       pico: aTexto(pico),
       estado,
       mesesAl: Math.max(0, desde - absHoy),
-      // el pico de esta temporada ya no se alcanza: la ventana es la del ciclo siguiente
-      perdioLaTemporada: k > 0 || undefined,
+      // hay un pico a la vista que ya no se alcanza por mar
+      perdioLaTemporada: (k > 0 && picoPorDelante) || undefined,
+      picoPerdido: k > 0 && picoPorDelante ? aTexto(picoDeEsteCiclo) : undefined,
       // para que la UI pueda explicar de dónde sale la fecha sin adivinar
       leadMeses: { min: leadMin, max: leadMax },
       motivo: null,

@@ -35,12 +35,25 @@ function chipVentana(v) {
   if (v.estado === 'pronto') {
     return { clase: 'pronto', texto: `pedir ${fmtMes(v.desde)}`, ayuda: `La ventana abre en ${v.mesesAl} mes(es)${pico}` }
   }
+  // PERDER LA TEMPORADA NO ES LO MISMO QUE TENERLA LEJOS.
+  //
+  // Los dos casos caen en 'futura' y hasta el 19-ago se veían idénticos: un
+  // "pedir may 2027" dentro de Estacionales lejanos. Pero son decisiones
+  // distintas — parrilla eléctrica tiene su pico en septiembre (Fiestas
+  // Patrias, 2,08×) y la ventana marítima se cerró en julio: no está lejos,
+  // se pasó por un mes. Eso cambia qué hacer (agendar el año que viene, o
+  // evaluar aéreo si el bulto lo permite) y merece leerse sin abrir el tooltip.
+  if (v.perdioLaTemporada) {
+    return {
+      clase: 'futura',
+      texto: `se pasó · pedir ${fmtMes(v.desde)}`,
+      ayuda: `La temporada de este año ya no se alcanza con lead marítimo (${v.leadMeses?.min ?? 2}-${v.leadMeses?.max ?? 4} meses). Próxima ventana ${fmtMes(v.desde)}–${fmtMes(v.hasta)}${pico}`,
+    }
+  }
   return {
     clase: 'futura',
     texto: `pedir ${fmtMes(v.desde)}`,
-    ayuda: v.perdioLaTemporada
-      ? `La temporada de este año ya no se alcanza. Próxima ventana ${fmtMes(v.desde)}–${fmtMes(v.hasta)}${pico}`
-      : `Faltan ${v.mesesAl} mes(es)${pico}`,
+    ayuda: `Faltan ${v.mesesAl} mes(es)${pico}`,
   }
 }
 
