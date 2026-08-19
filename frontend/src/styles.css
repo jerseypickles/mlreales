@@ -5738,7 +5738,7 @@ a.prod-titulo:focus-visible { outline: 2px solid var(--acento); outline-offset: 
   flex-direction: column;
   gap: 3px;
 }
-.ads-cifra span { font-size: 11px; color: var(--tinta-3); text-transform: lowercase; }
+.ads-cifra span { font-size: 11px; color: var(--tinta-3); }
 .ads-cifra strong { font-size: 19px; font-variant-numeric: tabular-nums; color: var(--tinta); line-height: 1.15; }
 .ads-cifra-bien strong { color: var(--exito-tinta); }
 .ads-cifra-mal strong { color: var(--peligro); }

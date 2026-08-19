@@ -50,12 +50,29 @@ export async function economiaPorAnuncio(porItem, propios) {
   for (const [itemId, ad] of Object.entries(porItem ?? {})) {
     const propio = porId.get(itemId)
     const ult = (propio?.mediciones ?? []).at(-1) ?? {}
-    const precio = ult.precio ?? null
+    const precioLista = ult.precio ?? null
     const m = ad.metricas ?? {}
     const gasto = Number(m.cost) || 0
     const venta = Number(m.total_amount) || 0
     const unidades = Number(m.units_quantity) || 0
     const roasReal = gasto > 0 ? Math.round((venta / gasto) * 100) / 100 : null
+
+    // EL PRECIO QUE MANDA ES EL QUE SE COBRÓ, NO EL DE LA VITRINA.
+    //
+    // Esto calculaba la contribución con el precio de lista de hoy, y el ROAS
+    // real con la venta atribuida — dos precios distintos para el mismo
+    // anuncio. Cuando hubo descuento, las dos mitades se contradicen: la
+    // lámpara mostraba "pierde" (ROAS 1,21x bajo su equilibrio de 1,3x) y a la
+    // vez "+$4.034 de resultado", porque el veredicto miraba lo cobrado
+    // ($6.893 por unidad, con el descuento de campaña que ya no existe) y el
+    // resultado la contribución del precio de lista ($9.990).
+    //
+    // Con unidades vendidas, el precio efectivo sale de dividir lo facturado:
+    // ahí la comisión, el envío y el equilibrio quedan sobre lo que de verdad
+    // entró. Sin ventas no hay qué dividir y se usa la lista, que para el
+    // equilibrio de referencia es lo correcto.
+    const precioEfectivo = unidades > 0 && venta > 0 ? Math.round(venta / unidades) : null
+    const precio = precioEfectivo ?? precioLista
 
     let eco = null
     if (Number.isFinite(precio) && precio > 0) {
@@ -87,6 +104,12 @@ export async function economiaPorAnuncio(porItem, propios) {
       titulo: ad.titulo ?? null,
       estado: ad.estado ?? null,
       precio,
+      precioLista,
+      // se vendió por debajo de vitrina (descuento, promo o cupón de ML)
+      vendidoBajoLista:
+        Number.isFinite(precioEfectivo) && Number.isFinite(precioLista) && precioEfectivo < precioLista * 0.97
+          ? { efectivo: precioEfectivo, lista: precioLista }
+          : null,
       gasto: Math.round(gasto),
       venta: Math.round(venta),
       unidades,
