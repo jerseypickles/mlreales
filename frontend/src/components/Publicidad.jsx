@@ -312,16 +312,13 @@ export function Publicidad() {
   if (!datos) return <Cargando texto="Leyendo campañas de Product Ads…" />
 
   const filas = Object.values(datos.economia ?? {})
-  const tot = filas.reduce(
-    (a, f) => ({
-      gasto: a.gasto + (f.gasto ?? 0),
-      venta: a.venta + (f.venta ?? 0),
-      unidades: a.unidades + (f.unidades ?? 0),
-      contribucion: a.contribucion + (f.contribucionGenerada ?? 0),
-    }),
-    { gasto: 0, venta: 0, unidades: 0, contribucion: 0 },
-  )
-  const neto = tot.contribucion - tot.gasto
+  // GASTO Y VENTA SALEN DE LAS CAMPAÑAS, no de sumar productos: la campaña
+  // gasta algo que no se atribuye a ningún anuncio puntual ($818 sobre $133.390
+  // el 20-ago) y sumar por producto no cuadraba con el panel de ML.
+  // La CONTRIBUCIÓN sí es por producto — es lo único que se calcula acá.
+  const tot = datos.totales ?? { gasto: 0, venta: 0, unidades: 0 }
+  const contribucion = filas.reduce((a, f) => a + (f.contribucionGenerada ?? 0), 0)
+  const neto = contribucion - tot.gasto
   const ticket = tot.unidades ? tot.venta / tot.unidades : null
 
   return (
@@ -332,6 +329,11 @@ export function Publicidad() {
           <p className="reporte-fecha">
             ML mide el gasto contra la venta; acá se mide contra la contribución, que es lo que decide si ganas.
           </p>
+          {datos.rango ? (
+            <p className="ads-rango" title="Ojo al cuadrar contra el panel de ML: por defecto ML muestra el MES EN CURSO, no una ventana rodante. Fechas en hora de Chile, ambos extremos incluidos.">
+              {datos.rango.desde} → {datos.rango.hasta} · {dias} día(s), hora de Chile
+            </p>
+          ) : null}
         </div>
         <div className="ads-controles">
           <button

@@ -6,7 +6,24 @@ const SITE = 'MLC'
 const METRICAS =
   'clicks,prints,cost,cpc,acos,organic_units_quantity,direct_units_quantity,indirect_units_quantity,units_quantity,direct_amount,indirect_amount,total_amount'
 
-const dia = (d) => d.toISOString().slice(0, 10)
+// LAS FECHAS SE CUENTAN EN CHILE, NO EN UTC, Y AMBOS EXTREMOS ENTRAN.
+//
+// Dos errores que se sumaban y desalineaban todo contra el panel de ML:
+//
+// 1) `date_from = hoy − dias` con ML incluyendo los dos extremos hace que "30d"
+//    traiga 31 días. En "1d" era peor: traía AYER y HOY, y al dividir por 1
+//    salía un gasto diario casi del doble del real.
+// 2) La fecha se sacaba de toISOString(), que es UTC. Entre las 20:00 y la
+//    medianoche de Chile eso ya es el día siguiente, así que la ventana se
+//    corría un día justo en las horas en que el importador mira el tablero.
+//
+// Con `dias` inclusivo: 1 = solo hoy, 7 = hoy y los seis anteriores.
+const dia = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' })
+const rangoDias = (dias) => {
+  const hasta = new Date()
+  const desde = new Date(hasta.getTime() - Math.max(0, dias - 1) * 86400e3)
+  return { desde: dia(desde), hasta: dia(hasta) }
+}
 
 let cacheAdvertiser = null
 async function advertiserId() {
@@ -21,10 +38,9 @@ export async function campanasConMetricas({ dias = 30 } = {}) {
   if (!(await hayCuentaMeli())) return null
   const adv = await advertiserId()
   if (!adv) return null
-  const hasta = new Date()
-  const desde = new Date(hasta.getTime() - dias * 86400e3)
+  const { desde, hasta } = rangoDias(dias)
   const r = await meliGet(
-    `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/campaigns/search?limit=50&date_from=${dia(desde)}&date_to=${dia(hasta)}&metrics=${METRICAS}`,
+    `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/campaigns/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS}`,
     { headers: { 'Api-Version': '2' } },
   )
   return (r?.results ?? []).map((c) => ({
@@ -43,10 +59,9 @@ export async function adsPorItem({ dias = 30 } = {}) {
   if (!(await hayCuentaMeli())) return new Map()
   const adv = await advertiserId()
   if (!adv) return new Map()
-  const hasta = new Date()
-  const desde = new Date(hasta.getTime() - dias * 86400e3)
+  const { desde, hasta } = rangoDias(dias)
   const r = await meliGet(
-    `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/ads/search?limit=50&date_from=${dia(desde)}&date_to=${dia(hasta)}&metrics=${METRICAS}`,
+    `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/ads/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS}`,
     { headers: { 'Api-Version': '2' } },
   )
   const porItem = new Map()
@@ -106,6 +121,9 @@ export async function resumenAds({ dias = 30, forzar = false } = {}) {
 async function construirResumenAds({ dias = 30 } = {}) {
   const campanas = await campanasConMetricas({ dias })
   if (!campanas) return null
+  // el rango exacto viaja a la mesa: sin él no se puede cuadrar contra el panel
+  // de ML, que por defecto muestra el MES EN CURSO y no 30 días rodantes
+  const rango = rangoDias(dias)
   const items = await adsPorItem({ dias }).catch(() => new Map())
   const porItem = Object.fromEntries(items)
 
@@ -142,7 +160,25 @@ async function construirResumenAds({ dias = 30 } = {}) {
     // sin experimento el tab funciona igual
   }
 
-  return { dias, campanas, porItem, economia, experimento }
+  // TOTALES DE CAMPAÑA, que es lo que ML cobra. Sumar los productos deja
+  // afuera lo que la campaña gasta sin atribuirse a un anuncio puntual: medido
+  // el 20-ago, $818 sobre $133.390 (0,6%). Chico, pero es la diferencia entre
+  // cuadrar con el panel de ML y no cuadrar.
+  const totales = (campanas ?? []).reduce(
+    (a, c) => {
+      const m = c.metricas ?? {}
+      return {
+        gasto: a.gasto + (m.cost ?? 0),
+        venta: a.venta + (m.total_amount ?? 0),
+        unidades: a.unidades + (m.units_quantity ?? 0),
+        impresiones: a.impresiones + (m.prints ?? 0),
+        clicks: a.clicks + (m.clicks ?? 0),
+      }
+    },
+    { gasto: 0, venta: 0, unidades: 0, impresiones: 0, clicks: 0 },
+  )
+
+  return { dias, rango, totales, campanas, porItem, economia, experimento }
 }
 
 // Métricas de una campaña desde una fecha: el "después" del experimento, con la

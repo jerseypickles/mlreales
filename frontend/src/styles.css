@@ -5929,3 +5929,4 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
   padding: 7px 11px;
   border-radius: 8px;
 }
+.ads-rango { margin: 3px 0 0; font-size: 11px; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
