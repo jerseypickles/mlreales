@@ -205,6 +205,20 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     }
   }
 
+  // LO QUE SE APRENDIÓ VENDIENDO vuelve al cerebro. Con las mediciones recién
+  // refrescadas, la conversión medida y la respuesta al precio se guardan como
+  // lecciones que el analista y el sugeridor leen — antes solo se mostraban en
+  // pantalla y no cambiaban ninguna decisión.
+  if (!soloOficial) {
+    try {
+      const { registrarConversionPropios } = await import('./aprendizajes.js')
+      const ap = await registrarConversionPropios()
+      if (ap.guardados.length) console.log(`[scan-propios] aprendizajes: ${ap.guardados.join(', ')}`)
+    } catch (err) {
+      console.warn(`[scan-propios] aprendizajes de conversión no registrados: ${err.message}`)
+    }
+  }
+
   // ventas reales de la cuenta (orders): mismas pasadas diarias que el scan
   let ordenes = null
   try {

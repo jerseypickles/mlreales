@@ -116,3 +116,100 @@ export async function registrarTerminoChileno({ propuesto, real, volumenPropuest
     { upsert: true, new: true },
   ).catch(() => null)
 }
+
+// LO QUE SE APRENDE VENDIENDO: la conversión y su respuesta al precio.
+//
+// El sistema juzgaba nichos con búsquedas de Google, competencia y economía —
+// todo medido DESDE AFUERA. Lo único que no se puede estimar desde afuera es
+// cuánta gente que mira termina comprando, y eso el importador lo sabe de sus
+// propias publicaciones desde el 13-ago. Esa evidencia no volvía a ninguna
+// decisión: se mostraba en pantalla y ahí moría.
+//
+// Acá se convierte en lecciones que el analista y el sugeridor leen antes de
+// dictar un veredicto o proponer un nicho nuevo.
+//
+// OJO CON LA LECTURA DEL EXPERIMENTO DE PRECIO: los tramos no son limpios. El
+// presupuesto de publicidad subió en las mismas fechas en que subieron los
+// precios, así que "subí el precio y la conversión subió" es más probablemente
+// "entró más tráfico pagado y mejor apuntado". Por eso la lección dice que el
+// precio NO hundió la conversión —que es lo que sí se puede afirmar— y no que
+// subirlo la mejore.
+export async function registrarConversionPropios() {
+  const { conversionDeLosPropios } = await import('./conversionPropios.js')
+  const filas = await conversionDeLosPropios()
+  const guardados = []
+
+  const conConv = filas.filter((f) => f.conversion?.conversionPct != null && f.conversion.visitas >= 20)
+  if (conConv.length >= 3) {
+    const pcts = conConv.map((f) => f.conversion.conversionPct).sort((a, b) => a - b)
+    const mediana = pcts[Math.floor(pcts.length / 2)]
+    const mejor = conConv.reduce((a, b) => (b.conversion.conversionPct > a.conversion.conversionPct ? b : a))
+    const leccion =
+      `Conversión MEDIDA en mis publicaciones: mediana ${mediana}% de visitas que compran ` +
+      `(${conConv.length} productos, ventana 7 días). La mejor es "${String(mejor.titulo).slice(0, 40)}" ` +
+      `con ${mejor.conversion.conversionPct}%. Úsala como referencia real al estimar cuánto vende un nicho, ` +
+      `en vez de suponer una tasa.`
+    await Aprendizaje.findOneAndUpdate(
+      { tipo: 'formato-gana', keyword: '__conversion-propios__' },
+      { $set: { leccion, evidencia: { mediana, n: conConv.length, ventanaDias: 7 }, actualizadoEl: new Date() } },
+      { upsert: true, new: true },
+    )
+    guardados.push('conversion-mediana')
+  }
+
+  // el experimento de precio, solo si hay tramos comparables de verdad
+  const conCurva = filas.filter((f) => f.curvaLegible)
+  const subidas = []
+  for (const f of conCurva) {
+    const t = f.curva.filter((x) => x.conversionPct != null && x.dias >= 2)
+    for (let i = 1; i < t.length; i++) {
+      if (t[i].precio > t[i - 1].precio) {
+        subidas.push({
+          titulo: f.titulo,
+          de: t[i - 1].precio,
+          a: t[i].precio,
+          convAntes: t[i - 1].conversionPct,
+          convDespues: t[i].conversionPct,
+        })
+      }
+    }
+  }
+  if (subidas.length >= 3) {
+    const noBajaron = subidas.filter((s) => s.convDespues >= s.convAntes).length
+    const leccion =
+      `Subidas de precio medidas en mis publicaciones: ${subidas.length} casos, y en ${noBajaron} ` +
+      `la conversión NO bajó (ej: ${subidas[0].titulo.slice(0, 28)} de $${subidas[0].de} a $${subidas[0].a}, ` +
+      `${subidas[0].convAntes}% → ${subidas[0].convDespues}%). En mi rango de precio la demanda no es ` +
+      `sensible al precio: no degrades un nicho por ticket alto. Advertencia: la publicidad subió en las ` +
+      `mismas fechas, así que esto prueba que el precio no hunde la conversión, no que subirlo la mejore.`
+    await Aprendizaje.findOneAndUpdate(
+      { tipo: 'formato-gana', keyword: '__precio-vs-conversion__' },
+      { $set: { leccion, evidencia: { casos: subidas.length, noBajaron, detalle: subidas.slice(0, 6) }, actualizadoEl: new Date() } },
+      { upsert: true, new: true },
+    )
+    guardados.push('precio-vs-conversion')
+  }
+
+  // SIN COSTO NO HAY RENTABILIDAD, y conviene que el prompt lo diga en vez de
+  // dejar que el analista hable de margen como si lo supiera
+  const sinCosto = filas.filter((f) => !Number.isFinite(f.costoUnitarioClp)).length
+  if (sinCosto) {
+    await Aprendizaje.findOneAndUpdate(
+      { tipo: 'formato-gana', keyword: '__falta-costo__' },
+      {
+        $set: {
+          leccion:
+            `${sinCosto} de ${filas.length} publicaciones propias no tienen costo unitario cargado, así que ` +
+            `NO se conoce la ganancia real de ninguna. Todo lo que digas sobre margen es contribución ` +
+            `(precio − comisión − envío), un TECHO: el resultado real es peor. Dilo explícitamente.`,
+          evidencia: { sinCosto, total: filas.length },
+          actualizadoEl: new Date(),
+        },
+      },
+      { upsert: true, new: true },
+    )
+    guardados.push('falta-costo')
+  }
+
+  return { guardados, productos: filas.length }
+}
