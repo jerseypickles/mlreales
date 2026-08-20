@@ -73,7 +73,37 @@ export async function adsPorItem({ dias = 30 } = {}) {
   return porItem
 }
 
-export async function resumenAds({ dias = 30 } = {}) {
+// CACHÉ CORTA, PORQUE LA PANTALLA SE MIRA SEGUIDO.
+//
+// Armar el resumen son dos llamadas a ML más la economía por anuncio: ~2
+// segundos. Con tres campañas corriendo el tab se abre y se recarga todo el
+// rato, y cada apertura pagaba los 2 segundos completos y una llamada a la API
+// de ML.
+//
+// 60 segundos es lo que corresponde al dato de abajo: ML no actualiza las
+// métricas de Product Ads en tiempo real —el gasto se mueve en minutos, las
+// conversiones tardan— así que refrescar más seguido no traería nada nuevo,
+// solo consumiría cuota. `refrescoEl` viaja al frontend para que pueda mostrar
+// cuán fresco es lo que está viendo en vez de aparentar tiempo real.
+const cacheResumen = new Map()
+const TTL_RESUMEN_MS = 60_000
+
+export function invalidarCacheAds() {
+  cacheResumen.clear()
+}
+
+export async function resumenAds({ dias = 30, forzar = false } = {}) {
+  const clave = `d${dias}`
+  const hit = cacheResumen.get(clave)
+  if (!forzar && hit && Date.now() - hit.el < TTL_RESUMEN_MS) {
+    return { ...hit.valor, refrescoEl: new Date(hit.el).toISOString(), deCache: true }
+  }
+  const valor = await construirResumenAds({ dias })
+  if (valor) cacheResumen.set(clave, { valor, el: Date.now() })
+  return valor ? { ...valor, refrescoEl: new Date().toISOString(), deCache: false } : valor
+}
+
+async function construirResumenAds({ dias = 30 } = {}) {
   const campanas = await campanasConMetricas({ dias })
   if (!campanas) return null
   const items = await adsPorItem({ dias }).catch(() => new Map())

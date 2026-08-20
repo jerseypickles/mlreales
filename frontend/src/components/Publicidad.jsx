@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
 import { fmtPrecio } from '../lib/formato.js'
@@ -253,24 +253,62 @@ function Productos({ economia, campanas }) {
   )
 }
 
+// Cuánto hace que se leyó, en palabras. Con tres campañas gastando a la vez, lo
+// que importa no es que el número sea de este segundo sino saber de cuándo es.
+function haceCuanto(iso) {
+  if (!iso) return null
+  const seg = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
+  if (seg < 45) return 'recién'
+  if (seg < 90) return 'hace 1 min'
+  if (seg < 3600) return `hace ${Math.round(seg / 60)} min`
+  return `hace ${Math.round(seg / 3600)} h`
+}
+
 export function Publicidad() {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [dias, setDias] = useState(30)
+  const [cargando, setCargando] = useState(false)
+  // el reloj del "hace X": su único trabajo es forzar el repintado, no se lee
+  const [, setTic] = useState(0)
+
+  // SIN PARPADEO. Antes esto hacía setDatos(null) en cada cambio de período, o
+  // sea blanqueaba la pantalla entera y mostraba el spinner para volver a
+  // pintar casi lo mismo. Ahora lo viejo se queda a la vista, atenuado, hasta
+  // que llega lo nuevo.
+  const traer = useCallback(
+    (forzar = false) => {
+      setCargando(true)
+      return api
+        .ads(dias, forzar)
+        .then((d) => {
+          setDatos(d)
+          setError(null)
+        })
+        .catch((e) => setError(e.message))
+        .finally(() => setCargando(false))
+    },
+    [dias],
+  )
 
   useEffect(() => {
-    let vigente = true
-    setDatos(null)
-    api
-      .ads(dias)
-      .then((d) => vigente && setDatos(d))
-      .catch((e) => vigente && setError(e.message))
-    return () => {
-      vigente = false
-    }
-  }, [dias])
+    traer()
+  }, [traer])
 
-  if (error) return <main><p className="error-inline">{error}</p></main>
+  // refresco solo: el gasto se mueve en minutos, así que 60s alcanza y coincide
+  // con la caché del servidor (pedir más seguido devolvería lo mismo)
+  useEffect(() => {
+    const id = setInterval(() => traer(), 60_000)
+    return () => clearInterval(id)
+  }, [traer])
+
+  // el reloj del "hace X" corre aunque no se pida nada
+  useEffect(() => {
+    const id = setInterval(() => setTic((t) => t + 1), 15_000)
+    return () => clearInterval(id)
+  }, [])
+
+  if (error && !datos) return <main><p className="error-inline">{error}</p></main>
   if (!datos) return <Cargando texto="Leyendo campañas de Product Ads…" />
 
   const filas = Object.values(datos.economia ?? {})
@@ -287,7 +325,7 @@ export function Publicidad() {
   const ticket = tot.unidades ? tot.venta / tot.unidades : null
 
   return (
-    <main>
+    <main className={cargando ? 'ads-refrescando' : undefined}>
       <div className="reporte-encabezado">
         <div>
           <h2>Publicidad</h2>
@@ -295,14 +333,27 @@ export function Publicidad() {
             ML mide el gasto contra la venta; acá se mide contra la contribución, que es lo que decide si ganas.
           </p>
         </div>
-        <div className="segmentado">
-          {[7, 15, 30, 60].map((d) => (
-            <button key={d} className={dias === d ? 'activo' : ''} onClick={() => setDias(d)}>
-              {d}d
-            </button>
-          ))}
+        <div className="ads-controles">
+          <button
+            type="button"
+            className="ads-refrescar"
+            onClick={() => traer(true)}
+            disabled={cargando}
+            title="Salta la caché de 60 segundos y vuelve a preguntarle a ML"
+          >
+            <span className={`ads-punto${cargando ? ' ads-punto-vivo' : ''}`} aria-hidden="true" />
+            {cargando ? 'actualizando…' : (haceCuanto(datos.refrescoEl) ?? 'actualizar')}
+          </button>
+          <div className="segmentado">
+            {[7, 15, 30, 60].map((d) => (
+              <button key={d} className={dias === d ? 'activo' : ''} onClick={() => setDias(d)}>
+                {d}d
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+      {error ? <p className="ads-error-suave">No se pudo actualizar: {error}. Se muestra la última lectura buena.</p> : null}
 
       <section className="ads-tablero">
         <Cifra etiqueta="facturado" valor={fmtPrecio(Math.round(tot.venta))} ayuda="Venta atribuida a la publicidad en la ventana" />
