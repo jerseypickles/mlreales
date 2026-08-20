@@ -710,16 +710,39 @@ export function calcularMetricas({
   const contribucionUnidad = Number.isFinite(medianaPrecio)
     ? medianaPrecio - medianaPrecio * comision - envioFullPorTramo(medianaPrecio)
     : null
-  const oportunidad = calcularScoreOportunidad({
-    demanda,
-    competencia,
-    calidad,
-    nivelBusqueda,
-    busquedasMes,
-    ratioPico,
-    vendidosHistoricos: vendidosHist,
-    contribucionUnidad,
-  })
+  // UN SCAN QUE ML BLOQUEÓ NO ES UNA MEDICIÓN, Y NO PUEDE DEJAR UN NÚMERO.
+  //
+  // Cuando ML corta el detalle de nivel 2 el scan igual termina: trae el
+  // listado de nivel 1 y arma el reporte. El score, en cambio, se seguía
+  // calculando — y salía SIEMPRE más bajo, porque `entrada` y `competencia` se
+  // construyen sobre el listado y quedaban a medias. Medido el 20-ago-2026 en
+  // los 8 nichos bloqueados esa mañana: los 8 bajaron, entre 1 y 8 puntos
+  // (soporte notebook 75 → 67, faja lumbar 77 → 71, nivel láser 86 → 84),
+  // todos con CERO items con dato de reseñas.
+  //
+  // Importa más que antes porque el tablero ahora lee el NIVEL de la serie
+  // (promedio de los últimos scans, ver nivelScore en tablero.js): cada scan
+  // bloqueado metía un número falsamente bajo en ese promedio y hundía nichos
+  // sanos sin que nadie hubiera medido nada.
+  //
+  // Sin cobertura de reseñas el reporte se guarda igual —el listado, los
+  // precios y la competencia siguen sirviendo— pero sin score. El reintento
+  // (escalera 2/4/8 h en workers.js) traerá la medición de verdad.
+  const detalleLlego = Number.isFinite(demanda?.reviews?.itemsConDato)
+    ? demanda.reviews.itemsConDato > 0
+    : false
+  const oportunidad = detalleLlego
+    ? calcularScoreOportunidad({
+        demanda,
+        competencia,
+        calidad,
+        nivelBusqueda,
+        busquedasMes,
+        ratioPico,
+        vendidosHistoricos: vendidosHist,
+        contribucionUnidad,
+      })
+    : null
 
   return {
     universo: {
@@ -749,6 +772,9 @@ export function calcularMetricas({
     demanda, // null mientras el detalle no traiga conteo de reseñas suficiente
     oportunidad, // { score, componentes } | null
     scoreOportunidad: oportunidad?.score ?? null,
+    // por qué este scan no tiene score: para que la mesa lo diga en vez de
+    // mostrar un hueco, y para poder auditar después cuántos scans se perdieron
+    ...(detalleLlego ? {} : { sinScore: 'detalle bloqueado por ML: sin cobertura de reseñas' }),
   }
 }
 
