@@ -376,6 +376,32 @@ export async function procesarCalcularMetricas(job) {
   const nicho = await Nicho.findById(job.data.nichoId)
   if (!nicho) throw new Error(`Nicho ${job.data.nichoId} no existe`)
 
+  // SIN CURVA NO HAY SCORE, Y SIN SCORE EL NICHO SE ATASCA.
+  //
+  // El volumen de búsqueda se mide una sola vez, cuando el radar EVALÚA al
+  // candidato (medirAtractivo desde sugeridor.js). Si esa medición falla, nada
+  // vuelve a intentarla: el nicho se crea igual, se escanea, pero su score
+  // queda null porque le falta el componente de demanda — y el filtro de
+  // screening, que necesita un score para promover o descartar, no puede hacer
+  // ninguna de las dos. Queda en el limbo para siempre.
+  //
+  // Le pasó a "maquina coser" el 19-ago-2026: creada por el radar junto a otras
+  // tres, las otras tres pasaron a completo y ella quedó en screening con 96
+  // productos scrapeados y score null. Medida a mano resultó ser 1.000
+  // búsquedas/mes — un nicho chico, que es justo lo que el screening tenía que
+  // poder juzgar.
+  try {
+    const { CurvaEstacional } = await import('../models/CurvaEstacional.js')
+    const tiene = await CurvaEstacional.exists({ keyword: nicho.keyword })
+    if (!tiene) {
+      const { medirAtractivo } = await import('../services/atractivoNicho.js')
+      await medirAtractivo([nicho.keyword], { conCrecimiento: true })
+      console.log(`[metricas] "${nicho.keyword}": curva de búsqueda medida (faltaba)`)
+    }
+  } catch (err) {
+    console.warn(`[metricas] "${nicho.keyword}": no se pudo medir la curva: ${err.message}`)
+  }
+
   const reporte = await generarReporteNicho(nicho)
   if (!reporte) throw new Error(`No hay snapshots para "${nicho.keyword}": el scan no guardó datos`)
 
