@@ -23,12 +23,32 @@ export function extraerImagen(raw) {
   return template.replace('{id}', foto).replace('{sanitizedTitle}', '')
 }
 
-// sourabhbgp: el ID pedido puede venir como catalogProductId, productId, sku o
+// EL ID TAMBIÉN VIVE EN LA URL, y desde el 20-ago-2026 es el único lugar donde
+// vive. El actor dejó de poblar catalogProductId, productId, sku y variations
+// —los cuatro llegan null— pero sigue devolviendo la URL con el id adentro:
+//
+//   url: "https://listado.mercadolibre.cl/mlc30394778-www.mercadolibre.cl-ondulador-..."
+//   pedidos: ["MLC30394778", ...]          ← calza, en minúscula y sin guion
+//
+// Sin leer la URL el detalle llegaba completo (ratingCount con 15, 447, 11666) y
+// se descartaba entero por "sin match de SKU". El log lo reportaba como
+// "probable bloqueo de ML", que es lo que hizo perder dos días buscando en el
+// lado equivocado: ML nunca bloqueó nada, el actor cambió su salida.
+export function skuDesdeUrl(url) {
+  const m = String(url ?? '').match(/\b(MLCU?-?\d{6,})\b/i)
+  if (!m) return null
+  const limpio = m[1].toUpperCase().replace('-', '')
+  return REGEX_SKU.test(limpio) ? limpio : null
+}
+
+// sourabhbgp: el ID pedido puede venir como catalogProductId, productId, sku,
 // dentro de variations[].id (comprobado: pedir /p/MLC62124281 devuelve el catálogo
-// padre MLC62133922 con la variante pedida en variations)
+// padre MLC62133922 con la variante pedida en variations) o —desde el 20-ago— solo
+// en la URL.
 function skusCandidatosSourabh(raw) {
   const variantes = Array.isArray(raw?.variations) ? raw.variations.map((v) => v?.id) : []
-  return [raw?.catalogProductId, raw?.productId, raw?.sku, ...variantes].filter(
+  const deUrl = skuDesdeUrl(raw?.url ?? raw?.permalink)
+  return [raw?.catalogProductId, raw?.productId, raw?.sku, ...variantes, deUrl].filter(
     (v, i, arr) => typeof v === 'string' && REGEX_SKU.test(v) && arr.indexOf(v) === i,
   )
 }
