@@ -43,15 +43,39 @@ export async function campanasConMetricas({ dias = 30 } = {}) {
     `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/campaigns/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS}`,
     { headers: { 'Api-Version': '2' } },
   )
-  return (r?.results ?? []).map((c) => ({
-    id: c.id,
-    nombre: c.name,
-    estado: c.status,
-    presupuestoDiario: c.budget ?? null,
-    estrategia: c.strategy ?? null,
-    acosObjetivo: c.acos_target ?? null,
-    metricas: c.metrics ?? {},
-  }))
+  // CUÁNTOS DÍAS LLEVA VIVA LA CAMPAÑA, no cuántos pide la ventana.
+  //
+  // Dividir el gasto por los días del rango asume que la campaña existió todo
+  // ese tiempo, y con una campaña nueva eso la muestra a una fracción de lo que
+  // gasta. Medido el 22-ago: Campaña 3 nació el 19 y gastaba $2.132/día sobre
+  // un tope de $2.000 —el 107%, se pasaba— pero dividido por 7 daba $914, un
+  // 46%, y el analista concluyó "le sobra presupuesto, bájale el objetivo". El
+  // consejo exacto al revés del correcto.
+  //
+  // `date_created` viene en la misma respuesta y nunca se usaba.
+  const hoy = new Date(`${hasta}T23:59:59Z`)
+  return (r?.results ?? []).map((c) => {
+    const creada = c.date_created ? new Date(c.date_created) : null
+    const desdeCreacion = creada ? Math.floor((hoy - creada) / 86400e3) + 1 : null
+    const diasConDatos = Number.isFinite(desdeCreacion) ? Math.max(1, Math.min(dias, desdeCreacion)) : dias
+    return {
+      id: c.id,
+      nombre: c.name,
+      estado: c.status,
+      presupuestoDiario: c.budget ?? null,
+      estrategia: c.strategy ?? null,
+      acosObjetivo: c.acos_target ?? null,
+      // ML lo entrega directo: no hace falta derivarlo de 100/acos
+      roasObjetivo: c.roas_target ?? (c.acos_target ? Math.round((100 / c.acos_target) * 100) / 100 : null),
+      creadaEl: c.date_created ?? null,
+      diasConDatos,
+      // una campaña con menos de una semana no tiene serie que leer: el gasto
+      // responde en horas pero las conversiones tardan, así que su ROAS todavía
+      // no significa nada
+      maduraParaOpinar: diasConDatos >= 7,
+      metricas: c.metrics ?? {},
+    }
+  })
 }
 
 // Métricas por anuncio/item (para atribuir pagado vs orgánico por producto)

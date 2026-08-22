@@ -96,6 +96,15 @@ QUÉ MIRAR, en orden:
    la peor: que el promedio sea 4x no significa que la siguiente impresión lo
    sea. Por eso subir presupuesto rinde menos de lo que el promedio sugiere.
 
+UNA CAMPAÑA NUEVA NO SE OPINA:
+Cada campaña trae "diasConDatos" y "maduraParaOpinar". Si maduraParaOpinar es
+false (menos de 7 días de vida), NO recomiendes cambiar sus diales: el gasto
+responde en horas pero las conversiones tardan días, así que su ROAS todavía no
+significa nada. Di "mantener" con confianza baja y explica cuántos días le
+faltan para poder leerla. Mover un dial sobre una campaña de tres días es
+decidir con ruido, y además borra el experimento que esa campaña estaba
+corriendo.
+
 LO QUE NO DEBES HACER:
 - No recomiendes subir presupuesto solo porque el ROAS promedio es bueno.
 - No uses el ACOS contra la venta como si fuera margen: la venta no es ganancia.
@@ -129,14 +138,20 @@ async function contexto({ dias = 7 } = {}) {
   }))
   const campanas = (r.campanas ?? []).map((c) => {
     const m = c.metricas ?? {}
+    // el divisor son los días que la campaña VIVIÓ, no los de la ventana
+    const d = c.diasConDatos ?? dias
+    const gastoDia = m.cost ? Math.round(m.cost / d) : 0
     return {
       id: c.id,
       nombre: c.nombre,
       estado: c.estado,
+      creadaEl: c.creadaEl,
+      diasConDatos: d,
+      maduraParaOpinar: c.maduraParaOpinar,
       presupuestoDiario: c.presupuestoDiario,
-      roasObjetivo: c.acosObjetivo ? Math.round((100 / c.acosObjetivo) * 100) / 100 : null,
-      gastoDia: m.cost ? Math.round(m.cost / dias) : 0,
-      usoPresupuestoPct: c.presupuestoDiario && m.cost ? Math.round((m.cost / dias / c.presupuestoDiario) * 100) : null,
+      roasObjetivo: c.roasObjetivo,
+      gastoDia,
+      usoPresupuestoPct: c.presupuestoDiario ? Math.round((gastoDia / c.presupuestoDiario) * 100) : null,
       roasReal: m.cost > 0 ? Math.round((m.total_amount / m.cost) * 100) / 100 : null,
       impresiones: m.prints ?? 0,
       clicks: m.clicks ?? 0,
@@ -174,7 +189,7 @@ export async function analizarAds({ dias = 7 } = {}) {
     `TOTALES: gastó $${Math.round(ctx.totales.gasto)}, facturó $${Math.round(ctx.totales.venta)}, ` +
     `${ctx.totales.unidades} unidades, ROAS ${(ctx.totales.venta / ctx.totales.gasto).toFixed(2)}x, ` +
     `ticket medio $${ctx.totales.unidades ? Math.round(ctx.totales.venta / ctx.totales.unidades) : 0}\n\n` +
-    `CAMPAÑAS:\n${JSON.stringify(ctx.campanas, null, 1)}\n\n` +
+    `CAMPAÑAS (ojo diasConDatos y maduraParaOpinar):\n${JSON.stringify(ctx.campanas, null, 1)}\n\n` +
     `ANUNCIO POR ANUNCIO (roasEquilibrio = bajo ese ROAS ese anuncio destruye margen):\n` +
     `${JSON.stringify(ctx.economia, null, 1)}\n` +
     bloquePrevio
