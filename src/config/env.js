@@ -34,6 +34,15 @@ export const config = {
   // modelo sin tocar el resto (LLM_MODEL_ANALISTA); si difiere del base,
   // llm.js degrada solo cuando el premium no está disponible.
   llmModelAnalista: process.env.LLM_MODEL_ANALISTA || 'claude-opus-5',
+  // El analista de PUBLICIDAD corre en Fable: los dos diales que ML deja mover
+  // —presupuesto y objetivo de ROAS— deciden dónde va la plata todos los días,
+  // y hasta ahora se movían a ojo. Se puede bajar con LLM_MODEL_ADS si el costo
+  // molesta; el resto del sistema no se entera.
+  llmModelAds: process.env.LLM_MODEL_ADS || 'claude-fable-5',
+  // cada cuánto opina sobre la publicidad (viernes 09:00 Chile: la semana ya
+  // corrió y hay serie que leer, y queda tiempo de aplicar antes del fin de semana)
+  adsAnalistaCron: process.env.ADS_ANALISTA_CRON || '0 9 * * 5',
+  adsAnalistaActivo: process.env.ADS_ANALISTA_ACTIVO !== 'false',
   // % del EXW máximo que se muestra al proveedor como precio objetivo (ancla)
   exwObjetivoPct: Number(process.env.EXW_OBJETIVO_PCT) || 80,
   // radar autónomo: descubre nichos por temporada/tendencia y los escanea solo

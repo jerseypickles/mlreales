@@ -51,6 +51,30 @@ router.get(
   }),
 )
 
+// El analista de publicidad: opina sobre los dos diales que ML deja mover
+// (presupuesto y objetivo de ROAS por campaña). GET lee el último; POST fuerza
+// uno nuevo. La serie se guarda para que cada análisis lea el anterior.
+router.get(
+  '/ads/analisis',
+  manejar(async (req, res) => {
+    const { ultimoAnalisisAds, historialAnalisisAds } = await import('../../services/analistaAds.js')
+    const ultimo = await ultimoAnalisisAds()
+    const historial = req.query.historial === '1' ? await historialAnalisisAds({ limite: 10 }) : undefined
+    res.json({ ultimo, ...(historial ? { historial } : {}) })
+  }),
+)
+
+router.post(
+  '/ads/analisis',
+  manejar(async (req, res) => {
+    const { analizarAds } = await import('../../services/analistaAds.js')
+    const dias = Math.min(60, Math.max(3, Number(req.body?.dias) || 7))
+    const r = await analizarAds({ dias })
+    if (r?.omitido) return res.status(409).json(r)
+    res.json(r)
+  }),
+)
+
 // Crea una publicación nueva en ML desde un borrador de listing (pausada por
 // defecto: se activa cuando llega el stock). El título nace libre — el bloqueo
 // 374 de family_name solo aplica a EDITAR user products existentes.

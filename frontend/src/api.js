@@ -72,6 +72,8 @@ export const api = {
   estratega: () => pedir('/api/estratega'),
   generarEstratega: () => pedir('/api/estratega', { method: 'POST' }),
   meliEstado: () => pedir('/api/meli/estado'),
+  adsAnalisis: () => pedir('/api/meli/ads/analisis'),
+  analizarAds: (dias = 7) => pedir('/api/meli/ads/analisis', json({ dias })),
   ads: (dias = 30, forzar = false) => pedir(`/api/meli/ads?dias=${dias}${forzar ? '&forzar=1' : ''}`),
   meliConectar: () => pedir('/api/meli/conectar'),
   meliImportar: () => pedir('/api/meli/importar-items', { method: 'POST' }),

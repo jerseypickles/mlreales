@@ -114,6 +114,19 @@ export async function registrarProgramados() {
   } else {
     await colas.estratega.removeJobScheduler('estratega-semanal').catch(() => {})
   }
+
+  // El analista de publicidad va en la misma cola: es semanal, no compite con
+  // el estratega (que está apagado) y así no se agrega infraestructura nueva
+  // para un job que corre una vez por semana.
+  if (config.adsAnalistaActivo) {
+    await colas.estratega.upsertJobScheduler(
+      'analista-ads',
+      { pattern: config.adsAnalistaCron, tz: 'America/Santiago' },
+      { name: 'analizar-ads', data: { motivo: 'programado' } },
+    )
+  } else {
+    await colas.estratega.removeJobScheduler('analista-ads').catch(() => {})
+  }
 }
 
 export async function cerrarColas() {

@@ -79,14 +79,24 @@ export async function pedirJSON({ system, user, schema, maxTokens = 8000, modelo
       e.status = 503
       throw e
     }
-    // modelo premium no disponible para la cuenta (404/403/400 de modelo):
-    // degradar al modelo base en vez de botar el análisis
-    if (
-      modeloPedido !== config.llmModel &&
-      (err instanceof Anthropic.NotFoundError ||
-        err instanceof Anthropic.PermissionDeniedError ||
-        err instanceof Anthropic.BadRequestError)
-    ) {
+    // UN 400 NO SIEMPRE ES "EL MODELO NO EXISTE".
+    //
+    // Esto degradaba al modelo base ante cualquier BadRequest, y un esquema mal
+    // formado también es 400. Pasó el 22-ago-2026 estrenando el analista de
+    // publicidad: el esquema le faltaba `additionalProperties: false`, la API
+    // respondió 400, el log dijo "claude-fable-5 no disponible" y el análisis
+    // corrió en Opus. El modelo estaba perfectamente disponible —probado
+    // directo— y el mensaje mandó a buscar un problema de cuenta que no existía.
+    //
+    // Ahora solo se degrada cuando el error habla del MODELO; un error de
+    // esquema o de parámetros explota, que es lo correcto: lo tiene que ver
+    // quien escribió el esquema, no esconderse detrás de un fallback.
+    const mensaje = String(err?.error?.error?.message ?? err?.message ?? '')
+    const esDelModelo =
+      err instanceof Anthropic.NotFoundError ||
+      err instanceof Anthropic.PermissionDeniedError ||
+      /\bmodel\b/i.test(mensaje)
+    if (modeloPedido !== config.llmModel && esDelModelo) {
       console.error(`[llm] ${modeloPedido} no disponible (${err.status}): usando ${config.llmModel}`)
       modeloUsado = config.llmModel
       respuesta = await llamar(config.llmModel)

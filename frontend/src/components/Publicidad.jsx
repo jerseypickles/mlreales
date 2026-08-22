@@ -264,6 +264,108 @@ function haceCuanto(iso) {
   return `hace ${Math.round(seg / 3600)} h`
 }
 
+
+// LA OPINIÓN DE FABLE sobre los dos diales que ML deja mover. Va arriba de todo
+// porque es lo único accionable de la pantalla: el resto son números, esto es
+// qué hacer con ellos. Guarda su recomendación anterior y la revisa, así que la
+// serie vale más que cada análisis suelto.
+const ACCION = {
+  'subir-presupuesto': { txt: 'subir presupuesto', clase: 'acc-sube' },
+  'bajar-presupuesto': { txt: 'bajar presupuesto', clase: 'acc-baja' },
+  'subir-objetivo': { txt: 'subir objetivo', clase: 'acc-baja' },
+  'bajar-objetivo': { txt: 'bajar objetivo', clase: 'acc-sube' },
+  mantener: { txt: 'mantener', clase: 'acc-neutra' },
+  cerrar: { txt: 'cerrar', clase: 'acc-baja' },
+}
+
+function OpinionAds() {
+  const [dato, setDato] = useState(null)
+  const [corriendo, setCorriendo] = useState(false)
+  const [err, setErr] = useState(null)
+
+  const cargar = useCallback(() => {
+    api.adsAnalisis().then((d) => setDato(d.ultimo)).catch((e) => setErr(e.message))
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+
+  const pedirAnalisis = () => {
+    setCorriendo(true)
+    setErr(null)
+    api.analizarAds(7).then(setDato).catch((e) => setErr(e.message)).finally(() => setCorriendo(false))
+  }
+
+  if (!dato && !corriendo) {
+    return (
+      <section className="ads-opinion ads-opinion-vacia">
+        <div>
+          <strong>Sin análisis todavía</strong>
+          <p>El analista opina sobre presupuesto y objetivo de ROAS por campaña — los dos únicos diales que ML deja mover.</p>
+        </div>
+        <button type="button" className="boton-secundario" onClick={pedirAnalisis}>Analizar ahora</button>
+        {err ? <p className="ads-error-suave">{err}</p> : null}
+      </section>
+    )
+  }
+
+  return (
+    <section className="ads-opinion">
+      <header>
+        <div>
+          <span className="ads-opinion-chip">análisis</span>
+          <strong>{corriendo ? 'Analizando…' : dato?.titular}</strong>
+        </div>
+        <button type="button" className="ads-refrescar" onClick={pedirAnalisis} disabled={corriendo}>
+          {corriendo ? 'analizando…' : 'volver a analizar'}
+        </button>
+      </header>
+
+      {dato?.revisionAnterior ? (
+        <p className="ads-revision"><b>Sobre su consejo anterior:</b> {dato.revisionAnterior}</p>
+      ) : null}
+
+      <ul className="ads-recos">
+        {(dato?.recomendaciones ?? []).map((r) => {
+          const a = ACCION[r.accion] ?? ACCION.mantener
+          return (
+            <li key={r.campanaId}>
+              <div className="ads-reco-cabeza">
+                <strong>{r.nombre}</strong>
+                <span className={`ads-acc ${a.clase}`}>{a.txt}</span>
+                <span className="ads-conf">confianza {r.confianza}</span>
+              </div>
+              {r.presupuestoSugerido || r.roasObjetivoSugerido ? (
+                <div className="ads-reco-diales">
+                  {r.presupuestoSugerido ? (
+                    <span>presupuesto <b>{fmtPrecio(r.presupuestoActual)} → {fmtPrecio(r.presupuestoSugerido)}</b></span>
+                  ) : null}
+                  {r.roasObjetivoSugerido ? (
+                    <span>objetivo <b>{r.roasObjetivoActual}x → {r.roasObjetivoSugerido}x</b></span>
+                  ) : null}
+                </div>
+              ) : null}
+              <p>{r.porque}</p>
+              {r.queEsperar ? <p className="ads-esperar"><b>A revisar:</b> {r.queEsperar}</p> : null}
+            </li>
+          )
+        })}
+      </ul>
+
+      {dato?.preguntas?.length ? (
+        <details className="ads-detalle">
+          <summary>{dato.preguntas.length} pregunta(s) para ti</summary>
+          <div>{dato.preguntas.map((p, i) => <p key={i}>· {p}</p>)}</div>
+        </details>
+      ) : null}
+
+      {dato?.fecha ? (
+        <p className="ads-opinion-pie">
+          {new Date(dato.fecha).toLocaleString('es-CL')} · {dato.modelo} · los cambios se aplican en el panel de ML
+        </p>
+      ) : null}
+    </section>
+  )
+}
+
 export function Publicidad() {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
@@ -370,6 +472,8 @@ export function Publicidad() {
           ayuda="Contribución generada menos gasto, antes del costo de la mercadería. Es un techo."
         />
       </section>
+
+      <OpinionAds />
 
       <Campanas campanas={datos.campanas ?? []} dias={dias} />
       <Productos economia={datos.economia} campanas={datos.campanas} />

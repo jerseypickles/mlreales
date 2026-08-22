@@ -939,7 +939,17 @@ export async function procesarNivelBusqueda(job) {
 
 // Estratega semanal: una llamada LLM sobre el tablero completo con acciones
 // priorizadas. Respeta el techo de presupuesto como todo gasto de IA.
-export async function procesarEstratega() {
+export async function procesarEstratega(job) {
+  // la cola es compartida: el analista de publicidad entra por nombre de job
+  if (job?.name === 'analizar-ads') {
+    const { analizarAds } = await import('../services/analistaAds.js')
+    const r = await analizarAds({ dias: 7 })
+    return r?.omitido ? r : { recomendaciones: r.recomendaciones?.length ?? 0, titular: r.titular }
+  }
+  return procesarEstrategaSemanal()
+}
+
+async function procesarEstrategaSemanal() {
   if (!llmDisponible()) return { omitido: true, motivo: 'IA no configurada (falta ANTHROPIC_API_KEY)' }
   // el estratega es LLM puro: que Apify esté en su tope no es razón para no
   // correrlo, así que mira el techo de IA y no el de scraping
