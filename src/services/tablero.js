@@ -116,11 +116,30 @@ export async function tableroOportunidades({ todos = false } = {}) {
       // (foco solares: 69 61 72 70 73 79 70 76). Leer el último valor acierta
       // el veredicto 64-69% de las veces; leer el promedio de la serie, 81%.
       // Por eso el tablero rankea por NIVEL, no por la última medición.
+      // SOLO SCORES DE LA MISMA FÓRMULA. El score se reescribió el 16-ago-2026
+      // (entraron constancia, entrada y economía; salieron calidad y full), y
+      // promediar los de antes con los de después mezcla dos escalas.
+      //
+      // Medido el 22-ago: 29 de 76 nichos tenían el nivel contaminado. El peor,
+      // ventilador de torre, promediaba su 58 actual con 82, 81, 88, 91, 90, 90
+      // y 90 de la fórmula vieja y mostraba 84 — el tablero rankeaba por un
+      // número que ninguna fórmula había calculado.
+      //
+      // `componentes.constancia` solo existe en la nueva, así que sirve de sello.
+      // El costo de filtrar es que un nicho recién medido queda con nivel de
+      // pocos scans y por lo tanto más ruidoso; se prefiere ruidoso y correcto
+      // antes que suave y falso, que es el criterio de toda la mesa.
       $lookup: {
         from: 'reportes',
         let: { nid: '$_id' },
         pipeline: [
-          { $match: { $expr: { $eq: ['$nichoId', '$$nid'] }, scoreOportunidad: { $ne: null } } },
+          {
+            $match: {
+              $expr: { $eq: ['$nichoId', '$$nid'] },
+              scoreOportunidad: { $ne: null },
+              'metricas.oportunidad.componentes.constancia': { $ne: null },
+            },
+          },
           { $sort: { fecha: -1 } },
           { $limit: 8 },
           { $project: { _id: 0, s: '$scoreOportunidad' } },
