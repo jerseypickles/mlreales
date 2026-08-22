@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
+import { Lightbulb, TrendingUp, TrendingDown, Minus, Clock } from 'lucide-react'
 import { fmtPrecio } from '../lib/formato.js'
 
 // PUBLICIDAD, LEÍDA EN PLATA.
@@ -78,7 +79,55 @@ function Cifra({ etiqueta, valor, ayuda, tono }) {
 // expone puja por producto, solo presupuesto y ROAS objetivo POR CAMPAÑA. Por
 // eso separar productos en campañas distintas es la única forma de tratarlos
 // distinto, y por eso esta tarjeta muestra objetivo y real uno al lado del otro.
-function Campanas({ campanas, dias }) {
+const ACCION = {
+  'subir-presupuesto': { txt: 'subir presupuesto', clase: 'acc-sube' },
+  'bajar-presupuesto': { txt: 'bajar presupuesto', clase: 'acc-baja' },
+  'subir-objetivo': { txt: 'subir objetivo', clase: 'acc-baja' },
+  'bajar-objetivo': { txt: 'bajar objetivo', clase: 'acc-sube' },
+  mantener: { txt: 'mantener', clase: 'acc-neutra' },
+  cerrar: { txt: 'cerrar', clase: 'acc-baja' },
+}
+
+// El ICONO de la acción: el importador lee la tarjeta de un vistazo y tiene que
+// saber si hay algo que hacer sin leer el párrafo.
+const ICONO_ACCION = {
+  'subir-presupuesto': TrendingUp,
+  'bajar-objetivo': TrendingUp, // objetivo más bajo = gasta más = empuja
+  'bajar-presupuesto': TrendingDown,
+  'subir-objetivo': TrendingDown,
+  cerrar: TrendingDown,
+  mantener: Minus,
+}
+
+// La sugerencia vive DENTRO de la tarjeta de su campaña: es sobre esos diales y
+// no sobre otra cosa, así que separarla en un bloque aparte obligaba a cruzar
+// nombres con la vista. Acá se lee el dial y su consejo en el mismo lugar.
+function SugerenciaCampana({ reco }) {
+  if (!reco) return null
+  const a = ACCION[reco.accion] ?? ACCION.mantener
+  const Icono = ICONO_ACCION[reco.accion] ?? Minus
+  const esperar = reco.accion === 'mantener' && reco.confianza === 'baja'
+  return (
+    <details className={`camp-sug camp-sug-${a.clase}`}>
+      <summary>
+        {esperar ? <Clock aria-hidden="true" /> : <Icono aria-hidden="true" />}
+        <span className="camp-sug-txt">{a.txt}</span>
+        {reco.presupuestoSugerido ? (
+          <b>{fmtPrecio(reco.presupuestoActual)} → {fmtPrecio(reco.presupuestoSugerido)}</b>
+        ) : null}
+        {reco.roasObjetivoSugerido ? <b>{reco.roasObjetivoActual}x → {reco.roasObjetivoSugerido}x</b> : null}
+      </summary>
+      <div>
+        <p>{reco.porque}</p>
+        {reco.queEsperar ? <p className="camp-sug-esperar"><b>A revisar:</b> {reco.queEsperar}</p> : null}
+        <span className="camp-sug-conf">confianza {reco.confianza}</span>
+      </div>
+    </details>
+  )
+}
+
+function Campanas({ campanas, dias, recomendaciones }) {
+  const porCampana = new Map((recomendaciones ?? []).map((r) => [r.campanaId, r]))
   const vivas = campanas.filter((c) => c.estado === 'active')
   const pausadas = campanas.filter((c) => c.estado !== 'active')
   const tarjeta = (c) => {
@@ -93,6 +142,11 @@ function Campanas({ campanas, dias }) {
         <header>
           <strong>{c.nombre}</strong>
           {c.estado !== 'active' ? <span className="ads-estado">pausada</span> : null}
+          {porCampana.has(c.id) ? (
+            <span className="camp-tiene-sug" title="Hay una sugerencia para esta campaña">
+              <Lightbulb aria-hidden="true" />
+            </span>
+          ) : null}
         </header>
         <div className="ads-camp-roas">
           <div title="El dial que le pediste a ML. Más alto = más exigente = gasta menos.">
@@ -121,6 +175,7 @@ function Campanas({ campanas, dias }) {
             </div>
           ) : null}
         </div>
+        <SugerenciaCampana reco={porCampana.get(c.id)} />
       </article>
     )
   }
@@ -265,90 +320,40 @@ function haceCuanto(iso) {
 }
 
 
-// LA OPINIÓN DE FABLE sobre los dos diales que ML deja mover. Va arriba de todo
-// porque es lo único accionable de la pantalla: el resto son números, esto es
-// qué hacer con ellos. Guarda su recomendación anterior y la revisa, así que la
-// serie vale más que cada análisis suelto.
-const ACCION = {
-  'subir-presupuesto': { txt: 'subir presupuesto', clase: 'acc-sube' },
-  'bajar-presupuesto': { txt: 'bajar presupuesto', clase: 'acc-baja' },
-  'subir-objetivo': { txt: 'subir objetivo', clase: 'acc-baja' },
-  'bajar-objetivo': { txt: 'bajar objetivo', clase: 'acc-sube' },
-  mantener: { txt: 'mantener', clase: 'acc-neutra' },
-  cerrar: { txt: 'cerrar', clase: 'acc-baja' },
-}
-
-function OpinionAds() {
-  const [dato, setDato] = useState(null)
-  const [corriendo, setCorriendo] = useState(false)
-  const [err, setErr] = useState(null)
-
-  const cargar = useCallback(() => {
-    api.adsAnalisis().then((d) => setDato(d.ultimo)).catch((e) => setErr(e.message))
-  }, [])
-  useEffect(() => { cargar() }, [cargar])
-
-  const pedirAnalisis = () => {
-    setCorriendo(true)
-    setErr(null)
-    api.analizarAds(7).then(setDato).catch((e) => setErr(e.message)).finally(() => setCorriendo(false))
-  }
-
+// El encabezado del análisis: el titular y lo que hay que saber del proceso.
+// Las recomendaciones YA NO viven acá — bajaron a la tarjeta de su campaña,
+// porque son sobre esos diales y leerlas lejos obligaba a cruzar nombres.
+function OpinionAds({ dato, corriendo, err, onAnalizar }) {
   if (!dato && !corriendo) {
     return (
       <section className="ads-opinion ads-opinion-vacia">
         <div>
           <strong>Sin análisis todavía</strong>
-          <p>El analista opina sobre presupuesto y objetivo de ROAS por campaña — los dos únicos diales que ML deja mover.</p>
+          <p>El analista opina sobre presupuesto y objetivo de ROAS — los dos únicos diales que ML deja mover. La sugerencia aparece dentro de cada campaña.</p>
         </div>
-        <button type="button" className="boton-secundario" onClick={pedirAnalisis}>Analizar ahora</button>
+        <button type="button" className="boton-secundario" onClick={onAnalizar}>Analizar ahora</button>
         {err ? <p className="ads-error-suave">{err}</p> : null}
       </section>
     )
   }
-
   return (
     <section className="ads-opinion">
       <header>
         <div>
-          <span className="ads-opinion-chip">análisis</span>
+          <span className="ads-opinion-chip"><Lightbulb aria-hidden="true" /> análisis</span>
           <strong>{corriendo ? 'Analizando…' : dato?.titular}</strong>
         </div>
-        <button type="button" className="ads-refrescar" onClick={pedirAnalisis} disabled={corriendo}>
+        <button type="button" className="ads-refrescar" onClick={onAnalizar} disabled={corriendo}>
           {corriendo ? 'analizando…' : 'volver a analizar'}
         </button>
       </header>
 
       {dato?.revisionAnterior ? (
-        <p className="ads-revision"><b>Sobre su consejo anterior:</b> {dato.revisionAnterior}</p>
+        <details className="ads-detalle">
+          <summary>Qué pasó con su consejo anterior</summary>
+          <div><p>{dato.revisionAnterior}</p></div>
+        </details>
       ) : null}
-
-      <ul className="ads-recos">
-        {(dato?.recomendaciones ?? []).map((r) => {
-          const a = ACCION[r.accion] ?? ACCION.mantener
-          return (
-            <li key={r.campanaId}>
-              <div className="ads-reco-cabeza">
-                <strong>{r.nombre}</strong>
-                <span className={`ads-acc ${a.clase}`}>{a.txt}</span>
-                <span className="ads-conf">confianza {r.confianza}</span>
-              </div>
-              {r.presupuestoSugerido || r.roasObjetivoSugerido ? (
-                <div className="ads-reco-diales">
-                  {r.presupuestoSugerido ? (
-                    <span>presupuesto <b>{fmtPrecio(r.presupuestoActual)} → {fmtPrecio(r.presupuestoSugerido)}</b></span>
-                  ) : null}
-                  {r.roasObjetivoSugerido ? (
-                    <span>objetivo <b>{r.roasObjetivoActual}x → {r.roasObjetivoSugerido}x</b></span>
-                  ) : null}
-                </div>
-              ) : null}
-              <p>{r.porque}</p>
-              {r.queEsperar ? <p className="ads-esperar"><b>A revisar:</b> {r.queEsperar}</p> : null}
-            </li>
-          )
-        })}
-      </ul>
 
       {dato?.preguntas?.length ? (
         <details className="ads-detalle">
@@ -371,8 +376,25 @@ export function Publicidad() {
   const [error, setError] = useState(null)
   const [dias, setDias] = useState(30)
   const [cargando, setCargando] = useState(false)
+  const [analisis, setAnalisis] = useState(null)
+  const [analizando, setAnalizando] = useState(false)
+  const [errAnalisis, setErrAnalisis] = useState(null)
   // el reloj del "hace X": su único trabajo es forzar el repintado, no se lee
   const [, setTic] = useState(0)
+
+  useEffect(() => {
+    api.adsAnalisis().then((d) => setAnalisis(d.ultimo)).catch(() => {})
+  }, [])
+
+  const pedirAnalisis = useCallback(() => {
+    setAnalizando(true)
+    setErrAnalisis(null)
+    api
+      .analizarAds(7)
+      .then(setAnalisis)
+      .catch((e) => setErrAnalisis(e.message))
+      .finally(() => setAnalizando(false))
+  }, [])
 
   // SIN PARPADEO. Antes esto hacía setDatos(null) en cada cambio de período, o
   // sea blanqueaba la pantalla entera y mostraba el spinner para volver a
@@ -473,9 +495,9 @@ export function Publicidad() {
         />
       </section>
 
-      <OpinionAds />
+      <OpinionAds dato={analisis} corriendo={analizando} err={errAnalisis} onAnalizar={pedirAnalisis} />
 
-      <Campanas campanas={datos.campanas ?? []} dias={dias} />
+      <Campanas campanas={datos.campanas ?? []} dias={dias} recomendaciones={analisis?.recomendaciones} />
       <Productos economia={datos.economia} campanas={datos.campanas} />
     </main>
   )

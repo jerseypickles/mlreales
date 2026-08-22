@@ -5955,17 +5955,49 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
   margin-bottom: 5px;
 }
 .ads-revision { margin: 0 0 10px; font-size: 12.5px; color: var(--tinta-2); line-height: 1.55; background: var(--superficie-2); padding: 8px 11px; border-radius: 8px; }
-.ads-recos { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
-.ads-recos li { border: 1px solid var(--borde); border-radius: var(--radio); padding: 10px 12px; }
-.ads-reco-cabeza { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
-.ads-reco-cabeza strong { font-size: 13px; }
-.ads-acc { font-size: 10px; padding: 3px 8px; border-radius: 999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
-.acc-sube { background: var(--exito-tenue); color: var(--exito-tinta); }
-.acc-baja { background: var(--avisa-tenue); color: var(--avisa-tinta); }
-.acc-neutra { background: var(--superficie-2); color: var(--tinta-3); }
-.ads-conf { font-size: 10.5px; color: var(--tinta-3); }
-.ads-reco-diales { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--tinta-2); margin-bottom: 6px; }
-.ads-reco-diales b { color: var(--tinta); font-variant-numeric: tabular-nums; }
-.ads-recos p { margin: 0; font-size: 12.5px; color: var(--tinta-2); line-height: 1.55; max-width: 82ch; }
-.ads-esperar { margin-top: 6px !important; color: var(--tinta-3) !important; font-size: 12px !important; }
 .ads-opinion-pie { margin: 10px 0 0; font-size: 11px; color: var(--tinta-3); }
+
+/* ---- La sugerencia, dentro de la tarjeta de su campaña ---- */
+/* Plegada por defecto: el resumen dice QUÉ hacer de un vistazo y el porqué se
+   abre solo si se quiere. Una tarjeta con tres párrafos deja de ser tarjeta. */
+.ads-camp { display: flex; flex-direction: column; }
+.camp-tiene-sug { margin-left: auto; display: inline-flex; color: var(--acento); }
+.camp-tiene-sug svg { width: 14px; height: 14px; }
+
+.camp-sug {
+  margin-top: 11px;
+  border-top: 1px solid var(--borde);
+  padding-top: 9px;
+  font-size: 12px;
+}
+.camp-sug summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--tinta-2);
+  transition: color 180ms ease;
+  flex-wrap: wrap;
+}
+.camp-sug summary::-webkit-details-marker { display: none; }
+.camp-sug summary:hover { color: var(--tinta); }
+.camp-sug summary:focus-visible { outline: 2px solid var(--acento); outline-offset: 3px; border-radius: 4px; }
+.camp-sug summary svg { width: 14px; height: 14px; flex-shrink: 0; }
+.camp-sug-txt { font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; }
+.camp-sug summary b { font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--tinta); }
+
+.camp-sug-acc-sube summary { color: var(--exito-tinta); }
+.camp-sug-acc-sube summary svg { color: var(--exito-tinta); }
+.camp-sug-acc-baja summary { color: var(--avisa-tinta); }
+.camp-sug-acc-baja summary svg { color: var(--avisa-tinta); }
+.camp-sug-acc-neutra summary svg { color: var(--tinta-3); }
+
+.camp-sug > div { padding-top: 8px; }
+.camp-sug p { margin: 0 0 7px; font-size: 12px; line-height: 1.55; color: var(--tinta-2); }
+.camp-sug-esperar { color: var(--tinta-3) !important; font-size: 11.5px !important; }
+.camp-sug-conf { font-size: 10.5px; color: var(--tinta-3); }
+
+/* el encabezado del análisis queda compacto: ya no lleva la lista */
+.ads-opinion-chip { display: inline-flex; align-items: center; gap: 5px; }
+.ads-opinion-chip svg { width: 11px; height: 11px; }
