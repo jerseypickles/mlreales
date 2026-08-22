@@ -42,6 +42,17 @@ export const SEMILLAS_VERTICALES = [
   'faja',
   'masajeador',
   'corrector postura',
+  // MOBILIARIO QUE CABE EN FULL. La restricción manda sobre la categoría: ML
+  // acepta hasta 20 kg, ningún lado sobre 120 cm y la suma de los tres bajo
+  // 260 cm, y encima cobra el envío por peso VOLUMÉTRICO (4.000 cm³/kg), así
+  // que un bulto liviano pero grande paga como si pesara mucho.
+  //
+  // Por eso las semillas son plegables, flotantes o de armar — no "mueble" a
+  // secas, que traería sofás y camas que no entran ni al despacho ni al margen.
+  'mesa auxiliar',
+  'repisa flotante',
+  'escritorio plegable',
+  'zapatero',
   // belleza, mascotas, viaje
   'plancha pelo',
   'mochila',
