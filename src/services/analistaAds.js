@@ -96,6 +96,32 @@ QUÉ MIRAR, en orden:
    la peor: que el promedio sea 4x no significa que la siguiente impresión lo
    sea. Por eso subir presupuesto rinde menos de lo que el promedio sugiere.
 
+MIRA LA TRAYECTORIA, NO EL PROMEDIO:
+Recibes la serie diaria. Un promedio de 7 días esconde lo que decide. Caso real
+de esta cuenta: el CPC pasó de $94 el 16-ago a $203 el 22-ago —se duplicó en
+seis días— y el promedio semanal lo mostraba como $126, "normal". Con ese número
+se recomendó subir el presupuesto, que es lo contrario de lo que corresponde
+cuando el clic se encarece. Si el CPC viene subiendo, subir presupuesto o
+aflojar el objetivo compra caro; lo que corresponde es EXIGIR MÁS.
+
+EL CALENDARIO CAMBIA LA SUBASTA:
+Recibes los eventos próximos. Aflojar el objetivo justo antes de una semana de
+alta competencia es comprar en el peor momento. Dilo cuando aplique.
+
+EL PRECIO QUE MANDA ES EL EFECTIVO:
+Si una promoción activa vende bajo el precio de lista, la contribución real es
+sobre lo que se cobra, no sobre lo publicado. Un producto con 31% de descuento
+activo tiene mucho menos colchón del que aparenta.
+
+SUBIR EL PRECIO ENCARECE EL CLIC:
+Medido en esta cuenta el 22-ago. Con estrategia de rentabilidad, ML calcula
+cuánto puede pagar por conversión como precio ÷ objetivo de ROAS, así que subir
+el precio le da permiso para pujar más. El saca puntos subió de $5.990 a $6.990
+y su CPC pasó de $111 a $277 (+150%); la pistola de $3.990 a $4.500 y su CPC de
+$96 a $209. Los productos que NO cambiaron de precio bajaron su CPC. Tenlo en
+cuenta al evaluar un cambio de precio reciente: parte del deterioro del CPC es
+consecuencia de eso y no del mercado.
+
 UNA CAMPAÑA NUEVA NO SE OPINA:
 Cada campaña trae "diasConDatos" y "maduraParaOpinar". Si maduraParaOpinar es
 false (menos de 7 días de vida), NO recomiendes cambiar sus diales: el gasto
@@ -161,10 +187,110 @@ async function contexto({ dias = 7 } = {}) {
   return { dias, rango: r.rango, totales: r.totales, campanas, economia }
 }
 
+// LA TRAYECTORIA, NO EL PROMEDIO.
+//
+// El analista recibía un agregado de 7 días y con eso recomendaba mover diales.
+// Pero un promedio esconde justo lo que decide: el CPC de esta cuenta pasó de
+// $94 el 16-ago a $203 el 22-ago —se duplicó en seis días— y en el promedio
+// semanal eso se ve como "$126, normal". Con ese número recomendó subir el
+// presupuesto, que es exactamente lo contrario de lo que corresponde cuando el
+// clic se está encareciendo.
+async function serieDiaria({ dias = 10 } = {}) {
+  const { meliGet } = await import('./meli.js')
+  const adv = (await meliGet('/advertising/advertisers?product_id=PADS', { headers: { 'Api-Version': '1' } }))
+    ?.advertisers?.[0]?.advertiser_id
+  if (!adv) return []
+  const M = 'clicks,prints,cost,units_quantity,total_amount'
+  const hoy = new Date()
+  const fechas = Array.from({ length: dias }, (_, i) => {
+    const d = new Date(hoy.getTime() - (dias - 1 - i) * 86400e3)
+    return d.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' })
+  })
+  const serie = []
+  for (const f of fechas) {
+    try {
+      const r = await meliGet(
+        `/marketplace/advertising/${SITE_ADS}/advertisers/${adv}/product_ads/campaigns/search?limit=50&date_from=${f}&date_to=${f}&metrics=${M}`,
+        { headers: { 'Api-Version': '2' } },
+      )
+      let p = 0, c = 0, g = 0, u = 0, v = 0
+      for (const x of r?.results ?? []) {
+        const m = x.metrics ?? {}
+        p += m.prints ?? 0; c += m.clicks ?? 0; g += m.cost ?? 0
+        u += m.units_quantity ?? 0; v += m.total_amount ?? 0
+      }
+      serie.push({
+        dia: f,
+        impresiones: p,
+        clicks: c,
+        gasto: Math.round(g),
+        unidades: u,
+        cpc: c ? Math.round(g / c) : null,
+        roas: g ? Math.round((v / g) * 100) / 100 : null,
+      })
+    } catch {
+      /* un día que ML no devuelve no bota la serie */
+    }
+  }
+  return serie
+}
+
+const SITE_ADS = 'MLC'
+
+// EVENTOS DEL CALENDARIO que cambian la subasta. Un analista que no sabe que
+// viene Black Week recomienda aflojar el objetivo justo la semana en que todos
+// pujan más fuerte.
+const CALENDARIO = [
+  { desde: '2026-08-27', hasta: '2026-09-02', que: 'Black Week Agosto de ML: la competencia puja más fuerte y el CPC sube. ML propone descuentos agresivos (41% en el set 8, dejándolo en $2.679 contra su lista de $4.490).' },
+  { desde: '2026-09-15', hasta: '2026-09-18', que: 'Fiestas Patrias: pico de consumo en Chile, sube la competencia en publicidad.' },
+  { desde: '2026-11-01', hasta: '2026-11-30', que: 'Black Friday y Cyber Monday: el mes más caro del año en publicidad.' },
+]
+
+// PRECIOS QUE NO SON LOS DE LISTA. Una promo activa que vende bajo el precio
+// publicado cambia la contribución real de cada venta, y el analista lo tiene
+// que saber antes de opinar sobre cuánto se puede pagar por un clic.
+async function preciosEfectivos() {
+  try {
+    const { ProductoPropio } = await import('../models/ProductoPropio.js')
+    const { meliGet } = await import('./meli.js')
+    const propios = await ProductoPropio.find({ estado: 'activo' }).select('itemIdMl sku titulo').lean()
+    const filas = []
+    for (const p of propios) {
+      const id = p.itemIdMl ?? p.sku
+      const it = await meliGet(`/items/${id}`).catch(() => null)
+      if (!it) continue
+      const pr = await meliGet(`/seller-promotions/items/${id}?app_version=v2`).catch(() => [])
+      const activas = (pr ?? []).filter((x) => x.status === 'started' && x.price > 0 && x.price < it.price)
+      if (!activas.length) continue
+      const efectivo = Math.min(...activas.map((x) => x.price))
+      filas.push({
+        itemId: id,
+        titulo: p.titulo,
+        precioLista: it.price,
+        precioEfectivo: efectivo,
+        descuentoPct: Math.round((1 - efectivo / it.price) * 100),
+        terminaEl: activas[0]?.finish_date?.slice(0, 10) ?? null,
+      })
+    }
+    return filas
+  } catch {
+    return []
+  }
+}
+
 export async function analizarAds({ dias = 7 } = {}) {
   if (!llmDisponible()) return { omitido: true, motivo: 'LLM no configurado' }
   const ctx = await contexto({ dias })
   if (!ctx) return { omitido: true, motivo: 'sin cuenta ML o sin advertiser de Product Ads' }
+
+  // TODO LO QUE EL SISTEMA YA SABE Y EL ANALISTA NO ESTABA VIENDO
+  const [serie, promos, lecciones] = await Promise.all([
+    serieDiaria({ dias: 10 }).catch(() => []),
+    preciosEfectivos().catch(() => []),
+    import('./aprendizajes.js').then((m) => m.leccionesAprendidas()).catch(() => []),
+  ])
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santiago' })
+  const eventos = CALENDARIO.filter((e) => e.hasta >= hoy).slice(0, 3)
 
   // su propia recomendación anterior: es lo que convierte una opinión suelta en
   // una serie que aprende
@@ -191,7 +317,18 @@ export async function analizarAds({ dias = 7 } = {}) {
     `ticket medio $${ctx.totales.unidades ? Math.round(ctx.totales.venta / ctx.totales.unidades) : 0}\n\n` +
     `CAMPAÑAS (ojo diasConDatos y maduraParaOpinar):\n${JSON.stringify(ctx.campanas, null, 1)}\n\n` +
     `ANUNCIO POR ANUNCIO (roasEquilibrio = bajo ese ROAS ese anuncio destruye margen):\n` +
-    `${JSON.stringify(ctx.economia, null, 1)}\n` +
+    `${JSON.stringify(ctx.economia, null, 1)}\n\n` +
+    `SERIE DIARIA (la trayectoria importa más que el promedio: mira si el CPC sube o baja):\n` +
+    `${JSON.stringify(serie, null, 1)}\n\n` +
+    (promos.length
+      ? `PRECIOS PISADOS POR PROMOCIÓN (la contribución real es sobre el precio EFECTIVO, no el de lista):\n${JSON.stringify(promos, null, 1)}\n\n`
+      : 'PRECIOS: ninguna promoción activa pisa el precio de lista.\n\n') +
+    (eventos.length
+      ? `CALENDARIO (hoy es ${hoy}):\n${eventos.map((e) => `  - ${e.desde} a ${e.hasta}: ${e.que}`).join('\n')}\n\n`
+      : '') +
+    (lecciones.length
+      ? `LO QUE EL SISTEMA APRENDIÓ MIDIENDO (úsalo, no lo repitas):\n${lecciones.map((l) => `  - ${l}`).join('\n')}\n`
+      : '') +
     bloquePrevio
 
   const { datos, costoUsd, modelo } = await pedirJSON({
