@@ -142,7 +142,14 @@ function SugerenciaCampana({ reco }) {
 }
 
 function Campanas({ campanas, dias, recomendaciones }) {
-  const porCampana = new Map((recomendaciones ?? []).map((r) => [r.campanaId, r]))
+  // UNA CAMPAÑA PUEDE TENER VARIAS RECOMENDACIONES y son de distinta naturaleza:
+  // el dial es una cosa y arreglar un listing es otra. Esto era un Map por
+  // campanaId, así que la segunda pisaba a la primera y la Campaña 1 mostraba
+  // "arreglar listing" habiendo también un "subir objetivo a 2,8x" que se perdía.
+  const porCampana = new Map()
+  for (const r of recomendaciones ?? []) {
+    porCampana.set(r.campanaId, [...(porCampana.get(r.campanaId) ?? []), r])
+  }
   const vivas = campanas.filter((c) => c.estado === 'active')
   const pausadas = campanas.filter((c) => c.estado !== 'active')
   const tarjeta = (c) => {
@@ -163,8 +170,12 @@ function Campanas({ campanas, dias, recomendaciones }) {
           <strong>{c.nombre}</strong>
           {c.estado !== 'active' ? <span className="ads-estado">pausada</span> : null}
           {porCampana.has(c.id) ? (
-            <span className="camp-tiene-sug" title="Hay una sugerencia para esta campaña">
+            <span
+              className="camp-tiene-sug"
+              title={`${porCampana.get(c.id).length} sugerencia(s) para esta campaña`}
+            >
               <Lightbulb aria-hidden="true" />
+              {porCampana.get(c.id).length > 1 ? <b>{porCampana.get(c.id).length}</b> : null}
             </span>
           ) : null}
         </header>
@@ -198,7 +209,9 @@ function Campanas({ campanas, dias, recomendaciones }) {
             </div>
           ) : null}
         </div>
-        <SugerenciaCampana reco={porCampana.get(c.id)} />
+        {(porCampana.get(c.id) ?? []).map((reco, i) => (
+          <SugerenciaCampana key={`${reco.accion}-${i}`} reco={reco} />
+        ))}
       </article>
     )
   }

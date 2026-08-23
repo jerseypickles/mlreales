@@ -6022,3 +6022,6 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 .camp-mover span { display: block; color: var(--tinta-3); margin-top: 2px; }
 .mov-entra b { color: var(--exito-tinta); }
 .mov-sale b { color: var(--avisa-tinta); }
+.camp-tiene-sug { align-items: center; gap: 3px; }
+.camp-tiene-sug b { font-size: 10px; font-weight: 700; }
+.camp-sug + .camp-sug { margin-top: 8px; }
