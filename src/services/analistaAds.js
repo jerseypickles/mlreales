@@ -426,6 +426,10 @@ export async function analizarAds({ dias = 7 } = {}) {
     }
   })
 
+  const calificacion = await import('./calificarAds.js')
+    .then((m) => m.calificarRecomendaciones({ minDias: 3 }))
+    .catch(() => null)
+
   const [serie, promos, lecciones, embudo] = await Promise.all([
     serieDiaria({ dias: 10 }).catch(() => []),
     preciosEfectivos().catch(() => []),
@@ -476,6 +480,16 @@ export async function analizarAds({ dias = 7 } = {}) {
     (lecciones.length
       ? `LO QUE EL SISTEMA APRENDIÓ MIDIENDO (úsalo, no lo repitas):\n${lecciones.map((l) => `  - ${l}`).join('\n')}\n`
       : '') +
+    (calificacion && !calificacion.omitido
+      ? `\nCÓMO TE HA IDO (medido, no declarado): de ${calificacion.total} recomendaciones tuyas con dial, ` +
+        `${calificacion.aplicadas} se aplicaron y ${calificacion.noAplicadas} no. ` +
+        (calificacion.tasaAcierto != null
+          ? `De las aplicadas, ${calificacion.tasaAcierto}% movió el número en la dirección que anunciaste.\n`
+          : `Ninguna se aplicó todavía, así que no hay tasa de acierto: no des por probado ningún consejo tuyo.\n`) +
+        (calificacion.noAplicadas > calificacion.aplicadas
+          ? `OJO: la mayoría de tus consejos NO se aplican. Si insistes con lo mismo cada semana sin que se aplique, considera que el problema puede ser que el consejo no sea accionable o que no hayas explicado bien por qué conviene.\n`
+          : '')
+      : '') +
     bloquePrevio
 
   const { datos, costoUsd, modelo } = await pedirJSON({
@@ -519,6 +533,38 @@ export async function analizarAds({ dias = 7 } = {}) {
     modelo,
     costoUsd,
   })
+  // LO QUE ENCONTRÓ SOBRE UN PRODUCTO VIAJA AL PRODUCTO, para que el cerebro
+  // que tiene la herramienta se entere. Un "arreglar-listing" dicho solo en la
+  // pantalla de publicidad no llega a quien edita títulos y fotos.
+  try {
+    const { ProductoPropio } = await import('../models/ProductoPropio.js')
+    for (const r of doc.recomendaciones) {
+      if (r.accion !== 'arreglar-listing') continue
+      // el producto puede venir en productosAMover, o ser el único de la campaña
+      // SOLO al producto del que habla, no a toda la campaña. Si la
+      // recomendación nombra items, esos; si no los nombra, solo vale cuando la
+      // campaña tiene UN anuncio (ahí la campaña ES el producto). En una
+      // campaña de seis, anotar a todos ensucia a los que venden bien: la
+      // primera corrida le puso la nota de la escopeta amarilla a la pistola
+      // negra, que convierte 17%.
+      const ids = (r.productosAMover ?? []).map((m) => m.itemId).filter(Boolean)
+      const deLaCampana = (ctx.economia ?? []).filter((e) => e.campanaId === r.campanaId)
+      const unicos = ids.length ? ids : deLaCampana.length === 1 ? [deLaCampana[0].itemId] : []
+      for (const itemId of unicos) {
+        const p = await ProductoPropio.findOne({ $or: [{ itemIdMl: itemId }, { sku: itemId }] })
+        if (!p) continue
+        const yaEsta = (p.hallazgos ?? []).some((h) => h.de === 'publicidad' && !h.resuelto && h.detalle === r.porque)
+        if (yaEsta) continue
+        p.hallazgos.push({ de: 'publicidad', que: 'el listing frena las ventas, no la puja', detalle: r.porque, queEsperar: r.queEsperar })
+        if (p.hallazgos.length > 10) p.hallazgos = p.hallazgos.slice(-10)
+        await p.save()
+        console.log(`[analista-ads] hallazgo anotado en ${itemId}`)
+      }
+    }
+  } catch (err) {
+    console.warn(`[analista-ads] hallazgos no anotados: ${err.message}`)
+  }
+
   await registrarGasto(null, costoUsd, 'ia').catch(() => {})
   console.log(`[analista-ads] ${modelo} · US$${costoUsd?.toFixed?.(4)} · ${doc.recomendaciones.length} recomendaciones`)
   return doc.toObject()

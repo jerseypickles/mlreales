@@ -941,6 +941,11 @@ export async function procesarNivelBusqueda(job) {
 // priorizadas. Respeta el techo de presupuesto como todo gasto de IA.
 export async function procesarEstratega(job) {
   // la cola es compartida: el analista de publicidad entra por nombre de job
+  if (job?.name === 'verificar-invariantes') {
+    const { verificarInvariantes } = await import('../services/invariantes.js')
+    const r = await verificarInvariantes()
+    return { total: r.total, rotas: r.rotas }
+  }
   if (job?.name === 'analizar-ads') {
     const { analizarAds } = await import('../services/analistaAds.js')
     const r = await analizarAds({ dias: 7 })

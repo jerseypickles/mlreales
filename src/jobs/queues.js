@@ -127,6 +127,16 @@ export async function registrarProgramados() {
   } else {
     await colas.estratega.removeJobScheduler('analista-ads').catch(() => {})
   }
+
+  if (config.invariantesActivo) {
+    await colas.estratega.upsertJobScheduler(
+      'invariantes',
+      { pattern: config.invariantesCron, tz: 'America/Santiago' },
+      { name: 'verificar-invariantes', data: { motivo: 'programado' } },
+    )
+  } else {
+    await colas.estratega.removeJobScheduler('invariantes').catch(() => {})
+  }
 }
 
 export async function cerrarColas() {

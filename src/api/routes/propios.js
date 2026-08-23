@@ -179,6 +179,8 @@ router.get(
         cargosMl30d: cargosItem,
         economiaUnidad: await economiaUnidad(p).catch(() => null),
         impacto: evaluarImpacto(p),
+        // lo que otros cerebros encontraron sobre este producto y sigue abierto
+        hallazgos: (p.hallazgos ?? []).filter((h) => !h.resuelto),
       })
     }
 

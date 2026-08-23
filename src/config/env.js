@@ -43,6 +43,10 @@ export const config = {
   // corrió y hay serie que leer, y queda tiempo de aplicar antes del fin de semana)
   adsAnalistaCron: process.env.ADS_ANALISTA_CRON || '0 9 * * 5',
   adsAnalistaActivo: process.env.ADS_ANALISTA_ACTIVO !== 'false',
+  // autochequeos: corren temprano, antes de que nadie mire el tablero, para que
+  // una invariante rota se sepa ANTES de tomar una decisión con ese número
+  invariantesActivo: process.env.INVARIANTES_ACTIVO !== 'false',
+  invariantesCron: process.env.INVARIANTES_CRON || '0 7 * * *',
   // % del EXW máximo que se muestra al proveedor como precio objetivo (ancla)
   exwObjetivoPct: Number(process.env.EXW_OBJETIVO_PCT) || 80,
   // radar autónomo: descubre nichos por temporada/tendencia y los escanea solo

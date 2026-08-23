@@ -51,6 +51,23 @@ router.get(
   }),
 )
 
+// Autochequeos: qué se verifica el sistema a sí mismo y qué está roto hoy
+router.get(
+  '/invariantes',
+  manejar(async (_req, res) => {
+    const { ultimasInvariantes } = await import('../../services/invariantes.js')
+    res.json((await ultimasInvariantes()) ?? { vacio: true })
+  }),
+)
+
+router.post(
+  '/invariantes',
+  manejar(async (_req, res) => {
+    const { verificarInvariantes } = await import('../../services/invariantes.js')
+    res.json(await verificarInvariantes())
+  }),
+)
+
 // El analista de publicidad: opina sobre los dos diales que ML deja mover
 // (presupuesto y objetivo de ROAS por campaña). GET lee el último; POST fuerza
 // uno nuevo. La serie se guarda para que cada análisis lea el anterior.

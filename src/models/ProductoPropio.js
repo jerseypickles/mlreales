@@ -27,6 +27,32 @@ const productoPropioSchema = new mongoose.Schema({
   // última auditoría de listing vs los ganadores del nicho: {estado:
   // 'generando'|'ok'|'error', generadoEl, competidores, resultado, costoUsd…}
   auditoria: { type: mongoose.Schema.Types.Mixed, default: null },
+  // HALLAZGOS DE OTROS CEREBROS SOBRE ESTE PRODUCTO.
+  //
+  // El analista de publicidad, el de nichos y el optimizador de listings corren
+  // separados y no se hablaban. Se vio con la lámpara UV: publicidad detectó
+  // que su problema es el TÍTULO —CTR 0,48% con 26.238 impresiones, y el título
+  // usa "lampara de uñas uv" (50 búsquedas/mes) en vez de "lampara para uñas"
+  // (1.600)— pero quien puede arreglarlo es el optimizador, que nunca se
+  // enteró. El hallazgo moría en la pantalla de publicidad.
+  //
+  // Acá aterrizan: cada uno anota lo que encontró en el producto, y el que
+  // tiene la herramienta lo ve.
+  hallazgos: {
+    type: [
+      {
+        _id: false,
+        de: { type: String, enum: ['publicidad', 'nichos', 'listing', 'contabilidad'] },
+        que: String,
+        detalle: String,
+        // qué medir para saber si el arreglo sirvió
+        queEsperar: String,
+        fecha: { type: Date, default: Date.now },
+        resuelto: { type: Boolean, default: false },
+      },
+    ],
+    default: [],
+  },
   ultimoScanEl: { type: Date, default: null },
   // RELOJ APARTE PARA LA PASADA COMPLETA. Los propios corren en dos ciclos: el
   // frecuente de 45 min (solo API oficial, $0) y el completo diario, que además
