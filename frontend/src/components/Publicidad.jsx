@@ -134,7 +134,12 @@ function Campanas({ campanas, dias, recomendaciones }) {
     const m = c.metricas ?? {}
     const objetivo = c.roasObjetivo ?? (c.acosObjetivo ? 100 / c.acosObjetivo : null)
     const real = m.cost > 0 ? m.total_amount / m.cost : null
-    const gastoDia = m.cost ? m.cost / dias : 0
+    // el divisor son los días que la campaña VIVIÓ, no los de la ventana. Con el
+    // selector en 30d y una campaña de 4 días, dividir por 30 la mostraba a un
+    // séptimo de lo que gasta: Campaña 2 aparecía con $281/día cuando gastaba
+    // $1.901 y su barra parecía vacía teniendo el presupuesto casi lleno.
+    const diasReales = c.diasConDatos ?? dias
+    const gastoDia = m.cost ? m.cost / diasReales : 0
     const usoPct = c.presupuestoDiario ? Math.round((gastoDia / c.presupuestoDiario) * 100) : null
     const cumple = real != null && objetivo != null ? real >= objetivo : null
     return (
@@ -159,8 +164,11 @@ function Campanas({ campanas, dias, recomendaciones }) {
           </div>
         </div>
         <div className="ads-camp-pie">
-          <span>
+          <span
+            title={`Promedio de los ${diasReales} día(s) que la campaña lleva viva, no de la ventana de ${dias} días. El presupuesto es un tope DIARIO, así que compararlo contra el promedio de una ventana larga no dice si hoy se topó.`}
+          >
             {fmtPrecio(Math.round(gastoDia))}/día de {fmtPrecio(c.presupuestoDiario)}
+            <em> · promedio de {diasReales}d</em>
           </span>
           {usoPct != null ? (
             <div

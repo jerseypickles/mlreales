@@ -6001,3 +6001,4 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 /* el encabezado del análisis queda compacto: ya no lleva la lista */
 .ads-opinion-chip { display: inline-flex; align-items: center; gap: 5px; }
 .ads-opinion-chip svg { width: 11px; height: 11px; }
+.ads-camp-pie > span em { font-style: normal; color: var(--tinta-3); }
