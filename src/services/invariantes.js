@@ -123,16 +123,64 @@ async function precioEfectivoBajoLista() {
 // El actor de nivel 2 dejó de poblar sus IDs y estuvimos dos días echándole la
 // culpa a un bloqueo de ML. Un campo que venía poblado y empieza a llegar
 // vacío es la señal más temprana de que un proveedor cambió su contrato.
+// UN PISO FIJO NO DETECTA UNA CAÍDA. La primera versión de esta invariante
+// fallaba solo bajo 20% de cobertura, y el 23-ago daba 21%: pasaba raspando.
+// Pero el 14-ago esa misma cobertura era 56% — se había desplomado a la mitad y
+// el chequeo decía que todo bien.
+//
+// Lo que importa no es cruzar un umbral que alguien eligió, es que el número se
+// mueva respecto de lo que este sistema venía entregando. Se compara contra la
+// mediana de las dos semanas previas, que es la definición de "lo normal aquí".
 async function actorSigueEntregandoIds() {
   const { Snapshot } = await import('../models/Snapshot.js')
-  const ayer = new Date(Date.now() - 36 * 3600e3)
-  const recientes = await Snapshot.countDocuments({ fecha: { $gte: ayer } })
-  if (!recientes) return ok('sin snapshots recientes que verificar')
-  const conReviews = await Snapshot.countDocuments({ fecha: { $gte: ayer }, numReviews: { $ne: null } })
-  const pct = (conReviews / recientes) * 100
-  return pct < 20
-    ? falla(`solo ${Math.round(pct)}% de los snapshots de las últimas 36 h traen reseñas (${conReviews}/${recientes}): el detalle está fallando`, { pct, conReviews, recientes })
-    : ok(`${Math.round(pct)}% de los snapshots recientes traen reseñas`, { pct })
+  const cobertura = async (desde, hasta) => {
+    const total = await Snapshot.countDocuments({ fecha: { $gte: desde, $lt: hasta } })
+    if (!total) return null
+    const con = await Snapshot.countDocuments({ fecha: { $gte: desde, $lt: hasta }, numReviews: { $ne: null } })
+    return (con / total) * 100
+  }
+  const ahora = Date.now()
+  const hoy = await cobertura(new Date(ahora - 36 * 3600e3), new Date(ahora))
+  if (hoy == null) return ok('sin snapshots recientes que verificar')
+
+  // la referencia: día a día de las dos semanas anteriores, sin contar las
+  // últimas 36 h
+  const previos = []
+  for (let d = 2; d <= 15; d++) {
+    const c = await cobertura(new Date(ahora - d * 86400e3), new Date(ahora - (d - 1) * 86400e3))
+    if (c != null) previos.push(c)
+  }
+  if (previos.length < 4) {
+    return hoy < 20
+      ? falla(`cobertura de reseñas en ${Math.round(hoy)}% y sin historia para comparar`, { hoy })
+      : ok(`cobertura ${Math.round(hoy)}% (sin historia suficiente para comparar)`, { hoy })
+  }
+  const orden = [...previos].sort((a, b) => a - b)
+  const normal = orden[Math.floor(orden.length / 2)]
+  const mejor = orden.at(-1)
+  const caida = normal > 0 ? ((normal - hoy) / normal) * 100 : 0
+
+  // DOS SEÑALES, PORQUE MIDEN COSAS DISTINTAS.
+  //
+  // La relativa caza el desplome de un día para otro. La absoluta caza lo que
+  // la relativa no puede: una degradación lenta que se vuelve la nueva
+  // normalidad. Medido el 23-ago — la cobertura pasó de 56% a 21% en dos
+  // semanas y se quedó ahí, así que comparada contra "lo habitual" daba +1% y
+  // el chequeo la aprobaba. Contra lo que este sistema SUPO entregar, es la
+  // mitad.
+  if (caida > 40) {
+    return falla(
+      `la cobertura de reseñas cayó ${Math.round(caida)}% de golpe: hoy ${Math.round(hoy)}% contra ${Math.round(normal)}% habitual. El detalle está fallando o el actor cambió su salida.`,
+      { hoy, normal, caida },
+    )
+  }
+  if (mejor > 0 && hoy < mejor * 0.6) {
+    return falla(
+      `la cobertura se estancó baja: ${Math.round(hoy)}% hoy y ${Math.round(normal)}% habitual, contra ${Math.round(mejor)}% que este sistema llegó a entregar. Ya es la nueva normalidad, que es justo lo que una comparación con el promedio reciente no detecta.`,
+      { hoy, normal, mejor },
+    )
+  }
+  return ok(`cobertura ${Math.round(hoy)}% · habitual ${Math.round(normal)}% · mejor ${Math.round(mejor)}%`, { hoy, normal, mejor })
 }
 
 // ── 7. La cartera en cotización tiene lo necesario para decidir ──────────
