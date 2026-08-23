@@ -22,7 +22,31 @@ const recomendacionCampana = {
   // lo que se recomienda
   presupuestoSugerido: Number,
   roasObjetivoSugerido: Number,
-  accion: { type: String, enum: ['subir-presupuesto', 'bajar-presupuesto', 'subir-objetivo', 'bajar-objetivo', 'mantener', 'cerrar'] },
+  accion: {
+    type: String,
+    enum: [
+      'subir-presupuesto', 'bajar-presupuesto', 'subir-objetivo', 'bajar-objetivo',
+      'mantener', 'cerrar',
+      // mover anuncios entre campañas: a veces una campaña no se recupera con
+      // diales sino trayéndole productos que rindan (o sacándole el que no)
+      'mover-productos',
+      // el problema no está en la puja sino en la oferta: CTR bajo con muchas
+      // impresiones significa que ML lo muestra y la gente no hace clic
+      'arreglar-listing',
+    ],
+  },
+  productosAMover: {
+    type: [
+      {
+        _id: false,
+        itemId: String,
+        titulo: String,
+        direccion: { type: String, enum: ['entra', 'sale'] },
+        motivo: String,
+      },
+    ],
+    default: [],
+  },
   porque: String,
   // qué habría que ver si el consejo es correcto, para poder revisarlo después
   queEsperar: String,

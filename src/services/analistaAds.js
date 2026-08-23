@@ -48,7 +48,22 @@ const ESQUEMA = {
           nombre: { type: 'string' },
           accion: {
             type: 'string',
-            enum: ['subir-presupuesto', 'bajar-presupuesto', 'subir-objetivo', 'bajar-objetivo', 'mantener', 'cerrar'],
+            enum: ['subir-presupuesto', 'bajar-presupuesto', 'subir-objetivo', 'bajar-objetivo', 'mantener', 'cerrar', 'mover-productos', 'arreglar-listing'],
+          },
+          productosAMover: {
+            type: 'array',
+            description: 'Solo para mover-productos: qué anuncios traer o sacar de esta campaña, y por qué cada uno.',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['itemId', 'direccion', 'motivo'],
+              properties: {
+                itemId: { type: 'string' },
+                titulo: { type: 'string' },
+                direccion: { type: 'string', enum: ['entra', 'sale'] },
+                motivo: { type: 'string' },
+              },
+            },
           },
           presupuestoSugerido: { type: ['number', 'null'], description: 'CLP/día, o null si no cambia' },
           roasObjetivoSugerido: { type: ['number', 'null'], description: 'ej 2.3, o null si no cambia' },
@@ -95,6 +110,37 @@ QUÉ MIRAR, en orden:
 4. El ROAS marginal, no el promedio. Las impresiones se compran de la mejor a
    la peor: que el promedio sea 4x no significa que la siguiente impresión lo
    sea. Por eso subir presupuesto rinde menos de lo que el promedio sugiere.
+
+UNA CAMPAÑA DE UN SOLO PRODUCTO ES EL PRODUCTO:
+Cuando la campaña tiene un anuncio, su ROAS ES el del producto y el dial NO
+puede arreglar lo que está roto en el listing. Recibes el embudo de cada uno
+(impresiones → clics → ventas, con CTR y conversión) y su precio contra la
+mediana de su nicho. Úsalo para distinguir:
+- CTR bajo (bajo ~1%) con muchas impresiones = ML lo muestra y la gente NO
+  hace clic. Es problema de OFERTA: foto, título, precio o el producto mismo.
+  Ningún objetivo de ROAS lo arregla. Recomienda accion "arreglar-listing" y di
+  qué mirar.
+- CTR sano pero conversión baja = entran y no compran. Precio, reseñas, ficha
+  incompleta o competencia mejor.
+- CTR y conversión sanos pero poco gasto = ahí SÍ es puja, y el dial sirve.
+Caso medido en esta cuenta: la lámpara UV recibió 26.238 impresiones y vendió 5
+(CTR 0,48%, conv 3,9%) vendiéndose 21% BAJO la mediana de su nicho; el saca
+puntos vendió 13 con 3.651 impresiones (CTR 2,47%, conv 14,4%) estando 54%
+SOBRE la mediana de la suya. El precio no era el problema de la lámpara.
+
+MOVER PRODUCTOS ENTRE CAMPAÑAS:
+Es una acción disponible ("mover-productos") y a veces es lo correcto:
+- Una campaña que quedó con un producto muerto no se recupera con diales: se
+  le traen productos que sí rinden, o se cierra y el producto vuelve a la
+  campaña general.
+- Un producto que rinde muy por encima del objetivo pero recibe poco gasto está
+  perdiendo subastas dentro de su campaña: sacarlo a una con objetivo más suelto
+  le da aire.
+- Junta en una misma campaña productos con ROAS de equilibrio PARECIDO: el
+  objetivo es uno solo para todos los que estén adentro, así que mezclar
+  economías distintas obliga a un número que le queda mal a alguno.
+Cuando la uses, lista los itemId con direccion "entra" o "sale" y el motivo de
+cada uno. Recuerda que el importador aplica esto a mano en el panel.
 
 MIRA LA TRAYECTORIA, NO EL PROMEDIO:
 Recibes la serie diaria. Un promedio de 7 días esconde lo que decide. Caso real
@@ -185,6 +231,65 @@ async function contexto({ dias = 7 } = {}) {
     }
   })
   return { dias, rango: r.rango, totales: r.totales, campanas, economia }
+}
+
+// EL EMBUDO DEL PRODUCTO, Y CONTRA QUÉ COMPITE.
+//
+// Con una campaña de un solo producto, el ROAS de la campaña ES el del
+// producto, y ahí el dial no puede arreglar lo que está roto en el listing.
+// Caso medido el 22-ago: la lámpara UV recibió 26.238 impresiones y vendió 5;
+// el saca puntos, 3.651 impresiones y vendió 13. La lámpara falla en los dos
+// pasos —CTR 0,48% contra 2,47%, conversión 3,9% contra 14,4%— y encima se
+// vende 21% BAJO la mediana de su nicho mientras el saca puntos se vende 54%
+// SOBRE la suya. O sea el precio no es su problema y ningún objetivo de ROAS
+// lo va a resolver.
+//
+// Sin estos datos el analista solo puede recomendar diales, que es como
+// ajustar el volumen de una radio que no está sintonizada.
+async function embudoPorProducto(economia) {
+  const [{ ProductoPropio }, { Nicho }, { Reporte }] = await Promise.all([
+    import('../models/ProductoPropio.js'),
+    import('../models/Nicho.js'),
+    import('../models/Reporte.js'),
+  ])
+  const propios = await ProductoPropio.find({ estado: 'activo' }).lean()
+  const porId = new Map(propios.flatMap((p) => [[p.itemIdMl, p], [p.sku, p]].filter(([k]) => k)))
+  const filas = []
+  for (const [itemId, e] of Object.entries(economia ?? {})) {
+    if (!(e.impresiones > 0)) continue
+    const p = porId.get(itemId)
+    const u = (p?.mediciones ?? []).at(-1) ?? {}
+    let mercado = null
+    if (p?.nichoId) {
+      const n = await Nicho.findById(p.nichoId).select('keyword').lean()
+      const r = n ? await Reporte.findOne({ nichoId: n._id }).sort({ fecha: -1 }).select('metricas').lean() : null
+      const pr = r?.metricas?.precio
+      if (pr) {
+        mercado = {
+          nicho: n.keyword,
+          medianaNicho: Math.round(pr.mediana),
+          p25Nicho: Math.round(pr.p25),
+          pctFullNicho: Math.round(r.metricas.competencia?.pctFull ?? 0),
+          miPrecioVsMediana: e.precio ? Math.round((e.precio / pr.mediana - 1) * 100) : null,
+        }
+      }
+    }
+    filas.push({
+      itemId,
+      titulo: e.titulo,
+      campanaId: e.campanaId,
+      impresiones: e.impresiones,
+      clicks: e.clicks,
+      unidades: e.unidades,
+      ctrPct: e.impresiones ? Math.round((e.clicks / e.impresiones) * 10000) / 100 : null,
+      conversionPct: e.clicks ? Math.round((e.unidades / e.clicks) * 1000) / 10 : null,
+      resenas: u.numReviews ?? 0,
+      rating: u.rating ?? null,
+      stock: u.stock ?? null,
+      mercado,
+    })
+  }
+  return filas
 }
 
 // LA TRAYECTORIA, NO EL PROMEDIO.
@@ -284,10 +389,11 @@ export async function analizarAds({ dias = 7 } = {}) {
   if (!ctx) return { omitido: true, motivo: 'sin cuenta ML o sin advertiser de Product Ads' }
 
   // TODO LO QUE EL SISTEMA YA SABE Y EL ANALISTA NO ESTABA VIENDO
-  const [serie, promos, lecciones] = await Promise.all([
+  const [serie, promos, lecciones, embudo] = await Promise.all([
     serieDiaria({ dias: 10 }).catch(() => []),
     preciosEfectivos().catch(() => []),
     import('./aprendizajes.js').then((m) => m.leccionesAprendidas()).catch(() => []),
+    embudoPorProducto(ctx.economia).catch(() => []),
   ])
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santiago' })
   const eventos = CALENDARIO.filter((e) => e.hasta >= hoy).slice(0, 3)
@@ -318,6 +424,8 @@ export async function analizarAds({ dias = 7 } = {}) {
     `CAMPAÑAS (ojo diasConDatos y maduraParaOpinar):\n${JSON.stringify(ctx.campanas, null, 1)}\n\n` +
     `ANUNCIO POR ANUNCIO (roasEquilibrio = bajo ese ROAS ese anuncio destruye margen):\n` +
     `${JSON.stringify(ctx.economia, null, 1)}\n\n` +
+    `EMBUDO POR PRODUCTO Y SU MERCADO (miPrecioVsMediana en %: negativo = vendo más barato que el nicho):\n` +
+    `${JSON.stringify(embudo, null, 1)}\n\n` +
     `SERIE DIARIA (la trayectoria importa más que el promedio: mira si el CPC sube o baja):\n` +
     `${JSON.stringify(serie, null, 1)}\n\n` +
     (promos.length
@@ -356,6 +464,7 @@ export async function analizarAds({ dias = 7 } = {}) {
         presupuestoSugerido: x.presupuestoSugerido ?? null,
         roasObjetivoSugerido: x.roasObjetivoSugerido ?? null,
         accion: x.accion,
+        productosAMover: x.productosAMover ?? [],
         porque: x.porque,
         queEsperar: x.queEsperar ?? null,
         confianza: x.confianza,

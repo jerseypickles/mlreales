@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
-import { Lightbulb, TrendingUp, TrendingDown, Minus, Clock } from 'lucide-react'
+import { Lightbulb, TrendingUp, TrendingDown, Minus, Clock, ArrowLeftRight, Wrench } from 'lucide-react'
 import { fmtPrecio } from '../lib/formato.js'
 
 // PUBLICIDAD, LEÍDA EN PLATA.
@@ -86,6 +86,8 @@ const ACCION = {
   'bajar-objetivo': { txt: 'bajar objetivo', clase: 'acc-sube' },
   mantener: { txt: 'mantener', clase: 'acc-neutra' },
   cerrar: { txt: 'cerrar', clase: 'acc-baja' },
+  'mover-productos': { txt: 'mover productos', clase: 'acc-mover' },
+  'arreglar-listing': { txt: 'arreglar listing', clase: 'acc-listing' },
 }
 
 // El ICONO de la acción: el importador lee la tarjeta de un vistazo y tiene que
@@ -97,6 +99,9 @@ const ICONO_ACCION = {
   'subir-objetivo': TrendingDown,
   cerrar: TrendingDown,
   mantener: Minus,
+  'mover-productos': ArrowLeftRight,
+  // el problema no está en la puja: ML lo muestra y la gente no hace clic
+  'arreglar-listing': Wrench,
 }
 
 // La sugerencia vive DENTRO de la tarjeta de su campaña: es sobre esos diales y
@@ -118,6 +123,16 @@ function SugerenciaCampana({ reco }) {
         {reco.roasObjetivoSugerido ? <b>{reco.roasObjetivoActual}x → {reco.roasObjetivoSugerido}x</b> : null}
       </summary>
       <div>
+        {reco.productosAMover?.length ? (
+          <ul className="camp-mover">
+            {reco.productosAMover.map((m) => (
+              <li key={m.itemId} className={m.direccion === 'entra' ? 'mov-entra' : 'mov-sale'}>
+                <b>{m.direccion === 'entra' ? '← entra' : '→ sale'}</b> {m.titulo ?? m.itemId}
+                <span>{m.motivo}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <p>{reco.porque}</p>
         {reco.queEsperar ? <p className="camp-sug-esperar"><b>A revisar:</b> {reco.queEsperar}</p> : null}
         <span className="camp-sug-conf">confianza {reco.confianza}</span>
