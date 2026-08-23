@@ -142,6 +142,19 @@ Es una acción disponible ("mover-productos") y a veces es lo correcto:
 Cuando la uses, lista los itemId con direccion "entra" o "sale" y el motivo de
 cada uno. Recuerda que el importador aplica esto a mano en el panel.
 
+UN CONSEJO QUE DEPENDE DE LA VENTANA NO ES UN CONSEJO:
+Recibes cada campaña medida en DOS ventanas y el campo estableEntreVentanas.
+Antes de recomendar mover un dial, comprueba que tu razonamiento se sostenga en
+las dos. Si el ROAS de la campaña cambia más de 25% entre una y otra
+—estableEntreVentanas: false— tu recomendación NO es confiable: dilo, pon
+confianza BAJA y recomienda "mantener" hasta que la señal se asiente, o propón
+medir algo concreto que la desempate.
+Caso real: Campaña 1 rinde 3,76x en 7 días y 2,71x en 14. Con el primero sobra
+margen sobre el objetivo de 2,3x y no hay que tocar nada; con el segundo está al
+filo y conviene exigir más. Recomendar "subir a 2,8x con confianza alta" mirando
+solo una ventana es darle al importador una certeza que los datos no tienen.
+NO uses confianza "alta" cuando estableEntreVentanas sea false. Nunca.
+
 MIRA LA TRAYECTORIA, NO EL PROMEDIO:
 Recibes la serie diaria. Un promedio de 7 días esconde lo que decide. Caso real
 de esta cuenta: el CPC pasó de $94 el 16-ago a $203 el 22-ago —se duplicó en
@@ -389,6 +402,30 @@ export async function analizarAds({ dias = 7 } = {}) {
   if (!ctx) return { omitido: true, motivo: 'sin cuenta ML o sin advertiser de Product Ads' }
 
   // TODO LO QUE EL SISTEMA YA SABE Y EL ANALISTA NO ESTABA VIENDO
+  // LA MISMA CAMPAÑA EN DOS VENTANAS. Si el diagnóstico cambia según el corte,
+  // no es un diagnóstico. Campaña 1 rinde 3,76x a 7 días y 2,71x a 14: con el
+  // primero sobra margen sobre el objetivo de 2,3x y con el segundo está al
+  // filo, y cada uno sugiere lo contrario. El analista tiene que ver los dos y
+  // decir cuándo su consejo no se sostiene en ambos.
+  const otraVentana = dias === 7 ? 14 : 7
+  const ctxOtra = await contexto({ dias: otraVentana }).catch(() => null)
+  const comparacion = (ctx.campanas ?? []).map((c) => {
+    const o = (ctxOtra?.campanas ?? []).find((x) => x.id === c.id)
+    const estable =
+      c.roasReal != null && o?.roasReal != null
+        ? Math.abs(c.roasReal - o.roasReal) / Math.max(c.roasReal, o.roasReal) < 0.25
+        : null
+    return {
+      id: c.id,
+      nombre: c.nombre,
+      [`roas${dias}d`]: c.roasReal,
+      [`roas${otraVentana}d`]: o?.roasReal ?? null,
+      [`usoPresupuesto${dias}d`]: c.usoPresupuestoPct,
+      [`usoPresupuesto${otraVentana}d`]: o?.usoPresupuestoPct ?? null,
+      estableEntreVentanas: estable,
+    }
+  })
+
   const [serie, promos, lecciones, embudo] = await Promise.all([
     serieDiaria({ dias: 10 }).catch(() => []),
     preciosEfectivos().catch(() => []),
@@ -424,6 +461,8 @@ export async function analizarAds({ dias = 7 } = {}) {
     `CAMPAÑAS (ojo diasConDatos y maduraParaOpinar):\n${JSON.stringify(ctx.campanas, null, 1)}\n\n` +
     `ANUNCIO POR ANUNCIO (roasEquilibrio = bajo ese ROAS ese anuncio destruye margen):\n` +
     `${JSON.stringify(ctx.economia, null, 1)}\n\n` +
+    `LA MISMA CAMPAÑA EN DOS VENTANAS (si el ROAS cambia mucho entre ${dias}d y ${otraVentana}d, el diagnóstico NO es estable):\n` +
+    `${JSON.stringify(comparacion, null, 1)}\n\n` +
     `EMBUDO POR PRODUCTO Y SU MERCADO (miPrecioVsMediana en %: negativo = vendo más barato que el nicho):\n` +
     `${JSON.stringify(embudo, null, 1)}\n\n` +
     `SERIE DIARIA (la trayectoria importa más que el promedio: mira si el CPC sube o baja):\n` +
@@ -449,7 +488,14 @@ export async function analizarAds({ dias = 7 } = {}) {
 
   const doc = await AnalisisAds.create({
     dias,
-    foto: ctx,
+    // LA FOTO GUARDA TODO LO QUE SE LE MANDÓ, no solo parte.
+    //
+    // Antes solo se guardaba `ctx` (campañas y anuncios), así que la serie
+    // diaria, el embudo, las promociones y las lecciones viajaban al prompt
+    // pero no quedaban registradas. Cuando el importador preguntó "¿estás
+    // seguro de que está viendo la campaña completa?" no se podía contestar
+    // con el registro en la mano — que es justo para lo que existe la foto.
+    foto: { ...ctx, serie, promos, lecciones, embudo, eventos, comparacion },
     titular: datos.titular,
     revisionAnterior: datos.revisionAnterior || null,
     preguntas: datos.preguntas ?? [],
