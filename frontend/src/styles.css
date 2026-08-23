@@ -5965,11 +5965,19 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 .camp-tiene-sug svg { width: 14px; height: 14px; }
 
 .camp-sug {
-  margin-top: 11px;
-  border-top: 1px solid var(--borde);
-  padding-top: 9px;
+  margin-top: 12px;
+  padding: 10px 11px;
+  border-radius: var(--radio);
   font-size: 12px;
+  /* Abierta y con fondo propio. Antes iba plegada y en tinta suave: el
+     importador la describió como "apagada, ni se ve". Una recomendación que
+     hay que descubrir no se lee, y es lo único accionable de la tarjeta. */
+  background: var(--acento-tenue);
+  border: 1px solid var(--acento-borde);
 }
+.camp-sug summary { margin-bottom: 2px; }
+.camp-sug > div { border-top: 1px solid var(--acento-borde); margin-top: 8px; }
+.camp-sug p { color: var(--tinta) !important; }
 .camp-sug summary {
   display: flex;
   align-items: center;
@@ -5987,6 +5995,9 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 .camp-sug-txt { font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; }
 .camp-sug summary b { font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--tinta); }
 
+.camp-sug-acc-sube { background: var(--exito-tenue); border-color: var(--exito-tinta); }
+.camp-sug-acc-baja { background: var(--avisa-tenue); border-color: var(--avisa-tinta); }
+.camp-sug-acc-neutra { background: var(--superficie-2); border-color: var(--borde); }
 .camp-sug-acc-sube summary { color: var(--exito-tinta); }
 .camp-sug-acc-sube summary svg { color: var(--exito-tinta); }
 .camp-sug-acc-baja summary { color: var(--avisa-tinta); }

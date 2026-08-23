@@ -113,7 +113,7 @@ function SugerenciaCampana({ reco }) {
   const Icono = ICONO_ACCION[reco.accion] ?? Minus
   const esperar = reco.accion === 'mantener' && reco.confianza === 'baja'
   return (
-    <details className={`camp-sug camp-sug-${a.clase}`}>
+    <details className={`camp-sug camp-sug-${a.clase}`} open>
       <summary>
         {esperar ? <Clock aria-hidden="true" /> : <Icono aria-hidden="true" />}
         <span className="camp-sug-txt">{a.txt}</span>
