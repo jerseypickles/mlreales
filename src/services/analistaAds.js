@@ -167,6 +167,18 @@ EL CALENDARIO CAMBIA LA SUBASTA:
 Recibes los eventos próximos. Aflojar el objetivo justo antes de una semana de
 alta competencia es comprar en el peor momento. Dilo cuando aplique.
 
+MIRA CONTRA QUIÉN COMPITE ANTES DE CULPAR AL LISTING:
+Recibes el top del nicho de cada anuncio con precio, descuento, reseñas y
+unidades vendidas. Un CTR bajo puede ser foto o título, pero también puede ser
+que el producto simplemente no compita: peor especificación, más caro, o sin
+reseñas frente a competidores con miles. Revisa el top ANTES de recomendar
+arreglar el listing, porque son arreglos distintos —y uno de ellos no tiene
+arreglo posible sin cambiar el producto o el precio.
+Caso medido el 23-ago: la lámpara UV tenía CTR 0,56% y se sospechaba de
+promociones de la competencia; solo 1 de 10 tenía descuento. Lo que había era
+que el líder vende 48 WATTS a $5.903 con 1.388 reseñas contra una de 24 W a
+$9.990 con 0 reseñas. Ahí no hay título que sirva.
+
 EL PRECIO QUE MANDA ES EL EFECTIVO:
 Si una promoción activa vende bajo el precio de lista, la contribución real es
 sobre lo que se cobra, no sobre lo publicado. Un producto con 31% de descuento
@@ -396,6 +408,59 @@ async function preciosEfectivos() {
   }
 }
 
+// CONTRA QUIÉN COMPITE CADA ANUNCIO, producto por producto.
+//
+// El analista veía tu embudo y tu precio contra la mediana del nicho, pero no
+// a los competidores. Y ahí está lo que ninguna métrica propia muestra: por qué
+// la gente ve tu anuncio y no entra.
+//
+// Caso que lo motivó, 23-ago. La lámpara UV tenía CTR 0,56% y conversión 3,9%,
+// y se sospechaba de promociones de la competencia. Solo 1 de los 10 primeros
+// tenía descuento. Lo que sí había: el líder vende 48 WATTS a $5.903 con 1.388
+// reseñas y 10.000 unidades, contra una de 24 W a $9.990 con 0 reseñas. El
+// doble de potencia por $4.000 menos. Ninguna decisión de puja ni de título
+// arregla eso, y sin ver el top el analista no podía saberlo.
+async function competenciaDeCadaAnuncio(economia, { top = 8 } = {}) {
+  try {
+    const [{ ProductoPropio }, { Nicho }, { obtenerProductosUltimoScan }] = await Promise.all([
+      import('../models/ProductoPropio.js'),
+      import('../models/Nicho.js'),
+      import('./metricas.js'),
+    ])
+    const propios = await ProductoPropio.find({ estado: 'activo' }).select('itemIdMl sku titulo nichoId').lean()
+    const porId = new Map(propios.flatMap((p) => [[p.itemIdMl, p], [p.sku, p]].filter(([k]) => k)))
+    const salida = []
+    const nichosVistos = new Set()
+    for (const [itemId, e] of Object.entries(economia ?? {})) {
+      if (!(e.gasto > 0)) continue
+      const p = porId.get(itemId)
+      if (!p?.nichoId || nichosVistos.has(String(p.nichoId))) continue
+      nichosVistos.add(String(p.nichoId))
+      const n = await Nicho.findById(p.nichoId).select('keyword').lean()
+      if (!n) continue
+      const v = await obtenerProductosUltimoScan(n)
+      salida.push({
+        miItemId: itemId,
+        miTitulo: e.titulo,
+        miPrecio: e.precio,
+        nicho: n.keyword,
+        competencia: (v?.productos ?? []).slice(0, top).map((x) => ({
+          pos: x.posicion,
+          titulo: x.titulo,
+          precio: x.precio,
+          descuentoPct: x.descuentoPct ?? null,
+          resenas: x.numReviews ?? 0,
+          vendidos: x.vendidos ?? null,
+          full: x.esFull ?? false,
+        })),
+      })
+    }
+    return salida
+  } catch {
+    return []
+  }
+}
+
 export async function analizarAds({ dias = 7 } = {}) {
   if (!llmDisponible()) return { omitido: true, motivo: 'LLM no configurado' }
   const ctx = await contexto({ dias })
@@ -436,6 +501,7 @@ export async function analizarAds({ dias = 7 } = {}) {
     import('./aprendizajes.js').then((m) => m.leccionesAprendidas()).catch(() => []),
     embudoPorProducto(ctx.economia).catch(() => []),
   ])
+  const competencia = await competenciaDeCadaAnuncio(ctx.economia).catch(() => [])
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santiago' })
   const eventos = CALENDARIO.filter((e) => e.hasta >= hoy).slice(0, 3)
 
@@ -469,6 +535,9 @@ export async function analizarAds({ dias = 7 } = {}) {
     `${JSON.stringify(comparacion, null, 1)}\n\n` +
     `EMBUDO POR PRODUCTO Y SU MERCADO (miPrecioVsMediana en %: negativo = vendo más barato que el nicho):\n` +
     `${JSON.stringify(embudo, null, 1)}\n\n` +
+    (competencia.length
+      ? `CONTRA QUIÉN COMPITE CADA ANUNCIO (el top de su nicho, tal como lo ve el comprador):\n${JSON.stringify(competencia, null, 1)}\n\n`
+      : '') +
     `SERIE DIARIA (la trayectoria importa más que el promedio: mira si el CPC sube o baja):\n` +
     `${JSON.stringify(serie, null, 1)}\n\n` +
     (promos.length
@@ -509,7 +578,7 @@ export async function analizarAds({ dias = 7 } = {}) {
     // pero no quedaban registradas. Cuando el importador preguntó "¿estás
     // seguro de que está viendo la campaña completa?" no se podía contestar
     // con el registro en la mano — que es justo para lo que existe la foto.
-    foto: { ...ctx, serie, promos, lecciones, embudo, eventos, comparacion },
+    foto: { ...ctx, serie, promos, lecciones, embudo, eventos, comparacion, competencia },
     titular: datos.titular,
     revisionAnterior: datos.revisionAnterior || null,
     preguntas: datos.preguntas ?? [],
