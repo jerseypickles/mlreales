@@ -6090,6 +6090,41 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 .f29-falta { font-size: 11px; color: #b45309; line-height: 1.4; margin-top: 4px; }
 .f29-casilla-abierta { border-style: dashed; }
 .f29-casilla-vacia .f29-valor { color: var(--tinta-3); }
+/* CIERRE DEL MES. Va ARRIBA del bloque del F29: la pregunta "¿puedo declarar
+   ya?" viene antes que "¿qué número pongo?". Los estados se distinguen por
+   color Y por ícono — un semáforo que solo usa color no sirve para todos. */
+.cierre { border-left: 3px solid var(--borde-fuerte); }
+.cierre-listo { border-left-color: var(--exito-tinta, #15803d); }
+.cierre-alerta { border-left-color: #b45309; }
+.cierre-titular { margin: 0 0 12px; font-size: 15px; font-weight: 600; color: var(--tinta); }
+
+.cierre-relojes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--borde);
+  border-bottom: 1px solid var(--borde);
+  margin-bottom: 10px;
+}
+.cierre-relojes > div > span { display: block; font-size: 11px; color: var(--tinta-3); margin-bottom: 2px; }
+.cierre-relojes > div > b { font-size: 12.5px; color: var(--tinta); font-variant-numeric: tabular-nums; }
+.cierre-relojes em { display: block; font-style: normal; font-size: 11px; color: var(--tinta-3); font-weight: 400; }
+
+.cierre-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cierre-chequeo { display: flex; gap: 9px; align-items: flex-start; font-size: 12.5px; }
+.cierre-chequeo svg { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+.cierre-chequeo b { display: block; color: var(--tinta); font-weight: 600; }
+.cierre-chequeo span { display: block; color: var(--tinta-2); line-height: 1.5; margin-top: 1px; }
+.cierre-ok svg { color: var(--exito-tinta, #15803d); }
+.cierre-esperando svg { color: var(--tinta-3); }
+.cierre-alerta svg { color: #b45309; }
+.cierre-sin_datos svg { color: var(--tinta-3); }
+/* la espera se atenúa: es lo que NO requiere que hagas nada */
+.cierre-esperando b, .cierre-sin_datos b { color: var(--tinta-2); font-weight: 500; }
+
+.cierre-pie { margin: 12px 0 0; font-size: 11.5px; color: var(--tinta-3); line-height: 1.55; }
+
 /* CONEXIÓN AL SII. Va DENTRO del bloque del F29 y no en la cabecera de la
    página: solo importa cuando estás mirando los casilleros, y ahí explica de
    dónde salen los números. Sin sesión no se rompe nada — cambia la fuente. */

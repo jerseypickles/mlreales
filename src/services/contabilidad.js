@@ -183,6 +183,223 @@ export function ivaDeCargo(montoClp) {
 // documentos de facturación de ML en la ventana; null cuando no se pudo contar
 // (sin líneas sincronizadas), y ahí el casillero queda vacío en vez de
 // inventar un 1 que después nadie revisa.
+// EL CIERRE: TRES RELOJES QUE NO COINCIDEN.
+//
+// El importador lo pidió así: "necesito control, porque si cierra ML, ¿cierra
+// el SII o no?". No, y esa es exactamente la trampa. Corren tres calendarios
+// distintos sobre el mismo mes:
+//
+//   1. La FACTURACIÓN de ML — lo que ML te cobra. El período 2026-08-01 va del
+//      29-jul al 25-ago. Ni empieza ni termina con el mes.
+//   2. Las LIQUIDACIONES de ventas — semanales, cada una con su folio y fecha.
+//   3. El PERÍODO TRIBUTARIO — 1 al 31, y ese no negocia.
+//
+// Lo que decide en qué F29 cae cada peso NO es ninguno de los tres cierres: es
+// la FECHA DEL DOCUMENTO. Y de ahí sale el riesgo concreto: si ML cierra su
+// facturación el 25-ago pero emite la factura de sus cargos con fecha de
+// septiembre, el débito queda en agosto y el crédito en septiembre. No se
+// pierde —se arrastra por el [77]— pero es un mes de caja propia inmovilizada
+// por una fecha que nadie miró.
+//
+// Estos tres chequeos son ese control. Mientras alguno no esté en verde, el
+// mes no se declara.
+
+// El corte real del período: 00:00 del día 1 del mes siguiente en hora de
+// Chile, o sea 04:00 UTC. Exclusivo.
+const finDelPeriodo = (periodo) => {
+  const [anio, mes] = periodo.split('-').map(Number)
+  return new Date(Date.UTC(mes === 12 ? anio + 1 : anio, mes === 12 ? 0 : mes, 1, 4, 0, 0))
+}
+
+// El último día calendario, al mediodía UTC. Restarle 1 ms al corte daría
+// 2026-09-01T03:59:59Z: es el 31 en Chile pero el 1 de septiembre en UTC, y
+// toISOString lo mostraría como septiembre. El mediodía cae dentro del día en
+// las dos zonas y no se presta a esa confusión.
+const ultimoDiaDelMes = (periodo) => new Date(finDelPeriodo(periodo).getTime() - 12 * 3600 * 1000)
+
+// 'DD/MM/AAAA' → Date. Es el formato que devuelve el RCV en detFchDoc.
+export function fechaDocumento(str) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(str ?? ''))
+  if (!m) return null
+  const [, d, mes, a] = m
+  return new Date(`${a}-${mes}-${d}T12:00:00Z`)
+}
+
+const DIAS = 86_400_000
+// una liquidación semanal puede llegar hasta ~7 días después del corte
+const HOLGURA_DIAS = 7
+// el descuadre contra lo que ML declara: bajo esto es redondeo, sobre esto
+// son líneas sin sincronizar y crédito que no estarías tomando
+const DESCUADRE_TOLERADO_CLP = 1000
+
+export function cierreDelPeriodo({ periodo, rcv = null, credito = null, periodoMl = null, hoy = new Date() } = {}) {
+  const finDelMes = ultimoDiaDelMes(periodo)
+  const mesCerrado = hoy >= finDelPeriodo(periodo)
+  const chequeos = []
+
+  // ── 1. ¿están todas las liquidaciones con fecha del período?
+  const fechas = (rcv?.detalle ?? []).map((d) => fechaDocumento(d.fecha)).filter(Boolean)
+  const ultima = fechas.length ? new Date(Math.max(...fechas.map((f) => f.getTime()))) : null
+  if (!rcv || rcv.error) {
+    chequeos.push({
+      id: 'liquidaciones',
+      titulo: 'Liquidaciones del período',
+      estado: 'sin_datos',
+      detalle: 'sin sesión del SII no se puede saber cuántas llegaron',
+    })
+  } else if (!mesCerrado) {
+    chequeos.push({
+      id: 'liquidaciones',
+      titulo: 'Liquidaciones del período',
+      estado: 'esperando',
+      detalle: `${rcv.documentos} hasta ahora, la última del ${ultima ? formatoCorto(ultima) : '—'}. El mes sigue abierto: faltan las semanas que quedan.`,
+    })
+  } else if (ultima && finDelMes - ultima > HOLGURA_DIAS * DIAS) {
+    chequeos.push({
+      id: 'liquidaciones',
+      titulo: 'Liquidaciones del período',
+      estado: 'alerta',
+      detalle: `la última es del ${formatoCorto(ultima)} y el mes cerró el ${formatoCorto(finDelMes)}: falta al menos un documento, y su IVA es débito que no estarías declarando`,
+    })
+  } else {
+    chequeos.push({
+      id: 'liquidaciones',
+      titulo: 'Liquidaciones del período',
+      estado: 'ok',
+      detalle: `${rcv.documentos} documento(s), la última del ${ultima ? formatoCorto(ultima) : '—'}`,
+    })
+  }
+
+  // ── 2. ¿emitió ML la factura de sus cargos, y con qué fecha?
+  const hayCredito = credito && !credito.error && credito.ivaCreditoClp > 0
+  const mlAbierto = periodoMl?.estado === 'OPEN'
+  if (hayCredito) {
+    chequeos.push({
+      id: 'factura-cargos',
+      titulo: 'Factura de cargos de ML',
+      estado: 'ok',
+      detalle: `${credito.documentos} factura(s) con $${Math.round(credito.ivaCreditoClp).toLocaleString('es-CL')} de crédito`,
+    })
+  } else if (mlAbierto) {
+    chequeos.push({
+      id: 'factura-cargos',
+      titulo: 'Factura de cargos de ML',
+      estado: 'esperando',
+      detalle: `el período de facturación de ML (${periodoMl.desde} a ${periodoMl.hasta}) sigue abierto: la factura no existe todavía`,
+    })
+  } else {
+    chequeos.push({
+      id: 'factura-cargos',
+      titulo: 'Factura de cargos de ML',
+      estado: 'alerta',
+      detalle: periodoMl
+        ? `ML cerró su facturación el ${periodoMl.hasta} y la factura no aparece. Si la emite con fecha del mes siguiente, el crédito cae en ESE F29 y este mes lo pagas completo.`
+        : 'no hay crédito documentado y no se pudo leer el período de ML',
+    })
+  }
+
+  // ── 3. ¿lo que medimos calza con lo que ML declara?
+  if (!periodoMl) {
+    chequeos.push({ id: 'descuadre', titulo: 'Cargos sincronizados', estado: 'sin_datos', detalle: 'no se pudo leer el período de ML' })
+  } else if (Math.abs(periodoMl.descuadreClp ?? 0) <= DESCUADRE_TOLERADO_CLP) {
+    chequeos.push({ id: 'descuadre', titulo: 'Cargos sincronizados', estado: 'ok', detalle: 'lo medido calza con lo que ML declara' })
+  } else {
+    chequeos.push({
+      id: 'descuadre',
+      titulo: 'Cargos sincronizados',
+      estado: 'alerta',
+      detalle: `ML declara $${Math.round(periodoMl.totalClp).toLocaleString('es-CL')} y medimos $${Math.round(periodoMl.medidoClp).toLocaleString('es-CL')}: faltan $${Math.abs(Math.round(periodoMl.descuadreClp)).toLocaleString('es-CL')} en líneas sin sincronizar, que es crédito que no estarías tomando`,
+    })
+  }
+
+  const alertas = chequeos.filter((c) => c.estado === 'alerta').length
+  const esperando = chequeos.filter((c) => c.estado === 'esperando').length
+  return {
+    periodo,
+    mesCerrado,
+    relojes: {
+      ml: periodoMl ? { desde: periodoMl.desde, hasta: periodoMl.hasta, estado: periodoMl.estado } : null,
+      sii: { desde: `${periodo}-01`, hasta: formatoIso(finDelMes) },
+      ultimaLiquidacion: ultima ? formatoIso(ultima) : null,
+    },
+    chequeos,
+    // se declara cuando no queda nada rojo NI nada por llegar
+    puedeDeclarar: alertas === 0 && esperando === 0 && chequeos.every((c) => c.estado === 'ok'),
+    alertas,
+    esperando,
+  }
+}
+
+const formatoIso = (d) => d.toISOString().slice(0, 10)
+const formatoCorto = (d) => `${String(d.getUTCDate()).padStart(2, '0')}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+
+// ¿ESTÁ LISTO PARA DECLARAR, SÍ O NO?
+//
+// El panel mostraba cuatro casilleros y dejaba que el importador dedujera solo
+// si podía presentar. Eso obliga a rehacer el mismo análisis todos los meses —
+// justo lo que el sistema existe para evitar. Acá el criterio queda escrito una
+// vez y se aplica solo.
+//
+// Cada falta dice QUÉ pasa, POR QUÉ importa y SI depende de nosotros o de
+// esperar. Una alerta que no distingue "hay que hacer algo" de "hay que
+// esperar" se termina ignorando.
+export function veredictoF29({ codigos = [], rcv = null, ventas = null, credito = null, hoy = new Date() } = {}) {
+  const faltas = []
+  const valor = (c) => codigos.find((x) => x.codigo === c)?.valor
+
+  if (!rcv || rcv.error) {
+    faltas.push({
+      que: 'Los números no salen del SII',
+      porque: rcv?.reconectar
+        ? 'la sesión expiró: los casilleros están estimados de lo que medimos, no leídos del RCV'
+        : 'sin sesión del SII los casilleros son nuestra estimación, no lo que el SII ve',
+      accion: 'conectar',
+    })
+  }
+
+  // el débito que existe en ventas y NO estamos declarando por el mandato. En
+  // julio ML usó tipo 48 y en agosto 43: si vuelve a cambiar, esto lo caza.
+  if (ventas?.ivaFueraDelMandatoClp) {
+    faltas.push({
+      que: `Hay $${Math.round(ventas.ivaFueraDelMandatoClp).toLocaleString('es-CL')} de IVA en ventas fuera de las liquidaciones`,
+      porque: `el RCV trae ${ventas.otrosTipos.map((t) => `${t.nombre} (${t.tipoDoc})`).join(', ')}, que no va por [500]/[501] — declararlo solo por el mandato dejaría débito afuera`,
+      accion: 'revisar',
+    })
+  }
+
+  if (!valor(501)) {
+    faltas.push({ que: 'No hay débito que declarar', porque: 'el período no registra ventas por mandato', accion: 'esperar' })
+  }
+
+  if (rcv?.pendientes) {
+    faltas.push({
+      que: `${rcv.pendientes} liquidación(es) todavía sin entrar al registro`,
+      porque: 'están dentro del plazo de aceptación y pasan solas a REGISTRO si nadie las reclama',
+      accion: 'esperar',
+    })
+  }
+
+  if (credito && !credito.error && !credito.ivaCreditoClp) {
+    faltas.push({
+      que: 'El crédito está en cero',
+      porque:
+        'ML no ha emitido la factura de sus cargos (comisión, envíos, publicidad, colecta, almacenaje). Sin ese documento no hay crédito, aunque el gasto sea real y esté pagado',
+      accion: 'esperar',
+    })
+  }
+
+  const listo = faltas.length === 0
+  const soloEsperar = !listo && faltas.every((f) => f.accion === 'esperar')
+  return {
+    listo,
+    // distinguir "falta que hagas algo" de "falta que llegue algo" es la mitad
+    // del valor: lo segundo no se arregla mirándolo más seguido
+    estado: listo ? 'listo' : soloEsperar ? 'esperando' : 'requiere_accion',
+    faltas,
+    calculadoEl: hoy,
+  }
+}
+
 export function codigosF29({
   debitoIvaClp = 0,
   comisionClp = 0,
@@ -361,10 +578,12 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
   // se cae, solo dice de dónde salió cada número.
   let rcv = null
   let credito = null
+  let ventasRcv = null
   try {
-    const { liquidacionesDelPeriodo, comprasConCredito } = await import('./sii.js')
+    const { liquidacionesDelPeriodo, comprasConCredito, ventasDelPeriodo } = await import('./sii.js')
     rcv = await liquidacionesDelPeriodo(periodo)
     credito = await comprasConCredito(periodo)
+    ventasRcv = await ventasDelPeriodo(periodo)
   } catch (err) {
     // sin sesión del SII esto es lo esperado, no un fallo
     rcv = { error: err.message, reconectar: Boolean(err.reconectar) }
@@ -383,13 +602,19 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
     }),
     rcv,
     credito,
+    ventasRcv,
     comisionClp: Math.round(comisionClp),
     documentos: rcvSirve ? rcv.documentos : documentosMl,
     // el resto de los cargos también da crédito, pero por las líneas normales
     // de compras: nombrarlo evita que alguien lea [520] como "todo lo de ML"
     fueraDeLaComisionClp: Math.round(totalCargos - comisionClp),
     ventana: periodoMl ? { desde: periodoMl.desde, hasta: periodoMl.hasta } : null,
-  }
+  }  // el criterio de "¿se puede declarar?" escrito una vez, no deducido cada mes
+  f29.veredicto = veredictoF29({ codigos: f29.codigos, rcv, ventas: ventasRcv, credito })
+  // los tres relojes y si el mes se puede cerrar (ver cierreDelPeriodo)
+  f29.cierre = cierreDelPeriodo({ periodo, rcv, credito, periodoMl })
+
+
 
   // la DIN no aplica hasta que llegue la primera carga (ver importacionesEnJuego)
   const importaciones = { enJuego: importacionesEnJuego(periodo), desde: PRIMERA_IMPORTACION }

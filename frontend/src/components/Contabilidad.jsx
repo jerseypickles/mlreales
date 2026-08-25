@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Landmark, Link2, ShieldCheck } from 'lucide-react'
+import { Landmark, Link2, ShieldCheck, Check, Clock, TriangleAlert, HelpCircle } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
 import { fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -63,6 +63,84 @@ function Casillero({ c }) {
       <span className="f29-que">{c.que}</span>
       {c.falta ? <span className="f29-falta">falta: {c.falta}</span> : null}
     </div>
+  )
+}
+
+// EL CIERRE DEL MES: TRES RELOJES QUE NO COINCIDEN.
+//
+// "Necesito control, porque si cierra ML, ¿cierra el SII o no?". No. La
+// facturación de ML corre del 29 al 25, las liquidaciones son semanales y el
+// período tributario va del 1 al 31 — y lo que decide en qué F29 cae cada peso
+// no es ninguno de esos cierres, es la FECHA DEL DOCUMENTO.
+//
+// Los tres chequeos separan a propósito "falta que hagas algo" (alerta) de
+// "falta que llegue algo" (espera). Mezclarlos convierte el bloque en un
+// semáforo siempre rojo que se termina ignorando.
+const ICONO_CHEQUEO = { ok: Check, esperando: Clock, alerta: TriangleAlert, sin_datos: HelpCircle }
+
+function Chequeo({ c }) {
+  const Icono = ICONO_CHEQUEO[c.estado] ?? HelpCircle
+  return (
+    <li className={`cierre-chequeo cierre-${c.estado}`}>
+      <Icono aria-hidden="true" />
+      <div>
+        <b>{c.titulo}</b>
+        <span>{c.detalle}</span>
+      </div>
+    </li>
+  )
+}
+
+function Cierre({ cierre }) {
+  if (!cierre) return null
+  const { relojes: r, chequeos, puedeDeclarar, alertas, esperando } = cierre
+  const titular = puedeDeclarar
+    ? 'El mes está listo para declarar'
+    : alertas
+      ? `${alertas} cosa(s) que revisar antes de declarar`
+      : esperando
+        ? 'Falta que lleguen documentos'
+        : 'Sin datos suficientes'
+
+  return (
+    <section className={`cta-caja cierre${puedeDeclarar ? ' cierre-listo' : alertas ? ' cierre-alerta' : ''}`}>
+      <h3>Cierre del mes</h3>
+      <p className="cierre-titular">{titular}</p>
+
+      {/* los tres relojes, que es lo que nadie tiene en la cabeza */}
+      <div className="cierre-relojes">
+        <div>
+          <span>Facturación de ML</span>
+          <b>
+            {r.ml ? `${r.ml.desde} → ${r.ml.hasta}` : '—'}
+            {r.ml?.estado === 'OPEN' ? <em> abierto</em> : r.ml ? <em> cerrado</em> : null}
+          </b>
+        </div>
+        <div>
+          <span>Liquidaciones de ventas</span>
+          <b>semanales{r.ultimaLiquidacion ? <em> última {r.ultimaLiquidacion}</em> : null}</b>
+        </div>
+        <div>
+          <span>Período tributario</span>
+          <b>
+            {r.sii.desde} → {r.sii.hasta}
+            <em> lo que manda</em>
+          </b>
+        </div>
+      </div>
+
+      <ul className="cierre-lista">
+        {chequeos.map((c) => (
+          <Chequeo key={c.id} c={c} />
+        ))}
+      </ul>
+
+      <p className="cierre-pie">
+        Lo que decide en qué F29 cae cada peso no es ninguno de los tres cierres: es la <b>fecha del documento</b>.
+        Si ML cierra su facturación y emite la factura de sus cargos con fecha del mes siguiente, el crédito se va a
+        ese F29 y este mes lo pagas completo.
+      </p>
+    </section>
   )
 }
 
@@ -285,6 +363,8 @@ export function Contabilidad() {
         </section>
       ) : null}
 
+      <Cierre cierre={f29?.cierre} />
+
       {/* PARA EL FORMULARIO — aviso del SII del 25-ago-2026 sobre el mandato */}
       {f29 ? (
         <section className="cta-caja f29">
@@ -402,11 +482,20 @@ export function Contabilidad() {
           </Nota>
         ) : null}
 
-        <Nota titulo="Para cerrar la posición falta el RCV">
+        <Nota titulo="El crédito no es lo que ML te cobra: es el IVA que va adentro">
           <p>
-            Arriba está lo que el sistema mide solo: tus ventas y lo que ML te cobró. El crédito grande son las
-            importaciones y los gastos, y viven en el Registro de Compras y Ventas del SII. No existe API para
-            presentar el F29: esto es un panel de gestión, no una declaración.
+            De los cargos de ML solo vuelve el <b>IVA</b>, no el monto. Si ML te cobra $100.000 con IVA incluido,
+            $84.034 son costo real —bajan tu utilidad, no tu IVA— y solo $15.966 son crédito fiscal. Vale para la
+            comisión, los envíos, la publicidad, la colecta y el almacenaje por igual: <b>gastar más en Product Ads
+            no te baja el IVA de forma importante</b>, se justifica por las ventas que trae y nunca por el impuesto.
+          </p>
+        </Nota>
+
+        <Nota titulo="El SII no tiene API para declarar: esto es un panel, no una declaración">
+          <p>
+            El RCV ya se lee solo —de ahí salen los casilleros— pero <b>no existe forma de presentar el F29 por
+            software</b>. La vía oficial de "upload" genera un archivo que igual hay que subir a mano por el
+            navegador. Alguien teclea los números en sii.cl; lo que el sistema hace es que sean los correctos.
           </p>
         </Nota>
       </section>

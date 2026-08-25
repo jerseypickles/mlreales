@@ -339,6 +339,45 @@ export function resumirCredito({ periodo, filas = [] }) {
   }
 }
 
+// TODO LO QUE HAY EN VENTAS, no solo las liquidaciones.
+//
+// Existe por un susto real: en JULIO el documento de ML fue un tipo 48
+// ("Total mes Comprobantes Pago Electrónico") y en AGOSTO pasó a tipo 43
+// (liquidación factura). ML cambió de formato de un mes a otro sin avisar.
+//
+// Si el sistema solo mira el 43 y ML vuelve a cambiar, el panel diría
+// "0 liquidaciones" con cara seria y el débito saldría en cero — declarando de
+// menos, que es la peor forma de equivocarse. Así que se lee el resumen
+// COMPLETO y se marca todo lo que no estemos tratando.
+export async function ventasDelPeriodo(periodo) {
+  const filas = []
+  for (const estadoContab of ESTADOS) {
+    filas.push(...(await rcvResumen({ periodo, operacion: 'VENTA', estadoContab })))
+  }
+  return resumirVentas({ periodo, filas })
+}
+
+// Pura.
+export function resumirVentas({ periodo, filas = [] }) {
+  const conMonto = filas.filter((f) => (f.documentos ?? 0) > 0)
+  const liquidaciones = conMonto.filter((f) => f.tipoDoc === TIPO_LIQUIDACION_FACTURA)
+  const otros = conMonto.filter((f) => f.tipoDoc !== TIPO_LIQUIDACION_FACTURA)
+  return {
+    periodo,
+    ivaTotalClp: Math.round(conMonto.reduce((s, f) => s + (f.ivaClp ?? 0), 0)),
+    ivaLiquidacionesClp: Math.round(liquidaciones.reduce((s, f) => s + (f.ivaClp ?? 0), 0)),
+    // el débito que existe en el RCV y que NO estamos declarando por el mandato:
+    // si esto no es cero, hay que mirarlo antes de presentar
+    otrosTipos: otros.map((f) => ({
+      tipoDoc: f.tipoDoc,
+      nombre: f.nombreTipoDoc,
+      documentos: f.documentos,
+      ivaClp: Math.round(f.ivaClp ?? 0),
+    })),
+    ivaFueraDelMandatoClp: Math.round(otros.reduce((s, f) => s + (f.ivaClp ?? 0), 0)),
+  }
+}
+
 // Pura, para poder probarla sin red.
 export function resumirLiquidaciones({ periodo, ventas = [], compras = [] }) {
   // UN FOLIO, UNA FILA. El mismo documento llega por los dos registros y cada
