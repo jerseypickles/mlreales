@@ -34,11 +34,12 @@ export const config = {
   // modelo sin tocar el resto (LLM_MODEL_ANALISTA); si difiere del base,
   // llm.js degrada solo cuando el premium no está disponible.
   llmModelAnalista: process.env.LLM_MODEL_ANALISTA || 'claude-opus-5',
-  // El analista de PUBLICIDAD corre en Fable: los dos diales que ML deja mover
-  // —presupuesto y objetivo de ROAS— deciden dónde va la plata todos los días,
-  // y hasta ahora se movían a ojo. Se puede bajar con LLM_MODEL_ADS si el costo
-  // molesta; el resto del sistema no se entera.
-  llmModelAds: process.env.LLM_MODEL_ADS || 'claude-fable-5',
+  // El analista de PUBLICIDAD. Nació en Fable el 22-ago y volvió a Opus 5 el
+  // 24-ago por decisión del importador: quiere un solo motor en todo el
+  // sistema. De paso cuesta la mitad — Fable son US$10/US$50 por millón contra
+  // US$5/US$25 de Opus — y en las 7 corridas de prueba no mostró una ventaja
+  // que justificara el doble de precio.
+  llmModelAds: process.env.LLM_MODEL_ADS || 'claude-opus-5',
   // cada cuánto opina sobre la publicidad (viernes 09:00 Chile: la semana ya
   // corrió y hay serie que leer, y queda tiempo de aplicar antes del fin de semana)
   adsAnalistaCron: process.env.ADS_ANALISTA_CRON || '0 9 * * 5',
