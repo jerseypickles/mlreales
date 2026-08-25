@@ -32,9 +32,30 @@ export const SEMILLAS_VERTICALES = [
   'nivel laser',
   'destornillador',
   'extension electrica',
-  // computación de escritorio (accesorios, nunca equipos)
+  // COMPUTACIÓN Y GAMING COMPLETOS, con marca y todo.
+  //
+  // Estaba acotado a "accesorios, nunca equipos" y sin nada de gaming, por el
+  // prejuicio de que Logitech, Razer y HyperX no dejan espacio. El importador
+  // lo corrigió el 25-ago y tiene sus propios criterios de respaldo: "marca
+  // dominante NUNCA es no_entrar por sí sola" y "la publicidad compra la
+  // posición que no se gana orgánicamente". Probado en brochas, donde entró
+  // con 63% de Full y marcas arriba, y vende 35 u/semana ganando por precio.
+  //
+  // Los volúmenes justifican mirarlo: silla gamer 40.500/mes, webcam 27.100,
+  // audífonos bluetooth 27.100, mouse inalámbrico 14.800 — más que casi todo
+  // el tablero actual.
   'soporte notebook',
   'hub usb',
+  'mouse gamer',
+  'teclado gamer',
+  'audifonos gamer',
+  'silla gamer',
+  'teclado mecanico',
+  'webcam',
+  'audifonos bluetooth',
+  'mouse inalambrico',
+  'cargador inalambrico',
+  'parlante bluetooth',
   // calzado genérico: el que se compra por función y no por logo
   'pantuflas',
   'zuecos',
@@ -62,7 +83,11 @@ export const SEMILLAS_VERTICALES = [
 ]
 
 // 25 semillas fijas + margen para que el tablero también aporte sus prefijos
-const MAX_PREFIJOS = 40
+// 40 → 55: con las semillas de computación y gaming las verticales solas ya
+// ocupaban los 40 cupos y las keywords del propio tablero quedaban sin
+// capturar. El autosuggest de ML es gratis; el costo de subirlo es tiempo y
+// riesgo de bloqueo anti-ráfaga, que el job ya maneja con pausas.
+const MAX_PREFIJOS = 55
 
 export function diaChile(fecha = new Date()) {
   // en-CA formatea YYYY-MM-DD
