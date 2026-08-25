@@ -108,3 +108,26 @@ test('la posición de agosto NO trae la DIN en juego, la de octubre sí', async 
   const octubre = await posicionIva({ periodo: '2026-10' })
   assert.equal(octubre.importaciones.enJuego, true)
 })
+
+// ── el RCV manda sobre lo medido ─────────────────────────────────────────────
+
+test('sin sesión del SII la posición NO se cae: cambia la fuente', async () => {
+  // en los tests no hay sesión, así que liquidacionesDelPeriodo tira
+  // SesionSiiVencida y el bloque tiene que seguir armándose con lo medido
+  await sembrar()
+  const r = await posicionIva({ periodo: '2026-08' })
+  assert.ok(r.f29, 'el bloque del F29 sigue existiendo')
+  assert.ok(r.f29.rcv?.error, 'y deja dicho por qué no hay RCV')
+  assert.equal(r.f29.documentos, 1, 'cae al conteo de document_id de los cargos')
+  const c501 = r.f29.codigos.find((c) => c.codigo === 501)
+  assert.equal(c501.valor, 589 + 1743, 'el débito sale de las boletas')
+  assert.ok(c501.falta, 'y viaja diciendo que falta cuadrarlo contra el RCV')
+})
+
+test('el [520] avisa que el documento de la comisión todavía no existe', async () => {
+  await sembrar()
+  const r = await posicionIva({ periodo: '2026-08' })
+  const c = r.f29.codigos.find((x) => x.codigo === 520)
+  assert.match(c.falta, /comisión/i)
+  assert.equal(c.valorSiNeto != null, true, 'sin documento sigue viajando con su rango')
+})

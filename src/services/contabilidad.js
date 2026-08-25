@@ -109,26 +109,37 @@ export function desglosarCargos(cargos) {
 // Tres cosas que el sistema medía distinto de como se declara:
 //
 //  1. LA CANTIDAD NO SON LAS BOLETAS. La pantalla contaba los documentos
-//     EMITIDOS a los compradores, que son decenas al mes. [500] pide los
-//     RECIBIDOS de ML, que son los de su facturación mensual: el orden de
-//     magnitud es 1. Poner el otro número es la inconsistencia del aviso.
+//     EMITIDOS a los compradores. [500] pide los RECIBIDOS de ML. Medido en el
+//     RCV el 25-ago: agosto trae CUATRO liquidaciones, una por semana —
+//     folios 1068187 (02/08), 1073915 (09/08), 1081925 (16/08) y 1087194
+//     (23/08). No es una al mes como se supuso al principio.
 //
 //  2. [520] ES SOLO LA COMISIÓN. El crédito de ML se venía mostrando como un
-//     bloque único de $283.939 que mezcla comisión, envíos Full, publicidad,
-//     colecta y almacenamiento. Todos dan crédito, pero el correo nombra la
-//     comisión y solo ella: el resto viaja por las líneas normales de compras.
-//     `desglosarCargos` ya separa la familia, faltaba usarla acá.
+//     bloque único que mezcla comisión, envíos Full, publicidad, colecta y
+//     almacenamiento. Todos dan crédito, pero el correo nombra la comisión y
+//     solo ella: el resto viaja por las líneas normales de compras.
 //
-//  3. LA VENTANA NO ES EL MES. El período de ML 2026-08-01 corre del 29-jul al
-//     25-ago. El débito del F29 sale de lo que el documento totaliza, no del
-//     mes calendario — y por eso el bruto de las boletas de agosto ($139.507)
-//     no tiene por qué calzar con lo que la liquidación diga.
+//  3. LA VENTANA NO ES EL MES. El período 2026-08-01 de ML corre del 29-jul al
+//     25-ago. Los documentos se cuentan sobre esa ventana, no sobre el
+//     calendario, que partiría uno en dos.
 //
-// LO QUE FALTA CONFIRMAR, y solo se resuelve abriendo el documento: si el
-// documento mensual de ML es una liquidación factura (DTE 43, totaliza las
-// ventas y descuenta la comisión) o una factura de servicios corriente (DTE
-// 33, solo sus cobros). Si es lo segundo, [500]/[501] no aplican y el débito
-// se declara por las boletas como hasta ahora. Los dos caminos quedan armados.
+// LO QUE EL RCV RESOLVIÓ (sondeo del 25-ago, ver docs/rcv-sii-contrato.md):
+//
+//  · ML emite LIQUIDACIÓN-FACTURA ELECTRÓNICA, tipo 43. Los cuatro casilleros
+//    aplican tal cual los describe el correo del SII.
+//  · El registro de VENTAS trae esas 4 liquidaciones por $607.543 con $96.999
+//    de IVA, y NINGUNA boleta. El débito sale de la liquidación, no de las
+//    boletas: por eso el RCV manda sobre lo que medimos.
+//  · Los mismos 4 folios están en COMPRAS con los montos en CERO, repartidos
+//    en dos estados (2 en REGISTRO, 2 todavía en PENDIENTE).
+//  · En julio el documento fue de otro tipo: un tipo 48 por $1.795. ML cambió
+//    de formato entre un mes y otro, así que nada de asumir "siempre 43".
+//
+// LO QUE SIGUE ABIERTO: el [520]. Los campos detLiqValComNeto/IVA de la
+// liquidación vienen en cero y no hay ninguna factura de servicios de ML en el
+// registro de compras. El documento de la comisión todavía no existe — su
+// período de facturación cerró el 25-ago— así que ese casillero se llena con
+// lo que medimos de sus cargos hasta que aparezca.
 
 // LA DIN TODAVÍA NO ESTÁ EN JUEGO.
 //
@@ -172,9 +183,19 @@ export function ivaDeCargo(montoClp) {
 // documentos de facturación de ML en la ventana; null cuando no se pudo contar
 // (sin líneas sincronizadas), y ahí el casillero queda vacío en vez de
 // inventar un 1 que después nadie revisa.
-export function codigosF29({ debitoIvaClp = 0, comisionClp = 0, documentos = null } = {}) {
+export function codigosF29({
+  debitoIvaClp = 0,
+  comisionClp = 0,
+  documentos = null,
+  ivaComisionClp = null,
+  fuenteRcv = false,
+} = {}) {
   const iva = ivaDeCargo(comisionClp)
   const cantidad = Number.isFinite(documentos) && documentos > 0 ? documentos : null
+  const delRcv = 'RCV del SII'
+  // el crédito de la comisión sale del documento si ML lo pobló; si no, de lo
+  // que medimos de sus cargos, y ahí sigue viajando con su rango
+  const comisionMedida = ivaComisionClp == null
   return [
     {
       codigo: 500,
@@ -182,8 +203,8 @@ export function codigosF29({ debitoIvaClp = 0, comisionClp = 0, documentos = nul
       que: 'Cantidad de liquidaciones factura recibidas de ML',
       valor: cantidad,
       unidad: 'documentos',
-      fuente: cantidad ? 'documentos de facturación de ML en la ventana' : 'sin líneas sincronizadas',
-      falta: cantidad ? null : 'sincronizar los cargos del período',
+      fuente: cantidad ? (fuenteRcv ? delRcv : 'documentos de facturación de ML en la ventana') : 'sin datos',
+      falta: cantidad ? (fuenteRcv ? null : 'confirmar contra el RCV') : 'conectar el SII o sincronizar los cargos',
     },
     {
       codigo: 501,
@@ -191,10 +212,9 @@ export function codigosF29({ debitoIvaClp = 0, comisionClp = 0, documentos = nul
       que: 'IVA débito de las ventas que esos documentos totalizan',
       valor: Math.round(debitoIvaClp),
       unidad: 'clp',
-      fuente: 'suma del IVA de las boletas emitidas en el mes',
-      // el valor es correcto como MONTO de tus ventas; lo que no está
-      // confirmado es que la liquidación totalice exactamente ese conjunto
-      falta: 'cuadrar contra lo que totalice la liquidación (su ventana no es el mes)',
+      fuente: fuenteRcv ? `${delRcv}: registro de ventas` : 'suma del IVA de las boletas emitidas en el mes',
+      // con el RCV en la mano esto deja de ser estimación: es lo que el SII ve
+      falta: fuenteRcv ? null : 'cuadrar contra lo que totalice la liquidación (su ventana no es el mes)',
     },
     {
       codigo: 519,
@@ -202,19 +222,24 @@ export function codigosF29({ debitoIvaClp = 0, comisionClp = 0, documentos = nul
       que: 'Cantidad de documentos, por la comisión',
       valor: cantidad,
       unidad: 'documentos',
-      fuente: cantidad ? 'los mismos documentos del [500]' : 'sin líneas sincronizadas',
-      falta: cantidad ? null : 'sincronizar los cargos del período',
+      fuente: cantidad ? (fuenteRcv ? `${delRcv}: los mismos folios del [500]` : 'los mismos documentos del [500]') : 'sin datos',
+      falta: cantidad ? (fuenteRcv ? null : 'confirmar contra el RCV') : 'conectar el SII o sincronizar los cargos',
     },
     {
       codigo: 520,
       lado: 'credito',
       que: 'IVA crédito de la comisión pagada',
-      valor: iva.siIncluido,
-      valorSiNeto: iva.siNeto,
+      valor: comisionMedida ? iva.siIncluido : Math.round(ivaComisionClp),
+      valorSiNeto: comisionMedida ? iva.siNeto : null,
       unidad: 'clp',
       baseClp: Math.round(comisionClp),
-      fuente: 'IVA de la familia comisión (CV), sin envíos ni publicidad',
-      falta: 'confirmar si ML factura con IVA incluido o neto',
+      fuente: comisionMedida
+        ? 'IVA de la familia comisión (CV), sin envíos ni publicidad'
+        : `${delRcv}: comisión del documento`,
+      // ML deja detLiqValComNeto/IVA en cero: medido el 25-ago sobre las 4
+      // liquidaciones de agosto, ninguna traía la comisión. Mientras no exista
+      // el documento de la comisión, este casillero es nuestro, no del SII.
+      falta: comisionMedida ? 'ML todavía no emite el documento de la comisión' : null,
     },
   ]
 }
@@ -314,10 +339,40 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
   // desde el 10-ago y no lo usaba nadie.
   const documentosMl = new Set(cargosDeLaVentana.map((c) => c.documentoId).filter(Boolean)).size
   const comisionClp = cargosMl.familias?.find((f) => f.familia === 'comision')?.clp ?? 0
+
+  // EL RCV MANDA SOBRE LO QUE MEDIMOS NOSOTROS.
+  //
+  // Nuestro conteo de documentos sale de los document_id de los cargos de ML y
+  // nuestro débito de las boletas. Los dos son aproximaciones razonables, pero
+  // el F29 se cruza contra el Registro de Compras y Ventas — así que cuando
+  // hay sesión del SII, ese número gana. Medido el 25-ago: el RCV traía 4
+  // liquidaciones factura por $96.999 de IVA débito, y en el registro de
+  // ventas NO había ninguna boleta, solo esas cuatro.
+  //
+  // Si no hay sesión el bloque sigue funcionando con lo medido: la pantalla no
+  // se cae, solo dice de dónde salió cada número.
+  let rcv = null
+  try {
+    const { liquidacionesDelPeriodo } = await import('./sii.js')
+    rcv = await liquidacionesDelPeriodo(periodo)
+  } catch (err) {
+    // sin sesión del SII esto es lo esperado, no un fallo
+    rcv = { error: err.message, reconectar: Boolean(err.reconectar) }
+  }
+  const rcvSirve = rcv && !rcv.error && rcv.documentos > 0
+
   const f29 = {
-    codigos: codigosF29({ debitoIvaClp: debitoBase.clp, comisionClp, documentos: documentosMl }),
+    codigos: codigosF29({
+      debitoIvaClp: rcvSirve ? rcv.ivaDebitoClp : debitoBase.clp,
+      comisionClp,
+      documentos: rcvSirve ? rcv.documentos : documentosMl,
+      // si el RCV trajera la comisión poblada mandaría ella; ML la deja vacía
+      ivaComisionClp: rcvSirve ? rcv.ivaComisionClp : null,
+      fuenteRcv: rcvSirve,
+    }),
+    rcv,
     comisionClp: Math.round(comisionClp),
-    documentos: documentosMl,
+    documentos: rcvSirve ? rcv.documentos : documentosMl,
     // el resto de los cargos también da crédito, pero por las líneas normales
     // de compras: nombrarlo evita que alguien lea [520] como "todo lo de ML"
     fueraDeLaComisionClp: Math.round(totalCargos - comisionClp),

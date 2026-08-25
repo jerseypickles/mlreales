@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Landmark } from 'lucide-react'
+import { Landmark, Link2, ShieldCheck } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
 import { fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -66,6 +66,127 @@ function Casillero({ c }) {
   )
 }
 
+// CONECTAR EL SII SIN ENTREGAR LA CLAVE.
+//
+// No hay API del SII: el RCV se lee llamando los endpoints internos de su
+// propia app con una sesión ya abierta. La decisión del importador el
+// 25-ago-2026 fue que la clave tributaria NO se guarda en ninguna parte — así
+// que el sistema recibe solo las cookies de una sesión que él abrió a mano.
+//
+// El precio es este formulario: la sesión dura un par de horas y hay que
+// repetirlo cuando toque declarar. Para un trámite mensual es barato, y a
+// cambio la credencial tributaria de la empresa no vive en Render.
+const RECETA = "copy(document.cookie)"
+
+function ConexionSii({ estado, onConectar }) {
+  const [abierto, setAbierto] = useState(false)
+  const [texto, setTexto] = useState('')
+  const [error, setError] = useState(null)
+  const [enviando, setEnviando] = useState(false)
+
+  const conectar = async () => {
+    setEnviando(true)
+    setError(null)
+    try {
+      await onConectar(texto.trim())
+      setTexto('')
+      setAbierto(false)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const viva = estado?.conectada
+  return (
+    <div className={`sii-conexion${viva ? ' sii-viva' : ''}`}>
+      <span className="sii-estado">
+        {viva ? <ShieldCheck aria-hidden="true" /> : <Link2 aria-hidden="true" />}
+        {viva ? (
+          <>
+            SII conectado · {estado.rut}
+            {estado.expiraEl ? <small>la sesión vence {fmtFecha(estado.expiraEl)}</small> : null}
+          </>
+        ) : (
+          <>
+            SII sin conectar
+            <small>{estado?.motivo ?? 'los casilleros salen de lo que medimos, no del RCV'}</small>
+          </>
+        )}
+      </span>
+      <button type="button" className="sii-btn" onClick={() => setAbierto((v) => !v)}>
+        {viva ? 'Reconectar' : 'Conectar'}
+      </button>
+
+      {abierto ? (
+        <div className="sii-forma">
+          <ol>
+            <li>
+              Entra a <b>sii.cl</b> con tu RUT y clave, y abre el Registro de Compras y Ventas.
+            </li>
+            <li>
+              Abre la consola del navegador y corre <code>{RECETA}</code>
+            </li>
+            <li>Pega acá lo que quedó copiado.</li>
+          </ol>
+          <textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            placeholder="TOKEN=...; CSESSIONID=...; RUT_NS=..."
+            rows={3}
+            spellCheck={false}
+          />
+          <div className="sii-forma-pie">
+            <em>Tu clave no viaja acá y no se guarda: solo las cookies de la sesión.</em>
+            <button type="button" onClick={conectar} disabled={!texto.trim() || enviando}>
+              {enviando ? 'Conectando…' : 'Guardar sesión'}
+            </button>
+          </div>
+          {error ? <p className="sii-error">{error}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// Las liquidaciones factura del período, tal como las ve el SII.
+function Liquidaciones({ rcv }) {
+  if (!rcv || rcv.error || !rcv.documentos) return null
+  return (
+    <div className="sii-liq">
+      <h4>
+        {rcv.documentos} liquidaciones factura en el RCV
+        {rcv.pendientes ? <small> · {rcv.pendientes} todavía sin entrar al registro</small> : null}
+      </h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Folio</th>
+            <th>Fecha</th>
+            <th>Neto</th>
+            <th>IVA</th>
+            <th>Total</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rcv.detalle.map((d) => (
+            <tr key={d.folio} className={d.estadoContab === 'PENDIENTE' ? 'liq-pendiente' : undefined}>
+              <td>{d.folio}</td>
+              <td>{d.fecha}</td>
+              <td>{fmtPrecio(d.netoClp)}</td>
+              <td>{fmtPrecio(d.ivaClp)}</td>
+              <td>{fmtPrecio(d.totalClp)}</td>
+              <td>{d.estadoContab === 'PENDIENTE' ? 'pendiente' : 'registrada'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function Nota({ titulo, tono, children }) {
   return (
     <details className={`cta-nota${tono ? ` cta-nota-${tono}` : ''}`}>
@@ -78,6 +199,12 @@ function Nota({ titulo, tono, children }) {
 export function Contabilidad() {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
+  const [sii, setSii] = useState(null)
+
+  const cargar = () => {
+    api.contabilidad().then(setDatos).catch((e) => setError(e.message))
+    api.siiEstado().then(setSii).catch(() => setSii({ conectada: false, motivo: 'no se pudo consultar' }))
+  }
 
   useEffect(() => {
     let vigente = true
@@ -85,10 +212,20 @@ export function Contabilidad() {
       .contabilidad()
       .then((d) => vigente && setDatos(d))
       .catch((e) => vigente && setError(e.message))
+    api
+      .siiEstado()
+      .then((e) => vigente && setSii(e))
+      .catch(() => vigente && setSii({ conectada: false, motivo: 'no se pudo consultar' }))
     return () => {
       vigente = false
     }
   }, [])
+
+  // al conectar hay que releer la posición: los casilleros cambian de fuente
+  const conectarSii = async (cookies) => {
+    await api.siiConectar(cookies)
+    cargar()
+  }
 
   if (error) return <main className="contabilidad"><p className="error-bloque">Error: {error}</p></main>
   if (!datos) return <main className="contabilidad"><Cargando texto="Cargando la posición del mes…" /></main>
@@ -160,11 +297,13 @@ export function Contabilidad() {
               </small>
             ) : null}
           </h3>
+          <ConexionSii estado={sii} onConectar={conectarSii} />
           <div className="f29-grid">
             {(f29.codigos ?? []).map((c) => (
               <Casillero key={c.codigo} c={c} />
             ))}
           </div>
+          <Liquidaciones rcv={f29.rcv} />
           <p className="f29-pie">
             ML vende <b>por mandato</b>: el débito de esas ventas es tuyo y se declara desde la liquidación factura
             que ML te emite, no desde tus boletas. El <b>[520] es solo la comisión</b> ({fmtPrecio(f29.comisionClp)});

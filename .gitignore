@@ -7,3 +7,8 @@ dist/
 .playwright-mcp/
 *.png
 fotos/
+
+# nunca commitear una sesión del SII: son cookies vivas de la cuenta tributaria
+.sesion-sii*.json
+*.tmp.mjs
+*.tmp.json

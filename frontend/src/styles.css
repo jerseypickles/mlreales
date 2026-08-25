@@ -6090,6 +6090,95 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 .f29-falta { font-size: 11px; color: #b45309; line-height: 1.4; margin-top: 4px; }
 .f29-casilla-abierta { border-style: dashed; }
 .f29-casilla-vacia .f29-valor { color: var(--tinta-3); }
+/* CONEXIÓN AL SII. Va DENTRO del bloque del F29 y no en la cabecera de la
+   página: solo importa cuando estás mirando los casilleros, y ahí explica de
+   dónde salen los números. Sin sesión no se rompe nada — cambia la fuente. */
+.sii-conexion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  margin-bottom: 12px;
+  border: 1px dashed var(--borde);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.sii-viva { border-style: solid; border-color: var(--exito-borde, var(--borde)); }
+.sii-estado { display: flex; align-items: center; gap: 7px; flex: 1 1 240px; color: var(--tinta-2); }
+.sii-estado svg { width: 15px; height: 15px; flex: none; color: var(--tinta-3); }
+.sii-viva .sii-estado svg { color: var(--exito-tinta, var(--acento)); }
+.sii-estado small { display: block; color: var(--tinta-3); font-size: 11px; margin-top: 1px; }
+.sii-btn {
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--tinta-2);
+  border-radius: 6px;
+  padding: 4px 11px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sii-btn:hover { border-color: var(--borde-fuerte); color: var(--tinta); }
+.sii-forma { flex: 1 1 100%; border-top: 1px solid var(--borde); padding-top: 10px; }
+.sii-forma ol { margin: 0 0 9px; padding-left: 18px; color: var(--tinta-2); line-height: 1.6; }
+.sii-forma code {
+  background: var(--fondo-2, rgba(0, 0, 0, 0.05));
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11.5px;
+}
+.sii-forma textarea {
+  width: 100%;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-family: inherit;
+  font-size: 11.5px;
+  resize: vertical;
+  background: var(--superficie);
+  color: var(--tinta);
+}
+.sii-forma-pie { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.sii-forma-pie em { font-style: normal; font-size: 11px; color: var(--tinta-3); }
+.sii-forma-pie button {
+  border: 1px solid var(--acento-borde);
+  background: var(--acento);
+  color: #fff;
+  border-radius: 6px;
+  padding: 5px 13px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sii-forma-pie button:disabled { opacity: 0.45; cursor: default; }
+.sii-error { margin: 8px 0 0; font-size: 11.5px; color: var(--peligro-tinta, #b42318); }
+
+/* Las liquidaciones tal como las ve el SII: es la prueba de dónde sale el
+   [501], así que se muestran con folio y fecha, no solo el total. */
+.sii-liq { margin-top: 14px; border-top: 1px solid var(--borde); padding-top: 11px; }
+.sii-liq h4 { margin: 0 0 8px; font-size: 12.5px; color: var(--tinta-2); font-weight: 600; }
+.sii-liq h4 small { font-weight: 400; color: var(--tinta-3); }
+.sii-liq table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sii-liq th {
+  text-align: right;
+  font-weight: 500;
+  color: var(--tinta-3);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--borde);
+}
+.sii-liq th:first-child, .sii-liq th:nth-child(2), .sii-liq th:last-child { text-align: left; }
+.sii-liq td {
+  text-align: right;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--borde);
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta);
+}
+.sii-liq td:first-child, .sii-liq td:nth-child(2), .sii-liq td:last-child { text-align: left; }
+.sii-liq tr:last-child td { border-bottom: none; }
+/* pendiente = ML ya la emitió pero no entró al registro: su crédito no está firme */
+.liq-pendiente td { color: var(--tinta-3); }
+
 .f29-pie { margin: 12px 0 0; font-size: 11.5px; color: var(--tinta-3); line-height: 1.55; }
 
 .cta-notas { display: grid; gap: 7px; margin-top: 4px; }
