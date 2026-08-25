@@ -16,6 +16,11 @@ import { fmtPrecio, fmtFecha } from '../lib/formato.js'
 // El texto no se borró: bajó al final, plegado, porque las advertencias siguen
 // siendo ciertas (la DIN que no entra sola al Registro de Compras vale
 // millones) pero ninguna es lo primero que hay que leer.
+//
+// Y una advertencia que todavía no puede aplicar tampoco va encendida: la de la
+// DIN aparece recién con la primera carga (importaciones.enJuego), porque hasta
+// octubre no hay ninguna importación que declarar y la alarma solo compite con
+// los casilleros del F29, que es lo que este mes sí hay que mirar.
 
 const IVA = 0.19
 
@@ -30,6 +35,33 @@ function Linea({ etiqueta, valor, detalle, signo, fuerte }) {
         {signo === '-' ? '−' : ''}
         {valor}
       </b>
+    </div>
+  )
+}
+
+// LOS CASILLEROS DEL F29.
+//
+// Aviso del SII del 25-ago-2026: ML vende por mandato y lo que se declara son
+// las liquidaciones factura que emite, en cuatro códigos. La pantalla mostraba
+// la plata correcta pero nunca en qué línea escribirla — y el cruce de líneas
+// es justamente lo que deja la declaración observada.
+//
+// Cada casillero muestra lo que FALTA para poder llenarlo, si falta algo. Un
+// número sin esa advertencia se copia al formulario tal cual, y dos de los
+// cuatro todavía dependen de leer el documento.
+function Casillero({ c }) {
+  const vacio = c.valor === null || c.valor === undefined
+  return (
+    <div className={`f29-casilla${vacio ? ' f29-casilla-vacia' : ''}${c.falta ? ' f29-casilla-abierta' : ''}`}>
+      <span className="f29-codigo">[{c.codigo}]</span>
+      <b className="f29-valor">
+        {vacio ? '—' : c.unidad === 'clp' ? fmtPrecio(c.valor) : c.valor}
+        {c.valorSiNeto != null && c.valorSiNeto !== c.valor ? (
+          <em className="f29-alt"> o {fmtPrecio(c.valorSiNeto)}</em>
+        ) : null}
+      </b>
+      <span className="f29-que">{c.que}</span>
+      {c.falta ? <span className="f29-falta">falta: {c.falta}</span> : null}
     </div>
   )
 }
@@ -61,7 +93,7 @@ export function Contabilidad() {
   if (error) return <main className="contabilidad"><p className="error-bloque">Error: {error}</p></main>
   if (!datos) return <main className="contabilidad"><Cargando texto="Cargando la posición del mes…" /></main>
 
-  const { periodo, ventas, cargosMl, resultado: res, periodoMl, debito, creditoMl, emision } = datos
+  const { periodo, ventas, cargosMl, resultado: res, periodoMl, debito, creditoMl, emision, f29, importaciones } = datos
   const familias = cargosMl.familias ?? []
   const rango = res && res.ivaAPagar !== res.ivaAPagarSiNeto
 
@@ -116,6 +148,32 @@ export function Contabilidad() {
         </section>
       ) : null}
 
+      {/* PARA EL FORMULARIO — aviso del SII del 25-ago-2026 sobre el mandato */}
+      {f29 ? (
+        <section className="cta-caja f29">
+          <h3>
+            Para el F29 de {periodo}
+            {f29.ventana ? (
+              <small>
+                {' '}
+                · la ventana de ML es {f29.ventana.desde} a {f29.ventana.hasta}, no el mes
+              </small>
+            ) : null}
+          </h3>
+          <div className="f29-grid">
+            {(f29.codigos ?? []).map((c) => (
+              <Casillero key={c.codigo} c={c} />
+            ))}
+          </div>
+          <p className="f29-pie">
+            ML vende <b>por mandato</b>: el débito de esas ventas es tuyo y se declara desde la liquidación factura
+            que ML te emite, no desde tus boletas. El <b>[520] es solo la comisión</b> ({fmtPrecio(f29.comisionClp)});
+            los otros {fmtPrecio(f29.fueraDeLaComisionClp)} de envíos, publicidad, colecta y almacenamiento también
+            dan crédito, pero por las líneas normales de compras.
+          </p>
+        </section>
+      ) : null}
+
       <div className="cont-grid">
         <section className="cta-caja">
           <h3>Débito · lo que cobraste</h3>
@@ -134,7 +192,11 @@ export function Contabilidad() {
               <Linea key={f.familia} etiqueta={f.etiqueta} valor={fmtPrecio(f.clp)} detalle=" " />
             ))}
             <Linea etiqueta="IVA de esos cargos" valor={fmtPrecio(creditoMl.clp)} fuerte />
-            <Linea etiqueta="Importaciones (DIN)" detalle="requiere el RCV" valor="—" />
+            {/* la DIN solo aparece cuando hay importaciones en juego: hasta que
+                llegue la primera carga es una fila vacía que no dice nada */}
+            {importaciones?.enJuego ? (
+              <Linea etiqueta="Importaciones (DIN)" detalle="requiere el RCV" valor="—" />
+            ) : null}
             <Linea etiqueta="Gastos de la empresa" detalle="requiere el RCV" valor="—" />
           </div>
         </section>
@@ -142,13 +204,23 @@ export function Contabilidad() {
 
       {/* EL PORQUÉ, AL FINAL Y PLEGADO */}
       <section className="cta-notas">
-        <Nota titulo="La DIN no entra sola al Registro de Compras" tono="alerta">
-          <p>
-            Hay que cargarla a mano como documento no electrónico, código <b>914</b>. Si tu contador no lo hace, el
-            IVA de cada importación no se toma como crédito — y en importación ese IVA es el monto grande, mucho
-            mayor que todo lo de ML junto.
-          </p>
-        </Nota>
+        {importaciones?.enJuego ? (
+          <Nota titulo="La DIN no entra sola al Registro de Compras" tono="alerta">
+            <p>
+              Hay que cargarla a mano como documento no electrónico, código <b>914</b>. Si tu contador no lo hace, el
+              IVA de cada importación no se toma como crédito — y en importación ese IVA es el monto grande, mucho
+              mayor que todo lo de ML junto.
+            </p>
+          </Nota>
+        ) : (
+          <Nota titulo={`Todavía no hay importaciones que declarar · la primera carga llega en ${importaciones?.desde ?? '2026-10'}`}>
+            <p>
+              Desde ese F29 aparece acá el crédito de la <b>DIN</b>, que hay que cargar a mano al Registro de Compras
+              como documento no electrónico código <b>914</b> — no entra solo, y en importación ese IVA es el monto
+              grande. Mientras no haya carga en aduana no aplica y el aviso queda apagado.
+            </p>
+          </Nota>
+        )}
 
         {periodoMl?.impagoClp ? (
           <Nota titulo={`ML factura ${fmtPrecio(periodoMl.totalClp)} en su período · ${fmtPrecio(periodoMl.impagoClp)} sin pagar`}>
@@ -173,7 +245,9 @@ export function Contabilidad() {
             <p>
               Con folios propios (RUT {emision.emisorRut}) y el mensaje legal{' '}
               <b>“por cuenta y orden de {emision.porCuentaDe}”</b>. Es un mandato de facturación: la venta es tuya y
-              este débito también. Falta confirmar que aparezcan en tu Registro de Ventas del SII.
+              este débito también. El SII lo confirmó por correo el 25-ago-2026 y dijo cómo se declara: el débito de
+              estas ventas <b>no se toma de estas boletas</b> sino de la liquidación factura que ML te emite, en los
+              códigos [500] y [501]. Por eso el bloque de arriba.
             </p>
           </Nota>
         ) : null}

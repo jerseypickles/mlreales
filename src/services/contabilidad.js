@@ -91,6 +91,133 @@ export function desglosarCargos(cargos) {
   }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOS CÓDIGOS DEL F29 BAJO EL MANDATO DE ML
+//
+// Aviso del SII recibido el 25-ago-2026, sobre el F29 de agosto: cuando un
+// contribuyente vende POR MANDATO en tu nombre, lo que se declara no son tus
+// boletas sino la(s) LIQUIDACIÓN(ES) FACTURA que ese mandatario te emite. Y va
+// a cuatro casilleros, dos por lado:
+//
+//   [500] cantidad de documentos recibidos    [501] IVA débito de las ventas
+//   [519] cantidad de documentos              [520] IVA crédito de la comisión
+//
+// Esto NO cambia cuánta plata se paga: cambia en qué línea se escribe, que es
+// justamente lo que el SII cruza para marcar la declaración como observada.
+//
+// Tres cosas que el sistema medía distinto de como se declara:
+//
+//  1. LA CANTIDAD NO SON LAS BOLETAS. La pantalla contaba los documentos
+//     EMITIDOS a los compradores, que son decenas al mes. [500] pide los
+//     RECIBIDOS de ML, que son los de su facturación mensual: el orden de
+//     magnitud es 1. Poner el otro número es la inconsistencia del aviso.
+//
+//  2. [520] ES SOLO LA COMISIÓN. El crédito de ML se venía mostrando como un
+//     bloque único de $283.939 que mezcla comisión, envíos Full, publicidad,
+//     colecta y almacenamiento. Todos dan crédito, pero el correo nombra la
+//     comisión y solo ella: el resto viaja por las líneas normales de compras.
+//     `desglosarCargos` ya separa la familia, faltaba usarla acá.
+//
+//  3. LA VENTANA NO ES EL MES. El período de ML 2026-08-01 corre del 29-jul al
+//     25-ago. El débito del F29 sale de lo que el documento totaliza, no del
+//     mes calendario — y por eso el bruto de las boletas de agosto ($139.507)
+//     no tiene por qué calzar con lo que la liquidación diga.
+//
+// LO QUE FALTA CONFIRMAR, y solo se resuelve abriendo el documento: si el
+// documento mensual de ML es una liquidación factura (DTE 43, totaliza las
+// ventas y descuenta la comisión) o una factura de servicios corriente (DTE
+// 33, solo sus cobros). Si es lo segundo, [500]/[501] no aplican y el débito
+// se declara por las boletas como hasta ahora. Los dos caminos quedan armados.
+
+// LA DIN TODAVÍA NO ESTÁ EN JUEGO.
+//
+// El panel encendía desde el primer día una alerta fija —"la DIN no entra sola
+// al Registro de Compras"— y una línea de crédito "Importaciones: —". Las dos
+// son ciertas y valen millones el día que apliquen, pero la PRIMERA CARGA
+// LLEGA EN OCTUBRE: en el F29 de agosto no hay ninguna importación que
+// declarar. Una alarma prendida por algo que todavía no puede pasar es ruido
+// que compite con lo único que este mes sí hay que mirar, que son los
+// casilleros del mandato — el mismo problema que ya se limpió cuando la
+// pantalla tenía cinco notas peleando por atención y ningún resultado.
+//
+// Se prende sola al llegar el período. La fecha se corre sin deploy con
+// PRIMERA_IMPORTACION, porque los embarques se atrasan y el que se atrasa no
+// puede quedarse con el aviso apagado.
+export const PRIMERA_IMPORTACION = process.env.PRIMERA_IMPORTACION || '2026-10'
+
+const esPeriodo = (v) => /^\d{4}-\d{2}$/.test(v ?? '')
+
+// Si la fecha de corte viene rota se prende igual: dejar de avisar por un
+// typo en una env var cuesta el IVA de una importación entera; avisar de más
+// cuesta una línea en pantalla. El error barato es hacia el aviso.
+export function importacionesEnJuego(periodo, desde = PRIMERA_IMPORTACION) {
+  if (!esPeriodo(desde)) return true
+  if (!esPeriodo(periodo)) return false
+  return periodo >= desde
+}
+
+// El IVA de un cargo de ML, con el supuesto todavía abierto: no consta si los
+// montos que factura vienen con IVA incluido o netos. Se muestran los dos
+// extremos en vez de un número falsamente preciso.
+export function ivaDeCargo(montoClp) {
+  const m = Number.isFinite(montoClp) ? Math.round(montoClp) : 0
+  return {
+    siIncluido: Math.round((m * IVA_PCT) / (100 + IVA_PCT)),
+    siNeto: Math.round((m * IVA_PCT) / 100),
+  }
+}
+
+// Pura: de lo medido a los cuatro casilleros. `documentos` es la cantidad de
+// documentos de facturación de ML en la ventana; null cuando no se pudo contar
+// (sin líneas sincronizadas), y ahí el casillero queda vacío en vez de
+// inventar un 1 que después nadie revisa.
+export function codigosF29({ debitoIvaClp = 0, comisionClp = 0, documentos = null } = {}) {
+  const iva = ivaDeCargo(comisionClp)
+  const cantidad = Number.isFinite(documentos) && documentos > 0 ? documentos : null
+  return [
+    {
+      codigo: 500,
+      lado: 'debito',
+      que: 'Cantidad de liquidaciones factura recibidas de ML',
+      valor: cantidad,
+      unidad: 'documentos',
+      fuente: cantidad ? 'documentos de facturación de ML en la ventana' : 'sin líneas sincronizadas',
+      falta: cantidad ? null : 'sincronizar los cargos del período',
+    },
+    {
+      codigo: 501,
+      lado: 'debito',
+      que: 'IVA débito de las ventas que esos documentos totalizan',
+      valor: Math.round(debitoIvaClp),
+      unidad: 'clp',
+      fuente: 'suma del IVA de las boletas emitidas en el mes',
+      // el valor es correcto como MONTO de tus ventas; lo que no está
+      // confirmado es que la liquidación totalice exactamente ese conjunto
+      falta: 'cuadrar contra lo que totalice la liquidación (su ventana no es el mes)',
+    },
+    {
+      codigo: 519,
+      lado: 'credito',
+      que: 'Cantidad de documentos, por la comisión',
+      valor: cantidad,
+      unidad: 'documentos',
+      fuente: cantidad ? 'los mismos documentos del [500]' : 'sin líneas sincronizadas',
+      falta: cantidad ? null : 'sincronizar los cargos del período',
+    },
+    {
+      codigo: 520,
+      lado: 'credito',
+      que: 'IVA crédito de la comisión pagada',
+      valor: iva.siIncluido,
+      valorSiNeto: iva.siNeto,
+      unidad: 'clp',
+      baseClp: Math.round(comisionClp),
+      fuente: 'IVA de la familia comisión (CV), sin envíos ni publicidad',
+      falta: 'confirmar si ML factura con IVA incluido o neto',
+    },
+  ]
+}
 export async function posicionIva({ periodo = mesActual() } = {}) {
   const { desde, hasta } = rangoDelMes(periodo)
 
@@ -153,6 +280,10 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
   // ventanas distintas, así que el descuadre se calcula sobre las líneas del
   // rango de ML. Si ese descuadre no da ~0, faltan líneas por sincronizar.
   let periodoMl = null
+  // Las líneas sobre las que se cuentan los documentos del F29. Por defecto el
+  // mes; si ML declara su ventana, esa manda —el documento cubre SU período, y
+  // contar documentos por mes calendario partiría uno en dos.
+  let cargosDeLaVentana = cargos
   try {
     const { periodosFacturacion } = await import('./cargosMl.js')
     const ps = await periodosFacturacion()
@@ -161,6 +292,7 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
       const enVentana = await CargoMl.find({
         fecha: { $gte: new Date(`${p.desde}T00:00:00Z`), $lt: new Date(`${p.hasta}T23:59:59Z`) },
       }).lean()
+      cargosDeLaVentana = enVentana
       const medido = desglosarCargos(enVentana).totalClp
       periodoMl = {
         totalClp: Math.round(p.montoClp ?? 0),
@@ -175,6 +307,25 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
   } catch (err) {
     console.warn(`[contabilidad] período de ML no consultado: ${err.message}`)
   }
+
+  // LOS CASILLEROS DEL F29 (ver codigosF29). Cada línea de cargo trae el
+  // document_id de ML: contando los distintos sale cuántos documentos hay que
+  // declarar, que es lo que piden [500] y [519]. El campo se venía guardando
+  // desde el 10-ago y no lo usaba nadie.
+  const documentosMl = new Set(cargosDeLaVentana.map((c) => c.documentoId).filter(Boolean)).size
+  const comisionClp = cargosMl.familias?.find((f) => f.familia === 'comision')?.clp ?? 0
+  const f29 = {
+    codigos: codigosF29({ debitoIvaClp: debitoBase.clp, comisionClp, documentos: documentosMl }),
+    comisionClp: Math.round(comisionClp),
+    documentos: documentosMl,
+    // el resto de los cargos también da crédito, pero por las líneas normales
+    // de compras: nombrarlo evita que alguien lea [520] como "todo lo de ML"
+    fueraDeLaComisionClp: Math.round(totalCargos - comisionClp),
+    ventana: periodoMl ? { desde: periodoMl.desde, hasta: periodoMl.hasta } : null,
+  }
+
+  // la DIN no aplica hasta que llegue la primera carga (ver importacionesEnJuego)
+  const importaciones = { enJuego: importacionesEnJuego(periodo), desde: PRIMERA_IMPORTACION }
 
   // LA RESPUESTA, CALCULADA ACÁ Y NO EN LA PANTALLA.
   //
@@ -205,6 +356,8 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
     ventas,
     cargosMl,
     resultado,
+    f29,
+    importaciones,
     periodoMl,
     debito: {
       ...debitoBase,

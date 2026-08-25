@@ -6054,6 +6054,44 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 .cta-linea-fuerte > span { color: var(--tinta); font-weight: 600; }
 .cta-linea-fuerte b { font-size: 17px; font-weight: 700; }
 
+/* LOS CASILLEROS DEL F29 — aviso del SII del 25-ago-2026 sobre el mandato de
+   ML. Se leen para copiar al formulario, así que el código va primero y grande:
+   lo que se busca en pantalla es "dónde va el [520]", no un monto suelto. */
+.f29 h3 small { font-weight: 400; color: var(--tinta-3); }
+.f29-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.f29-casilla {
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.f29-codigo {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--acento);
+  font-variant-numeric: tabular-nums;
+}
+.f29-valor {
+  font-size: 21px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta);
+}
+.f29-alt { font-style: normal; font-size: 13px; color: var(--tinta-3); font-weight: 400; }
+.f29-que { font-size: 11.5px; color: var(--tinta-2); line-height: 1.4; margin-top: 2px; }
+/* lo que falta NO es decoración: sin esto el número se copia al formulario
+   como si estuviera confirmado, y dos de los cuatro no lo están */
+.f29-falta { font-size: 11px; color: #b45309; line-height: 1.4; margin-top: 4px; }
+.f29-casilla-abierta { border-style: dashed; }
+.f29-casilla-vacia .f29-valor { color: var(--tinta-3); }
+.f29-pie { margin: 12px 0 0; font-size: 11.5px; color: var(--tinta-3); line-height: 1.55; }
+
 .cta-notas { display: grid; gap: 7px; margin-top: 4px; }
 .cta-nota {
   border: 1px solid var(--borde);
