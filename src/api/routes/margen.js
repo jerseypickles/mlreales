@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { Reporte } from '../../models/Reporte.js'
 import { calcularMargen } from '../../services/margen.js'
-import { importacion } from '../../config/importacion.js'
+import { parametrosVigentes } from '../../services/indicadores.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -9,7 +9,7 @@ const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).
 // Parámetros por defecto del modelo (para mostrarlos/editarlos en el dashboard)
 router.get(
   '/parametros',
-  manejar(async (_req, res) => res.json(importacion)),
+  manejar(async (_req, res) => res.json(await parametrosVigentes())),
 )
 
 // Simular unit economics de importación. Si viene nichoId sin precioVentaClp,
@@ -29,7 +29,14 @@ router.post(
     }
 
     try {
-      res.json(calcularMargen(entrada))
+      // el dólar del día manda sobre el del archivo, salvo que quien llama
+      // mande el suyo (el simulador deja fijarlo a mano para escenarios)
+      const vigentes = await parametrosVigentes()
+      entrada.parametros = {
+        tipoCambioUsdClp: vigentes.tipoCambioUsdClp,
+        ...(entrada.parametros ?? {}),
+      }
+      res.json({ ...calcularMargen(entrada), tipoCambio: vigentes.tipoCambio })
     } catch (err) {
       res.status(400).json({ error: err.message })
     }

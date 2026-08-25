@@ -293,6 +293,52 @@ export async function liquidacionesDelPeriodo(periodo) {
   return resumirLiquidaciones({ periodo, ventas, compras })
 }
 
+// EL CRÉDITO DEL PERÍODO, que NO sale de las liquidaciones.
+//
+// Corrección del 25-ago-2026 tras leer la instrucción oficial del F29
+// (instrucciones_f29_20241112.pdf, línea 28). El [519]/[520] NO es una línea
+// del mandato: es la línea general de "facturas recibidas que dan derecho a
+// crédito fiscal". La comisión del mandatario entra ahí solo si ML la cobra
+// con una FACTURA — el propio instructivo lo dice para el lado del mandatario:
+// "en caso de que el cobro de dicha comisión se realice a través de una
+// factura, esta será tratada como el resto de las operaciones cuyo respaldo es
+// una factura".
+//
+// Consecuencia práctica medida en agosto: las 4 liquidaciones tipo 43 llegan
+// al registro de compras con los montos en CERO, así que no aportan crédito.
+// Y no hay ninguna factura tipo 33 de ML. El crédito del período es CERO
+// mientras ML no emita la factura de su comisión — y que las 2 liquidaciones
+// pendientes pasen a REGISTRO no cambia eso: cambia su estado, no sus montos.
+//
+// Los tipos que sí dan crédito. 43 queda fuera a propósito: la liquidación
+// factura declara su crédito por el [520] solo si trae comisión, y ML no la
+// trae; contarla acá inflaría el casillero con documentos en cero.
+export const TIPOS_CON_CREDITO = [30, 33, 34, 45, 46, 55, 56, 60, 61]
+
+export async function comprasConCredito(periodo) {
+  const filas = []
+  for (const estadoContab of ESTADOS) {
+    filas.push(...(await rcvResumen({ periodo, operacion: 'COMPRA', estadoContab })))
+  }
+  return resumirCredito({ periodo, filas })
+}
+
+// Pura: de las filas del resumen de compras a lo que va en el [519] y el [520].
+export function resumirCredito({ periodo, filas = [] }) {
+  const conCredito = filas.filter((f) => TIPOS_CON_CREDITO.includes(f.tipoDoc))
+  return {
+    periodo,
+    documentos: conCredito.reduce((s, f) => s + (f.documentos ?? 0), 0),
+    ivaCreditoClp: Math.round(conCredito.reduce((s, f) => s + (f.ivaClp ?? 0), 0)),
+    netoClp: Math.round(conCredito.reduce((s, f) => s + (f.netoClp ?? 0), 0)),
+    // lo que llegó pero NO da crédito por esta línea: sirve para explicar por
+    // qué el casillero puede quedar en cero teniendo documentos en el registro
+    sinCredito: filas
+      .filter((f) => !TIPOS_CON_CREDITO.includes(f.tipoDoc))
+      .map((f) => ({ tipoDoc: f.tipoDoc, nombre: f.nombreTipoDoc, documentos: f.documentos })),
+  }
+}
+
 // Pura, para poder probarla sin red.
 export function resumirLiquidaciones({ periodo, ventas = [], compras = [] }) {
   // UN FOLIO, UNA FILA. El mismo documento llega por los dos registros y cada

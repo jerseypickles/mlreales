@@ -306,9 +306,10 @@ export function Contabilidad() {
           <Liquidaciones rcv={f29.rcv} />
           <p className="f29-pie">
             ML vende <b>por mandato</b>: el débito de esas ventas es tuyo y se declara desde la liquidación factura
-            que ML te emite, no desde tus boletas. El <b>[520] es solo la comisión</b> ({fmtPrecio(f29.comisionClp)});
-            los otros {fmtPrecio(f29.fueraDeLaComisionClp)} de envíos, publicidad, colecta y almacenamiento también
-            dan crédito, pero por las líneas normales de compras.
+            que ML te emite, no desde tus boletas. El <b>[519] y [520] son la línea general de facturas recibidas</b>
+            (línea 28 del formulario), no una línea del mandato: la comisión de ML entra ahí como una factura más,
+            junto con envíos, publicidad y cualquier otro proveedor. Mientras ML no emita esa factura, ese lado del
+            formulario queda en cero aunque las liquidaciones ya estén registradas.
           </p>
         </section>
       ) : null}
@@ -354,9 +355,10 @@ export function Contabilidad() {
         ) : (
           <Nota titulo={`Todavía no hay importaciones que declarar · la primera carga llega en ${importaciones?.desde ?? '2026-10'}`}>
             <p>
-              Desde ese F29 aparece acá el crédito de la <b>DIN</b>, que hay que cargar a mano al Registro de Compras
-              como documento no electrónico código <b>914</b> — no entra solo, y en importación ese IVA es el monto
-              grande. Mientras no haya carga en aduana no aplica y el aviso queda apagado.
+              Desde ese F29 aparece acá el crédito de la <b>DIN</b>. Son dos pasos distintos: se carga a mano al
+              Registro de Compras como documento no electrónico <b>código 914</b>, y en el formulario va en la{' '}
+              <b>línea 34</b> — cantidad en el [534] y crédito en el [535]. No entra solo, y en importación ese IVA
+              es el monto grande. Mientras no haya carga en aduana no aplica y el aviso queda apagado.
             </p>
           </Nota>
         )}

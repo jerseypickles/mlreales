@@ -90,16 +90,13 @@ test('el F29 pide los CUATRO casilleros que nombra el SII', () => {
   )
 })
 
-test('[500] y [519] cuentan LIQUIDACIONES, no las boletas de venta', () => {
-  // las boletas a compradores son decenas al mes; los documentos que ML emite
-  // al vendedor, uno. El casillero pide lo segundo: poner el primero es
-  // exactamente la inconsistencia que el aviso del SII pide evitar.
-  const cs = codigosF29({ debitoIvaClp: 22_287, comisionClp: 50_000, documentos: 1 })
-  const c500 = cs.find((c) => c.codigo === 500)
-  const c519 = cs.find((c) => c.codigo === 519)
-  assert.equal(c500.valor, 1)
+test('[500] cuenta LIQUIDACIONES recibidas, no las boletas de venta', () => {
+  // las boletas a compradores son decenas al mes; las liquidaciones que ML
+  // emite al vendedor fueron 4 en agosto, una por semana. El casillero pide
+  // las segundas: poner las primeras es la inconsistencia que el aviso evita.
+  const c500 = codigosF29({ debitoIvaClp: 96999, documentos: 4, fuenteRcv: true }).find((c) => c.codigo === 500)
+  assert.equal(c500.valor, 4)
   assert.equal(c500.unidad, 'documentos')
-  assert.equal(c519.valor, c500.valor, 'la liquidación factura sirve a los dos lados: es el mismo documento')
 })
 
 test('sin documentos sincronizados el casillero queda VACÍO, no en 1', () => {
@@ -110,22 +107,42 @@ test('sin documentos sincronizados el casillero queda VACÍO, no en 1', () => {
   }
 })
 
-test('[520] es SOLO la comisión: envíos y publicidad no van en esa línea', () => {
-  // agosto: ML cobró $283.939 en total pero la comisión fue $60.000. Meter el
-  // total daría $45.335 de crédito donde la línea pide $9.580.
-  const soloComision = codigosF29({ comisionClp: 60_000 }).find((c) => c.codigo === 520)
-  const todoElCargo = codigosF29({ comisionClp: 283_939 }).find((c) => c.codigo === 520)
-  assert.equal(soloComision.valor, 9580)
-  assert.equal(todoElCargo.valor, 45_335)
-  assert.notEqual(soloComision.valor, todoElCargo.valor)
-  assert.equal(soloComision.baseClp, 60_000, 'la base queda a la vista para poder cuadrarla')
+test('[519]/[520] son la línea GENERAL de facturas recibidas, no del mandato', () => {
+  // Corrección del 25-ago tras leer el instructivo oficial (línea 28): el
+  // [519] cuenta "facturas recibidas que dan derecho a crédito fiscal" y el
+  // [520] su crédito. No son "los mismos documentos del [500]" — la comisión
+  // de ML entra ahí como una factura más, si es que ML la emite.
+  const cs = codigosF29({
+    debitoIvaClp: 96999,
+    documentos: 4,
+    credito: { documentos: 2, ivaCreditoClp: 31000 },
+    fuenteRcv: true,
+  })
+  const c519 = cs.find((c) => c.codigo === 519)
+  const c520 = cs.find((c) => c.codigo === 520)
+  assert.equal(c519.valor, 2, 'cuenta las facturas del registro de compras')
+  assert.notEqual(c519.valor, cs.find((c) => c.codigo === 500).valor, 'y NO copia el [500]')
+  assert.equal(c520.valor, 31000)
+  assert.equal(c520.falta, null)
 })
 
-test('[520] viaja con su rango mientras el supuesto de IVA siga abierto', () => {
+test('[520] en cero avisa que falta la factura de la comisión', () => {
+  // el caso real de agosto: 4 liquidaciones en compras con montos en cero y
+  // ninguna factura de ML. Sin ese documento no hay crédito, y que las
+  // pendientes pasen a REGISTRO no lo cambia.
+  const cs = codigosF29({ debitoIvaClp: 96999, documentos: 4, credito: { documentos: 0, ivaCreditoClp: 0 }, fuenteRcv: true })
+  const c520 = cs.find((c) => c.codigo === 520)
+  assert.equal(c520.valor, 0)
+  assert.match(c520.falta, /comisión/i)
+  assert.match(cs.find((c) => c.codigo === 519).falta, /comisión/i)
+})
+
+test('sin RCV el [520] cae a lo medido y sigue con su rango', () => {
   const c = codigosF29({ comisionClp: 60_000 }).find((x) => x.codigo === 520)
-  assert.equal(c.valor, 9580) // con IVA incluido
-  assert.equal(c.valorSiNeto, 11_400) // si ML factura neto
-  assert.ok(c.falta, 'el supuesto sin confirmar tiene que viajar con el número')
+  assert.equal(c.valor, 9580)
+  assert.equal(c.valorSiNeto, 11_400)
+  assert.equal(c.baseClp, 60_000)
+  assert.ok(c.falta)
 })
 
 test('[501] lleva el IVA débito, no el bruto ni el neto', () => {

@@ -187,20 +187,18 @@ export function codigosF29({
   debitoIvaClp = 0,
   comisionClp = 0,
   documentos = null,
-  ivaComisionClp = null,
+  credito = null,
   fuenteRcv = false,
 } = {}) {
   const iva = ivaDeCargo(comisionClp)
   const cantidad = Number.isFinite(documentos) && documentos > 0 ? documentos : null
   const delRcv = 'RCV del SII'
-  // el crédito de la comisión sale del documento si ML lo pobló; si no, de lo
-  // que medimos de sus cargos, y ahí sigue viajando con su rango
-  const comisionMedida = ivaComisionClp == null
+  const creditoLeido = credito && !credito.error
   return [
     {
       codigo: 500,
       lado: 'debito',
-      que: 'Cantidad de liquidaciones factura recibidas de ML',
+      que: 'Cantidad de liquidaciones factura recibidas por el mandato',
       valor: cantidad,
       unidad: 'documentos',
       fuente: cantidad ? (fuenteRcv ? delRcv : 'documentos de facturación de ML en la ventana') : 'sin datos',
@@ -213,33 +211,43 @@ export function codigosF29({
       valor: Math.round(debitoIvaClp),
       unidad: 'clp',
       fuente: fuenteRcv ? `${delRcv}: registro de ventas` : 'suma del IVA de las boletas emitidas en el mes',
-      // con el RCV en la mano esto deja de ser estimación: es lo que el SII ve
       falta: fuenteRcv ? null : 'cuadrar contra lo que totalice la liquidación (su ventana no es el mes)',
     },
+    // LÍNEA 28 DEL F29, y no es una línea del mandato.
+    //
+    // El instructivo oficial dice: "[519] cantidad de FACTURAS recibidas por
+    // adquisición de bienes o utilización de servicios que dan derecho a
+    // crédito fiscal" y "[520] el monto de crédito recargado en esas
+    // facturas". La comisión de ML entra ahí como una factura más — no son
+    // "los mismos documentos del [500]", como se creyó al construir esto.
     {
       codigo: 519,
       lado: 'credito',
-      que: 'Cantidad de documentos, por la comisión',
-      valor: cantidad,
+      que: 'Cantidad de facturas recibidas con derecho a crédito',
+      valor: creditoLeido ? credito.documentos : null,
       unidad: 'documentos',
-      fuente: cantidad ? (fuenteRcv ? `${delRcv}: los mismos folios del [500]` : 'los mismos documentos del [500]') : 'sin datos',
-      falta: cantidad ? (fuenteRcv ? null : 'confirmar contra el RCV') : 'conectar el SII o sincronizar los cargos',
+      fuente: creditoLeido ? `${delRcv}: registro de compras` : 'sin datos',
+      falta: creditoLeido
+        ? credito.documentos
+          ? null
+          : 'ML todavía no emite la factura de su comisión'
+        : 'conectar el SII',
     },
     {
       codigo: 520,
       lado: 'credito',
-      que: 'IVA crédito de la comisión pagada',
-      valor: comisionMedida ? iva.siIncluido : Math.round(ivaComisionClp),
-      valorSiNeto: comisionMedida ? iva.siNeto : null,
+      que: 'Crédito fiscal de esas facturas',
+      valor: creditoLeido ? credito.ivaCreditoClp : iva.siIncluido,
+      valorSiNeto: creditoLeido ? null : iva.siNeto,
       unidad: 'clp',
       baseClp: Math.round(comisionClp),
-      fuente: comisionMedida
-        ? 'IVA de la familia comisión (CV), sin envíos ni publicidad'
-        : `${delRcv}: comisión del documento`,
-      // ML deja detLiqValComNeto/IVA en cero: medido el 25-ago sobre las 4
-      // liquidaciones de agosto, ninguna traía la comisión. Mientras no exista
-      // el documento de la comisión, este casillero es nuestro, no del SII.
-      falta: comisionMedida ? 'ML todavía no emite el documento de la comisión' : null,
+      fuente: creditoLeido ? `${delRcv}: registro de compras` : 'estimado de los cargos de ML (CV), sin documento',
+      // Lo medido el 25-ago: las liquidaciones llegan a compras con los montos
+      // en CERO y no hay ninguna factura de ML. Que las 2 pendientes pasen a
+      // REGISTRO no cambia esto — cambia su estado, no sus montos.
+      falta: creditoLeido && credito.ivaCreditoClp
+        ? null
+        : 'ML todavía no emite la factura de su comisión: sin ese documento no hay crédito',
     },
   ]
 }
@@ -352,9 +360,11 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
   // Si no hay sesión el bloque sigue funcionando con lo medido: la pantalla no
   // se cae, solo dice de dónde salió cada número.
   let rcv = null
+  let credito = null
   try {
-    const { liquidacionesDelPeriodo } = await import('./sii.js')
+    const { liquidacionesDelPeriodo, comprasConCredito } = await import('./sii.js')
     rcv = await liquidacionesDelPeriodo(periodo)
+    credito = await comprasConCredito(periodo)
   } catch (err) {
     // sin sesión del SII esto es lo esperado, no un fallo
     rcv = { error: err.message, reconectar: Boolean(err.reconectar) }
@@ -366,11 +376,13 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
       debitoIvaClp: rcvSirve ? rcv.ivaDebitoClp : debitoBase.clp,
       comisionClp,
       documentos: rcvSirve ? rcv.documentos : documentosMl,
-      // si el RCV trajera la comisión poblada mandaría ella; ML la deja vacía
-      ivaComisionClp: rcvSirve ? rcv.ivaComisionClp : null,
+      // el [519]/[520] es la línea general de facturas recibidas, no del
+      // mandato: sale del resumen de compras, no de las liquidaciones
+      credito,
       fuenteRcv: rcvSirve,
     }),
     rcv,
+    credito,
     comisionClp: Math.round(comisionClp),
     documentos: rcvSirve ? rcv.documentos : documentosMl,
     // el resto de los cargos también da crédito, pero por las líneas normales
