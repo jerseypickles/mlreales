@@ -4538,18 +4538,10 @@ section {
 }
 .cont-caja h3 { margin: 0 0 12px; font-size: 13.5px; }
 
-.iva-lista { list-style: none; margin: 0; padding: 0; }
-.iva-fila {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--borde);
-  font-size: 13px;
-}
-.iva-fila:last-child { border-bottom: none; }
-.iva-fila b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+
+
+
 .iva-etiqueta { display: flex; flex-direction: column; color: var(--tinta-2); }
 .iva-etiqueta small { color: var(--tinta-3); font-size: 11px; margin-top: 1px; }
 .iva-debito b { color: var(--peligro); font-size: 15px; }
@@ -4580,17 +4572,12 @@ section {
 .cont-nota-alerta svg { color: #b45309; }
 @media (prefers-color-scheme: dark) { .cont-nota-alerta svg { color: #fbbf24; } }
 
-.cont-falta {
-  border: 1px dashed var(--borde-fuerte);
-  border-radius: var(--radio-g, 14px);
-  padding: 16px 18px;
-  background: color-mix(in srgb, var(--acento) 3%, var(--superficie));
-}
-.cont-falta h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 13.5px; }
-.cont-falta h3 svg { width: 17px; height: 17px; color: var(--acento); }
-.cont-falta p { margin: 0 0 10px; font-size: 13px; line-height: 1.55; color: var(--tinta-2); }
-.cont-falta .boton-secundario { display: inline-flex; align-items: center; gap: 7px; }
-.cont-falta .boton-secundario svg { width: 15px; height: 15px; }
+
+
+
+
+
+
 .cont-pie { margin: 12px 0 0; font-size: 11.5px; color: var(--tinta-3); line-height: 1.5; }
 
 /* ── Familia de búsqueda, dentro del nicho ─────────────────────────────── */
@@ -5652,61 +5639,33 @@ a.prod-titulo:focus-visible { outline: 2px solid var(--acento); outline-offset: 
 .cont-periodo { margin: 0; font-size: 12px; color: var(--tinta-3); }
 
 /* desglose de cargos: sangrado bajo su total, más chico y en tinta suave */
-.iva-fila.iva-sangria {
-  padding-left: 16px;
-  border-bottom: none;
-  padding-top: 3px;
-  padding-bottom: 3px;
-}
+
 .iva-sangria .iva-etiqueta { font-size: 12px; color: var(--tinta-2); }
 .iva-sangria b { font-size: 12px; font-weight: 500; color: var(--tinta-2); }
-.iva-sangria + .iva-fila:not(.iva-sangria) { border-top: 1px solid var(--borde); }
+.iva-sangria + 
 
-.cont-detalle {
-  margin-top: 8px;
-  border: 1px solid var(--borde);
-  border-radius: 8px;
-  background: var(--superficie-2);
-  font-size: 12.5px;
-}
-.cont-detalle summary {
-  padding: 8px 10px;
-  cursor: pointer;
-  color: var(--tinta-2);
-  line-height: 1.4;
-  list-style: none;
-  display: flex;
-  gap: 7px;
-  align-items: baseline;
-  transition: color 180ms ease;
-}
-.cont-detalle summary::-webkit-details-marker { display: none; }
-.cont-detalle summary::before {
-  content: '›';
-  font-size: 15px;
-  line-height: 1;
-  color: var(--tinta-3);
-  transition: transform 180ms ease;
-  transform-origin: center;
-}
-.cont-detalle[open] summary::before { transform: rotate(90deg); }
-.cont-detalle summary:hover { color: var(--tinta); }
-.cont-detalle summary:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; border-radius: 8px; }
-.cont-detalle > div { padding: 0 10px 10px 24px; }
-.cont-detalle p { margin: 0 0 7px; color: var(--tinta-2); line-height: 1.55; max-width: 62ch; }
-.cont-detalle p:last-child { margin-bottom: 0; }
+
+
+
+
+
+
+
+
+
+
 
 /* una alerta se distingue por color, no por estar siempre abierta */
-.cont-detalle-alerta { border-color: var(--avisa-tinta); background: var(--avisa-tenue); }
-.cont-detalle-alerta summary { color: var(--avisa-tinta); font-weight: 500; }
-.cont-detalle-alerta p { color: var(--avisa-tinta); }
-.cont-detalle-ok { border-color: var(--exito-tinta); background: var(--exito-tenue); }
-.cont-detalle-ok summary { color: var(--exito-tinta); }
-.cont-detalle-ok p { color: var(--exito-tinta); }
 
-.cont-falta { margin-top: 18px; }
-.cont-falta h3 { margin: 0 0 6px; font-size: 14px; }
-.cont-falta p { margin: 0 0 10px; font-size: 12.5px; color: var(--tinta-2); line-height: 1.55; max-width: 78ch; }
+
+
+
+
+
+
+
+
+
 .cont-pie {
   display: flex;
   gap: 6px;
@@ -6025,3 +5984,101 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 .camp-tiene-sug { align-items: center; gap: 3px; }
 .camp-tiene-sug b { font-size: 10px; font-weight: 700; }
 .camp-sug + .camp-sug { margin-top: 8px; }
+
+/* ══ Contabilidad ═════════════════════════════════════════════════════════ */
+/* La página empieza por la RESPUESTA. La versión anterior mostraba débito y
+   crédito en dos columnas y nunca decía cuánto se paga ni cuánto queda, que
+   eran justo las dos preguntas del importador. */
+
+.cta-respuestas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.cta-respuesta {
+  background: var(--superficie);
+  border: 1px solid var(--acento-borde);
+  border-radius: var(--radio-g);
+  padding: 16px 18px;
+}
+.cta-respuesta > span { display: block; font-size: 12px; color: var(--tinta-3); margin-bottom: 4px; }
+.cta-respuesta > strong {
+  display: block;
+  font-size: 30px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta);
+}
+.cta-respuesta > em {
+  display: block;
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--tinta-3);
+  margin-top: 6px;
+  line-height: 1.45;
+  max-width: 42ch;
+}
+.cta-respuesta-caja { border-color: var(--borde); }
+
+.cta-caja {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-g);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.cta-caja h3 { margin: 0 0 10px; font-size: 13px; color: var(--tinta-2); font-weight: 600; }
+
+.cta-cuenta { display: flex; flex-direction: column; }
+.cta-linea {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--borde);
+  font-size: 13px;
+}
+.cta-linea:last-child { border-bottom: none; }
+.cta-linea > span { color: var(--tinta-2); }
+.cta-linea small { display: block; font-size: 11px; color: var(--tinta-3); margin-top: 1px; }
+.cta-linea b { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--tinta); }
+.cta-resta { color: var(--tinta-2); }
+.cta-linea-fuerte {
+  border-top: 2px solid var(--borde-fuerte);
+  border-bottom: none;
+  margin-top: 4px;
+  padding-top: 10px;
+}
+.cta-linea-fuerte > span { color: var(--tinta); font-weight: 600; }
+.cta-linea-fuerte b { font-size: 17px; font-weight: 700; }
+
+.cta-notas { display: grid; gap: 7px; margin-top: 4px; }
+.cta-nota {
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--superficie-2);
+  font-size: 12.5px;
+}
+.cta-nota summary {
+  padding: 9px 11px;
+  cursor: pointer;
+  color: var(--tinta-2);
+  list-style: none;
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  transition: color 180ms ease;
+}
+.cta-nota summary::-webkit-details-marker { display: none; }
+.cta-nota summary::before { content: '›'; font-size: 15px; line-height: 1; color: var(--tinta-3); transition: transform 180ms ease; }
+.cta-nota[open] summary::before { transform: rotate(90deg); }
+.cta-nota summary:hover { color: var(--tinta); }
+.cta-nota summary:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; border-radius: 8px; }
+.cta-nota > div { padding: 0 11px 11px 25px; }
+.cta-nota p { margin: 0; color: var(--tinta-2); line-height: 1.55; max-width: 76ch; }
+.cta-nota-alerta { border-color: var(--avisa-tinta); background: var(--avisa-tenue); }
+.cta-nota-alerta summary { color: var(--avisa-tinta); font-weight: 500; }
+.cta-nota-alerta summary::before { color: var(--avisa-tinta); }
+.cta-nota-alerta p { color: var(--avisa-tinta); }

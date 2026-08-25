@@ -176,10 +176,35 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
     console.warn(`[contabilidad] período de ML no consultado: ${err.message}`)
   }
 
+  // LA RESPUESTA, CALCULADA ACÁ Y NO EN LA PANTALLA.
+  //
+  // La mesa mostraba débito y crédito en dos columnas y nunca decía cuánto se
+  // paga. El importador lo dijo así: "veo un enredo y no sé qué es lo que se
+  // impone, después gastamos en publicidad y no sé cuánto queda". Las dos
+  // preguntas que tiene son esas, y ninguna estaba en pantalla.
+  //
+  // El rango existe porque no se sabe si ML factura con IVA incluido o neto —
+  // se resuelve cuando emita el documento del período. Mientras tanto se
+  // muestran los dos extremos en vez de un número falsamente preciso.
+  const creditoConIva = Math.round((totalCargos * 19) / 119)
+  const creditoNeto = Math.round(totalCargos * 0.19)
+  const resultado = {
+    ivaAPagar: debitoBase.clp - creditoConIva,
+    ivaAPagarSiNeto: debitoBase.clp - creditoNeto,
+    // lo que queda en caja: lo cobrado menos lo que ML se llevó menos el IVA.
+    // ANTES del costo de la mercadería, que no está cargado.
+    vendido: debitoBase.brutoClp,
+    cobradoPorMl: Math.round(totalCargos),
+    publicidad: cargosMl.familias?.find((f) => f.familia === 'publicidad')?.clp ?? 0,
+    quedaEnCaja: debitoBase.brutoClp - Math.round(totalCargos) - (debitoBase.clp - creditoConIva),
+    esTecho: true,
+  }
+
   return {
     periodo,
     ventas,
     cargosMl,
+    resultado,
     periodoMl,
     debito: {
       ...debitoBase,
