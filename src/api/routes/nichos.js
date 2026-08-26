@@ -545,7 +545,15 @@ router.post(
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {
   const cambios = {}
-  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, costoPuestoClp, unidadesPedido } = req.body ?? {}
+  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, costoPuestoClp, unidadesPedido, volumenM3, pesoKg } = req.body ?? {}
+  // cubicaje de la cotización: sin esto el flete del costo puesto es un supuesto
+  for (const [campo, valor] of [['volumenM3', volumenM3], ['pesoKg', pesoKg]]) {
+    if (valor === undefined) continue
+    if (valor === null || valor === '') { cambios[campo] = null; continue }
+    const n = Number(valor)
+    if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: `${campo} inválido (> 0)` })
+    cambios[campo] = n
+  }
   if (unidadesPedido !== undefined) {
     // cantidad del pedido editada a mano en la planilla (pisa la sugerida por
     // el análisis; null = volver a la sugerencia)

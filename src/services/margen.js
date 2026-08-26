@@ -5,6 +5,11 @@ const redondear = (n) => (Number.isFinite(n) ? Math.round(n) : null)
 const seguroPct = (p) => p.flete.seguroPctExw ?? p.flete.seguroPctFob ?? 0
 const pct = (n) => (Number.isFinite(n) ? Math.round(n * 10) / 10 : null)
 
+// Supuestos de última instancia cuando la cotización no trae cubicaje. Son los
+// mismos que usa el simulador por defecto: un producto chico de bodega.
+const VOLUMEN_SUPUESTO_M3 = 0.003
+const PESO_SUPUESTO_KG = 0.5
+
 // Fusión superficial de overrides sobre los parámetros por defecto.
 function parametrosCon(overrides = {}) {
   return {
@@ -12,6 +17,79 @@ function parametrosCon(overrides = {}) {
     flete: { ...importacion.flete, ...overrides.flete },
     aduana: { ...importacion.aduana, ...overrides.aduana },
     mercadoLibre: { ...importacion.mercadoLibre, ...overrides.mercadoLibre },
+  }
+}
+
+// DE EXW A COSTO PUESTO EN BODEGA.
+//
+// La cotización del proveedor viene EXW: el precio ex-fábrica en China, que NO
+// es comparable con el precio de venta en ML. Entre uno y otro hay flete,
+// seguro, arancel y despacho, y en productos voluminosos el flete pesa más que
+// la diferencia de precio entre dos proveedores.
+//
+// Caso QBUY del 24-ago-2026: 15 líneas cotizadas EXW por US$13.615, y sin esto
+// no había forma de saber cuáles dejaban margen. El importador lo pidió así:
+// "el tema es que el precio es exwork".
+//
+// EL CUBICAJE ES EL DATO QUE FALTA. El flete marítimo se prorratea por m³, así
+// que sin volumen no hay costo puesto real. Cuando no viene, se usa el supuesto
+// del config y `volumenSupuesto` viaja en true — un número con su advertencia
+// sirve más que una casilla vacía, PERO en un rack de 85 cm el supuesto de
+// 0,003 m³ puede quedarse corto por diez, así que la advertencia no es adorno.
+export function costoPuesto({
+  exwUsd,
+  unidades = 1,
+  volumenM3 = null,
+  pesoKg = null,
+  modoFlete = 'maritimo',
+  parametros: overrides,
+} = {}) {
+  if (!Number.isFinite(exwUsd) || exwUsd <= 0) throw new Error('exwUsd requerido (> 0)')
+  if (!Number.isFinite(unidades) || unidades < 1) throw new Error('unidades requeridas (>= 1)')
+
+  const p = parametrosCon(overrides)
+  const tc = p.tipoCambioUsdClp
+
+  const volumenSupuesto = !(volumenM3 > 0)
+  const vol = volumenSupuesto ? VOLUMEN_SUPUESTO_M3 : volumenM3
+  const pesoSupuesto = !(pesoKg > 0)
+  const peso = pesoSupuesto ? PESO_SUPUESTO_KG : pesoKg
+
+  const exwClp = exwUsd * tc
+  const fleteUsd = modoFlete === 'aereo' ? peso * p.flete.aereoUsdPorKg : vol * p.flete.maritimoUsdPorM3
+  const fleteClp = fleteUsd * tc
+  const seguroClp = exwClp * (seguroPct(p) / 100)
+  const cifClp = exwClp + fleteClp + seguroClp
+  const arancelClp = cifClp * (p.aduana.arancelPct / 100)
+  // el despacho es por embarque: cuantas más unidades, menos pesa por unidad
+  const despachoClp = (p.aduana.despachoUsd * tc) / unidades
+  const puestoClp = cifClp + arancelClp + despachoClp
+  // crédito fiscal, pero hay que financiarlo hasta recuperarlo en el F29
+  const ivaImportacionClp = (cifClp + arancelClp) * (p.aduana.ivaPct / 100)
+
+  return {
+    puestoClp: redondear(puestoClp),
+    desglose: {
+      exwClp: redondear(exwClp),
+      fleteClp: redondear(fleteClp),
+      seguroClp: redondear(seguroClp),
+      arancelClp: redondear(arancelClp),
+      despachoClp: redondear(despachoClp),
+    },
+    ivaImportacionClp: redondear(ivaImportacionClp),
+    inversionCajaClp: redondear((puestoClp + ivaImportacionClp) * unidades),
+    // cuánto del costo puesto es flete: sobre ~25% el cubicaje deja de ser un
+    // detalle y pasa a decidir si el producto sirve
+    fletePctDelPuesto: pct((fleteClp / puestoClp) * 100),
+    supuestos: {
+      tipoCambioUsdClp: tc,
+      modoFlete,
+      volumenM3: vol,
+      volumenSupuesto,
+      pesoKg: modoFlete === 'aereo' ? peso : null,
+      pesoSupuesto: modoFlete === 'aereo' ? pesoSupuesto : null,
+      unidades,
+    },
   }
 }
 

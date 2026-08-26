@@ -36,17 +36,32 @@ function margenPuesto({ costoPuestoClp, rec, comisionPct = null }) {
   }
 }
 
-function margenCotizacion({ exwUsd, rec, unidades, comisionPct = null }) {
+// EL VOLUMEN QUE FALTA. Hasta el 26-ago-2026 esto clavaba `volumenM3: 0.003`
+// —un producto chico de bodega— sin decirlo en ninguna parte. Con la cotización
+// de QBUY sobre la mesa el supuesto dejó de ser inocente: en la depiladora el
+// flete es el 1% del costo puesto, pero en un rack de 85 cm con 0,05 m³ reales
+// es el 23%. El mismo supuesto que no cambia nada en uno decide el otro.
+//
+// Ahora el cubicaje viaja desde el nicho cuando existe, y cuando no, el número
+// sale igual PERO con `volumenSupuesto` en true para que la pantalla lo diga.
+const VOLUMEN_SUPUESTO_M3 = 0.003
+
+function margenCotizacion({ exwUsd, rec, unidades, comisionPct = null, volumenM3 = null, tipoCambioUsdClp = null }) {
   if (!Number.isFinite(exwUsd) || !Number.isFinite(rec?.precioVentaClp)) return null
   const pctFinal = comisionPct ?? rec.comisionMlPct
+  const volumenSupuesto = !(volumenM3 > 0)
+  const vol = volumenSupuesto ? VOLUMEN_SUPUESTO_M3 : volumenM3
+  const parametros = {}
+  if (Number.isFinite(pctFinal)) parametros.mercadoLibre = { comisionPct: pctFinal }
+  if (Number.isFinite(tipoCambioUsdClp)) parametros.tipoCambioUsdClp = tipoCambioUsdClp
   try {
     const sim = calcularMargen({
       costoExwUsd: exwUsd,
       precioVentaClp: rec.precioVentaClp,
       unidades: unidades ?? 500,
-      volumenM3: 0.003,
+      volumenM3: vol,
       modoFlete: 'maritimo',
-      parametros: Number.isFinite(pctFinal) ? { mercadoLibre: { comisionPct: pctFinal } } : undefined,
+      parametros: Object.keys(parametros).length ? parametros : undefined,
     })
     return {
       margenClp: sim.porUnidad.margenClp,
@@ -55,6 +70,9 @@ function margenCotizacion({ exwUsd, rec, unidades, comisionPct = null }) {
       // desglose para el panel de detalle: costo puesto en Chile y comisión+Full
       landedClp: sim.porUnidad.landedNetoClp,
       comisionClp: Math.round(sim.porUnidad.comisionMlClp + sim.porUnidad.fullClp),
+      fleteClp: sim.porUnidad.fleteClp ?? null,
+      volumenM3: vol,
+      volumenSupuesto,
     }
   } catch {
     return null
@@ -65,6 +83,14 @@ function margenCotizacion({ exwUsd, rec, unidades, comisionPct = null }) {
 // comparable y rankeados por score (empate: demanda). Con todos=true incluye
 // no_entrar y pausados — fuente de la planilla IA y del estratega semanal.
 export async function tableroOportunidades({ todos = false } = {}) {
+  // el dólar del día para que el costo puesto no se calcule con el del archivo
+  let tipoCambioUsdClp = null
+  try {
+    const { dolarObservado } = await import('./indicadores.js')
+    tipoCambioUsdClp = Math.round((await dolarObservado()).valor)
+  } catch {
+    // sin indicador se usa el del config: calcularMargen ya tiene su default
+  }
   const filas = await Nicho.aggregate([
     { $match: todos ? {} : { estado: 'activo' } },
     {
@@ -167,6 +193,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
         costoPuestoClp: 1,
         costoPuestoEl: 1,
         unidadesPedido: 1,
+        volumenM3: 1,
+        pesoKg: 1,
         radarInfo: 1,
         rfq: 1,
         ultimos: 1,
@@ -322,7 +350,14 @@ export async function tableroOportunidades({ todos = false } = {}) {
         exwUsd: n.exwCotizadoUsd,
         fecha: n.exwCotizadoEl ?? null,
         cierra: exwMax != null ? n.exwCotizadoUsd <= exwMax : null,
-        ...(margenCotizacion({ exwUsd: n.exwCotizadoUsd, rec, unidades: unidadesEfectivas, comisionPct }) ?? {}),
+        ...(margenCotizacion({
+          exwUsd: n.exwCotizadoUsd,
+          rec,
+          unidades: unidadesEfectivas,
+          comisionPct,
+          volumenM3: n.volumenM3 ?? null,
+          tipoCambioUsdClp,
+        }) ?? {}),
       }
     }
     // gasto del pedido: cantidad × EXW cotizado (real) o × EXW máx (estimación)

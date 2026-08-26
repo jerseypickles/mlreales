@@ -57,6 +57,13 @@ const nichoSchema = new mongoose.Schema({
   costoPuestoClp: { type: Number, default: null },
   costoPuestoEl: { type: Date, default: null },
   exwCotizadoEl: { type: Date, default: null },
+  // CUBICAJE de la cotización: m³ y kg por unidad de venta. El flete marítimo
+  // se prorratea por m³, así que sin esto el costo puesto usa un supuesto de
+  // producto chico y se queda corto justo donde más importa — medido el
+  // 26-ago: con 0,003 m³ el flete es 1% del costo puesto, con 0,05 m³ (un rack
+  // de 85 cm) es 23%. Se pide en la RFQ y se carga acá cuando llega.
+  volumenM3: { type: Number, default: null },
+  pesoKg: { type: Number, default: null },
   // cantidad del pedido fijada a mano en la planilla (pisa la sugerida por el
   // análisis en primeraCompra; null = usar la sugerencia)
   unidadesPedido: { type: Number, default: null },
