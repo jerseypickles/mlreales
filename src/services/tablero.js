@@ -195,6 +195,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         unidadesPedido: 1,
         volumenM3: 1,
         pesoKg: 1,
+        precioVentaObjetivoClp: 1,
         radarInfo: 1,
         rfq: 1,
         ultimos: 1,
@@ -335,13 +336,20 @@ export async function tableroOportunidades({ todos = false } = {}) {
     // la ganancia por unidad al precio recomendado del análisis
     let cotizacion = null
     const comisionPct = comisionPorKeyword.get(n.keyword) ?? null
+    // EL MARGEN SOLO SI HAY PRECIO PROPIO, y vale para las dos ramas.
+    // `rec.precioVentaClp` sale de la mediana del mercado, o sea de OTRO
+    // producto. Si el tuyo es de mejor calidad ese margen no dice nada.
+    const precioPropio = Number.isFinite(n.precioVentaObjetivoClp) ? n.precioVentaObjetivoClp : null
+    const recParaMargen = precioPropio ? { ...rec, precioVentaClp: precioPropio } : rec
+
     if (Number.isFinite(n.costoPuestoClp)) {
       // el costo puesto en Chile manda: dato real del importador
-      const m = margenPuesto({ costoPuestoClp: n.costoPuestoClp, rec, comisionPct })
+      const m = precioPropio ? margenPuesto({ costoPuestoClp: n.costoPuestoClp, rec: recParaMargen, comisionPct }) : null
       cotizacion = {
         costoPuestoClp: n.costoPuestoClp,
         exwUsd: n.exwCotizadoUsd ?? null,
         fecha: n.costoPuestoEl ?? n.exwCotizadoEl ?? null,
+        precioObjetivoClp: precioPropio,
         cierra: m ? m.margenClp > 0 : null,
         ...(m ?? {}),
       }
@@ -349,15 +357,22 @@ export async function tableroOportunidades({ todos = false } = {}) {
       cotizacion = {
         exwUsd: n.exwCotizadoUsd,
         fecha: n.exwCotizadoEl ?? null,
+        precioObjetivoClp: precioPropio,
         cierra: exwMax != null ? n.exwCotizadoUsd <= exwMax : null,
-        ...(margenCotizacion({
-          exwUsd: n.exwCotizadoUsd,
-          rec,
-          unidades: unidadesEfectivas,
-          comisionPct,
-          volumenM3: n.volumenM3 ?? null,
-          tipoCambioUsdClp,
-        }) ?? {}),
+        // el costo puesto se calcula siempre (es lo que preguntó el importador);
+        // el margen se borra si el precio no es suyo
+        ...(() => {
+          const m = margenCotizacion({
+            exwUsd: n.exwCotizadoUsd,
+            rec: recParaMargen,
+            unidades: unidadesEfectivas,
+            comisionPct,
+            volumenM3: n.volumenM3 ?? null,
+            tipoCambioUsdClp,
+          })
+          if (!m) return {}
+          return precioPropio ? m : { ...m, margenClp: null, margenPct: null, viable: null }
+        })(),
       }
     }
     // gasto del pedido: cantidad × EXW cotizado (real) o × EXW máx (estimación)

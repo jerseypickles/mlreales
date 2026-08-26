@@ -4414,6 +4414,13 @@ section {
   transition: filter 0.15s ease;
 }
 .op-cot-boton.pendiente { border: 1px dashed var(--borde-fuerte); }
+/* estimado desde EXW: ni verde ni rojo. Es un costo calculado, no un veredicto
+   — el precio de venta todavía no existe y sin él no hay nada que juzgar. */
+.op-cot-boton.estimado {
+  border: 1px dashed var(--borde-fuerte);
+  background: transparent;
+  color: var(--tinta-2);
+}
 .op-cot-boton:hover { filter: brightness(0.94); }
 .op-cot-boton:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 

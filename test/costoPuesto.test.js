@@ -63,3 +63,26 @@ test('sin EXW no hay costo puesto que calcular', () => {
   assert.throws(() => costoPuesto({ exwUsd: null, unidades: 10 }), /exwUsd/)
   assert.throws(() => costoPuesto({ exwUsd: 5, unidades: 0 }), /unidades/)
 })
+
+// ── el margen NO se muestra contra un precio que no es tuyo ──────────────────
+//
+// Regla del importador el 26-ago-2026: "no podemos saber lo que va a dejar por
+// un precio que va a competir solo; varios productos son de mejor calidad, son
+// todo diferente". El precio del análisis sale de la mediana del mercado, o sea
+// de OTRO producto — usarlo para juzgar el tuyo es inventar dos veces (el
+// cubicaje y el precio).
+
+test('costoPuesto no habla de margen ni de precio de venta', () => {
+  const r = costoPuesto({ exwUsd: 17, unidades: 150, parametros: TC })
+  assert.equal(r.margenClp, undefined, 'no le corresponde: no sabe a qué vas a vender')
+  assert.equal(r.precioVentaClp, undefined)
+  assert.ok(Number.isFinite(r.puestoClp), 'lo suyo es el costo puesto y nada más')
+})
+
+test('el costo puesto no depende del precio de venta, solo del EXW y el embarque', () => {
+  // dos productos con el mismo EXW y embarque cuestan lo mismo puesto en
+  // bodega, se vendan a $5.000 o a $50.000
+  const a = costoPuesto({ exwUsd: 12.5, unidades: 80, parametros: TC })
+  const b = costoPuesto({ exwUsd: 12.5, unidades: 80, parametros: TC })
+  assert.equal(a.puestoClp, b.puestoClp)
+})

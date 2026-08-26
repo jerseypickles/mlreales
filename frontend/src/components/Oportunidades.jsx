@@ -518,12 +518,16 @@ function Cotizacion({ o, onRecargar }) {
   return (
     <button
       type="button"
-      className={`op-cotizacion op-cot-boton ${cot ? (cot.viable === false || cot.cierra === false ? 'mal' : 'bien') : 'pendiente'}`}
+      /* el semáforo solo aplica cuando el costo puesto es REAL: pintar de rojo
+         una estimación contra un precio que no es el tuyo es peor que no pintar */
+      className={`op-cotizacion op-cot-boton ${
+        !cot ? 'pendiente' : cot.costoPuestoClp == null ? 'estimado' : cot.viable === false || cot.cierra === false ? 'mal' : 'bien'
+      }`}
       title={
         cot?.costoPuestoClp
           ? `Te cuesta ${fmtPrecio(cot.costoPuestoClp)} por unidad ya puesto en Chile — clic para cambiarlo`
           : cot?.exwUsd
-            ? `EXW US$ ${cot.exwUsd} + flete ${cot.fleteClp != null ? fmtPrecio(cot.fleteClp) : '?'} + seguro, arancel y despacho = ${cot.landedClp != null ? fmtPrecio(cot.landedClp) : '?'} puesto en Chile.${cot.volumenSupuesto ? ` OJO: el flete se calculó con un volumen SUPUESTO de ${cot.volumenM3} m³ porque la cotización no trae cubicaje — pídelo al proveedor.` : ''} Clic para escribir el costo puesto real y dejar de estimar.`
+            ? `EXW US$ ${cot.exwUsd} + flete ${cot.fleteClp != null ? fmtPrecio(cot.fleteClp) : '?'} + seguro, arancel y despacho = ${cot.landedClp != null ? fmtPrecio(cot.landedClp) : '?'} puesto en Chile.${cot.volumenSupuesto ? ` El flete usa un volumen SUPUESTO de ${cot.volumenM3} m³: la cotización no trae cubicaje, pídeselo al proveedor.` : ''} No dice cuánto deja porque el precio de venta lo pones tú. Clic para escribir el costo puesto real.`
             : 'Anota lo que te cuesta cada unidad ya puesta en Chile (con flete e internación): con eso el sistema calcula el margen real'
       }
       onClick={(e) => {
@@ -531,22 +535,22 @@ function Cotizacion({ o, onRecargar }) {
         setEditando(true)
       }}
     >
-      {/* EL EXW VUELVE, PERO ROTULADO. Se había retirado porque calcular desde
-          EXW obliga a suponer el cubicaje. Con la cotización de QBUY encima el
-          silencio salía más caro que el supuesto: ahora el margen estimado se
-          muestra con ~ y el volumen supuesto se avisa con ◊, en vez de dejar la
-          fila diciendo solo "falta costo puesto". */}
+      {/* LO QUE CUESTA, NO LO QUE DEJA.
+          Hasta el 26-ago esto mostraba el margen estimado, calculado contra el
+          precio de mercado del nicho. El importador lo paró en seco: "no
+          podemos saber lo que va a dejar por un precio que va a competir solo;
+          varios productos son de mejor calidad, son todo diferente".
+          Y tiene razón — ese margen suponía DOS cosas: el cubicaje y el precio
+          al que se va a vender un producto que todavía no existe en la vitrina.
+          Así que la fila lleva solo el COSTO PUESTO. El margen vuelve cuando
+          haya un precio de venta puesto por él, no inferido del mercado. */}
       {!cot
         ? 'sin costo'
-        : cot.costoPuestoClp == null
-          ? cot.margenClp != null
-            ? `${cot.margenClp > 0 ? '~ deja' : '~ pierde'} ${fmtPrecio(Math.abs(cot.margenClp))}/u${cot.volumenSupuesto ? ' ◊' : ''}`
-            : `EXW US$ ${cot.exwUsd} · falta costo puesto`
-          : cot.margenClp != null
-            ? cot.margenClp > 0
-              ? `✓ deja ${fmtPrecio(cot.margenClp)}/u (${Math.round(cot.margenPct)}%)`
-              : `✗ pierde ${fmtPrecio(Math.abs(cot.margenClp))}/u a ese precio`
-            : `✓ ${fmtPrecio(cot.costoPuestoClp)}/u puesto`}
+        : cot.costoPuestoClp != null
+          ? `✓ ${fmtPrecio(cot.costoPuestoClp)}/u puesto`
+          : cot.landedClp != null
+            ? `~ ${fmtPrecio(cot.landedClp)}/u puesto${cot.volumenSupuesto ? ' ◊' : ''}`
+            : `EXW US$ ${cot.exwUsd} · falta costo puesto`}
     </button>
   )
 }

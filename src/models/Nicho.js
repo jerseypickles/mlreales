@@ -64,6 +64,12 @@ const nichoSchema = new mongoose.Schema({
   // de 85 cm) es 23%. Se pide en la RFQ y se carga acá cuando llega.
   volumenM3: { type: Number, default: null },
   pesoKg: { type: Number, default: null },
+  // PRECIO AL QUE VAS A VENDER TÚ, no el que el análisis infiere del mercado.
+  // Regla del importador el 26-ago-2026: "no podemos saber lo que va a dejar
+  // por un precio que va a competir solo; varios productos son de mejor
+  // calidad, son todo diferente". El margen del panel solo aparece cuando este
+  // campo existe — hasta entonces se muestra el costo puesto y punto.
+  precioVentaObjetivoClp: { type: Number, default: null },
   // cantidad del pedido fijada a mano en la planilla (pisa la sugerida por el
   // análisis en primeraCompra; null = usar la sugerencia)
   unidadesPedido: { type: Number, default: null },
