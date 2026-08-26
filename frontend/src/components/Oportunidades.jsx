@@ -525,9 +525,9 @@ function Cotizacion({ o, onRecargar }) {
       }`}
       title={
         cot?.costoPuestoClp
-          ? `Te cuesta ${fmtPrecio(cot.costoPuestoClp)} por unidad ya puesto en Chile — clic para cambiarlo`
+          ? `Te cuesta ${fmtPrecio(cot.costoPuestoClp)} por unidad ya puesto en tu bodega, todo incluido — clic para cambiarlo`
           : cot?.exwUsd
-            ? `EXW US$ ${cot.exwUsd} + flete ${cot.fleteClp != null ? fmtPrecio(cot.fleteClp) : '?'} + seguro, arancel y despacho = ${cot.landedClp != null ? fmtPrecio(cot.landedClp) : '?'} puesto en Chile.${cot.volumenSupuesto ? ` El flete usa un volumen SUPUESTO de ${cot.volumenM3} m³: la cotización no trae cubicaje, pídeselo al proveedor.` : ''} No dice cuánto deja porque el precio de venta lo pones tú. Clic para escribir el costo puesto real.`
+            ? `EXW US$ ${cot.exwUsd} + flete ${cot.fleteClp != null ? fmtPrecio(cot.fleteClp) : '?'} + seguro, arancel y despacho = ${cot.landedClp != null ? fmtPrecio(cot.landedClp) : '?'} INTERNADO, o sea hasta salir de aduana. Todavía FALTAN el transporte del puerto a tu bodega, los gastos locales de la naviera y el envío a Full.${cot.volumenSupuesto ? ` Y el flete usa un volumen SUPUESTO de ${cot.volumenM3} m³ porque la cotización no trae cubicaje.` : ''} No dice cuánto deja porque el precio de venta lo pones tú. Clic para escribir el costo puesto real.`
             : 'Anota lo que te cuesta cada unidad ya puesta en Chile (con flete e internación): con eso el sistema calcula el margen real'
       }
       onClick={(e) => {
@@ -535,7 +535,13 @@ function Cotizacion({ o, onRecargar }) {
         setEditando(true)
       }}
     >
-      {/* LO QUE CUESTA, NO LO QUE DEJA.
+      {/* INTERNADO ≠ PUESTO. El importador marcó la diferencia el 26-ago:
+          "puesto es cuando llega a Chile, pero faltan costos". Lo calculado
+          llega hasta SALIR DE ADUANA; el transporte a bodega, los gastos
+          locales de naviera y el envío a Full no están. Por eso el estimado
+          dice "internado" y solo el que él escribe a mano dice "puesto".
+
+          LO QUE CUESTA, NO LO QUE DEJA.
           Hasta el 26-ago esto mostraba el margen estimado, calculado contra el
           precio de mercado del nicho. El importador lo paró en seco: "no
           podemos saber lo que va a dejar por un precio que va a competir solo;
@@ -549,7 +555,7 @@ function Cotizacion({ o, onRecargar }) {
         : cot.costoPuestoClp != null
           ? `✓ ${fmtPrecio(cot.costoPuestoClp)}/u puesto`
           : cot.landedClp != null
-            ? `~ ${fmtPrecio(cot.landedClp)}/u puesto${cot.volumenSupuesto ? ' ◊' : ''}`
+            ? `~ ${fmtPrecio(cot.landedClp)}/u internado${cot.volumenSupuesto ? ' ◊' : ''}`
             : `EXW US$ ${cot.exwUsd} · falta costo puesto`}
     </button>
   )

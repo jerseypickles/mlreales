@@ -20,7 +20,17 @@ function parametrosCon(overrides = {}) {
   }
 }
 
-// DE EXW A COSTO PUESTO EN BODEGA.
+// DE EXW A COSTO INTERNADO.
+//
+// INTERNADO, NO PUESTO — la distinción la marcó el importador el 26-ago-2026 y
+// es correcta: "puesto es cuando llega a Chile, pero faltan costos". Esto
+// calcula hasta SALIR DE ADUANA (EXW + flete + seguro + arancel + despacho).
+// Después de eso todavía queda transporte del puerto a bodega, gastos locales
+// de la naviera y el envío a Full — ninguno está acá.
+//
+// El costo puesto REAL sigue siendo `costoPuestoClp` del nicho, que el
+// importador escribe a mano cuando ya lo sabe. Este número es el piso: lo que
+// cuesta como mínimo, no lo que cuesta.
 //
 // La cotización del proveedor viene EXW: el precio ex-fábrica en China, que NO
 // es comparable con el precio de venta en ML. Entre uno y otro hay flete,
@@ -36,7 +46,7 @@ function parametrosCon(overrides = {}) {
 // del config y `volumenSupuesto` viaja en true — un número con su advertencia
 // sirve más que una casilla vacía, PERO en un rack de 85 cm el supuesto de
 // 0,003 m³ puede quedarse corto por diez, así que la advertencia no es adorno.
-export function costoPuesto({
+export function costoInternado({
   exwUsd,
   unidades = 1,
   volumenM3 = null,
@@ -63,12 +73,12 @@ export function costoPuesto({
   const arancelClp = cifClp * (p.aduana.arancelPct / 100)
   // el despacho es por embarque: cuantas más unidades, menos pesa por unidad
   const despachoClp = (p.aduana.despachoUsd * tc) / unidades
-  const puestoClp = cifClp + arancelClp + despachoClp
+  const internadoClp = cifClp + arancelClp + despachoClp
   // crédito fiscal, pero hay que financiarlo hasta recuperarlo en el F29
   const ivaImportacionClp = (cifClp + arancelClp) * (p.aduana.ivaPct / 100)
 
   return {
-    puestoClp: redondear(puestoClp),
+    internadoClp: redondear(internadoClp),
     desglose: {
       exwClp: redondear(exwClp),
       fleteClp: redondear(fleteClp),
@@ -77,10 +87,12 @@ export function costoPuesto({
       despachoClp: redondear(despachoClp),
     },
     ivaImportacionClp: redondear(ivaImportacionClp),
-    inversionCajaClp: redondear((puestoClp + ivaImportacionClp) * unidades),
-    // cuánto del costo puesto es flete: sobre ~25% el cubicaje deja de ser un
+    inversionCajaClp: redondear((internadoClp + ivaImportacionClp) * unidades),
+    // cuánto del internado es flete: sobre ~25% el cubicaje deja de ser un
     // detalle y pasa a decidir si el producto sirve
-    fletePctDelPuesto: pct((fleteClp / puestoClp) * 100),
+    fletePctDelInternado: pct((fleteClp / internadoClp) * 100),
+    // lo que ESTE número no incluye, para que nadie lo lea como costo final
+    noIncluye: ['transporte del puerto a bodega', 'gastos locales de naviera', 'envío a bodega Full'],
     supuestos: {
       tipoCambioUsdClp: tc,
       modoFlete,
