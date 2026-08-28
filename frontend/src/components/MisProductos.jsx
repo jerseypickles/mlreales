@@ -22,6 +22,8 @@ import {
   LineChart,
   Users,
   ArrowLeftRight,
+  X,
+  ArrowDownWideNarrow,
 } from 'lucide-react'
 import { BotonCopiar } from './Listing.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -319,7 +321,7 @@ function Reposicion({ r }) {
 // los tres que se miran para decidir; el resto baja al pliegue
 const PRINCIPALES = new Set(['Ventas 7d', 'Margen 30d', 'ML cobra 30d'])
 
-function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio }) {
+function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, expandida = false, onExpandir }) {
   const d = deltas(p.mediciones)
   const a = p.auditoria
   const generando =
@@ -396,8 +398,61 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
     { k: 'Ingresos 30d', v: p.ventas30d ? fmtPrecio(p.ventas30d.ingresosClp) : '—', Icono: DollarSign },
   ]
 
+  // COLAPSADA: la foto manda y el resto se resume.
+  //
+  // Con 8 productos la lista vertical se leía; con 40 es scroll infinito. El
+  // importador lo pidió así: grilla con la foto del producto, que se abra.
+  // Acá la tarjeta tiene DOS estados y la misma identidad — abrir no navega a
+  // otra parte, expande en su lugar. Eso conserva el contexto: sigues viendo
+  // dónde estabas en la grilla.
+  if (!expandida) {
+    const r = p.reposicion
+    const urg = r ? TONO_URGENCIA[r.urgencia] : null
+    return (
+      <article className={`propio-card pc-mini${urg ? ` pc-mini-${urg}` : ''}`}>
+        <button
+          className="pc-mini-abrir"
+          onClick={() => onExpandir?.(p._id)}
+          aria-expanded={false}
+          aria-label={`Abrir ${p.titulo ?? p.sku}`}
+        >
+          <span className="pc-mini-foto">
+            {p.imagen ? (
+              <img src={p.imagen} alt="" loading="lazy" />
+            ) : (
+              <span className="sin-imagen" />
+            )}
+            {/* el estado de quiebre va SOBRE la foto: es lo único que hay que
+                ver sin abrir nada, y desde lejos */}
+            {r && r.urgencia !== 'holgado' && r.urgencia !== 'sin_ventas' ? (
+              <span className={`pc-mini-sello pc-mini-sello-${urg}`}>
+                {r.urgencia === 'quebrado' ? 'sin stock' : `${r.diasCobertura} días`}
+              </span>
+            ) : null}
+            {p.estadoMl === 'paused' ? <span className="pc-mini-pausada">pausada</span> : null}
+          </span>
+          <span className="pc-mini-titulo">{p.titulo ?? p.sku}</span>
+          <span className="pc-mini-kpis">
+            <em>
+              <b>{ventas7 != null ? fmtNum(ventas7) : '—'}</b> vend. 7d
+            </em>
+            <em>
+              <b>{p.margen30d ? fmtPrecio(p.margen30d.margenClp) : '—'}</b> margen
+            </em>
+            <em>
+              <b>{fmtNum(p.reposicion?.stock ?? d?.ultima?.stock)}</b> stock
+            </em>
+          </span>
+          {p.reposicion?.aEnviar > 0 ? (
+            <span className="pc-mini-accion">enviar {fmtNum(p.reposicion.aEnviar)}</span>
+          ) : null}
+        </button>
+      </article>
+    )
+  }
+
   return (
-    <article className="propio-card">
+    <article className="propio-card pc-abierta">
       <header className="pc-head">
         <button className="pc-foto" onClick={() => onAbrir(p)} aria-label="Ver series del producto">
           {p.imagen ? <img src={p.imagen} alt="" loading="lazy" width="64" height="64" /> : <span className="sin-imagen" />}
@@ -433,6 +488,9 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
           </a>
           <button className="icono-boton icono-peligro" onClick={() => onEliminar(p)} aria-label="Quitar producto">
             <Trash2 aria-hidden="true" />
+          </button>
+          <button className="icono-boton" onClick={() => onExpandir?.(null)} aria-label="Cerrar la tarjeta" aria-expanded>
+            <X aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -1023,6 +1081,9 @@ export function MisProductos() {
   const [url, setUrl] = useState('')
   const [ocupado, setOcupado] = useState(false)
   const [abierto, setAbierto] = useState(null)
+  // una sola tarjeta abierta a la vez: dos expandidas vuelven a ser una lista
+  const [expandido, setExpandido] = useState(null)
+  const [orden, setOrden] = useState('urgencia')
   const [meli, setMeli] = useState(null)
   const [aviso, setAviso] = useState(null)
   const [nichos, setNichos] = useState([])
@@ -1253,6 +1314,19 @@ export function MisProductos() {
     }
   }
 
+  // ORDEN. Por defecto lo que se quiebra antes: sin ventas al final, porque un
+  // producto que no vende no tiene urgencia de reposición aunque tenga 0 stock.
+  const PESO_URGENCIA = { quebrado: 0, critico: 1, reponer: 2, holgado: 3, sin_ventas: 4 }
+  const ordenados = [...(datos?.propios ?? [])].sort((a, b) => {
+    if (orden === 'ventas') return (b.ventas7d?.unidades ?? 0) - (a.ventas7d?.unidades ?? 0)
+    if (orden === 'margen') return (b.margen30d?.margenClp ?? -Infinity) - (a.margen30d?.margenClp ?? -Infinity)
+    if (orden === 'alfabetico') return (a.titulo ?? '').localeCompare(b.titulo ?? '')
+    const pa = PESO_URGENCIA[a.reposicion?.urgencia] ?? 5
+    const pb = PESO_URGENCIA[b.reposicion?.urgencia] ?? 5
+    if (pa !== pb) return pa - pb
+    return (a.reposicion?.diasCobertura ?? 9999) - (b.reposicion?.diasCobertura ?? 9999)
+  })
+
   return (
     <main>
       <div className="reporte-encabezado">
@@ -1332,25 +1406,48 @@ export function MisProductos() {
           todos los días: si aparece en los listados de tus nichos, también verás tu posición.
         </p>
       ) : (
-        <div className="propios-lista">
+        <>
           {Object.entries(datos.carteras ?? {}).map(([nichoId, c]) => (
             <CarteraNicho key={nichoId} c={c} />
           ))}
-          {datos.propios.map((p) => (
-            <TarjetaPropio
-              key={p._id}
-              p={p}
-              nichos={nichos}
-              onEliminar={eliminar}
-              onAbrir={setAbierto}
-              onCablear={cablearNicho}
-              onAuditar={auditar}
-              onVerAuditoria={(x) => setAuditoriaDe(x._id)}
-              onGuardarCosto={guardarCosto}
-              onCambiarPrecio={cambiarPrecio}
-            />
-          ))}
-        </div>
+
+          {/* EL ORDEN ES LA MITAD DEL REDISEÑO.
+              Una grilla de 40 tarjetas sin ordenar es el mismo scroll infinito
+              con otra forma. Por defecto manda lo que se quiebra antes: eso es
+              lo que uno viene a resolver a esta pantalla. */}
+          <div className="propios-barra">
+            <label>
+              <ArrowDownWideNarrow aria-hidden="true" />
+              <span className="sr-solo">Ordenar por</span>
+              <select value={orden} onChange={(e) => setOrden(e.target.value)}>
+                <option value="urgencia">Lo que se quiebra antes</option>
+                <option value="ventas">Lo que más vende</option>
+                <option value="margen">Lo que más deja</option>
+                <option value="alfabetico">Nombre</option>
+              </select>
+            </label>
+            <span className="propios-cuenta">{ordenados.length} producto(s)</span>
+          </div>
+
+          <div className="propios-grilla">
+            {ordenados.map((p) => (
+              <TarjetaPropio
+                key={p._id}
+                p={p}
+                nichos={nichos}
+                onEliminar={eliminar}
+                onAbrir={setAbierto}
+                onCablear={cablearNicho}
+                onAuditar={auditar}
+                onVerAuditoria={(x) => setAuditoriaDe(x._id)}
+                onGuardarCosto={guardarCosto}
+                onCambiarPrecio={cambiarPrecio}
+                expandida={expandido === p._id}
+                onExpandir={setExpandido}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       <p className="nota">
