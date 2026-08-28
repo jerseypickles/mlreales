@@ -268,6 +268,57 @@ function GananciaUnidad({ p, onGuardarCosto, onCambiarPrecio }) {
   )
 }
 
+// LO ÚNICO QUE EXIGE ACCIÓN HOY.
+//
+// Se construye sobre el stock REAL de la bodega de Full, no sobre el
+// `available_quantity` del item — medido el 28-ago, en las Brochas Set 18 el
+// item decía 20 y la bodega tenía 9. Y la velocidad se divide por los días que
+// el producto estuvo disponible, no por la ventana del reporte.
+const TONO_URGENCIA = {
+  quebrado: 'mal',
+  critico: 'mal',
+  reponer: 'aviso',
+  holgado: 'bien',
+  sin_ventas: null,
+}
+
+function Reposicion({ r }) {
+  if (!r) return null
+  const tono = TONO_URGENCIA[r.urgencia]
+  const texto =
+    r.urgencia === 'quebrado'
+      ? 'Sin stock'
+      : r.urgencia === 'sin_ventas'
+        ? `${fmtNum(r.stock)} en bodega · sin ventas que proyectar`
+        : `Se quiebra en ${r.diasCobertura} días`
+
+  return (
+    <div className={`pc-repo${tono ? ` pc-repo-${tono}` : ''}`}>
+      <strong>{texto}</strong>
+      <span>
+        {fmtNum(r.stock)} en bodega
+        {r.enCamino ? ` · ${fmtNum(r.enCamino)} en camino` : ''}
+        {r.velocidadDia > 0 ? ` · ${r.velocidadDia}/día (${r.base})` : ''}
+      </span>
+      {r.aEnviar > 0 ? <b className="pc-repo-accion">enviar {fmtNum(r.aEnviar)}</b> : null}
+      {r.retenido > 0 ? (
+        <em className="pc-repo-retenido" title={r.motivosRetenido.map((m) => `${m.motivo}: ${m.unidades}`).join(' · ')}>
+          {fmtNum(r.retenido)} retenida(s) en ML
+        </em>
+      ) : null}
+      {/* el item y la bodega deberían decir lo mismo; cuando no, es dato */}
+      {r.descuadreItem ? (
+        <em className="pc-repo-descuadre" title="ML declara en el item un stock distinto al que tiene en bodega">
+          el item declara {r.descuadreItem > 0 ? '+' : ''}{fmtNum(r.descuadreItem)}
+        </em>
+      ) : null}
+    </div>
+  )
+}
+
+// los tres que se miran para decidir; el resto baja al pliegue
+const PRINCIPALES = new Set(['Ventas 7d', 'Margen 30d', 'ML cobra 30d'])
+
 function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio }) {
   const d = deltas(p.mediciones)
   const a = p.auditoria
@@ -280,6 +331,17 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
   const intervenciones = p.impacto?.intervenciones ?? []
   const midiendo = intervenciones.filter((i) => i.veredicto === 'midiendo').length
 
+  // NUEVE KPIS ERAN OCHO DE MÁS.
+  //
+  // La tarjeta mostraba precio, ventas, conversión, visitas, margen, cargos ML,
+  // stock, reseñas e ingresos — todos del mismo tamaño y del mismo color. El
+  // importador lo dijo así: "hay mucho relleno". Y tenía razón: con nueve
+  // números iguales ninguno resalta, y la pregunta que uno trae a esta pantalla
+  // ("¿tengo que hacer algo con este producto hoy?") no la contesta ninguno.
+  //
+  // Ahora tres arriba —lo que vende, lo que deja, lo que ML se lleva— y el
+  // resto plegado. La reposición va en su propia banda, porque es lo único que
+  // exige acción hoy.
   const kpis = [
     {
       k: 'Precio',
@@ -375,8 +437,10 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
         </div>
       </header>
 
+      <Reposicion r={p.reposicion} />
+
       <div className="pc-kpis" onClick={() => onAbrir(p)}>
-        {kpis.map(({ k, v, extra, Icono, tono, ayuda }) => (
+        {kpis.filter((x) => PRINCIPALES.has(x.k)).map(({ k, v, extra, Icono, tono, ayuda }) => (
           <div key={k} className={`kpi${tono ? ` kpi-${tono}` : ''}`} title={ayuda}>
             <span className="kpi-k">
               <Icono aria-hidden="true" />
@@ -389,6 +453,26 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
           </div>
         ))}
       </div>
+
+      {/* el resto no desaparece: baja a un pliegue, que es donde vive lo que se
+          consulta a veces y no se decide todos los días */}
+      <details className="pc-mas">
+        <summary>Más números</summary>
+        <div className="pc-kpis pc-kpis-menor">
+          {kpis.filter((x) => !PRINCIPALES.has(x.k)).map(({ k, v, extra, Icono, tono, ayuda }) => (
+            <div key={k} className={`kpi${tono ? ` kpi-${tono}` : ''}`} title={ayuda}>
+              <span className="kpi-k">
+                <Icono aria-hidden="true" />
+                {k}
+              </span>
+              <span className="kpi-v">
+                {v}
+                {extra}
+              </span>
+            </div>
+          ))}
+        </div>
+      </details>
 
       <GananciaUnidad p={p} onGuardarCosto={onGuardarCosto} onCambiarPrecio={onCambiarPrecio} />
 

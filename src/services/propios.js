@@ -119,7 +119,33 @@ export async function escanearPropios({ soloOficial = false } = {}) {
       }
     }
     const precio = (Number.isFinite(oficial?.price) ? oficial.price : null) ?? det?.precio ?? null
-    const stock = Number.isFinite(oficial?.available_quantity) ? oficial.available_quantity : null
+    // EL STOCK SALE DE LA BODEGA, NO DEL ITEM.
+    //
+    // `available_quantity` del item NO es el stock en Full. Medido el
+    // 28-ago-2026 sobre las Brochas Set 18: el item decía 20 y la bodega tenía
+    // 9 — el libro de movimientos confirmó que entraron 20, se vendieron 11 y
+    // quedan 9. La cobertura del panel salía al doble de la real, que es la
+    // peor forma de equivocarse en reposición: te deja tranquilo mientras te
+    // quiebras. Si el item no es Full o la consulta falla, se cae al del item.
+    let stock = Number.isFinite(oficial?.available_quantity) ? oficial.available_quantity : null
+    let inventario = null
+    if (oficial?.inventory_id) {
+      try {
+        const { stockFull } = await import('./inventarioFull.js')
+        inventario = await stockFull(oficial.inventory_id)
+        if (Number.isFinite(inventario?.disponible)) stock = inventario.disponible
+      } catch (err) {
+        console.warn(`[propios] stock de Full no leído para ${propio.sku}: ${err.message}`)
+      }
+    }
+    if (inventario) {
+      propio.inventarioFull = {
+        ...inventario,
+        // lo que el item declara, para que el descuadre quede a la vista en vez
+        // de resolverse en silencio
+        declaraElItem: oficial?.available_quantity ?? null,
+      }
+    }
     const vendidos = Number.isFinite(oficial?.sold_quantity) ? oficial.sold_quantity : null
     const visitas = oficial ? await visitasSeguro(propio.itemIdMl ?? propio.sku) : null
     // promoción vigente: el precio efectivo manda sobre el de lista

@@ -99,6 +99,11 @@ const productoPropioSchema = new mongoose.Schema({
     ],
     default: [],
   },
+  // Stock REAL en la bodega de Full, con lo retenido y su motivo. Se guarda
+  // aparte de `mediciones.stock` porque el item declara otra cosa: el descuadre
+  // entre ambos es un dato, no un error a esconder (ver services/inventarioFull).
+  inventarioFull: { type: mongoose.Schema.Types.Mixed, default: null },
+
   creadoEl: { type: Date, default: Date.now },
 })
 

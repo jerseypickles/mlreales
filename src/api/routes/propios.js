@@ -178,6 +178,8 @@ router.get(
         margen30d,
         cargosMl30d: cargosItem,
         economiaUnidad: await economiaUnidad(p).catch(() => null),
+        // REPOSICIÓN: cuánto aguanta y cuánto mandar (ver services/inventarioFull)
+        reposicion: await reposicionDe(p, v30, v7).catch(() => null),
         impacto: evaluarImpacto(p),
         // lo que otros cerebros encontraron sobre este producto y sigue abierto
         hallazgos: (p.hallazgos ?? []).filter((h) => !h.resuelto),
@@ -496,5 +498,59 @@ router.delete(
     res.json({ eliminado: borrado.sku })
   }),
 )
+
+// CUÁNTO AGUANTA Y CUÁNTO MANDAR.
+//
+// Dos correcciones sobre lo obvio, las dos medidas el 28-ago-2026:
+//
+//  1. El stock sale de la BODEGA de Full, no de `available_quantity` del item.
+//     En las Brochas Set 18 el item decía 20 y la bodega tenía 9.
+//  2. La velocidad se divide por los días que el producto ESTUVO disponible,
+//     no por la ventana del reporte. Un producto de 13 días de vida dividido
+//     por 30 muestra un tercio de su velocidad real, y parece que no hay que
+//     reponerlo justo cuando más hay que hacerlo.
+async function reposicionDe(p, v30, v7) {
+  const { velocidadDiaria, coberturaYReposicion, urgencia, movimientosFull, primeraEntrada } = await import(
+    '../../services/inventarioFull.js'
+  )
+  const inv = p.inventarioFull ?? null
+  const stock = Number.isFinite(inv?.disponible) ? inv.disponible : (p.mediciones ?? []).at(-1)?.stock ?? null
+  if (!Number.isFinite(stock)) return null
+
+  // desde cuándo se puede vender: la primera entrada a bodega
+  let desdeEl = null
+  try {
+    const { hayCuentaMeli } = await import('../../services/meli.js')
+    if (inv?.inventoryId && (await hayCuentaMeli())) {
+      const { meliGet } = await import('../../services/meli.js')
+      const me = await meliGet('/users/me')
+      const movs = await movimientosFull(inv.inventoryId, me.id)
+      desdeEl = primeraEntrada(movs)
+    }
+  } catch {
+    // sin libro de movimientos se usa la ventana completa: peor, pero sirve
+  }
+
+  // la de 7 días manda cuando hay señal reciente; si no, la de 30
+  const usa7 = (v7?.unidades ?? 0) > 0
+  const velocidadDia = velocidadDiaria({
+    unidades: usa7 ? v7.unidades : v30?.unidades ?? 0,
+    ventanaDias: usa7 ? 7 : 30,
+    desdeEl,
+    hoy: new Date(),
+  })
+
+  const r = coberturaYReposicion({ stock, velocidadDia })
+  return {
+    ...r,
+    urgencia: urgencia(r.diasCobertura),
+    base: usa7 ? '7 días' : '30 días',
+    vendiendoDesde: desdeEl,
+    retenido: inv?.noDisponible ?? 0,
+    motivosRetenido: inv?.motivos ?? [],
+    // el descuadre entre lo que el item declara y lo que hay en bodega
+    descuadreItem: Number.isFinite(inv?.declaraElItem) ? inv.declaraElItem - stock : null,
+  }
+}
 
 export default router

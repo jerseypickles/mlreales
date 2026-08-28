@@ -3943,6 +3943,64 @@ section {
 .icono-peligro:hover { background: color-mix(in srgb, var(--peligro) 12%, transparent); color: var(--peligro); }
 
 /* KPIs: barra densa en vez de ocho tarjetones */
+/* BANDA DE REPOSICIÓN. Va arriba de los KPIs porque es lo único de la tarjeta
+   que exige una decisión hoy. Color Y palabra: un semáforo que solo usa color
+   no le sirve a todo el mundo, y "se quiebra en 9 días" se entiende sin leer
+   la leyenda. */
+.pc-repo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  padding: 8px 12px;
+  margin: 0 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  font-size: 12.5px;
+}
+.pc-repo > strong { font-size: 14px; color: var(--tinta); }
+.pc-repo > span { color: var(--tinta-3); font-size: 11.5px; }
+.pc-repo-mal { border-color: var(--peligro-borde, #fecaca); background: var(--peligro-fondo, #fef2f2); }
+.pc-repo-mal > strong { color: var(--peligro-tinta, #b42318); }
+.pc-repo-aviso { border-color: #fde68a; background: #fffbeb; }
+.pc-repo-aviso > strong { color: #b45309; }
+.pc-repo-bien { border-color: var(--exito-borde, #bbf7d0); }
+.pc-repo-bien > strong { color: var(--exito-tinta, #15803d); }
+/* la acción se separa del diagnóstico: es lo que hay que hacer, no lo que pasa */
+.pc-repo-accion {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--tinta);
+  color: var(--superficie);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.pc-repo-retenido, .pc-repo-descuadre {
+  font-style: normal;
+  font-size: 11px;
+  color: #b45309;
+  border-bottom: 1px dotted currentColor;
+  cursor: help;
+}
+
+/* Los números que se consultan a veces, plegados. No se borran: dejan de
+   competir con los tres que se miran para decidir. */
+.pc-mas { margin-top: 8px; }
+.pc-mas > summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--tinta-3);
+  list-style: none;
+  padding: 3px 0;
+}
+.pc-mas > summary::-webkit-details-marker { display: none; }
+.pc-mas > summary::before { content: '▸ '; }
+.pc-mas[open] > summary::before { content: '▾ '; }
+.pc-mas > summary:hover { color: var(--tinta-2); }
+.pc-kpis-menor { margin-top: 6px; opacity: 0.88; }
+
 .pc-kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
