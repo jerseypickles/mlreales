@@ -281,6 +281,35 @@ function GananciaUnidad({ p, onGuardarCosto, onCambiarPrecio }) {
   )
 }
 
+// EL TÍTULO SIN EL PREFIJO QUE TODOS COMPARTEN.
+//
+// Los títulos de ML son largos y en una cartera repiten la cabeza: "Brochas
+// Maquillaje Profesionales Set 8 + Organizador Rosa" y "Brochas Maquillaje
+// Profesionales Set 18 Pcs Makeup Cosmetico Gris". Lo que DISTINGUE está al
+// final, así que cortar a una línea deja todas las tarjetas diciendo lo mismo,
+// y dejarlas a dos líneas desfigura la tarjeta.
+//
+// Se quita la cabeza común y queda lo que diferencia. El título completo sigue
+// en el `title`, para quien lo necesite.
+export function prefijoComun(titulos = []) {
+  const listas = titulos.filter(Boolean).map((t) => t.trim().split(/\s+/))
+  if (listas.length < 2) return ''
+  const palabras = []
+  for (let i = 0; i < listas[0].length; i++) {
+    const w = listas[0][i]
+    // se corta antes de dejar el título sin nada: al menos dos palabras propias
+    if (!listas.every((l) => l.length > i + 2 && l[i].toLowerCase() === w.toLowerCase())) break
+    palabras.push(w)
+  }
+  return palabras.join(' ')
+}
+
+export function tituloCorto(titulo, prefijo) {
+  if (!titulo) return ''
+  if (!prefijo || !titulo.toLowerCase().startsWith(prefijo.toLowerCase())) return titulo
+  return titulo.slice(prefijo.length).replace(/^[\s\-–·+]+/, '') || titulo
+}
+
 // LO ÚNICO QUE EXIGE ACCIÓN HOY.
 //
 // Se construye sobre el stock REAL de la bodega de Full, no sobre el
@@ -332,7 +361,7 @@ function Reposicion({ r }) {
 // los tres que se miran para decidir; el resto baja al pliegue
 const PRINCIPALES = new Set(['Ventas 7d', 'Margen 30d', 'ML cobra 30d'])
 
-function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, expandida = false, onExpandir }) {
+function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, expandida = false, onExpandir, prefijo = '' }) {
   const d = deltas(p.mediciones)
   const a = p.auditoria
   const generando =
@@ -442,16 +471,22 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
             ) : null}
             {p.estadoMl === 'paused' ? <span className="pc-mini-pausada">pausada</span> : null}
           </span>
-          <span className="pc-mini-titulo">{p.titulo ?? p.sku}</span>
+          <span className="pc-mini-titulo" title={p.titulo ?? p.sku}>
+            {tituloCorto(p.titulo ?? p.sku, prefijo)}
+          </span>
+          {/* SEMÁFORO DE LOS ÚLTIMOS 7 DÍAS: ¿este producto va bien AHORA?
+              Verde vende y convierte, rojo no vende, ámbar convierte poco o le
+              falta el costo para saber si gana. El stock no está acá porque ya
+              vive sobre la foto. */}
           <span className="pc-mini-kpis">
-            <em>
+            <em className={`k-${ventas7 > 0 ? 'bien' : ventas7 === 0 ? 'mal' : 'neutro'}`}>
               <b>{ventas7 != null ? fmtNum(ventas7) : '—'}</b> vend. 7d
             </em>
-            <em>
-              <b>{p.margen30d ? fmtPrecio(p.margen30d.margenClp) : '—'}</b> margen
+            <em className={`k-${p.conversion7d == null ? 'neutro' : p.conversion7d >= 3 ? 'bien' : p.conversion7d >= 1.5 ? 'aviso' : 'mal'}`}>
+              <b>{p.conversion7d != null ? `${p.conversion7d}%` : '—'}</b> conv.
             </em>
-            <em>
-              <b>{fmtNum(p.reposicion?.stock ?? d?.ultima?.stock)}</b> stock
+            <em className={`k-${p.margen30d ? (p.margen30d.margenClp > 0 ? 'bien' : 'mal') : p.ventas30d ? 'aviso' : 'neutro'}`}>
+              <b>{p.margen30d ? fmtPrecio(p.margen30d.margenClp) : p.ventas30d ? 'falta costo' : '—'}</b> margen
             </em>
           </span>
           {p.reposicion?.aEnviar > 0 ? (
@@ -1328,6 +1363,7 @@ export function MisProductos() {
   // ORDEN. Por defecto lo que se quiebra antes: sin ventas al final, porque un
   // producto que no vende no tiene urgencia de reposición aunque tenga 0 stock.
   const PESO_URGENCIA = { quebrado: 0, critico: 1, reponer: 2, holgado: 3, sin_ventas: 4 }
+  const prefijoTitulos = prefijoComun((datos?.propios ?? []).map((x) => x.titulo))
   const ordenados = [...(datos?.propios ?? [])].sort((a, b) => {
     if (orden === 'ventas') return (b.ventas7d?.unidades ?? 0) - (a.ventas7d?.unidades ?? 0)
     if (orden === 'margen') return (b.margen30d?.margenClp ?? -Infinity) - (a.margen30d?.margenClp ?? -Infinity)
@@ -1363,14 +1399,18 @@ export function MisProductos() {
         <div className="toolbar">
           {meli?.conectado ? (
             <>
-              <span className="badge badge-full" title={`conectado el ${fmtFecha(meli.conectadoEl)}`}>
-                ML: {meli.nickname ?? meli.userId}
+              {/* UN SOLO CONTROL, NO TRES PIEZAS SUELTAS.
+                  Antes eran un pill de 10px, un link subrayado de 11px y un
+                  botón de 14px alineados en fila: tres pesos distintos que se
+                  leían como descuido. Ahora el estado y su acción viven en el
+                  mismo bloque, a la misma altura que los botones. */}
+              <span className="ml-conexion" title={`conectado el ${fmtFecha(meli.conectadoEl)}`}>
+                <i className="ml-punto" aria-hidden="true" />
+                <b>{meli.nickname ?? meli.userId}</b>
+                {/* re-autorizar tras cambiar permisos de la app en DevCenter:
+                    la nueva autorización trae los scopes nuevos al mismo token */}
+                <button onClick={conectarMeli}>reconectar</button>
               </span>
-              {/* re-autorizar tras cambiar permisos de la app en DevCenter:
-                  la nueva autorización trae los scopes nuevos al mismo token */}
-              <button className="enlace-boton" onClick={conectarMeli}>
-                reconectar
-              </button>
               <button className="boton-secundario" onClick={importarMeli} disabled={ocupado}>
                 {ocupado ? 'Importando…' : 'Importar mis publicaciones'}
               </button>
@@ -1455,6 +1495,7 @@ export function MisProductos() {
                 onCambiarPrecio={cambiarPrecio}
                 expandida={expandido === p._id}
                 onExpandir={setExpandido}
+                prefijo={prefijoTitulos}
               />
             ))}
           </div>
