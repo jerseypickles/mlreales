@@ -291,8 +291,10 @@ function GananciaUnidad({ p, onGuardarCosto, onCambiarPrecio }) {
 //
 // Se quita la cabeza común y queda lo que diferencia. El título completo sigue
 // en el `title`, para quien lo necesite.
-export function prefijoComun(titulos = []) {
-  const listas = titulos.filter(Boolean).map((t) => t.trim().split(/\s+/))
+// Prefijo compartido por un GRUPO. Global no sirve: la cartera mezcla brochas,
+// lámpara, saca puntos y pistolas, así que el prefijo común de los ocho es
+// vacío y no se recortaba nada — el bug que dejó los títulos enteros.
+function prefijoDe(listas) {
   if (listas.length < 2) return ''
   const palabras = []
   for (let i = 0; i < listas[0].length; i++) {
@@ -302,6 +304,25 @@ export function prefijoComun(titulos = []) {
     palabras.push(w)
   }
   return palabras.join(' ')
+}
+
+// Devuelve, por título, el prefijo que comparte con SUS PARIENTES. Se agrupa por
+// las dos primeras palabras: "Brochas Maquillaje" junta a las cinco brochas sin
+// arrastrar a la lámpara ni a las pistolas.
+export function prefijosPorFamilia(titulos = []) {
+  const grupos = new Map()
+  for (const t of titulos) {
+    if (!t) continue
+    const clave = t.trim().split(/\s+/).slice(0, 2).join(' ').toLowerCase()
+    if (!grupos.has(clave)) grupos.set(clave, [])
+    grupos.get(clave).push(t)
+  }
+  const mapa = new Map()
+  for (const [, miembros] of grupos) {
+    const pre = prefijoDe(miembros.map((t) => t.trim().split(/\s+/)))
+    for (const t of miembros) mapa.set(t, pre)
+  }
+  return mapa
 }
 
 export function tituloCorto(titulo, prefijo) {
@@ -361,7 +382,7 @@ function Reposicion({ r }) {
 // los tres que se miran para decidir; el resto baja al pliegue
 const PRINCIPALES = new Set(['Ventas 7d', 'Margen 30d', 'ML cobra 30d'])
 
-function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, expandida = false, onExpandir, prefijo = '' }) {
+function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, expandida = false, onExpandir, prefijos = null }) {
   const d = deltas(p.mediciones)
   const a = p.auditoria
   const generando =
@@ -464,15 +485,23 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
             )}
             {/* el estado de quiebre va SOBRE la foto: es lo único que hay que
                 ver sin abrir nada, y desde lejos */}
-            {r && r.urgencia !== 'holgado' && r.urgencia !== 'sin_ventas' ? (
-              <span className={`pc-mini-sello pc-mini-sello-${urg}`}>
-                {r.urgencia === 'quebrado' ? 'sin stock' : `${r.diasCobertura} días`}
+            {/* UN SELLO, NO DOS. Una publicación pausada casi siempre lo está
+                PORQUE se quedó sin stock en Full — mostrar "sin stock" y
+                "pausada" una al lado de la otra dice lo mismo dos veces y
+                ensucia la foto. Cuando coinciden gana la causa, con la
+                consecuencia como letra chica. */}
+            {r?.urgencia === 'quebrado' ? (
+              <span className="pc-mini-sello pc-mini-sello-mal">
+                sin stock{p.estadoMl === 'paused' ? <i> · pausada</i> : null}
               </span>
+            ) : r && r.urgencia !== 'holgado' && r.urgencia !== 'sin_ventas' ? (
+              <span className={`pc-mini-sello pc-mini-sello-${urg}`}>{r.diasCobertura} días</span>
+            ) : p.estadoMl === 'paused' ? (
+              <span className="pc-mini-sello pc-mini-sello-pausa">pausada</span>
             ) : null}
-            {p.estadoMl === 'paused' ? <span className="pc-mini-pausada">pausada</span> : null}
           </span>
           <span className="pc-mini-titulo" title={p.titulo ?? p.sku}>
-            {tituloCorto(p.titulo ?? p.sku, prefijo)}
+            {tituloCorto(p.titulo ?? p.sku, prefijos?.get(p.titulo) ?? '')}
           </span>
           {/* SEMÁFORO DE LOS ÚLTIMOS 7 DÍAS: ¿este producto va bien AHORA?
               Verde vende y convierte, rojo no vende, ámbar convierte poco o le
@@ -1363,7 +1392,7 @@ export function MisProductos() {
   // ORDEN. Por defecto lo que se quiebra antes: sin ventas al final, porque un
   // producto que no vende no tiene urgencia de reposición aunque tenga 0 stock.
   const PESO_URGENCIA = { quebrado: 0, critico: 1, reponer: 2, holgado: 3, sin_ventas: 4 }
-  const prefijoTitulos = prefijoComun((datos?.propios ?? []).map((x) => x.titulo))
+  const prefijoTitulos = prefijosPorFamilia((datos?.propios ?? []).map((x) => x.titulo))
   const ordenados = [...(datos?.propios ?? [])].sort((a, b) => {
     if (orden === 'ventas') return (b.ventas7d?.unidades ?? 0) - (a.ventas7d?.unidades ?? 0)
     if (orden === 'margen') return (b.margen30d?.margenClp ?? -Infinity) - (a.margen30d?.margenClp ?? -Infinity)
@@ -1495,7 +1524,7 @@ export function MisProductos() {
                 onCambiarPrecio={cambiarPrecio}
                 expandida={expandido === p._id}
                 onExpandir={setExpandido}
-                prefijo={prefijoTitulos}
+                prefijos={prefijoTitulos}
               />
             ))}
           </div>

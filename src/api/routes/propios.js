@@ -524,8 +524,11 @@ async function reposicionDe(p, v30, v7) {
     if (inv?.inventoryId && (await hayCuentaMeli())) {
       const { meliGet } = await import('../../services/meli.js')
       const me = await meliGet('/users/me')
-      const movs = await movimientosFull(inv.inventoryId, me.id)
-      desdeEl = primeraEntrada(movs)
+      const LIMITE = 50
+      const movs = await movimientosFull(inv.inventoryId, me.id, { limite: LIMITE })
+      // si el libro vino lleno hay operaciones más viejas que no vemos: la
+      // entrada más antigua de esta página NO es la primera
+      desdeEl = primeraEntrada(movs, { paginaLlena: movs.length >= LIMITE })
     }
   } catch {
     // sin libro de movimientos se usa la ventana completa: peor, pero sirve

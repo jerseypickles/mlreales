@@ -77,3 +77,25 @@ test('primeraEntrada toma el inbound más viejo, no el último', () => {
   assert.equal(primeraEntrada([]), null)
   assert.equal(primeraEntrada([{ tipo: 'venta', fecha: new Date() }]), null)
 })
+
+test('primeraEntrada NO adivina cuando la página del libro vino llena', () => {
+  // caso saca puntos, 28-ago: 17 ventas en 30 días, pero el libro se pide de a
+  // 50 operaciones y la primera entrada quedó fuera. Tomar la más vieja de la
+  // página daba "vendiendo desde hace 2 días" y triplicaba la velocidad: 1,83
+  // en vez de 0,57, y el panel pedía reponer 72 unidades que no hacían falta.
+  const movs = [
+    { tipo: 'entrada', fecha: new Date('2026-08-26') },
+    { tipo: 'venta', fecha: new Date('2026-08-27') },
+  ]
+  assert.equal(primeraEntrada(movs, { paginaLlena: true }), null, 'sin certeza, null')
+  assert.ok(primeraEntrada(movs, { paginaLlena: false }), 'con la página incompleta sí se sabe')
+})
+
+test('sin fecha de inicio la velocidad cae a la ventana: subestima, no infla', () => {
+  // el error barato es hacia abajo: pedir de más inmoviliza capital, pedir de
+  // menos cuesta una venta que igual se detecta al siguiente scan
+  const conFecha = velocidadDiaria({ unidades: 17, ventanaDias: 30, desdeEl: new Date('2026-08-26'), hoy: HOY })
+  const sinFecha = velocidadDiaria({ unidades: 17, ventanaDias: 30, desdeEl: null, hoy: HOY })
+  assert.ok(sinFecha < conFecha)
+  assert.ok(Math.abs(sinFecha - 17 / 30) < 0.001)
+})

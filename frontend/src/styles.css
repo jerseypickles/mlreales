@@ -4111,12 +4111,9 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
 }
 .pc-mini-sello-mal { background: rgba(180, 35, 24, 0.92); color: #fff; }
 .pc-mini-sello-aviso { background: rgba(180, 83, 9, 0.92); color: #fff; }
-.pc-mini-pausada {
-  position: absolute; top: 8px; right: 8px;
-  padding: 3px 9px; border-radius: 999px;
-  background: rgba(15, 23, 42, 0.82); color: #fff;
-  font-size: 11px;
-}
+.pc-mini-sello-pausa { background: rgba(15, 23, 42, 0.82); color: #fff; }
+/* la consecuencia, en letra chica dentro del mismo sello */
+.pc-mini-sello i { font-style: normal; opacity: 0.75; font-weight: 400; }
 
 .pc-mini-titulo {
   display: -webkit-box;

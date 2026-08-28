@@ -72,7 +72,19 @@ export async function movimientosFull(inventoryId, sellerId, { limite = 50 } = {
 // que lleva 13 días en bodega eso divide sus ventas por 30 y muestra un tercio
 // de su velocidad real — justo el error que hace que un producto que se está
 // vendiendo bien parezca que no hay que reponerlo.
-export function primeraEntrada(movimientos = []) {
+// OJO CON LA PÁGINA LLENA. El libro se pide paginado: si vinieron tantas
+// operaciones como el límite, hay más atrás y la más vieja que tenemos NO es la
+// primera. Tomarla igual fue un error real medido el 28-ago-2026: el saca
+// puntos, con 17 ventas en 30 días, daba "vendiendo desde el 26-ago" y su
+// velocidad salía 1,83/día en vez de 0,57 — más del triple. Y de ahí el panel
+// pedía reponer 72 unidades.
+//
+// Sin certeza se devuelve null, y quien llama usa la ventana completa: subestima
+// un producto nuevo, pero no infla uno viejo. En reposición, pedir de más cuesta
+// capital inmovilizado y pedir de menos cuesta una venta — el error barato es
+// hacia abajo.
+export function primeraEntrada(movimientos = [], { paginaLlena = false } = {}) {
+  if (paginaLlena) return null
   const entradas = movimientos.filter((m) => m.tipo === 'entrada' && m.fecha)
   if (!entradas.length) return null
   return new Date(Math.min(...entradas.map((m) => m.fecha.getTime())))
