@@ -3943,6 +3943,21 @@ section {
 .icono-peligro:hover { background: color-mix(in srgb, var(--peligro) 12%, transparent); color: var(--peligro); }
 
 /* KPIs: barra densa en vez de ocho tarjetones */
+/* La cartera del nicho, plegada. Abierta repetía lo que ya dicen las tarjetas
+   y empujaba la grilla media pantalla hacia abajo. */
+details.cartera > summary { cursor: pointer; list-style: none; }
+details.cartera > summary::-webkit-details-marker { display: none; }
+details.cartera > summary::after {
+  content: '▸';
+  margin-left: 8px;
+  color: var(--tinta-3);
+  transition: transform 150ms ease-out;
+}
+details.cartera[open] > summary::after { content: '▾'; }
+details.cartera > summary:hover { background: var(--fondo-2, rgba(0, 0, 0, 0.02)); }
+details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; }
+.cartera-ml-alto { color: #b45309; }
+
 /* ══ GRILLA DE MIS PRODUCTOS ══════════════════════════════════════════════
    Con 8 productos la lista vertical se leía; con 40 es scroll infinito. La
    grilla mete ~4 veces más por pantalla y la foto hace de índice: el ojo
@@ -4017,11 +4032,24 @@ section {
 .pc-mini-foto {
   position: relative;
   display: block;
-  aspect-ratio: 1 / 1;
-  background: var(--fondo-2, #f1f5f9);
+  /* 4:3 en vez de cuadrado: la foto sigue mandando pero la tarjeta no queda
+     tan alta, y entran más filas antes de tener que hacer scroll */
+  aspect-ratio: 4 / 3;
+  background: #fff;
   overflow: hidden;
 }
-.pc-mini-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* CONTAIN, NO COVER. Con `cover` la foto se recorta para llenar el cuadrado y
+   el producto se sale por los bordes — en fotos de catálogo, que vienen con el
+   producto centrado sobre fondo blanco, eso corta justo lo que hay que ver.
+   `contain` muestra la pieza entera; el aire alrededor lo pone el fondo. */
+.pc-mini-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  padding: 10px;
+  background: #fff;
+}
 /* el sello va SOBRE la foto: es lo único que hay que ver sin abrir nada */
 .pc-mini-sello {
   position: absolute;

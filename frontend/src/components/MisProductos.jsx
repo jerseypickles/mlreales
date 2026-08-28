@@ -61,16 +61,27 @@ function Metrica({ etiqueta, children, alerta, estado, Icono }) {
 // A/B natural. Qué convierte, qué trae tráfico y qué copiarle a cuál.
 function CarteraNicho({ c }) {
   const ICONO = { trasplante: ArrowLeftRight, cierre: Percent, exposicion: Eye, 'no-es-precio': Tag }
+  // PLEGADA POR DEFECTO. Abierta ocupaba media pantalla ANTES de la grilla y
+  // repetía por producto lo que las tarjetas ya muestran: "así abierto solo
+  // ruido". Lo que sí vale de un vistazo —cuánto rota la cartera y qué
+  // porcentaje de tus ingresos se lleva ML en ese nicho— sube al resumen, que
+  // es lo único visible sin abrir.
+  const pctMl =
+    c.cargosMl30d?.ingresos30d > 0
+      ? Math.round((c.cargosMl30d.totalClp / c.cargosMl30d.ingresos30d) * 100)
+      : null
   return (
-    <section className="cartera">
-      <header className="cartera-head">
+    <details className="cartera">
+      <summary className="cartera-head">
         <Users aria-hidden="true" />
         <h3>Tu cartera en “{c.keyword}”</h3>
         <span className="cartera-share">
           {c.ventasDia} u/día
           {c.sharePct != null ? ` · ${c.sharePct}% del nicho` : ''}
+          {pctMl != null ? <b className={pctMl > 50 ? 'cartera-ml-alto' : undefined}> · ML se lleva {pctMl}%</b> : null}
+          {c.lecciones?.length ? ` · ${c.lecciones.length} hallazgo(s)` : ''}
         </span>
-      </header>
+      </summary>
       <div className="cartera-tabla">
         {c.productos.map((p, i) => (
           <div key={p.sku} className={i === 0 ? 'cartera-fila lider' : 'cartera-fila'}>
@@ -114,7 +125,7 @@ function CarteraNicho({ c }) {
           </p>
         )
       })}
-    </section>
+    </details>
   )
 }
 
