@@ -8,6 +8,7 @@ import {
   extraerPolycards,
   extraerPrintedResult,
   posicionReal,
+  renderPlantilla,
   itemsDesdeHtml,
 } from '../src/services/listadoMl.js'
 import { normalizarScan } from '../src/services/normalizador.js'
@@ -165,4 +166,31 @@ test('el conteo de reseñas no viene del listado: llega la nota, no el conteo', 
   const conNota = items.filter((i) => i.produtoReviews)
   assert.ok(conNota.length, 'la nota sí viene')
   for (const i of items) assert.equal(i.numeroEvaluaciones, '')
+})
+
+// ML SIRVE EL VENDEDOR DE DOS FORMAS, Y HAY QUE AGUANTAR LAS DOS.
+//
+//   A  text: "{label} {icon_cockade}"           values: [icon, label:"PHILIPS"]
+//   B  text: "MGM IMPORTACIONES {icon_cockade}"  values: [icon]
+//
+// En la B el nombre va incrustado en la plantilla y no aparece en `values`.
+// Leer solo `values` dejaba el vendedor en null para nichos enteros: medido el
+// 29-ago-2026, 0 de 98 en "arbol de navidad" contra 30 de 48 en "depiladora
+// laser". Y `esTiendaOficial` sí funcionaba, así que el hueco no se notaba.
+test('el vendedor sale igual venga en values o incrustado en el texto', () => {
+  assert.equal(
+    renderPlantilla('{label} {icon_cockade}', [
+      { key: 'icon_cockade', type: 'icon' },
+      { key: 'label', label: { text: 'PHILIPS' } },
+    ]),
+    'PHILIPS',
+  )
+  assert.equal(
+    renderPlantilla('MGM IMPORTACIONES {icon_cockade}', [{ key: 'icon_cockade', type: 'icon' }]),
+    'MGM IMPORTACIONES',
+  )
+  // solo iconos: no hay nombre que sacar
+  assert.equal(renderPlantilla('{icon_cockade}', [{ key: 'icon_cockade' }]), null)
+  assert.equal(renderPlantilla(undefined), null)
+  assert.equal(renderPlantilla(''), null)
 })

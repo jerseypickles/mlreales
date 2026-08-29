@@ -175,6 +175,32 @@ function valor(comp, contenedor, clave) {
   return (comp?.[contenedor]?.values ?? []).find((v) => v?.key === clave)
 }
 
+// EL NOMBRE DEL VENDEDOR VIENE DE DOS FORMAS DISTINTAS.
+//
+// ML sirve el componente `seller` de dos maneras y hay que aguantar las dos:
+//   A  text: "{label} {icon_cockade}"          values: [icon, label:"PHILIPS"]
+//   B  text: "MGM IMPORTACIONES {icon_cockade}" values: [icon]
+//
+// En la B el nombre va INCRUSTADO en la plantilla y no aparece en `values`.
+// Leer solo `values` —que era lo que hacía— dejaba el vendedor en null para
+// nichos enteros: medido el 29-ago-2026, 0 de 98 en "arbol de navidad" mientras
+// en "depiladora laser" salían 30 de 48.
+//
+// Se renderiza la plantilla: se sustituyen las claves que sí traen etiqueta y
+// se borran los marcadores que sobran (los iconos). Lo que queda es el nombre,
+// venga por donde venga.
+export function renderPlantilla(texto, values = []) {
+  if (typeof texto !== 'string') return null
+  const etiquetas = new Map(
+    (values ?? []).filter((v) => v?.key && v?.label?.text).map((v) => [v.key, v.label.text]),
+  )
+  const salida = texto
+    .replace(/\{([a-z0-9_]+)\}/gi, (_, k) => etiquetas.get(k) ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return salida || null
+}
+
 function textoEnvio(tarjeta) {
   const c = componente(tarjeta, 'shipping_v2')
   // se devuelve la PLANTILLA con sus llaves ("{same_day_free_shipping}
@@ -243,7 +269,7 @@ export function aItemBusqueda(tarjeta, telemetria, { keyword, domainCode = 'CL',
     nuevoPrecio: vigente,
     precioAnterior: anterior,
     installments: cuotas,
-    Vendedor: valor(vend, 'seller', 'label')?.label?.text ?? null,
+    Vendedor: renderPlantilla(vend?.seller?.text, vend?.seller?.values),
     esTiendaOficial: Boolean(valor(vend, 'seller', 'icon_cockade')),
     SKU: '',
     palabraClave: keyword ?? null,
