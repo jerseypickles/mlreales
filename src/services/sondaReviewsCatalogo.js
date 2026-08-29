@@ -1,6 +1,7 @@
 import { buscarNivel1Zyte } from './listadoMl.js'
 import { detallesDeMl } from './detalleMl.js'
 import { reviewsOficialesSeguro } from './meli.js'
+import { idDesdeUrl } from './normalizadorDetalle.js'
 
 // ¿PUEDEN LAS RESEÑAS SALIR GRATIS, PARA TODO EL LISTADO?
 //
@@ -9,13 +10,15 @@ import { reviewsOficialesSeguro } from './meli.js'
 // la base de la señal de demanda —el delta entre scans—, así que sin él no se
 // puntúa un nicho.
 //
-// `sondaReviews.js` ya había encontrado que `/reviews/item/{id}` con el id del
-// ITEM devuelve el bucket propio, casi vacío en publicaciones de catálogo,
-// mientras la página muestra el agregado del CATÁLOGO. Le faltaba el id de
-// catálogo, y ese solo se conseguía haciendo justamente la llamada de ficha que
-// se quería evitar.
+// Medido el 29-ago-2026 contra producción: `/reviews/item/` con el id de
+// CATÁLOGO da 404 ("not found item id"). Quiere el id del ITEM, que el nivel 1
+// por Zyte ahora entrega en `metadata.id`.
 //
-// El nivel 1 por Zyte lo entrega gratis: `metadata.product_id` de cada tarjeta.
+// Con el id correcto responde, pero la fidelidad es la duda: en dos sondeos a
+// mano, un item dio 60 contra 59 de la ficha (calza) y otro dio 401 contra 843
+// (la mitad), y en ese segundo las reseñas venían de un `reviewable_object`
+// distinto al pedido. Por eso esto se mide sobre una muestra y no se decide con
+// dos anécdotas.
 // Esta sonda cierra el círculo y responde tres cosas con números:
 //
 //   1. COBERTURA: de los items del listado, ¿cuántos traen id de catálogo?
@@ -62,31 +65,44 @@ export function veredicto({ conCatalogo, total, responden, comparados, calzan })
 export async function sondearReviewsPorCatalogo(keyword, { domainCode = 'CL' } = {}) {
   const inicio = Date.now()
   const { items } = await buscarNivel1Zyte(keyword, { domainCode })
-  const conCatalogo = items.filter((i) => i.catalogId)
+  const conId = items.filter((i) => i.itemId)
 
   // 1 y 2: cobertura y respuesta de la API oficial
   const tApi = Date.now()
-  const porCatalogo = new Map()
-  for (const i of conCatalogo) {
-    if (porCatalogo.has(i.catalogId)) continue
-    porCatalogo.set(i.catalogId, await reviewsOficialesSeguro(i.catalogId))
+  const porItem = new Map()
+  for (const i of conId) {
+    if (porItem.has(i.itemId)) continue
+    porItem.set(i.itemId, await reviewsOficialesSeguro(i.itemId))
   }
   const msApi = Date.now() - tApi
-  const responden = [...porCatalogo.values()].filter((r) => Number.isFinite(r?.numReviews)).length
+  const responden = [...porItem.values()].filter((r) => Number.isFinite(r?.numReviews)).length
 
-  // 3: fidelidad contra la ficha, que es la verdad que usa el sistema hoy
-  const muestra = conCatalogo.filter((i) => i.zProductoLink).slice(0, MUESTRA_FICHAS)
-  const { items: fichas } = await detallesDeMl(muestra.map((i) => i.zProductoLink))
-  const porUrl = new Map(fichas.map((f) => [f.url, f]))
+  // 3: fidelidad contra la ficha, que es la verdad que usa el sistema hoy.
+  // Se comparan solo los que la API contestó: pedir fichas de los que no
+  // respondieron es gastar navegador para no aprender nada.
+  const muestra = conId
+    .filter((i) => i.zProductoLink && Number.isFinite(porItem.get(i.itemId)?.numReviews))
+    .slice(0, MUESTRA_FICHAS)
+  const { items: fichas, fallidos } = await detallesDeMl(muestra.map((i) => i.zProductoLink))
+
+  // el emparejamiento por URL cruda falla: Zyte devuelve la canónica. Se
+  // normaliza por el id embebido en la URL, que es el que ambos lados comparten.
+  const porIdUrl = new Map()
+  for (const f of fichas) {
+    const k = idDesdeUrl(f.url) ?? f.sku
+    if (k) porIdUrl.set(k, f)
+  }
 
   const comparaciones = []
   for (const i of muestra) {
-    const ficha = porUrl.get(i.zProductoLink) ?? fichas.find((f) => f.sku === i.catalogId)
+    const k = idDesdeUrl(i.zProductoLink)
+    const ficha = porIdUrl.get(k) ?? porIdUrl.get(i.catalogId)
     const deFicha = ficha?.ratingCount ?? null
-    const deApi = porCatalogo.get(i.catalogId)?.numReviews ?? null
+    const deApi = porItem.get(i.itemId)?.numReviews ?? null
     if (!Number.isFinite(deFicha) || !Number.isFinite(deApi)) continue
     comparaciones.push({
-      catalogId: i.catalogId,
+      itemId: i.itemId,
+      catalogId: i.catalogId ?? null,
       ficha: deFicha,
       api: deApi,
       calza: Math.abs(deFicha - deApi) <= TOLERANCIA,
@@ -97,15 +113,17 @@ export async function sondearReviewsPorCatalogo(keyword, { domainCode = 'CL' } =
   return {
     keyword,
     items: items.length,
-    conCatalogo: conCatalogo.length,
-    catalogosUnicos: porCatalogo.size,
+    conId: conId.length,
+    itemsUnicos: porItem.size,
     responden,
+    fichasPedidas: muestra.length,
+    fichasFallidas: fallidos.length,
     // cuánto tarda pedirle a la API oficial todo el listado: es el costo real
     // de reemplazar al nivel 2, y es tiempo, no plata
-    msApiPorItem: porCatalogo.size ? Math.round(msApi / porCatalogo.size) : null,
+    msApiPorItem: porItem.size ? Math.round(msApi / porItem.size) : null,
     comparaciones,
     veredicto: veredicto({
-      conCatalogo: conCatalogo.length,
+      conCatalogo: conId.length,
       total: items.length,
       responden,
       comparados: comparaciones.length,
