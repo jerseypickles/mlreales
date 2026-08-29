@@ -771,6 +771,56 @@ router.get(
   }),
 )
 
+// SEÑALES QUE ML PUBLICA GRATIS, cruzadas contra lo que medimos.
+//
+// Dos preguntas que hoy se contestan peor scrapeando:
+//   · ¿los más vendidos de la categoría, según ML, están en nuestro top? Si no,
+//     estamos midiendo un listado que no es el que compra la gente.
+//   · ¿qué busca la gente en esta categoría, con sus palabras? ML lo publica.
+router.get(
+  '/:id/senales-oficiales',
+  manejar(async (req, res) => {
+    const nicho = await Nicho.findById(req.params.id)
+    if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
+
+    const { Snapshot } = await import('../../models/Snapshot.js')
+    const { Producto } = await import('../../models/Producto.js')
+    const ultimo = await Snapshot.findOne({ keyword: nicho.keyword }).sort({ fecha: -1 }).lean()
+    if (!ultimo) return res.status(409).json({ error: 'el nicho todavía no tiene scans' })
+    const snaps = await Snapshot.find({ keyword: nicho.keyword, fecha: ultimo.fecha }).select('sku').lean()
+    const productos = await Producto.find({ sku: { $in: snaps.map((s) => s.sku) } })
+      .select('sku categoriaML catalogId itemId')
+      .lean()
+
+    // la categoría dominante del listado: es la que ML rankea
+    const cuenta = new Map()
+    for (const p of productos) {
+      if (p.categoriaML) cuenta.set(p.categoriaML, (cuenta.get(p.categoriaML) ?? 0) + 1)
+    }
+    const categoriaId = [...cuenta.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+    if (!categoriaId) return res.json({ categoriaId: null, motivo: 'el listado no trae categoría de ML' })
+
+    const { masVendidosDeCategoria, tendenciasDeCategoria, cruceConDestacados } = await import(
+      '../../services/senalesOficiales.js'
+    )
+    const [destacados, tendencias] = await Promise.all([
+      masVendidosDeCategoria(categoriaId),
+      tendenciasDeCategoria(categoriaId),
+    ])
+
+    // los ids de ML pueden ser de catálogo o de publicación: se cruza contra
+    // los tres que conocemos de cada producto
+    const conocidos = productos.flatMap((p) => [p.sku, p.catalogId, p.itemId].filter(Boolean))
+    res.json({
+      categoriaId,
+      itemsDelScan: productos.length,
+      masVendidos: destacados,
+      cruce: destacados ? cruceConDestacados(destacados, conocidos) : null,
+      tendencias,
+    })
+  }),
+)
+
 // Forzar scan manual
 router.post(
   '/:id/scan',
