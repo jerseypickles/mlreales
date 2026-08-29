@@ -881,6 +881,9 @@ export async function obtenerProductosUltimoScan(nicho) {
         vendidos: s.vendidos ?? null,
         // la posición está comprada. null = scan de Apify, que no lo medía.
         esAnuncio: s.esAnuncio ?? null,
+        // segunda medida de reseñas (API oficial), en observación: viaja para
+        // poder comparar las dos series en pantalla, no alimenta el score
+        numReviewsApi: s.numReviewsApi ?? null,
         resenasNuevasDia: velocidadPorSku.get(s.sku)?.resenasNuevasDia ?? null,
         reviewsDelta: velocidadPorSku.get(s.sku)?.reviewsDelta ?? null,
         ventanaDias: velocidadPorSku.get(s.sku)?.ventanaDias ?? null,
