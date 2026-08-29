@@ -175,43 +175,22 @@ header h1 {
   text-overflow: ellipsis;
 }
 
-.presupuesto {
+/* Chip del topbar. Se llamaba `.presupuesto` porque ahí vivía el gasto del mes;
+   ese widget salió el 29-ago-2026 y quedó solo el de ventas, así que el nombre
+   describe lo que es: un chip a la derecha del header. El riel y la barra de
+   uso se borraron con él. */
+.chip-topbar {
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 150px;
 }
 
-.presupuesto-texto {
+.chip-topbar-texto {
   font-family: 'Fira Code', monospace;
   font-size: 11.5px;
   font-weight: 600;
   text-align: right;
-}
-
-.presupuesto-tope {
-  color: var(--tinta-3);
-  font-weight: 400;
-}
-
-.presupuesto-riel {
-  height: 4px;
-  border-radius: 99px;
-  background: var(--superficie-2);
-  overflow: hidden;
-  border: 1px solid var(--borde);
-}
-
-.presupuesto-uso {
-  display: block;
-  height: 100%;
-  border-radius: 99px;
-  background: var(--grad-acento);
-  transition: width 400ms ease;
-}
-
-.presupuesto-uso.alto {
-  background: linear-gradient(135deg, var(--avisa-tinta), var(--peligro));
 }
 
 .cuerpo {

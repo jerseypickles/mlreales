@@ -16,40 +16,15 @@ import { Radar as RadarIcono, Landmark } from 'lucide-react'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
 import { GRUPOS, agruparNichos, anidarFamilias, tienePrecio, sinBusqueda, rechazadoPeroSeBusca } from './lib/sidebar.js'
 
-function PresupuestoChip() {
-  const [gastos, setGastos] = useState(null)
-
-  useEffect(() => {
-    let vigente = true
-    const cargar = () => api.gastos().then((g) => vigente && setGastos(g)).catch(() => {})
-    cargar()
-    const intervalo = setInterval(cargar, 5 * 60_000)
-    return () => {
-      vigente = false
-      clearInterval(intervalo)
-    }
-  }, [])
-
-  if (!gastos) return null
-  const pct = Math.min(100, Math.round((gastos.gastadoUsd / gastos.presupuestoUsd) * 100))
-  return (
-    <div
-      className="presupuesto"
-      title={`Gasto de ${gastos.mes}: Apify + IA${
-        gastos.apify?.topeUsd
-          ? ` · saldo REAL Apify: US$${Math.round(gastos.apify.gastadoUsd)} de ${gastos.apify.topeUsd} (ciclo hasta ${String(gastos.apify.cicloHasta ?? '').slice(0, 10)})`
-          : ''
-      }`}
-    >
-      <span className="presupuesto-texto">
-        US$ {gastos.gastadoUsd.toFixed(2)} <span className="presupuesto-tope">/ {gastos.presupuestoUsd} este mes</span>
-      </span>
-      <span className="presupuesto-riel" aria-hidden="true">
-        <span className={pct >= 80 ? 'presupuesto-uso alto' : 'presupuesto-uso'} style={{ width: `${pct}%` }} />
-      </span>
-    </div>
-  )
-}
+// EL CHIP DE PRESUPUESTO SALIÓ DEL HEADER (29-ago-2026).
+//
+// Mostraba "US$ 92,82 / 150 este mes" con una barra de uso. El importador lo
+// retiró: el techo mensual sigue vivo y sigue frenando el gasto —ver
+// `presupuesto()` en services/gastos.js, que es lo que corta el radar y los
+// scans cuando se agota—, pero tenerlo permanente en el header ocupaba el
+// espacio de lo único que ahí se mira todos los días, que son las ventas.
+//
+// El gasto sigue disponible en /api/gastos, abierto por día y por fuente.
 
 // Ventas reales de la cuenta ML en el topbar: el ciclo de propios las trae
 // cada ~45 min — la primera alegría del día sin abrir Seller Central
@@ -71,8 +46,8 @@ function VentasChip() {
   const conHoy = resumen.hoy.unidades > 0
   const { unidades, ingresosClp } = conHoy ? resumen.hoy : resumen.semana
   return (
-    <div className="presupuesto" title="Ventas reales de tu cuenta ML (órdenes pagadas; se refresca cada ~45 min)">
-      <span className="presupuesto-texto">
+    <div className="chip-topbar" title="Ventas reales de tu cuenta ML (órdenes pagadas; se refresca cada ~45 min)">
+      <span className="chip-topbar-texto">
         🛒 {unidades} {unidades === 1 ? 'venta' : 'ventas'} {conHoy ? 'hoy' : 'esta semana'} ·{' '}
         {fmtPrecio(ingresosClp)}
       </span>
@@ -839,7 +814,6 @@ export default function App() {
           </button>
         </nav>
         <VentasChip />
-        <PresupuestoChip />
       </header>
       {mundo === 'contabilidad' ? (
         <Contabilidad />
