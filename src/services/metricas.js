@@ -891,6 +891,11 @@ export async function obtenerProductosUltimoScan(nicho) {
         cuotas: s.cuotas,
         vendedor: p.vendedor ?? null,
         sellerId: p.sellerId ?? null,
+        // ids de ML que baja el nivel 1 por Zyte: el de catálogo y el de la
+        // publicación. Viajan para poder auditarlos desde el panel sin entrar
+        // a Mongo — sin esto un sondeo los ve en cero y parece que faltan.
+        catalogId: p.catalogId ?? null,
+        itemId: p.itemId ?? null,
         reputacionSeller: p.reputacionSeller ?? null,
         powerSeller: p.powerSeller ?? null,
         categoriaRuta: p.categoriaRuta ?? null,
