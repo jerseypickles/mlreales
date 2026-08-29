@@ -117,8 +117,17 @@ export function extraerPolycards(html) {
   return tarjetas
 }
 
-// Pura. La telemetría de ML, indexada por id de item. De acá salen los vendidos
-// y la marca de anuncio, que no están en la tarjeta.
+// Pura. La telemetría de ML, indexada por id de item.
+//
+// UN ITEM PUEDE SER ANUNCIO Y ORGÁNICO A LA VEZ. Medido en "depiladora laser":
+// 10 de 60 filas son el mismo item apareciendo dos veces —arriba como PAD,
+// pagado, y más abajo como ORGANIC, ganado—. Tratar esos como "anuncio" y
+// sacarlos del análisis borraría competidores reales: son justamente los
+// vendedores fuertes, los que rankean Y además pagan.
+//
+// Así que se distingue: `esSoloAnuncio` es el que NUNCA aparece orgánico. Y la
+// posición se toma de la fila ORGÁNICA cuando existe, porque la del anuncio
+// (0-3) es un lugar comprado, no un lugar en el ranking.
 export function extraerPrintedResult(html) {
   const texto = String(html ?? '')
   const ancla = '"printed_result":'
@@ -130,10 +139,16 @@ export function extraerPrintedResult(html) {
   for (const fila of arr) {
     const id = fila?.item_id
     if (!id) continue
-    // un mismo item aparece como PAD y como ORGANIC; gana la fila orgánica,
-    // que es la que representa su posición real en el ranking
-    if (porId.has(id) && fila.type !== 'ORGANIC') continue
-    porId.set(id, fila)
+    const previo = porId.get(id)
+    const esOrganica = fila.type === 'ORGANIC'
+    if (!previo) {
+      porId.set(id, { fila, tieneOrganico: esOrganica, tienePad: !esOrganica })
+      continue
+    }
+    previo.tieneOrganico ||= esOrganica
+    previo.tienePad ||= !esOrganica
+    // la fila orgánica manda: es la que lleva la posición real
+    if (esOrganica) previo.fila = fila
   }
   return porId
 }
@@ -199,12 +214,16 @@ function urlDeTarjeta(meta, domainCode) {
 // `extraerSku` deriva el id desde la URL (/p/MLC… o /up/MLCU…). Ese id —el de
 // CATÁLOGO, no el del item— es la llave con que está indexada toda la serie
 // histórica; usar `metadata.id` la rompería entera.
-export function aItemBusqueda(tarjeta, fila, { keyword, domainCode = 'CL', resultadosTotales = null } = {}) {
+export function aItemBusqueda(tarjeta, telemetria, { keyword, domainCode = 'CL', resultadosTotales = null } = {}) {
   const meta = tarjeta?.metadata ?? {}
+  const fila = telemetria?.fila ?? null
   const { vigente, anterior, cuotas } = precios(tarjeta)
   const vend = componente(tarjeta, 'seller')
   const nota = valor(componente(tarjeta, 'review_compacted'), 'review_compacted', 'label')
-  const esAnuncio = String(meta.is_pad) === 'true' || fila?.type === 'PAD'
+  // solo anuncio = pagó y NO rankea. El que hace las dos cosas es competidor.
+  const esAnuncio = telemetria
+    ? Boolean(telemetria.tienePad && !telemetria.tieneOrganico)
+    : String(meta.is_pad) === 'true'
   return {
     // --- campos de karamelo, consumidos por normalizarScan sin cambios
     articuloTitulo: componente(tarjeta, 'title')?.title?.text ?? null,
@@ -222,7 +241,10 @@ export function aItemBusqueda(tarjeta, fila, { keyword, domainCode = 'CL', resul
     // lo traía —`numeroEvaluaciones` vacío 0/5 en test/fixtures/nivel1.json—,
     // así que el conteo sigue viniendo del nivel 2 como siempre.
     numeroEvaluaciones: '',
-    itemPosition: Number(meta.item_position) || fila?.position || null,
+    // `item_position` viene en -1 en las tarjetas de anuncio: tomarlo ordenaría
+    // los pagados ANTES de la posición 1. Manda la posición de la fila orgánica.
+    // el anuncio puro no tiene lugar en el ranking: su 0-3 es comprado
+    itemPosition: esAnuncio ? null : posicionReal(meta, fila),
     resultadosTotales,
     zProductoLink: urlDeTarjeta(meta, domainCode),
     imgDireccion: urlImagen(tarjeta?.pictures?.pictures?.[0]?.id),
@@ -243,6 +265,16 @@ export function aItemBusqueda(tarjeta, fila, { keyword, domainCode = 'CL', resul
   }
 }
 
+// Pura. La posición que vale es la orgánica. Se descarta el -1 con que ML marca
+// las tarjetas pagadas, y también el 0, que es un lugar de anuncio.
+export function posicionReal(meta, fila) {
+  if (fila?.type === 'ORGANIC' && Number.isFinite(fila.position)) return fila.position
+  const dela = Number(meta?.item_position)
+  if (Number.isFinite(dela) && dela > 0) return dela
+  const dela2 = Number(fila?.position)
+  return Number.isFinite(dela2) && dela2 > 0 ? dela2 : null
+}
+
 // Pura. El total de resultados que ML declara ("+9.999 resultados").
 export function resultadosTotalesDe(html) {
   const m = String(html ?? '').match(/"total_results?"\s*:\s*"?([\d.+]+)"?/)
@@ -250,15 +282,29 @@ export function resultadosTotalesDe(html) {
 }
 
 // Pura. HTML → items listos para `normalizarScan`.
+//
+// SE DEVUELVEN ORDENADOS POR POSICIÓN ORGÁNICA, y no es un detalle estético.
+// `normalizarScan` asigna la posición con el ÍNDICE DEL ARRAY (`posicionGlobal:
+// indice + 1`) e ignora el `itemPosition` del item. Como ML entrega las
+// tarjetas con los anuncios primero, dejar el orden crudo escribía en la serie
+// un ranking donde los cuatro primeros lugares eran comprados —medido: en los
+// seis nichos probados el 29-ago-2026, las primeras cuatro posiciones eran
+// pagadas SIN EXCEPCIÓN.
+//
+// Los anuncios puros van al final: no tienen lugar en el ranking orgánico. No
+// se descartan porque siguen siendo oferta real del mercado y cuentan para
+// precios y descuentos; quien mire ranking los excluye por `esAnuncio`.
 export function itemsDesdeHtml(html, { keyword, domainCode = 'CL' } = {}) {
   const tarjetas = extraerPolycards(html)
   const telemetria = extraerPrintedResult(html)
   const totales = resultadosTotalesDe(html)
-  return tarjetas.map((t) => aItemBusqueda(t, telemetria.get(t?.metadata?.id), {
+  const items = tarjetas.map((t) => aItemBusqueda(t, telemetria.get(t?.metadata?.id), {
     keyword,
     domainCode,
     resultadosTotales: totales,
   }))
+  const rango = (i) => (i.esAnuncio ? Infinity : (i.itemPosition ?? Infinity))
+  return items.sort((a, b) => rango(a) - rango(b))
 }
 
 // Nivel 1 completo. Misma firma que `buscarNivel1` de apify.js —{items, costoUsd}—

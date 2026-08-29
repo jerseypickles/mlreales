@@ -7,6 +7,7 @@ import {
   urlImagen,
   extraerPolycards,
   extraerPrintedResult,
+  posicionReal,
   itemsDesdeHtml,
 } from '../src/services/listadoMl.js'
 import { normalizarScan } from '../src/services/normalizador.js'
@@ -46,8 +47,49 @@ test('printed_result se indexa por item y la fila orgánica gana a la del anunci
   // MLC1749192945 aparece dos veces en el listado real: posición 0 como PAD y 4
   // como ORGANIC. La orgánica es la que representa su lugar en el ranking.
   const philips = t.get('MLC1749192945')
-  assert.equal(philips.type, 'ORGANIC')
-  assert.equal(philips.sold_quantity, 500)
+  assert.equal(philips.fila.type, 'ORGANIC')
+  assert.equal(philips.fila.sold_quantity, 500)
+  assert.equal(philips.tieneOrganico, true)
+  assert.equal(philips.tienePad, true)
+})
+
+// Medido: 10 de 60 filas son el mismo item apareciendo arriba como PAD y más
+// abajo como ORGANIC. Son los vendedores fuertes —rankean Y además pagan—.
+// Marcarlos como "anuncio" y sacarlos del análisis borraría competencia real.
+test('el que paga Y rankea no es un anuncio: es un competidor', () => {
+  const items = itemsDesdeHtml(HTML, { keyword: 'k' })
+  const philips = items.find((i) => i.itemId === 'MLC1749192945')
+  assert.equal(philips.esAnuncio, false, 'aparece como PAD pero también orgánico')
+})
+
+// `item_position` viene en -1 en las tarjetas pagadas. Tomarlo tal cual ordena
+// los anuncios ANTES de la posición 1, que es justo la contaminación a evitar.
+// normalizarScan asigna la posición con el ÍNDICE DEL ARRAY e ignora
+// itemPosition. Como ML entrega los anuncios primero, el orden crudo escribía
+// un ranking con las primeras posiciones compradas.
+test('los items salen ordenados por posición orgánica, con los anuncios al final', () => {
+  const items = itemsDesdeHtml(HTML, { keyword: 'k' })
+  const organicos = items.filter((i) => !i.esAnuncio)
+  const posiciones = organicos.map((i) => i.itemPosition).filter(Number.isFinite)
+  const ordenado = [...posiciones].sort((a, b) => a - b)
+  assert.deepEqual(posiciones, ordenado, 'los orgánicos van en orden de ranking')
+  const primerAnuncio = items.findIndex((i) => i.esAnuncio)
+  if (primerAnuncio !== -1) {
+    assert.ok(
+      items.slice(primerAnuncio).every((i) => i.esAnuncio),
+      'después del primer anuncio no vuelve a haber orgánicos',
+    )
+  }
+})
+
+test('la posición -1 del anuncio no se usa como posición', () => {
+  assert.equal(posicionReal({ item_position: '-1' }, { type: 'ORGANIC', position: 4 }), 4)
+  assert.equal(posicionReal({ item_position: '-1' }, { type: 'PAD', position: 0 }), null)
+  assert.equal(posicionReal({ item_position: '2' }, null), 2)
+  const items = itemsDesdeHtml(HTML, { keyword: 'k' })
+  for (const i of items) {
+    assert.ok(i.itemPosition === null || i.itemPosition > 0, `posición inválida: ${i.itemPosition}`)
+  }
 })
 
 test('ML publica el id de la foto, no su URL', () => {

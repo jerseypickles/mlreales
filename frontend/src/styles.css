@@ -5905,6 +5905,19 @@ a.prod-titulo:focus-visible { outline: 2px solid var(--acento); outline-offset: 
 .chip-full { background: var(--exito-tenue); color: var(--exito-tinta); }
 .chip-cbt { background: var(--avisa-tenue); color: var(--avisa-tinta); }
 .chip-catalogo { background: var(--superficie); color: var(--tinta-2); border-color: var(--borde-fuerte); }
+/* Posición pagada. Va rayado y no de color plano para que se lea distinto de
+   los chips que describen al producto (Full, catálogo, tienda oficial): éste no
+   dice qué es el aviso, dice por qué está ahí arriba. */
+.chip-anuncio {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--superficie-2), var(--superficie-2) 4px,
+    var(--superficie) 4px, var(--superficie) 8px
+  );
+  color: var(--tinta-2);
+  border-color: var(--borde-fuerte);
+  font-style: italic;
+}
 
 .prod-numeros {
   display: flex;

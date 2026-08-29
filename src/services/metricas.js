@@ -570,7 +570,18 @@ export function calcularMetricas({
   // 17% de Premium, que era el supuesto original y erra hasta 3 puntos
   comisionPct = null,
 }) {
-  const top = [...snapshots]
+  // EL TOP ES DEL RANKING ORGÁNICO, NO DEL LISTADO.
+  //
+  // Medido el 29-ago-2026 sobre seis nichos: las cuatro primeras posiciones del
+  // listado son anuncios en TODOS, sin excepción. Un top que los incluye mide,
+  // en el tramo que más pesa, quién pagó más — no quién vende.
+  //
+  // Se excluyen solo los anuncios PUROS: el item que aparece pagado Y orgánico
+  // es un competidor de verdad (en freidora de aire, 9 de 11 "anuncios" eran de
+  // esos) y queda dentro. `esAnuncio` es null en los scans de Apify, que no
+  // traía el dato: esos entran igual, porque tirarlos borraría la serie vieja.
+  const organicos = snapshots.filter((s) => s.esAnuncio !== true)
+  const top = [...organicos]
     .sort((a, b) => (a.posicion ?? Infinity) - (b.posicion ?? Infinity))
     .slice(0, topN)
   const n = top.length
@@ -868,6 +879,8 @@ export async function obtenerProductosUltimoScan(nicho) {
         // badge público acumulado de ML, en baldes (25/50/100/500/...): dice
         // trayectoria del listing, NO ritmo. Ver senalVendidos().
         vendidos: s.vendidos ?? null,
+        // la posición está comprada. null = scan de Apify, que no lo medía.
+        esAnuncio: s.esAnuncio ?? null,
         resenasNuevasDia: velocidadPorSku.get(s.sku)?.resenasNuevasDia ?? null,
         reviewsDelta: velocidadPorSku.get(s.sku)?.reviewsDelta ?? null,
         ventanaDias: velocidadPorSku.get(s.sku)?.ventanaDias ?? null,
@@ -1118,7 +1131,10 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
     // sin juez el reporte sale igual: mejor un dato sin arbitrar que ninguno
   }
 
+  // mismo criterio que el top de métricas: el ranking que se muestra y se le
+  // pasa a la IA es el orgánico, sin los lugares comprados
   const topProductos = [...snapshots]
+    .filter((s) => s.esAnuncio !== true)
     .sort((a, b) => (a.posicion ?? Infinity) - (b.posicion ?? Infinity))
     .slice(0, 10)
     .map((snap) => {

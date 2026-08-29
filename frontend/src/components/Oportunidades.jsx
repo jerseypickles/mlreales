@@ -1052,6 +1052,16 @@ function ProductosEscaneados({ nichoId }) {
                 {p.esFull ? <span className="prod-chip chip-full">Full</span> : null}
                 {p.origenCrossBorder ? <span className="prod-chip chip-cbt" title="Se despacha desde el exterior">del exterior</span> : null}
                 {p.tipoListing === 'catalogo' ? <span className="prod-chip chip-catalogo">catálogo</span> : null}
+                {/* Posición comprada. Medido el 29-ago-2026 en seis nichos: las
+                    cuatro primeras posiciones del listado son anuncios en todos.
+                    Se marca solo el anuncio PURO —el que paga y además rankea
+                    orgánico es un competidor de verdad y no lleva chip—, y ya
+                    queda fuera del top de métricas. */}
+                {p.esAnuncio ? (
+                  <span className="prod-chip chip-anuncio" title="Posición pagada: este aviso aparece por publicidad, no por ranking. No cuenta para el top del nicho.">
+                    anuncio
+                  </span>
+                ) : null}
               </div>
             </div>
 
