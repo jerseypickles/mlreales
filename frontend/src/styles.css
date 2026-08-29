@@ -4099,7 +4099,7 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  padding: 9px 11px 5px;
+  padding: 4px 12px 6px;
   font-size: 12px;
   line-height: 1.3;
   color: var(--tinta);
@@ -4108,28 +4108,35 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
      grilla se ve rota */
   height: 36px;
 }
-/* El precio de venta, bajo el título. No va en la fila de KPIs porque no es un
-   indicador que se compare entre productos: es el dato con el que se leen todos
-   los demás. Con promoción activa manda el efectivo y el de lista queda tachado
-   al lado, que es lo que el comprador ve en ML. */
+/* EL PRECIO, EN LA BANDA BAJO LA FOTO.
+   Lleva el mismo padding lateral que el resto de la tarjeta (12px): sin eso el
+   texto llega al borde y se ve salido, que es como quedó la primera versión.
+   Alineado a la línea base para que el tachado de la promoción se apoye en el
+   precio vigente y no flote. */
 .pc-mini-precio {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  margin-top: 2px;
+  gap: 7px;
+  padding: 10px 12px 0;
+  min-width: 0;
 }
 
 .pc-mini-precio b {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--tinta);
-  letter-spacing: -0.2px;
+  letter-spacing: -0.3px;
+  line-height: 1.1;
 }
 
 .pc-mini-precio s {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--tinta-3);
   text-decoration-thickness: 1px;
+  /* el precio de lista nunca empuja al vigente fuera de la tarjeta */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pc-mini-kpis {

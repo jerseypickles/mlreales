@@ -524,17 +524,14 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
               <span className="pc-mini-sello pc-mini-sello-pausa">pausada</span>
             ) : null}
           </span>
-          <span className="pc-mini-titulo" title={p.titulo ?? p.sku}>
-            {tituloCorto(p.titulo ?? p.sku, prefijos?.get(p.titulo) ?? '')}
-          </span>
-          {/* EL PRECIO AL QUE SE ESTÁ VENDIENDO HOY.
-              Va bajo el título y no en la fila de KPIs porque no es un
-              indicador que se compara entre productos: es el dato con el que se
-              leen todos los demás —una conversión de 4% dice cosas muy
-              distintas a $2.960 que a $6.780—.
-              Con promoción activa manda el precio EFECTIVO, que es lo que el
-              comprador paga y sobre lo que ML cobra su comisión; el de lista
-              queda al lado tachado para que se vea el descuento vigente. */}
+          {/* EL PRECIO AL QUE SE ESTÁ VENDIENDO HOY, justo bajo la foto.
+              Es el dato con el que se leen todos los demás: una conversión de
+              4% dice cosas muy distintas a $2.960 que a $6.780. Va antes del
+              título porque se busca con la vista junto con la imagen, no
+              leyendo.
+              Con promoción activa manda el precio EFECTIVO —lo que el comprador
+              paga y sobre lo que ML cobra comisión— con el de lista tachado al
+              lado, igual que se ve en ML. */}
           {Number.isFinite(precioEfectivo) ? (
             <span className="pc-mini-precio">
               <b>{fmtPrecio(precioEfectivo)}</b>
@@ -545,6 +542,9 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
               ) : null}
             </span>
           ) : null}
+          <span className="pc-mini-titulo" title={p.titulo ?? p.sku}>
+            {tituloCorto(p.titulo ?? p.sku, prefijos?.get(p.titulo) ?? '')}
+          </span>
           {/* SEMÁFORO DE LOS ÚLTIMOS 7 DÍAS: ¿este producto va bien AHORA?
               Verde vende y convierte, rojo no vende, ámbar convierte poco o le
               falta el costo para saber si gana. El stock no está acá porque ya
