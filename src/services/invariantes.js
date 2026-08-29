@@ -131,29 +131,29 @@ async function precioEfectivoBajoLista() {
 // Lo que importa no es cruzar un umbral que alguien eligió, es que el número se
 // mueva respecto de lo que este sistema venía entregando. Se compara contra la
 // mediana de las dos semanas previas, que es la definición de "lo normal aquí".
-async function actorSigueEntregandoIds() {
-  const { Snapshot } = await import('../models/Snapshot.js')
-  const cobertura = async (desde, hasta) => {
-    const total = await Snapshot.countDocuments({ fecha: { $gte: desde, $lt: hasta } })
-    if (!total) return null
-    const con = await Snapshot.countDocuments({ fecha: { $gte: desde, $lt: hasta }, numReviews: { $ne: null } })
-    return (con / total) * 100
-  }
+// EL COMPARADOR, REUSABLE. Recibe una función que mide cobertura entre dos
+// fechas y decide si se desplomó, comparando contra la mediana de las dos
+// semanas previas Y contra lo mejor que este sistema supo entregar.
+//
+// Se sacó de la invariante de reseñas para poder vigilar VARIOS campos con la
+// misma lógica. La razón es concreta: el 29-ago-2026 el nombre del vendedor
+// dejó de llegar para listados enteros —ML sirve el componente de dos formas y
+// el parser leía una— y ninguna invariante lo vio, porque solo se vigilaba
+// `numReviews`. Lo encontró el importador preguntando por un nicho.
+export async function derivaDeCobertura(nombre, cobertura, { pisoSinHistoria = 20 } = {}) {
   const ahora = Date.now()
   const hoy = await cobertura(new Date(ahora - 36 * 3600e3), new Date(ahora))
-  if (hoy == null) return ok('sin snapshots recientes que verificar')
+  if (hoy == null) return ok(`sin datos recientes de ${nombre}`)
 
-  // la referencia: día a día de las dos semanas anteriores, sin contar las
-  // últimas 36 h
   const previos = []
   for (let d = 2; d <= 15; d++) {
     const c = await cobertura(new Date(ahora - d * 86400e3), new Date(ahora - (d - 1) * 86400e3))
     if (c != null) previos.push(c)
   }
   if (previos.length < 4) {
-    return hoy < 20
-      ? falla(`cobertura de reseñas en ${Math.round(hoy)}% y sin historia para comparar`, { hoy })
-      : ok(`cobertura ${Math.round(hoy)}% (sin historia suficiente para comparar)`, { hoy })
+    return hoy < pisoSinHistoria
+      ? falla(`cobertura de ${nombre} en ${Math.round(hoy)}% y sin historia para comparar`, { hoy })
+      : ok(`${nombre}: ${Math.round(hoy)}% (sin historia suficiente)`, { hoy })
   }
   const orden = [...previos].sort((a, b) => a - b)
   const normal = orden[Math.floor(orden.length / 2)]
@@ -170,17 +170,116 @@ async function actorSigueEntregandoIds() {
   // mitad.
   if (caida > 40) {
     return falla(
-      `la cobertura de reseñas cayó ${Math.round(caida)}% de golpe: hoy ${Math.round(hoy)}% contra ${Math.round(normal)}% habitual. El detalle está fallando o el actor cambió su salida.`,
+      `la cobertura de ${nombre} cayó ${Math.round(caida)}% de golpe: hoy ${Math.round(hoy)}% contra ${Math.round(normal)}% habitual. Algo cambió río arriba.`,
       { hoy, normal, caida },
     )
   }
   if (mejor > 0 && hoy < mejor * 0.6) {
     return falla(
-      `la cobertura se estancó baja: ${Math.round(hoy)}% hoy y ${Math.round(normal)}% habitual, contra ${Math.round(mejor)}% que este sistema llegó a entregar. Ya es la nueva normalidad, que es justo lo que una comparación con el promedio reciente no detecta.`,
+      `la cobertura de ${nombre} se estancó baja: ${Math.round(hoy)}% hoy y ${Math.round(normal)}% habitual, contra ${Math.round(mejor)}% que este sistema llegó a entregar. Ya es la nueva normalidad, que es justo lo que una comparación con el promedio reciente no detecta.`,
       { hoy, normal, mejor },
     )
   }
-  return ok(`cobertura ${Math.round(hoy)}% · habitual ${Math.round(normal)}% · mejor ${Math.round(mejor)}%`, { hoy, normal, mejor })
+  return ok(`${nombre}: ${Math.round(hoy)}% · habitual ${Math.round(normal)}% · mejor ${Math.round(mejor)}%`, { hoy, normal, mejor })
+}
+
+// Cobertura de un campo del snapshot en una ventana.
+async function coberturaSnapshot(campo) {
+  const { Snapshot } = await import('../models/Snapshot.js')
+  return async (desde, hasta) => {
+    const total = await Snapshot.countDocuments({ fecha: { $gte: desde, $lt: hasta } })
+    if (!total) return null
+    const con = await Snapshot.countDocuments({ fecha: { $gte: desde, $lt: hasta }, [campo]: { $ne: null } })
+    return (con / total) * 100
+  }
+}
+
+async function actorSigueEntregandoIds() {
+  return derivaDeCobertura('reseñas del nivel 2', await coberturaSnapshot('numReviews'))
+}
+
+// ── 9. Deriva del LISTADO: los campos que baja el nivel 1 ────────────────
+// El nivel 1 trae precio, vendedor, vendidos y las reseñas por API oficial. Un
+// campo que venía poblado y empieza a llegar vacío significa que ML cambió la
+// forma de su página, y eso pasa sin aviso: el 29-ago el vendedor se cayó a
+// cero en nichos enteros y el sistema siguió puntuando como si nada.
+async function listadoSigueEntregandoCampos() {
+  const { Snapshot } = await import('../models/Snapshot.js')
+  const { Producto } = await import('../models/Producto.js')
+  const revisiones = []
+
+  // precio y vendidos viven en el snapshot
+  for (const [campo, nombre] of [['precio', 'precio del listado'], ['numReviewsApi', 'reseñas por API oficial']]) {
+    revisiones.push({ nombre, r: await derivaDeCobertura(nombre, await coberturaSnapshot(campo)) })
+  }
+
+  // el vendedor vive en el producto: se mide sobre los vistos en la ventana
+  const porVentana = async (desde, hasta) => {
+    const total = await Producto.countDocuments({ ultimaVezVisto: { $gte: desde, $lt: hasta } })
+    if (!total) return null
+    const con = await Producto.countDocuments({
+      ultimaVezVisto: { $gte: desde, $lt: hasta },
+      vendedor: { $nin: [null, ''] },
+    })
+    return (con / total) * 100
+  }
+  revisiones.push({ nombre: 'vendedor', r: await derivaDeCobertura('vendedor', porVentana, { pisoSinHistoria: 5 }) })
+
+  const rotas = revisiones.filter((x) => !x.r.ok)
+  if (rotas.length) {
+    return falla(rotas.map((x) => x.r.detalle).join(' · '), { rotas: rotas.map((x) => x.nombre) })
+  }
+  return ok(revisiones.map((x) => x.r.detalle).join(' · '))
+}
+
+// ── 10. El ranking que se guarda es orgánico, no comprado ────────────────
+// Medido el 29-ago-2026 sobre seis nichos: las cuatro primeras posiciones del
+// listado son ANUNCIOS en todos, sin excepción. Si vuelven a colarse arriba es
+// que se rompió el orden del nivel 1, y el sistema estaría midiendo quién pagó
+// más en vez de quién vende.
+async function elTopNoEsPagado() {
+  const { Snapshot } = await import('../models/Snapshot.js')
+  const desde = new Date(Date.now() - 36 * 3600e3)
+  const conDato = await Snapshot.countDocuments({ fecha: { $gte: desde }, esAnuncio: { $ne: null } })
+  if (!conDato) return ok('ningún scan reciente distingue anuncios todavía')
+  const arriba = await Snapshot.countDocuments({
+    fecha: { $gte: desde },
+    esAnuncio: true,
+    posicion: { $lte: 5 },
+  })
+  return arriba === 0
+    ? ok(`ningún anuncio en el top 5 (${conDato} snapshots con la marca)`)
+    : falla(
+        `${arriba} anuncio(s) colados en el top 5: el ranking guardado mezcla posición comprada con ganada`,
+        { arriba, conDato },
+      )
+}
+
+// ── 11. Los cargos de ML no caen todos en "otros" ────────────────────────
+// ML cambia los códigos de sus cargos sin avisar: hasta el 29-ago el envío se
+// leía como `CXD` cuando ya venía como `CFF`, y se capturaba el 0,5% —$799 de
+// $153.405—. El resto caía en "otros" y nadie lo miraba. Si "otros" vuelve a
+// pesar más que el envío, ML cambió de códigos otra vez.
+async function cargosClasificados() {
+  const { CargoMl } = await import('../models/CargoMl.js')
+  const desde = new Date(Date.now() - 30 * 86400e3)
+  const filas = await CargoMl.aggregate([
+    { $match: { fecha: { $gte: desde }, anulado: false, esAnulacion: { $ne: true } } },
+    { $group: { _id: '$tipo', monto: { $sum: '$montoClp' } } },
+  ])
+  if (!filas.length) return ok('sin cargos de ML en la ventana')
+  const CONOCIDOS = new Set(['CV', 'CFF', 'CXD', 'PADS', 'CFCB', 'CFWA'])
+  const total = filas.reduce((s, f) => s + f.monto, 0)
+  const desconocido = filas.filter((f) => !CONOCIDOS.has(f._id))
+  const montoDesconocido = desconocido.reduce((s, f) => s + f.monto, 0)
+  const pct = total > 0 ? (montoDesconocido / total) * 100 : 0
+  if (pct > 10) {
+    return falla(
+      `${Math.round(pct)}% de lo que ML cobró está sin clasificar (${desconocido.map((f) => f._id).join(', ')}): probable código nuevo, como pasó con CFF`,
+      { pct, tipos: desconocido.map((f) => f._id) },
+    )
+  }
+  return ok(`${Math.round(100 - pct)}% de los cargos clasificados en su bolsillo`)
 }
 
 // ── 7. La cartera en cotización tiene lo necesario para decidir ──────────
@@ -212,6 +311,9 @@ export const INVARIANTES = [
   { id: 'actor-entrega-ids', que: 'El detalle sigue entregando reseñas (deriva de esquema del actor)', fn: actorSigueEntregandoIds },
   { id: 'cotizando-con-precio', que: 'Los nichos en cotización tienen costo para poder compararse', fn: cotizandoTienePrecio },
   { id: 'propios-con-costo', que: 'Los productos propios tienen costo: sin él no hay ganancia, solo contribución', fn: propiosConCosto },
+  { id: 'listado-entrega-campos', que: 'El listado sigue trayendo precio, vendedor y reseñas (deriva de esquema de ML)', fn: listadoSigueEntregandoCampos },
+  { id: 'top-no-pagado', que: 'El ranking guardado es orgánico: ningún anuncio en el top 5', fn: elTopNoEsPagado },
+  { id: 'cargos-clasificados', que: 'Los cargos de ML caen en su bolsillo, no en "otros"', fn: cargosClasificados },
 ]
 
 export async function verificarInvariantes() {
