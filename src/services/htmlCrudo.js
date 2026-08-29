@@ -44,10 +44,26 @@ export async function guardarHtmlCrudo({ keyword, html, items, fuente = 'zyte', 
   }
 }
 
-// Devuelve el HTML descomprimido de un nicho, para diagnosticar.
-export async function leerHtmlCrudo(keyword) {
+// Pura. Mongoose con `.lean()` devuelve los Buffer como `Binary` del driver de
+// MongoDB, que zlib rechaza —"Received an instance of Binary"—. Se normaliza
+// acá para que quien llame no tenga que saberlo.
+export function aBuffer(v) {
+  if (!v) return null
+  if (Buffer.isBuffer(v)) return v
+  if (Buffer.isBuffer(v.buffer)) return v.buffer
+  if (typeof v.value === 'function') return Buffer.from(v.value(true))
+  if (ArrayBuffer.isView(v)) return Buffer.from(v.buffer, v.byteOffset, v.byteLength)
+  return null
+}
+
+// Devuelve el HTML de un nicho, para diagnosticar. Con `soloResumen` NO
+// descomprime: los conteos son lo que se mira primero y no hace falta pagar
+// 2 MB de descompresión para leer seis números.
+export async function leerHtmlCrudo(keyword, { soloResumen = false } = {}) {
   const doc = await HtmlCrudo.findOne({ keyword }).lean()
   if (!doc) return null
-  const html = doc.htmlBr ? (await descomprimir(doc.htmlBr)).toString('utf8') : null
-  return { ...doc, html, htmlBr: undefined }
+  const meta = { ...doc, htmlBr: undefined, comprimidoBytes: aBuffer(doc.htmlBr)?.length ?? null }
+  if (soloResumen) return { ...meta, html: null }
+  const buf = aBuffer(doc.htmlBr)
+  return { ...meta, html: buf ? (await descomprimir(buf)).toString('utf8') : null }
 }

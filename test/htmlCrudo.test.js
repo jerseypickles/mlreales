@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { resumirExtraccion } from '../src/services/htmlCrudo.js'
+import { resumirExtraccion, aBuffer } from '../src/services/htmlCrudo.js'
 
 // El resumen es la primera pregunta cuando algo se rompe: ¿cambió ML o
 // cambiamos nosotros? Guardar el HTML sin lo que el parser sacó ese día deja la
@@ -37,4 +37,19 @@ test('el cero cuenta como dato, el null no', () => {
 test('sin items el resumen es todo cero, no explota', () => {
   assert.equal(resumirExtraccion([]).items, 0)
   assert.equal(resumirExtraccion().items, 0)
+})
+
+// Mongoose con `.lean()` devuelve los Buffer como `Binary` del driver de
+// MongoDB, no como Buffer de Node, y zlib los rechaza con "Received an instance
+// of Binary". El HTML se guardaba bien y fallaba al leerlo.
+test('el Binary de MongoDB se normaliza a Buffer', () => {
+  const original = Buffer.from('hola')
+  assert.equal(aBuffer(original), original, 'un Buffer pasa tal cual')
+  // así viene de Mongo con .lean()
+  assert.deepEqual(aBuffer({ buffer: original, sub_type: 0 }), original)
+  // y así de algunos drivers
+  assert.deepEqual(aBuffer({ value: () => original }), original)
+  assert.deepEqual(aBuffer(new Uint8Array([104, 111, 108, 97])), original)
+  assert.equal(aBuffer(null), null)
+  assert.equal(aBuffer(undefined), null)
 })

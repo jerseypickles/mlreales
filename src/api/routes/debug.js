@@ -164,10 +164,18 @@ router.get(
   autorizado,
   manejar(async (req, res) => {
     const { leerHtmlCrudo } = await import('../../services/htmlCrudo.js')
-    const doc = await leerHtmlCrudo(req.params.keyword)
+    const soloResumen = Boolean(req.query.resumen)
+    const doc = await leerHtmlCrudo(req.params.keyword, { soloResumen })
     if (!doc) return res.status(404).json({ error: 'sin html guardado para esa keyword' })
-    if (req.query.resumen) {
-      return res.json({ keyword: doc.keyword, fecha: doc.fecha, fuente: doc.fuente, chars: doc.chars, resumen: doc.resumen })
+    if (soloResumen) {
+      return res.json({
+        keyword: doc.keyword,
+        fecha: doc.fecha,
+        fuente: doc.fuente,
+        chars: doc.chars,
+        comprimidoBytes: doc.comprimidoBytes,
+        resumen: doc.resumen,
+      })
     }
     res.type('text/html').send(doc.html ?? '')
   }),
