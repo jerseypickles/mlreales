@@ -13,7 +13,18 @@ const cargoMlSchema = new mongoose.Schema({
   documentoId: String,
   periodo: { type: String, index: true }, // clave del período: 'AAAA-MM-01'
   fecha: { type: Date, index: true },
-  // CV = cargo por venta (comisión) · CXD = envíos · PADS = Product Ads
+  // Tipos medidos sobre el período 2026-08 (300 líneas), por peso:
+  //   CFF  envíos de ML          108 líneas  $152.606  ← el envío de verdad
+  //   PADS Product Ads            20         $137.327
+  //   CV   cargo por venta       113         $ 59.919
+  //   BPAD anulación de PADS      14         $ 57.112
+  //   CFCB colecta Full           10         $ 18.417
+  //   BFF  anulación de envío      3         $  2.398
+  //   BV   anulación de venta      3         $    931
+  //   CXD  envíos (código viejo)   1         $    799
+  //   CFWA almacenamiento Full    28         $    647
+  // Los que empiezan con B son ANULACIONES: vienen con monto positivo y anulan
+  // un cargo anterior, que a su vez llega con estado BONUS_ON_BILL.
   tipo: { type: String, index: true },
   concepto: String,
   montoClp: Number,
@@ -22,6 +33,9 @@ const cargoMlSchema = new mongoose.Schema({
   // 'BONUS_ON_BILL' = anulado en la factura: NO es un costo real
   estado: { type: String, default: null },
   anulado: { type: Boolean, default: false },
+  // esta línea ANULA otro cargo: `bonificaA` es el detalleId del anulado
+  esAnulacion: { type: Boolean, default: false },
+  bonificaA: { type: String, default: null, index: true },
   // ya descontado del pago de la operación (vs cobrado aparte)
   descontadoDeLaVenta: { type: Boolean, default: null },
   itemId: { type: String, index: true },

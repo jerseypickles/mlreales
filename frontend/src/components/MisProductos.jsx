@@ -232,7 +232,20 @@ function GananciaUnidad({ p, onGuardarCosto, onCambiarPrecio }) {
         </li>
         {e.esFull ? (
           <li>
-            <span>envío Full{e.envioSupuesto ? ' (caja estimada)' : ''}</span>
+            {/* El envío facturado le gana a la tarifa: sobre los propios de
+                agosto el tarifario decía $799 donde ML cobró $2.487, y con eso
+                la ganancia salía optimista justo en los de ticket bajo. */}
+            <span
+              title={
+                e.envioBase === 'facturado'
+                  ? `Promedio de lo que ML facturó por envío en los últimos 30 días.${
+                      e.envioTarifarioClp != null ? ` El tarifario estimaba ${fmtPrecio(e.envioTarifarioClp)}.` : ''
+                    }`
+                  : 'Estimado del tarifario de ML: todavía no hay envíos facturados de este producto.'
+              }
+            >
+              envío Full{e.envioBase === 'facturado' ? ' (facturado)' : e.envioSupuesto ? ' (caja estimada)' : ''}
+            </span>
             <b>{e.envioClp != null ? `−${fmtPrecio(e.envioClp)}` : 'sin dato'}</b>
           </li>
         ) : (
@@ -446,7 +459,18 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
           : 'aviso'
         : null,
       ayuda: p.cargosMl30d
-        ? `comisión ${fmtPrecio(p.cargosMl30d.comisionClp)}\nenvío ${fmtPrecio(p.cargosMl30d.envioClp)}\npublicidad ${fmtPrecio(p.cargosMl30d.adsClp)}\n${p.cargosMl30d.lineas} línea(s) facturadas`
+        ? [
+            `comisión ${fmtPrecio(p.cargosMl30d.comisionClp)}`,
+            `envío ${fmtPrecio(p.cargosMl30d.envioClp)}`,
+            `publicidad ${fmtPrecio(p.cargosMl30d.adsClp)}`,
+            // bolsillos que antes caían en "otros" y no se veían
+            p.cargosMl30d.colectaClp ? `colecta ${fmtPrecio(p.cargosMl30d.colectaClp)}` : null,
+            p.cargosMl30d.almacenajeClp ? `almacenaje ${fmtPrecio(p.cargosMl30d.almacenajeClp)}` : null,
+            p.cargosMl30d.otrosClp ? `otros ${fmtPrecio(p.cargosMl30d.otrosClp)}` : null,
+            `${p.cargosMl30d.lineas} línea(s) facturadas`,
+          ]
+            .filter(Boolean)
+            .join('\n')
         : 'Se sincroniza a diario desde el detalle de facturación de ML',
     },
     { k: 'Stock', v: fmtNum(d?.ultima?.stock), Icono: Package, tono: d?.ultima?.stock <= 3 ? 'aviso' : null },

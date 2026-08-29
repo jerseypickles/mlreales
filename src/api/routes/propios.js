@@ -37,7 +37,9 @@ async function tipoPublicacionDe(propio) {
   return valor
 }
 
-async function economiaUnidad(propio) {
+// `medido` es lo que ML FACTURÓ por este item en los últimos 30 días, con las
+// unidades vendidas en la misma ventana: { envioClp, unidades }.
+async function economiaUnidad(propio, medido = null) {
   const ultima = (propio.mediciones ?? []).at(-1) ?? null
   const precioClp = propio.promoMl?.activa?.precio ?? ultima?.precioEfectivo ?? ultima?.precio ?? null
   if (!Number.isFinite(precioClp) || precioClp <= 0) return null
@@ -61,7 +63,20 @@ async function economiaUnidad(propio) {
         tipoPublicacion: tipoPublicacion ?? 'gold_pro',
       }).catch(() => null)
     : null
-  const envioClp = Number.isFinite(env?.clp) ? Math.round(env.clp) : null
+  const delTarifario = Number.isFinite(env?.clp) ? Math.round(env.clp) : null
+
+  // EL ENVÍO MEDIDO LE GANA AL DEL TARIFARIO.
+  //
+  // El tarifario cobra por tramo de precio y caja declarada; lo que ML factura
+  // de verdad llega en las líneas CFF del detalle. Sobre los propios de agosto
+  // la diferencia no era de redondeo: el tarifario decía $799 donde el cargo
+  // real llegaba a $2.487, y con eso la ganancia por unidad salía optimista en
+  // los productos de ticket bajo, que son justo los que no la aguantan.
+  const envioMedidoClp =
+    Number.isFinite(medido?.envioClp) && medido.envioClp > 0 && medido.unidades > 0
+      ? Math.round(medido.envioClp / medido.unidades)
+      : null
+  const envioClp = envioMedidoClp ?? delTarifario
 
   if (comisionClp === null && envioClp === null) return null
   const mlTotalClp = (comisionClp ?? 0) + (envioClp ?? 0)
@@ -74,9 +89,13 @@ async function economiaUnidad(propio) {
     comisionClp,
     comisionPct: Number.isFinite(com?.pct) ? com.pct : null,
     envioClp,
+    // de dónde salió el envío: lo facturado por ML o la tarifa estimada
+    envioBase: envioMedidoClp != null ? 'facturado' : 'tarifario',
+    envioTarifarioClp: delTarifario,
     // sin dimensiones declaradas la tarifa sale de una caja chica supuesta: el
-    // tramo de precio manda, pero conviene decirlo en pantalla
-    envioSupuesto: esFull && !declaradas,
+    // tramo de precio manda, pero conviene decirlo en pantalla. Con envío
+    // facturado el supuesto ya no aplica.
+    envioSupuesto: envioMedidoClp == null && esFull && !declaradas,
     esFull,
     mlTotalClp,
     mlPct: Math.round((mlTotalClp / precioClp) * 1000) / 10,
@@ -149,6 +168,9 @@ router.get(
             comisionClp: cargosItem.comisionClp,
             envioClp: cargosItem.envioClp,
             adsClp: cargosItem.adsClp,
+            colectaClp: cargosItem.colectaClp,
+            almacenajeClp: cargosItem.almacenajeClp,
+            otrosClp: cargosItem.otrosClp,
             costoClp,
             base: 'cargos reales de ML',
           }
@@ -177,7 +199,10 @@ router.get(
         conversion7d,
         margen30d,
         cargosMl30d: cargosItem,
-        economiaUnidad: await economiaUnidad(p).catch(() => null),
+        economiaUnidad: await economiaUnidad(p, {
+          envioClp: cargosItem?.envioClp ?? null,
+          unidades: v30?.unidades ?? null,
+        }).catch(() => null),
         // REPOSICIÓN: cuánto aguanta y cuánto mandar (ver services/inventarioFull)
         reposicion: await reposicionDe(p, v30, v7).catch(() => null),
         impacto: evaluarImpacto(p),
@@ -241,13 +266,22 @@ router.get(
             (acc, p) => {
               const g = p.cargosMl30d
               if (!g) return acc
-              acc.comisionClp += g.comisionClp
-              acc.envioClp += g.envioClp
-              acc.adsClp += g.adsClp
-              acc.totalClp += g.totalClp
+              // todos los bolsillos, o el desglose no cuadra con el total: la
+              // colecta y el almacenaje Full existen y antes se escondían
+              for (const k of ['comisionClp', 'envioClp', 'adsClp', 'colectaClp', 'almacenajeClp', 'otrosClp', 'totalClp']) {
+                acc[k] += g[k] ?? 0
+              }
               return acc
             },
-            { comisionClp: 0, envioClp: 0, adsClp: 0, totalClp: 0 },
+            {
+              comisionClp: 0,
+              envioClp: 0,
+              adsClp: 0,
+              colectaClp: 0,
+              almacenajeClp: 0,
+              otrosClp: 0,
+              totalClp: 0,
+            },
           )
           const ingresos30d = hermanos.reduce((s, p) => s + (p.ventas30d?.ingresosClp ?? 0), 0)
           carteras[nichoId] = {
