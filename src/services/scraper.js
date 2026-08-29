@@ -30,8 +30,11 @@ export function proveedorDetalle() {
 // la cuenta correcta.
 export async function buscarListado(keyword, { domainCode = 'CL' } = {}) {
   if (proveedorListado() === 'zyte') {
-    const { items, costoUsd } = await buscarNivel1Zyte(keyword, { domainCode })
-    return { items, costoUsd, fuente: 'zyte' }
+    // `html` viaja para poder guardarlo crudo: cuando ML cambia la forma de un
+    // dato, tener la página que sirvió ese día es la diferencia entre leer un
+    // documento y volver a scrapear esperando que repita la variante
+    const { items, costoUsd, html } = await buscarNivel1Zyte(keyword, { domainCode })
+    return { items, costoUsd, html, fuente: 'zyte' }
   }
   const { items, costoUsd } = await buscarNivel1(keyword, { domainCode })
   return { items, costoUsd, fuente: 'apify' }

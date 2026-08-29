@@ -155,4 +155,22 @@ router.get(
   }),
 )
 
+// El HTML que ML sirvió en el último scan de un nicho, para diagnosticar un
+// cambio de forma sin volver a scrapear. Con ?resumen=1 devuelve solo lo que el
+// parser sacó ese día, que es la primera pregunta: ¿cambió ML o cambiamos
+// nosotros?
+router.get(
+  '/html-crudo/:keyword',
+  autorizado,
+  manejar(async (req, res) => {
+    const { leerHtmlCrudo } = await import('../../services/htmlCrudo.js')
+    const doc = await leerHtmlCrudo(req.params.keyword)
+    if (!doc) return res.status(404).json({ error: 'sin html guardado para esa keyword' })
+    if (req.query.resumen) {
+      return res.json({ keyword: doc.keyword, fecha: doc.fecha, fuente: doc.fuente, chars: doc.chars, resumen: doc.resumen })
+    }
+    res.type('text/html').send(doc.html ?? '')
+  }),
+)
+
 export default router

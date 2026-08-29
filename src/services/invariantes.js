@@ -302,6 +302,48 @@ async function propiosConCosto() {
     : ok(`${conCosto} de ${total} propios con costo unitario cargado`, { total, conCosto })
 }
 
+// ── 12. Un scan no encoge a la mitad de un día para otro ─────────────────
+// Un listado que traía 100 items y trae 50 no es un mercado que se achicó: es
+// scrapeo a medias. Pasó el 29-ago-2026 —el nivel 1 por Zyte pedía una sola
+// página donde el actor pedía dos, y los nichos cayeron de ~95 a ~48 items sin
+// que nada avisara—, y también pasa cuando ML bloquea a mitad de corrida o una
+// página devuelve 5xx.
+//
+// Se compara cada nicho contra SU PROPIA historia, no contra un número global:
+// un nicho de 30 items y otro de 100 son ambos normales, cada uno en lo suyo.
+async function elScanNoEncoge() {
+  const { Snapshot } = await import('../models/Snapshot.js')
+  const desde = new Date(Date.now() - 12 * 86400e3)
+  const porScan = await Snapshot.aggregate([
+    { $match: { fecha: { $gte: desde } } },
+    { $group: { _id: { keyword: '$keyword', fecha: '$fecha' }, items: { $sum: 1 } } },
+    { $sort: { '_id.fecha': -1 } },
+    { $group: { _id: '$_id.keyword', serie: { $push: '$items' } } },
+  ])
+  const encogidos = []
+  for (const { _id: keyword, serie } of porScan) {
+    // hacen falta al menos tres corridas previas para saber qué es normal acá
+    if (serie.length < 4) continue
+    const [ultimo, ...previos] = serie
+    const orden = [...previos].sort((a, b) => a - b)
+    const normal = orden[Math.floor(orden.length / 2)]
+    if (normal >= 20 && ultimo < normal * 0.6) {
+      encogidos.push({ keyword, ultimo, normal })
+    }
+  }
+  if (!encogidos.length) {
+    return ok(`ningún nicho encogió (${porScan.length} con historia suficiente)`)
+  }
+  const muestra = encogidos
+    .slice(0, 5)
+    .map((e) => `${e.keyword} ${e.ultimo} vs ${e.normal}`)
+    .join(', ')
+  return falla(
+    `${encogidos.length} nicho(s) trajeron menos de la mitad de items que de costumbre: ${muestra}. Scrapeo a medias, no mercado más chico.`,
+    { encogidos: encogidos.slice(0, 20) },
+  )
+}
+
 export const INVARIANTES = [
   { id: 'reviews-no-retroceden', que: 'Las reseñas son acumulativas: una lectura que baja es scrapeo fallido', fn: reviewsNoRetroceden },
   { id: 'ads-cuadran', que: 'El gasto por campaña y por producto deben coincidir con ML', fn: adsCuadranConMl },
@@ -314,6 +356,7 @@ export const INVARIANTES = [
   { id: 'listado-entrega-campos', que: 'El listado sigue trayendo precio, vendedor y reseñas (deriva de esquema de ML)', fn: listadoSigueEntregandoCampos },
   { id: 'top-no-pagado', que: 'El ranking guardado es orgánico: ningún anuncio en el top 5', fn: elTopNoEsPagado },
   { id: 'cargos-clasificados', que: 'Los cargos de ML caen en su bolsillo, no en "otros"', fn: cargosClasificados },
+  { id: 'scan-no-encoge', que: 'Un scan no trae la mitad de items que de costumbre: eso es scrapeo a medias', fn: elScanNoEncoge },
 ]
 
 export async function verificarInvariantes() {

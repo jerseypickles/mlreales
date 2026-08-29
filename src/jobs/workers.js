@@ -57,7 +57,7 @@ export async function procesarScanNicho(job) {
   if (nicho.estado !== 'activo') return { omitido: true, motivo: `nicho en estado "${nicho.estado}"` }
 
   const fecha = new Date()
-  const { items: crudos, costoUsd, fuente } = await buscarListado(nicho.keyword, {
+  const { items: crudos, costoUsd, fuente, html } = await buscarListado(nicho.keyword, {
     domainCode: nicho.domainCode,
   })
   await registrarGasto(nicho._id, costoUsd, fuente)
@@ -65,6 +65,13 @@ export async function procesarScanNicho(job) {
     throw new Error(
       `${fuente} devolvió 0 items para "${nicho.keyword}": posible bloqueo o keyword sin resultados`,
     )
+  }
+
+  // El HTML tal como ML lo sirvió, para poder diagnosticar un cambio de forma
+  // sin volver a scrapear. Best-effort: si falla se pierde una ayuda, no un dato.
+  if (html) {
+    const { guardarHtmlCrudo } = await import('../services/htmlCrudo.js')
+    await guardarHtmlCrudo({ keyword: nicho.keyword, html, items: crudos, fuente, fecha })
   }
 
   const { items, descartados, totalResultados } = normalizarScan(crudos, {
