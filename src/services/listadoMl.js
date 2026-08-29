@@ -39,22 +39,34 @@ const LISTADO_POR_DOMINIO = {
 
 const GEO_POR_DOMINIO = { CL: 'CL', AR: 'AR', CO: 'CO', MX: 'MX', PE: 'PE', UY: 'UY' }
 
+// PAGINACIÓN. ML pagina de a 50 con un sufijo en la URL, y el sufijo importa:
+//   _Desde_51                  → ML lo ignora y devuelve la página 1
+//   _Desde_49_NoIndex_True     → cambia el canonical pero sirve lo mismo
+//   _Desde_51_NoIndex_True     → la página 2 de verdad (medido: 59 items,
+//                                solo 12 repetidos con la página 1)
+// Sin esto Zyte traía ~50 items donde karamelo traía ~95, y el listado se
+// quedaba en la mitad del mercado.
+const POR_PAGINA = 50
+
 // Pura. La URL de listado para una keyword, con los espacios como ML los espera.
-export function urlListado(keyword, domainCode = 'CL') {
+// `pagina` es 1-based.
+export function urlListado(keyword, domainCode = 'CL', pagina = 1) {
   const base = LISTADO_POR_DOMINIO[domainCode]
   if (!base) throw new ZyteError(`domainCode "${domainCode}" sin URL de listado (services/listadoMl.js)`)
   const slug = String(keyword ?? '')
     .trim()
     .toLowerCase()
     .replace(/\s+/g, '-')
-  return `${base}${encodeURIComponent(slug).replace(/%2F/g, '/')}`
+  const url = `${base}${encodeURIComponent(slug).replace(/%2F/g, '/')}`
+  if (pagina <= 1) return url
+  return `${url}_Desde_${(pagina - 1) * POR_PAGINA + 1}_NoIndex_True`
 }
 
 // Pura. El cuerpo de la petición. Sin `productList`: el parseo es nuestro, y así
 // tampoco se paga extracción automática.
-export function cuerpoListado(keyword, { domainCode = 'CL' } = {}) {
+export function cuerpoListado(keyword, { domainCode = 'CL', pagina = 1 } = {}) {
   return {
-    url: urlListado(keyword, domainCode),
+    url: urlListado(keyword, domainCode, pagina),
     geolocation: GEO_POR_DOMINIO[domainCode] ?? 'CL',
     browserHtml: true,
     actions: [
@@ -275,10 +287,16 @@ export function posicionReal(meta, fila) {
   return Number.isFinite(dela2) && dela2 > 0 ? dela2 : null
 }
 
-// Pura. El total de resultados que ML declara ("+9.999 resultados").
+// Pura. El total de resultados que ML declara. Viene en un componente propio,
+// `{"type":"TOTAL_RESULTS","text":"544 resultados"}`, y ML lo capea en 9.999
+// para búsquedas grandes —ahí lo escribe como "+9.999", que es lo que
+// `parsearResultadosTotales` lee como `esMinimo`.
 export function resultadosTotalesDe(html) {
-  const m = String(html ?? '').match(/"total_results?"\s*:\s*"?([\d.+]+)"?/)
-  return m ? m[1] : null
+  const m = String(html ?? '').match(/"type":"TOTAL_RESULTS","text":"([^"]+)"/)
+  if (m) return m[1]
+  // respaldo: el mismo número pintado en la cabecera del listado
+  const t = String(html ?? '').match(/quantity-results[^>]*>([^<]+)</)
+  return t ? t[1] : null
 }
 
 // Pura. HTML → items listos para `normalizarScan`.
@@ -309,8 +327,13 @@ export function itemsDesdeHtml(html, { keyword, domainCode = 'CL' } = {}) {
 
 // Nivel 1 completo. Misma firma que `buscarNivel1` de apify.js —{items, costoUsd}—
 // para que el worker no distinga el proveedor.
-export async function buscarNivel1Zyte(keyword, { domainCode = 'CL', apiKey = config.zyteApiKey } = {}) {
-  if (!apiKey) throw new ZyteError('falta ZYTE_API_KEY')
+// Zyte devuelve 5xx transitorios contra ML —medido un 520 en la página 2 de
+// "cama perro"—. Sin reintento el scan se queda con la mitad del listado y no
+// se entera: hay red de seguridad más arriba, pero prefiere reintentar antes
+// de resignar media página de mercado.
+const REINTENTOS_PAGINA = 2
+
+async function pedirPaginaUnaVez(keyword, { domainCode, apiKey, pagina }) {
   const control = new AbortController()
   const t = setTimeout(() => control.abort(), TIMEOUT_MS)
   let r
@@ -322,20 +345,74 @@ export async function buscarNivel1Zyte(keyword, { domainCode = 'CL', apiKey = co
         'Content-Type': 'application/json',
         Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}`,
       },
-      body: JSON.stringify(cuerpoListado(keyword, { domainCode })),
+      body: JSON.stringify(cuerpoListado(keyword, { domainCode, pagina })),
     })
   } finally {
     clearTimeout(t)
   }
   if (!r.ok) {
     const cuerpo = await r.text().catch(() => '')
-    throw new ZyteError(`Zyte HTTP ${r.status} en listado "${keyword}": ${cuerpo.slice(0, 200)}`, {
-      status: r.status,
-    })
+    throw new ZyteError(
+      `Zyte HTTP ${r.status} en listado "${keyword}" p${pagina}: ${cuerpo.slice(0, 200)}`,
+      { status: r.status },
+    )
   }
-  const json = await r.json()
-  const html = json?.browserHtml ?? ''
-  const items = itemsDesdeHtml(html, { keyword, domainCode })
+  return (await r.json())?.browserHtml ?? ''
+}
+
+async function pedirPagina(keyword, opciones) {
+  let ultimo = null
+  for (let intento = 0; intento <= REINTENTOS_PAGINA; intento++) {
+    try {
+      return await pedirPaginaUnaVez(keyword, opciones)
+    } catch (err) {
+      ultimo = err
+      // 4xx no se reintenta: es la petición, no la suerte
+      if (err.status && err.status >= 400 && err.status < 500) throw err
+    }
+  }
+  throw ultimo
+}
+
+export async function buscarNivel1Zyte(
+  keyword,
+  { domainCode = 'CL', apiKey = config.zyteApiKey, maxPaginas = config.maxPagesBusqueda } = {},
+) {
+  if (!apiKey) throw new ZyteError('falta ZYTE_API_KEY')
+  const paginas = Math.max(1, Number(maxPaginas) || 1)
+
+  // la página 1 primero, sola: si viene vacía no vale la pena pagar la segunda
+  const html = await pedirPagina(keyword, { domainCode, apiKey, pagina: 1 })
+  let items = itemsDesdeHtml(html, { keyword, domainCode })
+  let paginasPedidas = 1
+
+  if (items.length && paginas > 1) {
+    paginasPedidas = paginas
+    const resto = await Promise.all(
+      Array.from({ length: paginas - 1 }, (_, i) =>
+        pedirPagina(keyword, { domainCode, apiKey, pagina: i + 2 })
+          .then((h) => itemsDesdeHtml(h, { keyword, domainCode }))
+          // una página que falla no bota el scan: se sigue con lo que haya
+          .catch((err) => {
+            console.warn(`[listado-ml] "${keyword}" p${i + 2}: ${err.message}`)
+            return []
+          }),
+      ),
+    )
+    // el orden importa: `normalizarScan` numera la posición por índice de array,
+    // así que las páginas se concatenan en orden y se deduplica dejando la
+    // primera aparición, que es la mejor posición
+    const vistos = new Set(items.map((i) => i.itemId))
+    for (const pagina of resto) {
+      for (const it of pagina) {
+        if (it.itemId && vistos.has(it.itemId)) continue
+        if (it.itemId) vistos.add(it.itemId)
+        items.push(it)
+      }
+    }
+    // los anuncios puros al final del conjunto, no al final de cada página
+    items = items.sort((a, b) => Number(a.esAnuncio) - Number(b.esAnuncio))
+  }
   // Sin tarjetas es bloqueo o cambio de layout, no un nicho vacío: ML siempre
   // devuelve algo. Vale más fallar fuerte que guardar un scan de cero items,
   // que en la serie se lee como "el nicho desapareció".
@@ -347,5 +424,5 @@ export async function buscarNivel1Zyte(keyword, { domainCode = 'CL', apiKey = co
   // el costo real lo factura Zyte por request; acá no se puede leer (no viene en
   // cabeceras ni hay endpoint de consumo), así que se registra el estimado del
   // tramo de navegador y se calibra contra la factura
-  return { items, costoUsd: config.zyteCostoListadoUsd, html }
+  return { items, costoUsd: paginasPedidas * config.zyteCostoListadoUsd, html }
 }
