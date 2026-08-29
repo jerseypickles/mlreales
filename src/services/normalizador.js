@@ -151,6 +151,10 @@ export function normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal } =
     // que necesita /reviews/item de la API oficial para devolver el agregado
     // del catálogo en vez del bucket del item (ver sondaReviews.js).
     catalogId: raw.catalogId || null,
+    // id de la PUBLICACIÓN, distinto del sku (que es el de catálogo). Es lo que
+    // pide /reviews/item de la API oficial, que responde para el 100% del
+    // listado y gratis — medido 109/109 y 97/97 el 29-ago-2026.
+    itemId: raw.itemId || null,
     esTiendaOficial: Boolean(raw.esTiendaOficial),
     esFull: envio.esFull,
     envioRapido: envio.envioRapido,

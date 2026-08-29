@@ -10,7 +10,8 @@ const productoSchema = new mongoose.Schema({
   domainML: String,
   vendedor: String,
   sellerId: String,
-  catalogId: String, // id de catálogo de ML (nivel 1 por Zyte); llave de /reviews/item
+  catalogId: String, // id de catálogo de ML (nivel 1 por Zyte)
+  itemId: String, // id de la publicación; es lo que pide /reviews/item
   esTiendaOficial: { type: Boolean, default: false },
   // null = el listado no mostró el flag (desconocido ≠ sin Full)
   esFull: { type: Boolean, default: null },

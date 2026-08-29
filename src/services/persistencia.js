@@ -7,7 +7,8 @@ export async function guardarScan({ items, fecha }) {
   if (!items?.length) return { productosNuevos: 0, productosActualizados: 0, snapshotsInsertados: 0 }
 
   const ops = items.map(({ producto }) => {
-    const { sku, keywordOrigen, sellerId, imagen, esFull, envioRapido, ...resto } = producto
+    const { sku, keywordOrigen, sellerId, imagen, esFull, envioRapido, catalogId, itemId, ...resto } =
+      producto
     const set = { ...resto, activo: true, ultimaVezVisto: fecha }
     if (sellerId) set.sellerId = sellerId // nivel 1 lo trae vacío: no pisar lo que llene el nivel 2
     if (imagen) set.imagen = imagen // no pisar una imagen existente con null
@@ -17,6 +18,11 @@ export async function guardarScan({ items, fecha }) {
     // en null porque el siguiente nivel 1 los sobrescribió)
     if (esFull != null) set.esFull = esFull
     if (envioRapido != null) set.envioRapido = envioRapido
+    // los ids de ML solo los trae el nivel 1 por Zyte. Un scan por Apify los
+    // manda en null, y dejarlos entrar borraría lo que ya se sabe — el mismo
+    // error que la imagen y el sellerId, que están arriba por lo mismo.
+    if (catalogId) set.catalogId = catalogId
+    if (itemId) set.itemId = itemId
     return {
       updateOne: {
         filter: { sku },

@@ -77,6 +77,18 @@ export async function procesarScanNicho(job) {
     )
   }
 
+  // Segunda medida de reseñas, en observación: gratis, por API oficial y para
+  // el 100% del listado. No alimenta el score —ver Snapshot.numReviewsApi—, se
+  // acumula al lado para comparar estabilidad contra la del nivel 2.
+  // Best-effort: si falla, el scan sigue igual.
+  let reviewsApi = 0
+  try {
+    const { conteosPorItem, aplicarConteos } = await import('../services/reviewsApi.js')
+    reviewsApi = aplicarConteos(items, await conteosPorItem(items.map((i) => i.producto.itemId)))
+  } catch (err) {
+    console.warn(`[scan-nicho] reseñas por API oficial no disponibles: ${err.message}`)
+  }
+
   const resultado = await guardarScan({ items, fecha })
 
   nicho.ultimoScanEl = fecha
@@ -140,6 +152,8 @@ export async function procesarScanNicho(job) {
     itemsCrudos: crudos.length,
     descartados,
     totalResultados: totalResultados?.total ?? null,
+    // cuántos items quedaron con la segunda medida de reseñas (API oficial)
+    reviewsApi,
     nivel2Encolado: config.nivel2Activo,
   }
 }
