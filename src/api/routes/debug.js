@@ -58,10 +58,14 @@ router.get(
     // item, que es SOLO lo vendible. No ve lo que va en camino a Full ni lo
     // que está retenido, así que puede gritar "te quiebras en 5 días" con 200
     // unidades ya despachadas. El item trae `inventory_id`, que es la llave.
-    if (!/^\/(items|users|user-products|reviews|categories|sites|billing|orders|seller-promotions|inventories|stock|shipments)\//.test(ruta)) {
+    //
+    // `highlights` y `trends` entran el 29-ago-2026 para responder si la API
+    // oficial puede dar señal de demanda gratis —más vendidos por categoría—
+    // en vez de scrapearla. Siguen siendo solo lectura.
+    if (!/^\/(items|users|user-products|reviews|categories|sites|billing|orders|seller-promotions|inventories|stock|shipments|highlights|trends)\//.test(ruta)) {
       return res.status(400).json({
         error:
-          'ruta inválida: solo /items/…, /users/…, /user-products/…, /reviews/…, /categories/…, /sites/…, /billing/…, /orders/…, /seller-promotions/…, /inventories/…, /stock/…, /shipments/…',
+          'ruta inválida: solo /items/…, /users/…, /user-products/…, /reviews/…, /categories/…, /sites/…, /billing/…, /orders/…, /seller-promotions/…, /inventories/…, /stock/…, /shipments/…, /highlights/…, /trends/…',
       })
     }
     const { meliGet } = await import('../../services/meli.js')

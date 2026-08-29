@@ -2,6 +2,7 @@ import { config } from '../config/env.js'
 import { buscarNivel1, ejecutarActorAsync, construirInputDetalle } from './apify.js'
 import { buscarNivel1Zyte } from './listadoMl.js'
 import { detallesDeMl } from './detalleMl.js'
+import { conCortacircuito } from './cortacircuito.js'
 
 // QUIÉN SCRAPEA, DECIDIDO EN UN SOLO LUGAR.
 //
@@ -33,10 +34,14 @@ export async function buscarListado(keyword, { domainCode = 'CL' } = {}) {
     // `html` viaja para poder guardarlo crudo: cuando ML cambia la forma de un
     // dato, tener la página que sirvió ese día es la diferencia entre leer un
     // documento y volver a scrapear esperando que repita la variante
-    const { items, costoUsd, html } = await buscarNivel1Zyte(keyword, { domainCode })
+    const { items, costoUsd, html } = await conCortacircuito('zyte', () =>
+      buscarNivel1Zyte(keyword, { domainCode }),
+    )
     return { items, costoUsd, html, fuente: 'zyte' }
   }
-  const { items, costoUsd } = await buscarNivel1(keyword, { domainCode })
+  const { items, costoUsd } = await conCortacircuito('apify', () =>
+    buscarNivel1(keyword, { domainCode }),
+  )
   return { items, costoUsd, fuente: 'apify' }
 }
 
@@ -47,7 +52,9 @@ export async function buscarDetalle(urls, { domainCode = 'CL', preciosListado } 
   if (!lista.length) return { items: [], costoUsd: 0, fuente: proveedorDetalle(), fallidos: [] }
 
   if (proveedorDetalle() === 'zyte') {
-    const { items, fallidos, pedidas } = await detallesDeMl(lista, { preciosListado })
+    const { items, fallidos, pedidas } = await conCortacircuito('zyte', () =>
+      detallesDeMl(lista, { preciosListado }),
+    )
     return {
       items,
       fallidos,

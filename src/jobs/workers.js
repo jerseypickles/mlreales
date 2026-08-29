@@ -102,6 +102,7 @@ export async function procesarScanNicho(job) {
   nicho.ultimoTotalResultados = totalResultados
   await nicho.save()
 
+  let ahorroPotencialNivel2 = null
   const colas = obtenerColas()
   // reporte rápido con lo del nivel 1; el nivel 2 lo recalcula al terminar
   await colas.calcularMetricas.add('reporte', { nichoId: String(nicho._id) })
@@ -147,6 +148,32 @@ export async function procesarScanNicho(job) {
       })),
       { topN, medidoEl, enSerie },
     ).map((i) => ({ sku: i.sku, url: i.url }))
+
+    // ¿CUÁNTO DEL NIVEL 2 SE PODRÍA AHORRAR? Se mide, no se decide.
+    //
+    // El nivel 2 existe sobre todo para el conteo de reseñas, y cuesta un
+    // request de navegador por ficha. La API oficial ahora entrega ese conteo
+    // gratis y para el listado COMPLETO —medido el 29-ago-2026: 85 a 101 items
+    // por nicho contra 17 a 44 del nivel 2—, así que en principio el nivel 2
+    // podría encogerse mucho.
+    //
+    // No se cambia todavía, y la razón es dura: los dos números NO miden lo
+    // mismo. La API cuenta las reseñas de la PUBLICACIÓN y la ficha muestra a
+    // veces el agregado del CATÁLOGO —razones medidas de 1,000 a 0,297—.
+    // Cambiar la fuente fabricaría deltas que nadie hizo.
+    //
+    // Lo que sí se puede hacer hoy sin arriesgar nada es CONTAR: de los que se
+    // van a pagar, cuántos ya venían con conteo por API. En una semana ese
+    // número, junto a la estabilidad de las dos series, decide si el nivel 2
+    // deja de ser obligatorio para puntuar.
+    const skusTop = new Set(top.map((t) => t.sku))
+    ahorroPotencialNivel2 = {
+      objetivos: top.length,
+      yaConReviewsApi: items.filter(
+        (i) => skusTop.has(i.producto.sku) && Number.isFinite(i.snapshot.numReviewsApi),
+      ).length,
+    }
+
     await colas.scanDetalle.add('detalle', {
       nichoId: String(nicho._id),
       fechaScan: fecha.toISOString(),
@@ -161,6 +188,9 @@ export async function procesarScanNicho(job) {
     totalResultados: totalResultados?.total ?? null,
     // cuántos items quedaron con la segunda medida de reseñas (API oficial)
     reviewsApi,
+    // de los que van a pagar nivel 2, cuántos ya tenían conteo gratis: es el
+    // ahorro potencial, medido en cada scan para poder decidir con datos
+    ahorroPotencialNivel2,
     nivel2Encolado: config.nivel2Activo,
   }
 }

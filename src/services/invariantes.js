@@ -344,6 +344,21 @@ async function elScanNoEncoge() {
   )
 }
 
+// ── 13. Ningún proveedor de scraping está caído ──────────────────────────
+// Cuando la cuenta de Zyte se suspendió el 29-ago-2026, el sistema siguió
+// encolando scans y fallando de a uno durante 40 minutos. Nadie se enteró hasta
+// que el importador preguntó por qué un nicho no se actualizaba. Un proveedor
+// caído tiene que gritar, no acumular fallos en silencio.
+async function ningunProveedorCaido() {
+  const { ProveedorEstado } = await import('../models/ProveedorEstado.js')
+  const caidos = await ProveedorEstado.find({ abierto: true }).lean()
+  if (!caidos.length) return ok('los proveedores de scraping responden')
+  return falla(
+    caidos.map((c) => `${c.proveedor} caído desde ${new Date(c.desdeEl).toISOString().slice(0, 16)}: ${c.motivo}`).join(' · '),
+    { caidos: caidos.map((c) => c.proveedor) },
+  )
+}
+
 export const INVARIANTES = [
   { id: 'reviews-no-retroceden', que: 'Las reseñas son acumulativas: una lectura que baja es scrapeo fallido', fn: reviewsNoRetroceden },
   { id: 'ads-cuadran', que: 'El gasto por campaña y por producto deben coincidir con ML', fn: adsCuadranConMl },
@@ -357,6 +372,7 @@ export const INVARIANTES = [
   { id: 'top-no-pagado', que: 'El ranking guardado es orgánico: ningún anuncio en el top 5', fn: elTopNoEsPagado },
   { id: 'cargos-clasificados', que: 'Los cargos de ML caen en su bolsillo, no en "otros"', fn: cargosClasificados },
   { id: 'scan-no-encoge', que: 'Un scan no trae la mitad de items que de costumbre: eso es scrapeo a medias', fn: elScanNoEncoge },
+  { id: 'proveedor-arriba', que: 'Ningún proveedor de scraping está caído (cuenta suspendida, cuota agotada)', fn: ningunProveedorCaido },
 ]
 
 export async function verificarInvariantes() {
