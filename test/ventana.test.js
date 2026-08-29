@@ -36,13 +36,32 @@ test('piscina inflable (pico dic): ventana abierta hasta octubre', () => {
   assert.equal(v.hasta, '2026-10')
 })
 
-test('parka niño (pico jun-ago): la temporada ya se perdió, apunta al año que viene', () => {
+// PERDER LA TEMPORADA NO ES "SALTAR AL AÑO SIGUIENTE".
+//
+// Antes se marcaba `perdioLaTemporada` cada vez que el cálculo saltaba al pico
+// del ciclo siguiente. Para un pico de enero eso es lo NORMAL —se pide en
+// sept-nov del año anterior, siempre— y dejaba rotulados como atrasados a 12
+// nichos veraniegos cuya ventana abría el mes siguiente: kayak, cooler, carpa,
+// snorkel, quitasol, colchoneta y compañía.
+//
+// La distinción que sí cambia una decisión: hay un pico A LA VISTA que ya no se
+// alcanza por mar. Si el pico de este ciclo ya ocurrió, no se perdió nada.
+test('parka niño (pico junio): el pico ya pasó, no se perdió nada', () => {
   const v = ventanaDeCompra(estacional('junio', 'julio', 'agosto'), { hoy: HOY })
-  assert.equal(v.perdioLaTemporada, true)
   assert.equal(v.desde, '2027-02')
   assert.equal(v.hasta, '2027-04')
   assert.equal(v.estado, 'futura')
   assert.equal(v.mesesAl, 6)
+  assert.equal(v.perdioLaTemporada, undefined, 'en agosto, el pico de junio quedó atrás')
+})
+
+test('parrilla eléctrica (pico septiembre): ese sí se perdió', () => {
+  // caso real del 19-ago-2026: pico en septiembre por Fiestas Patrias y la
+  // ventana de pedido cerrada en julio. El pico está a la vista y no se alcanza.
+  const v = ventanaDeCompra(estacional('septiembre'), { hoy: HOY })
+  assert.equal(v.perdioLaTemporada, true)
+  assert.equal(v.picoPerdido, '2026-09')
+  assert.equal(v.estado, 'futura')
 })
 
 test('disfraz fiestas patrias (pico ago-sep): estás DENTRO del pico, ya no alcanzas', () => {

@@ -1,9 +1,24 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { clasificarNicho, agruparNichos, anidarFamilias } from '../frontend/src/lib/sidebar.js'
+import {
+  clasificarNicho,
+  agruparNichos,
+  anidarFamilias,
+  tienePrecio,
+  sinBusqueda,
+  madurando,
+  rechazadoPeroSeBusca,
+} from '../frontend/src/lib/sidebar.js'
 
 // Casos tomados del tablero real al 9-ago-2026 (80 nichos, 65 con veredicto de
 // entrada): la regla tiene que separar lo comprable HOY del ruido.
+//
+// EL SIDEBAR TIENE CUATRO GRUPOS, NO NUEVE. Llegó a nueve contenedores para 81
+// nichos y el importador lo cortó: "aquí hay mucho contenedor, mientras sea más
+// sencillo está bien". Las distinciones no se perdieron, BAJARON DE RANGO —lo
+// que era un grupo entero ahora es una marca en la fila—, y por eso cada caso
+// que antes probaba un grupo propio se prueba ahora en dos partes: en qué grupo
+// cae, y qué marca lleva.
 const nicho = (extra = {}) => ({ keyword: 'x', veredicto: 'entrar', estado: 'activo', ...extra })
 const abierta = { estado: 'ahora', desde: '2026-07', hasta: '2026-09' }
 
@@ -11,11 +26,18 @@ test('vendiendo: donde ya hay producto propio, es operación y no apuesta', () =
   assert.equal(clasificarNicho(nicho({ misProductos: 2, veredicto: 'no_entrar' })), 'vendiendo')
 })
 
-test('con precio en la mesa y ventana abierta: solo falta decidir', () => {
-  // manguera extensible: score 92, cotizada, último mes de ventana
-  assert.equal(clasificarNicho(nicho({ ventana: abierta, exwCotizadoUsd: 2.1 })), 'decidir')
+// Antes era el grupo "decidir". Tener precio del proveedor ya no abre un
+// contenedor: marca la fila y la manda al principio de "Comprar", que es donde
+// de verdad se nota.
+test('con precio en la mesa: sigue en comprar, pero marcado', () => {
+  const cotizado = nicho({ ventana: abierta, exwCotizadoUsd: 2.1 })
+  assert.equal(clasificarNicho(cotizado), 'comprar')
+  assert.equal(tienePrecio(cotizado), true)
   // el costo puesto en Chile también cuenta como precio sobre la mesa
-  assert.equal(clasificarNicho(nicho({ ventana: abierta, costoPuestoClp: 3500 })), 'decidir')
+  const puesto = nicho({ ventana: abierta, costoPuestoClp: 3500 })
+  assert.equal(clasificarNicho(puesto), 'comprar')
+  assert.equal(tienePrecio(puesto), true)
+  assert.equal(tienePrecio(nicho({ ventana: abierta })), false)
 })
 
 test('sin cotizar todavía: comprar esta temporada', () => {
@@ -25,9 +47,11 @@ test('sin cotizar todavía: comprar esta temporada', () => {
   assert.equal(clasificarNicho(nicho({ ventana: { estado: 'sin-temporada' } })), 'comprar')
 })
 
+// Antes era el grupo "aunNo". Ahora cae en "espera", que es la misma respuesta:
+// no lo toques, vuelve solo.
 test('la ventana futura baja el nicho aunque el score sea alto', () => {
   const n = nicho({ ventana: { estado: 'futura', mesesAl: 6 }, ultimoReporte: { scoreOportunidad: 95 } })
-  assert.equal(clasificarNicho(n), 'aunNo')
+  assert.equal(clasificarNicho(n), 'espera')
 })
 
 test('keyword mal escrita NO baja al nicho: el producto se sigue pudiendo comprar', () => {
@@ -40,11 +64,13 @@ test('keyword mal escrita NO baja al nicho: el producto se sigue pudiendo compra
     ultimoReporte: { scoreOportunidad: 92 },
     nivelBusqueda: { nivel: 'renombrar', keywordSugerida: 'manguera jardin' },
   })
-  assert.equal(clasificarNicho(n), 'decidir')
+  assert.equal(clasificarNicho(n), 'comprar')
+  assert.equal(sinBusqueda(n), false, '"renombrar" no es "nadie lo busca"')
   // sin cotizar sigue siendo comprable esta temporada
   assert.equal(clasificarNicho({ ...n, exwCotizadoUsd: undefined }), 'comprar')
 })
 
+// Antes era el grupo "sinBusqueda". Ahora cae en "fuera" con su marca.
 test('nadie busca la keyword: fuera del embudo aunque el análisis diga entrar', () => {
   // set snorkel (82), depiladora ipl casera (87), foco solares (80): el
   // autocompletado no las registra — miden un listado que nadie ve
@@ -54,7 +80,8 @@ test('nadie busca la keyword: fuera del embudo aunque el análisis diga entrar',
     ultimoReporte: { scoreOportunidad: 87 },
     nivelBusqueda: { nivel: 'nulo' },
   })
-  assert.equal(clasificarNicho(n), 'sinBusqueda')
+  assert.equal(clasificarNicho(n), 'fuera')
+  assert.equal(sinBusqueda(n), true)
 })
 
 test('nivel de búsqueda medido y sano no cambia nada', () => {
@@ -63,58 +90,80 @@ test('nivel de búsqueda medido y sano no cambia nada', () => {
   }
 })
 
-test('no_entrar sobre una búsqueda VIVA queda pendiente, no descartado', () => {
+// Antes era el grupo "revisar". El rechazo sobre una búsqueda viva sigue siendo
+// una duda y no un cierre, pero se comunica con una marca en la fila.
+test('no_entrar sobre una búsqueda VIVA queda marcado, no silenciado', () => {
   // caso paleta maquillaje: rechazada por dominancia de marca (42% oficial)
   // con ~850 ventas/día medidas y la keyword #3 de su prefijo. El rechazo
   // puede estar mal leído: se revisa, no se cierra.
-  assert.equal(clasificarNicho(nicho({ veredicto: 'no_entrar', nivelBusqueda: { nivel: 'alto' } })), 'revisar')
-  assert.equal(clasificarNicho(nicho({ veredicto: 'no_entrar', nivelBusqueda: { nivel: 'medio' } })), 'revisar')
+  for (const nivel of ['alto', 'medio']) {
+    const n = nicho({ veredicto: 'no_entrar', nivelBusqueda: { nivel } })
+    assert.equal(clasificarNicho(n), 'fuera')
+    assert.equal(rechazadoPeroSeBusca(n), true)
+  }
   // aunque ya lo hayan pausado, sigue mereciendo la revisión
-  assert.equal(
-    clasificarNicho(nicho({ veredicto: 'no_entrar', estado: 'pausado', nivelBusqueda: { nivel: 'alto' } })),
-    'revisar',
-  )
+  const pausado = nicho({ veredicto: 'no_entrar', estado: 'pausado', nivelBusqueda: { nivel: 'alto' } })
+  assert.equal(rechazadoPeroSeBusca(pausado), true)
 })
 
-test('un descartado sin búsqueda viva sí se queda fuera', () => {
-  assert.equal(clasificarNicho(nicho({ veredicto: 'no_entrar', nivelBusqueda: { nivel: 'nulo' } })), 'fuera')
-  assert.equal(clasificarNicho(nicho({ veredicto: 'no_entrar', nivelBusqueda: { nivel: 'bajo' } })), 'fuera')
-  // sin medir todavía no se rescata nada: no se sabe
-  assert.equal(clasificarNicho(nicho({ veredicto: 'no_entrar' })), 'fuera')
-  assert.equal(clasificarNicho(nicho({ estado: 'pausado' })), 'fuera')
-  assert.equal(clasificarNicho(nicho({ etapaCompra: 'descartado' })), 'fuera')
+test('un descartado sin búsqueda viva no lleva marca de revisión', () => {
+  for (const extra of [
+    { veredicto: 'no_entrar', nivelBusqueda: { nivel: 'nulo' } },
+    { veredicto: 'no_entrar', nivelBusqueda: { nivel: 'bajo' } },
+    // sin medir todavía no se rescata nada: no se sabe
+    { veredicto: 'no_entrar' },
+    { estado: 'pausado' },
+    { etapaCompra: 'descartado' },
+  ]) {
+    const n = nicho(extra)
+    assert.equal(clasificarNicho(n), 'fuera')
+    assert.equal(rechazadoPeroSeBusca(n), false)
+  }
 })
 
+// Antes era el grupo "vuelven".
 test('pausado con fecha de regreso: vuelve solo, no es descarte', () => {
-  assert.equal(clasificarNicho(nicho({ estado: 'pausado', revisarEl: '2027-04-01' })), 'vuelven')
+  assert.equal(clasificarNicho(nicho({ estado: 'pausado', revisarEl: '2027-04-01' })), 'espera')
 })
 
-test('sin veredicto firme o madurando: midiendo', () => {
-  assert.equal(clasificarNicho(nicho({ veredicto: null })), 'midiendo')
-  assert.equal(clasificarNicho(nicho({ madurando: true, ventana: abierta })), 'midiendo')
+// Antes era el grupo "midiendo".
+test('sin veredicto firme o madurando: en espera y marcado', () => {
+  const sinVeredicto = nicho({ veredicto: null })
+  assert.equal(clasificarNicho(sinVeredicto), 'espera')
+  assert.equal(madurando(sinVeredicto), true)
+  const enMaduracion = nicho({ madurando: true, ventana: abierta })
+  assert.equal(clasificarNicho(enMaduracion), 'espera')
+  assert.equal(madurando(enMaduracion), true)
 })
 
-test('agruparNichos: urgencia primero, score de desempate', () => {
+// El orden reemplaza a los contenedores: lo que era el grupo "decidir" ahora es
+// el primer criterio de ordenamiento dentro de "Comprar".
+test('agruparNichos: el precio sobre la mesa manda, después la urgencia', () => {
   const porGrupo = agruparNichos([
-    nicho({ keyword: 'ventana abierta score bajo', ventana: abierta, ultimoReporte: { scoreOportunidad: 60 } }),
-    nicho({ keyword: 'sin temporada score alto', ventana: null, ultimoReporte: { scoreOportunidad: 90 } }),
     nicho({ keyword: 'ultimo mes', ventana: { estado: 'ultimo-mes' }, ultimoReporte: { scoreOportunidad: 50 } }),
+    nicho({ keyword: 'cotizado sin urgencia', ventana: null, exwCotizadoUsd: 2.1, ultimoReporte: { scoreOportunidad: 40 } }),
+    nicho({ keyword: 'sin temporada score alto', ventana: null, ultimoReporte: { scoreOportunidad: 90 } }),
   ])
   assert.deepEqual(
     porGrupo.get('comprar').map((n) => n.keyword),
-    ['ultimo mes', 'ventana abierta score bajo', 'sin temporada score alto'],
+    ['cotizado sin urgencia', 'ultimo mes', 'sin temporada score alto'],
   )
 })
 
-test('agruparNichos: "aún no toca" se ordena por cuánto falta', () => {
+test('agruparNichos: en espera, lo que vuelve antes va primero', () => {
   const porGrupo = agruparNichos([
     nicho({ keyword: 'lejos', ventana: { estado: 'futura', mesesAl: 8 } }),
     nicho({ keyword: 'cerca', ventana: { estado: 'futura', mesesAl: 3 } }),
   ])
   assert.deepEqual(
-    porGrupo.get('aunNo').map((n) => n.keyword),
+    porGrupo.get('espera').map((n) => n.keyword),
     ['cerca', 'lejos'],
   )
+})
+
+test('los cuatro grupos existen siempre, aunque vengan vacíos', () => {
+  const porGrupo = agruparNichos([])
+  assert.deepEqual([...porGrupo.keys()].sort(), ['comprar', 'espera', 'fuera', 'vendiendo'])
 })
 
 test('anidarFamilias: el hijo cuelga del líder solo si ambos están en el grupo', () => {
@@ -128,5 +177,5 @@ test('anidarFamilias: el hijo cuelga del líder solo si ambos están en el grupo
   // con el líder en otro grupo, el hijo queda como fila suelta
   const solo = anidarFamilias([hijo])
   assert.equal(solo.length, 1)
-  assert.deepEqual(solo[0].hijos, [])
+  assert.equal(solo[0].nicho.keyword, 'sabanillas perro 60x60')
 })

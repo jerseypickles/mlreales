@@ -112,28 +112,60 @@ test('calcularDemanda: muestra bajo el mínimo no mide (mejor null que demanda f
   assert.equal(d.reviews.itemsConDato, 5)
 })
 
-test('calcularDemanda: totales y delta entre scans', () => {
-  const fechaPrevia = new Date('2026-07-14T12:00:00Z')
-  const fechaActual = new Date('2026-07-16T12:00:00Z') // 2 días después
-  const actuales = [
-    { sku: 'A', vendidos: 150, fecha: fechaActual },
-    { sku: 'B', vendidos: 500, fecha: fechaActual },
-    { sku: 'C', vendidos: 50, fecha: fechaActual }, // nuevo, sin previo
+// LA DEMANDA SE MIDE CON RESEÑAS, Y `vendidos` DEJÓ DE SER UNA BASE.
+//
+// Hasta el 14-ago `calcularDemanda` podía apoyarse en el badge "+N vendidos" y
+// sacarle delta y tasa. No se puede: ML lo publica EN BALDES —medido el
+// 29-ago-2026 sobre seis nichos, los únicos valores son 25, 50, 100, 500, 1.000
+// y 5.000—, así que un producto se queda meses en "100" y después salta a 500.
+// De ahí no sale un ritmo, sale un escalón.
+//
+// El badge sigue guardándose y sirve para comparar TAMAÑO entre nichos
+// (senalVendidos, el muro del líder), pero no alimenta la demanda.
+test('calcularDemanda: sin reseñas no hay demanda, aunque sobren vendidos', () => {
+  const fecha = new Date('2026-07-16T12:00:00Z')
+  const soloVendidos = [
+    { sku: 'A', vendidos: 5000, fecha },
+    { sku: 'B', vendidos: 1000, fecha },
+    { sku: 'C', vendidos: 500, fecha },
   ]
-  const previos = [
-    { sku: 'A', vendidos: 100, fecha: fechaPrevia },
-    { sku: 'B', vendidos: 480, fecha: fechaPrevia },
-  ]
+  assert.equal(calcularDemanda(soloVendidos, null, { minItems: 1 }), null)
+})
 
-  const d = calcularDemanda(actuales, previos, { minItems: 1 })
-  assert.equal(d.base, 'vendidos')
-  assert.equal(d.vendidos.total, 700)
-  assert.equal(d.vendidos.mediana, 150)
-  assert.equal(d.vendidos.itemsComparables, 2)
-  assert.equal(d.vendidos.delta, 70) // (150-100) + (500-480)
-  assert.equal(d.vendidos.periodoDias, 2)
-  assert.equal(d.vendidos.porDia, 35, 'vendidos es otra señal, con su propia tasa')
-  assert.equal(d.resenasNuevasPorDia, null, 'sin reseñas no se inventa una tasa de reseñas')
+test('calcularDemanda: con reseñas medidas, la base es reviews', () => {
+  const previa = new Date('2026-07-14T12:00:00Z')
+  const actual = new Date('2026-07-16T12:00:00Z') // 2 días después
+  const d = calcularDemanda(
+    [
+      { sku: 'A', numReviews: 150, vendidos: 5000, fecha: actual },
+      { sku: 'B', numReviews: 500, vendidos: 1000, fecha: actual },
+    ],
+    [
+      { sku: 'A', numReviews: 100, fecha: previa },
+      { sku: 'B', numReviews: 480, fecha: previa },
+    ],
+    { minItems: 1 },
+  )
+  assert.equal(d.base, 'reviews')
+  assert.equal(d.reviews.delta, 70) // (150-100) + (500-480)
+  assert.equal(d.reviews.periodoDias, 2)
+  assert.equal(d.resenasNuevasPorDia, 35)
+  // el badge de vendidos viaja en el snapshot pero NO como demanda
+  assert.equal(d.vendidos, undefined)
+})
+
+// Una señal sacada de tres items de un listado de cien diría "demanda 0" con
+// cara seria. Sin representatividad se devuelve null y el pipeline reintenta,
+// en vez de publicar un número falso.
+test('calcularDemanda: muestra ínfima no publica demanda', () => {
+  const previa = new Date('2026-07-14T12:00:00Z')
+  const actual = new Date('2026-07-16T12:00:00Z')
+  const args = [
+    [{ sku: 'A', numReviews: 150, fecha: actual }],
+    [{ sku: 'A', numReviews: 100, fecha: previa }],
+  ]
+  assert.ok(calcularDemanda(...args, { minItems: 1 }), 'con el mínimo en 1 sí publica')
+  assert.equal(calcularDemanda(...args, { minItems: 5 }), null)
 })
 
 test('calcularDemanda: una ventana de minutos no publica tasa (ni 0 ni inflada)', () => {
@@ -159,11 +191,6 @@ test('calcularDemanda: una ventana de minutos no publica tasa (ni 0 ni inflada)'
   assert.equal(conVenta.resenasNuevasPorDia, null, 'pero no se extrapola a una tasa')
 })
 
-test('calcularDemanda: primer scan sin previos', () => {
-  const d = calcularDemanda([{ sku: 'A', vendidos: 200, fecha: new Date('2026-07-16') }], null, { minItems: 1 })
-  assert.equal(d.vendidos.total, 200)
-  assert.equal(d.resenasNuevasPorDia, null)
-})
 
 test('calcularDemanda: un salto de catálogo imposible queda fuera del delta', () => {
   // caso mancuernas 30-jul: un item de catálogo pasó 811→1483 (+672 en 6 días,
@@ -248,25 +275,6 @@ test('calcularDemanda: expone la resolución de la ventana', () => {
   assert.equal(d.resolucionResenasDia, 1)
 })
 
-test('calcularDemanda: la depuración no toca la señal de vendidos', () => {
-  // los buckets de vendidos son gruesos y coinciden entre items — el dedupe
-  // y el filtro de saltos son exclusivos del conteo de reseñas
-  const fechaPrevia = new Date('2026-07-29T12:00:00Z')
-  const fechaActual = new Date('2026-07-30T12:00:00Z')
-  const d = calcularDemanda(
-    [
-      { sku: 'A', vendidos: 500, fecha: fechaActual },
-      { sku: 'B', vendidos: 500, fecha: fechaActual },
-    ],
-    [
-      { sku: 'A', vendidos: 100, fecha: fechaPrevia },
-      { sku: 'B', vendidos: 100, fecha: fechaPrevia },
-    ],
-    { minItems: 1 },
-  )
-  assert.equal(d.vendidos.delta, 800) // saltos idénticos y enormes, ambos cuentan
-  assert.equal(d.vendidos.saltosFiltrados, undefined)
-})
 
 test('calcularDemanda: sin vendidos usa delta de reseñas como proxy', () => {
   const fechaPrevia = new Date('2026-07-14T12:00:00Z')
@@ -290,22 +298,31 @@ test('calcularDemanda: sin vendidos usa delta de reseñas como proxy', () => {
   assert.equal(d.volumenVentasEstimado, undefined)
 })
 
+// EL SCORE TIENE CINCO COMPONENTES, TODOS MEDIDOS.
+//
+// El modelo viejo pesaba `calidad` (rating promedio) y `full`. Hoy son demanda,
+// competencia, constancia, entrada y economía —ver calcularScoreOportunidad—, y
+// ninguno se multiplica por un factor inventado: la demanda sale de búsquedas
+// reales de Google Ads, no de reseñas × 25.
 test('calcularScoreOportunidad: la demanda sale de búsquedas medidas, no de un factor', () => {
-  const r = calcularScoreOportunidad({
-    busquedasMes: 10000, // Google Ads Chile, absoluto y comparable entre nichos
+  const base = {
     demanda: {},
     competencia: { concentracionTop3Pct: 40, pctFull: 10, sellersConFull: 0 },
-    calidad: { ratingPromedio: 4.0, itemsConRating: 20 }, // cobertura suficiente para medir
-  })
-  // demanda 20*log10(10001)≈80 · competencia 60 · calidad (4.4-4)/0.9*100≈44 · full 90
-  assert.equal(r.componentes.demanda, 80)
+  }
+  const r = calcularScoreOportunidad({ ...base, busquedasMes: 10000 })
+  assert.deepEqual(
+    Object.keys(r.componentes).sort(),
+    ['competencia', 'constancia', 'demanda', 'economia', 'entrada'],
+  )
+  // 100 - concentración del top 3
   assert.equal(r.componentes.competencia, 60)
-  assert.equal(r.componentes.calidad, 44)
-  assert.equal(r.componentes.full, 90)
-  // 0.4*80 + 0.25*60 + 0.2*44.4 + 0.15*90 ≈ 69
-  assert.equal(r.score, 69)
+  // más búsquedas, más demanda; y es logarítmica, no lineal
+  const menos = calcularScoreOportunidad({ ...base, busquedasMes: 1000 })
+  assert.ok(r.componentes.demanda > menos.componentes.demanda)
+  assert.ok(r.componentes.demanda < menos.componentes.demanda * 10)
+  // sin búsquedas medidas no hay score que dar
+  assert.equal(calcularScoreOportunidad({ ...base, busquedasMes: null }), null)
 })
-
 test('calcularScoreOportunidad: sin búsquedas medidas no hay score', () => {
   // antes bastaba con tener reseñas acumuladas: eso permitía puntuar nichos
   // cuya demanda era pura multiplicación. Ahora exige la medición real.
@@ -371,7 +388,12 @@ test('sin medir el nivel de búsqueda, el score no se castiga', () => {
   )
 })
 
-test('calcularMetricas: integra demanda y score cuando hay vendidos', () => {
+// SIN CONTEO DE RESEÑAS HAY REPORTE, PERO NO SCORE.
+//
+// El listado, los precios y la competencia siguen sirviendo, así que el reporte
+// se guarda; lo que no se publica es un score construido sobre una demanda que
+// no se midió. El nivel 2 reintenta (escalera 2/4/8 h en workers.js).
+test('calcularMetricas: sin reseñas hay reporte pero no score', () => {
   const fecha = new Date('2026-07-16T12:00:00Z')
   const snapshots = [
     { sku: 'A1', precio: 10000, vendidos: 5000, rating: 4.0, posicion: 1, fecha },
@@ -380,47 +402,36 @@ test('calcularMetricas: integra demanda y score cuando hay vendidos', () => {
     { sku: 'A4', precio: 9000, vendidos: 500, rating: 3.9, posicion: 4, fecha },
     { sku: 'A5', precio: 13000, vendidos: 500, rating: 4.3, posicion: 5, fecha },
   ]
-  const productosPorSku = new Map([
-    ['A1', { sku: 'A1', vendedor: 'X', esFull: false }],
-    ['A2', { sku: 'A2', vendedor: 'Y', esFull: false }],
-    ['A3', { sku: 'A3', vendedor: 'Z', esFull: false }],
-    ['A4', { sku: 'A4', vendedor: 'X', esFull: false }],
-    ['A5', { sku: 'A5', vendedor: 'W', esFull: false }],
-  ])
+  const productosPorSku = new Map(
+    snapshots.map((s) => [s.sku, { sku: s.sku, vendedor: 'V' + s.sku, esFull: false }]),
+  )
   const m = calcularMetricas({ snapshots, productosPorSku, busquedasMes: 5000 })
-  assert.equal(m.demanda.vendidos.total, 10000)
-  assert.equal(m.demanda.vendidos.porDia, null, 'un solo scan: sin delta que reportar')
-  assert.ok(m.scoreOportunidad > 0)
-  assert.ok(m.oportunidad.componentes.demanda > 70)
+  assert.equal(m.demanda, null)
+  assert.equal(m.scoreOportunidad, null)
+  // pero el badge de vendidos sí se resume: sirve para comparar tamaño
+  assert.equal(m.vendidosHistoricos.pisoUnidades, 10000)
+  assert.equal(m.vendidosHistoricos.maximoPorItem, 5000)
+  assert.equal(m.vendidosHistoricos.pctCobertura, 100)
 })
-
-test('componente calidad: pocos ratings → neutro 50, no extremos falsos', async () => {
+// El componente `calidad` (rating promedio del listado) salió del modelo. La
+// pregunta que ocupó su lugar es CONSTANCIA: ¿vende todo el año o solo en su
+// pico? Un estacional deja el capital dormido diez meses y su sobrante paga
+// bodega Full todo ese tiempo.
+test('componente constancia: sin ratio medido queda neutro, no castigado', async () => {
   const { calcularScoreOportunidad } = await import('../src/services/metricas.js')
   const base = {
     busquedasMes: 5000,
     demanda: {},
     competencia: { concentracionTop3Pct: 40, pctFull: 30, sellersConFull: 0 },
   }
-  // 3 productos con rating 4.9: evidencia fina → neutro, no "calidad 0"
-  const finos = calcularScoreOportunidad({
-    ...base,
-    calidad: { ratingPromedio: 4.9, itemsConRating: 3 },
-  })
-  assert.equal(finos.componentes.calidad, 50)
-  // 20 productos con rating 4.9: evidencia real → calidad 0 legítimo
-  const solidos = calcularScoreOportunidad({
-    ...base,
-    calidad: { ratingPromedio: 4.9, itemsConRating: 20 },
-  })
-  assert.equal(solidos.componentes.calidad, 0)
-  // 20 productos con rating 3.6: espacio real para diferenciarse
-  const mediocres = calcularScoreOportunidad({
-    ...base,
-    calidad: { ratingPromedio: 3.6, itemsConRating: 20 },
-  })
-  assert.ok(mediocres.componentes.calidad > 80)
+  // no haber medido la curva todavía no es una falta
+  assert.equal(calcularScoreOportunidad(base).componentes.constancia, 50)
+  // plano (ratio bajo) puntúa más que estacional agudo (ratio alto)
+  const plano = calcularScoreOportunidad({ ...base, ratioPico: 1.2 })
+  const agudo = calcularScoreOportunidad({ ...base, ratioPico: 5.3 })
+  assert.ok(plano.componentes.constancia > agudo.componentes.constancia)
+  assert.ok(agudo.componentes.constancia < 50, 'un pico de 5,3x sí castiga')
 })
-
 test('unidadesDelTitulo: detecta packs reales y evita dimensiones/medidas/promos', async () => {
   const { unidadesDelTitulo } = await import('../src/services/metricas.js')
   assert.equal(unidadesDelTitulo('Toallitas Húmedas Pack De 12 Bolsas'), 12)
