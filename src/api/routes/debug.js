@@ -141,4 +141,18 @@ router.get(
   }),
 )
 
+// ¿Pueden las reseñas salir gratis por la API oficial, usando el id de catálogo
+// que el nivel 1 por Zyte ahora entrega? Ver services/sondaReviewsCatalogo.js.
+// Solo lee: un listado, la API de reseñas y una muestra de fichas.
+router.get(
+  '/reviews-catalogo',
+  autorizado,
+  manejar(async (req, res) => {
+    const keyword = String(req.query.keyword ?? '').trim()
+    if (!keyword) return res.status(400).json({ error: 'falta ?keyword=' })
+    const { sondearReviewsPorCatalogo } = await import('../../services/sondaReviewsCatalogo.js')
+    res.json(await sondearReviewsPorCatalogo(keyword, { domainCode: req.query.pais || 'CL' }))
+  }),
+)
+
 export default router
