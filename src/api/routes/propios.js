@@ -510,7 +510,7 @@ router.delete(
 //     por 30 muestra un tercio de su velocidad real, y parece que no hay que
 //     reponerlo justo cuando más hay que hacerlo.
 async function reposicionDe(p, v30, v7) {
-  const { velocidadDiaria, coberturaYReposicion, urgencia, movimientosFull, primeraEntrada } = await import(
+  const { velocidadPonderada, coberturaYReposicion, urgencia, movimientosFull, primeraEntrada } = await import(
     '../../services/inventarioFull.js'
   )
   const inv = p.inventarioFull ?? null
@@ -534,11 +534,10 @@ async function reposicionDe(p, v30, v7) {
     // sin libro de movimientos se usa la ventana completa: peor, pero sirve
   }
 
-  // la de 7 días manda cuando hay señal reciente; si no, la de 30
-  const usa7 = (v7?.unidades ?? 0) > 0
-  const velocidadDia = velocidadDiaria({
-    unidades: usa7 ? v7.unidades : v30?.unidades ?? 0,
-    ventanaDias: usa7 ? 7 : 30,
+  // mezcla de ventanas, no interruptor: ver velocidadPonderada
+  const velocidadDia = velocidadPonderada({
+    unidades7: v7?.unidades ?? 0,
+    unidades30: v30?.unidades ?? 0,
     desdeEl,
     hoy: new Date(),
   })
@@ -547,7 +546,7 @@ async function reposicionDe(p, v30, v7) {
   return {
     ...r,
     urgencia: urgencia(r.diasCobertura),
-    base: usa7 ? '7 días' : '30 días',
+    base: '7d+30d',
     vendiendoDesde: desdeEl,
     retenido: inv?.noDisponible ?? 0,
     motivosRetenido: inv?.motivos ?? [],

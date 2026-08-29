@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { velocidadDiaria, coberturaYReposicion, urgencia, primeraEntrada } from '../src/services/inventarioFull.js'
+import { velocidadDiaria, velocidadPonderada, redondearEnvio, coberturaYReposicion, urgencia, primeraEntrada } from '../src/services/inventarioFull.js'
 
 // Medido el 28-ago-2026 sobre las Brochas Set 18 (inventario EKVS28895):
 // el item declaraba available_quantity 20 y la bodega tenía 9. El libro lo
@@ -98,4 +98,65 @@ test('sin fecha de inicio la velocidad cae a la ventana: subestima, no infla', (
   const sinFecha = velocidadDiaria({ unidades: 17, ventanaDias: 30, desdeEl: null, hoy: HOY })
   assert.ok(sinFecha < conFecha)
   assert.ok(Math.abs(sinFecha - 17 / 30) < 0.001)
+})
+
+// ── ESTABILIDAD: el forecast no puede saltar con una venta ───────────────────
+//
+// "He visto un producto moverse 4 veces en un rango de tiempo la cantidad a
+// enviar." La primera versión CONMUTABA de ventana (7d si había ventas, 30d si
+// no) y con 5-7 ventas semanales eso salta solo. Un número que cambia cuatro
+// veces al día no se puede obedecer.
+
+test('una venta más o menos NO puede mover el envío a la mitad', () => {
+  const base = { unidades30: 30, desdeEl: null, hoy: HOY }
+  const con5 = velocidadPonderada({ ...base, unidades7: 5 })
+  const con6 = velocidadPonderada({ ...base, unidades7: 6 })
+  const salto = Math.abs(con6 - con5) / con5
+  assert.ok(salto < 0.1, `una venta movió la velocidad ${Math.round(salto * 100)}%`)
+})
+
+test('la semana en cero amortigua, no borra la historia', () => {
+  // un producto con 30 ventas en el mes y 0 esta semana está bajando, no muerto
+  const v = velocidadPonderada({ unidades7: 0, unidades30: 30, desdeEl: null, hoy: HOY })
+  assert.ok(v > 0, 'no puede caer a cero de golpe')
+  assert.ok(v < 1, 'pero sí tiene que bajar respecto del promedio del mes')
+})
+
+test('la semana caliente sube el número sin ignorar el mes', () => {
+  // caso Set 8 del 28-ago: 88 en 30 días y 31 en 7 — acelerando de verdad
+  const v = velocidadPonderada({ unidades7: 31, unidades30: 88, desdeEl: null, hoy: HOY })
+  assert.ok(v > 88 / 30, 'reconoce la aceleración')
+  assert.ok(v < 31 / 7, 'pero no se cuelga solo de la semana')
+})
+
+test('el envío se redondea: 34 y 36 son la misma decisión', () => {
+  assert.equal(redondearEnvio(34), 35)
+  assert.equal(redondearEnvio(36), 35)
+  assert.equal(redondearEnvio(38), 40)
+  assert.equal(redondearEnvio(112), 110, 'sobre 100 el paso es de 10')
+  assert.equal(redondearEnvio(7), 7, 'bajo 10 no se redondea: cada unidad pesa')
+  assert.equal(redondearEnvio(0), 0)
+  assert.equal(redondearEnvio(-5), 0)
+})
+
+test('una venta de diferencia mueve el envío UN paso, no un salto', () => {
+  // La exigencia correcta no es que el número quede clavado —si las ventas se
+  // mueven el forecast tiene que moverse— sino que no salte. Con el
+  // interruptor de ventanas, pasar de 5 a 6 ventas movía el envío de 24 a 30;
+  // ahora se mueve un solo escalón de redondeo.
+  const envio = (u7) =>
+    coberturaYReposicion({ stock: 9, velocidadDia: velocidadPonderada({ unidades7: u7, unidades30: 30, hoy: HOY }) }).aEnviar
+  const a = envio(5)
+  const b = envio(6)
+  assert.ok(Math.abs(b - a) <= 5, `saltó de ${a} a ${b}`)
+  assert.ok(b >= a, 'y en la dirección correcta: más ventas, más stock')
+})
+
+test('el salto es MENOR que con el interruptor de ventanas', () => {
+  // la comparación contra el diseño viejo, que es lo que el importador vio
+  const nuevo = (u7) => velocidadPonderada({ unidades7: u7, unidades30: 30, hoy: HOY })
+  const viejo = (u7) => velocidadDiaria({ unidades: u7, ventanaDias: 7, hoy: HOY })
+  const saltoNuevo = (nuevo(6) - nuevo(5)) / nuevo(5)
+  const saltoViejo = (viejo(6) - viejo(5)) / viejo(5)
+  assert.ok(saltoNuevo < saltoViejo / 2, `nuevo ${Math.round(saltoNuevo * 100)}% vs viejo ${Math.round(saltoViejo * 100)}%`)
 })

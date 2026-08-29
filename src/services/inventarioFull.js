@@ -104,6 +104,43 @@ export function velocidadDiaria({ unidades, ventanaDias, desdeEl, hoy = new Date
   return unidades / Math.max(1, dias)
 }
 
+// LA VELOCIDAD NO PUEDE SALTAR CON UNA VENTA.
+//
+// La primera versión CONMUTABA de ventana: si había ventas en 7 días usaba esa,
+// si no la de 30. Con 5-7 ventas por semana eso es inestable de raíz — una sola
+// venta que entra o sale mueve el número entre 20% y 100%, y al llegar a cero
+// salta de ventana entera. El importador lo cazó mirando la pantalla: "he visto
+// un producto moverse 4 veces en un rango de tiempo la cantidad a enviar".
+//
+// Un forecast que cambia cuatro veces al día no se usa: no se sabe cuál de los
+// cuatro obedecer.
+//
+// Ahora se MEZCLAN. La de 7 días aporta reacción y la de 30 estabilidad, con el
+// peso en la segunda. Y cuando la semana viene en cero no se ignora la historia:
+// se amortigua, porque un producto que vendió 30 en un mes y 0 esta semana está
+// bajando, no muerto.
+const PESO_7D = 0.4
+const AMORTIGUA_SEMANA_MUERTA = 0.7
+
+export function velocidadPonderada({ unidades7, unidades30, desdeEl, hoy = new Date() }) {
+  const r7 = velocidadDiaria({ unidades: unidades7, ventanaDias: 7, desdeEl, hoy })
+  const r30 = velocidadDiaria({ unidades: unidades30, ventanaDias: 30, desdeEl, hoy })
+  if (!r30) return r7
+  if (!r7) return r30 * AMORTIGUA_SEMANA_MUERTA
+  return r7 * PESO_7D + r30 * (1 - PESO_7D)
+}
+
+// Redondeo grueso de la recomendación. "Enviar 34" y "enviar 36" son la misma
+// decisión, pero en pantalla parecen dos números distintos y hacen dudar de
+// todo el cálculo. Se redondea al 5 más cercano, y de 100 para arriba al 10:
+// nadie despacha una caja con precisión unitaria.
+export function redondearEnvio(n) {
+  if (!Number.isFinite(n) || n <= 0) return 0
+  if (n < 10) return Math.ceil(n)
+  const paso = n >= 100 ? 10 : 5
+  return Math.round(n / paso) * paso
+}
+
 // Pura. Cuántos días aguanta el stock actual, y qué hay que mandar para llegar
 // a la cobertura objetivo.
 export function coberturaYReposicion({ stock, velocidadDia, enCamino = 0, objetivoDias = 45 }) {
@@ -120,7 +157,9 @@ export function coberturaYReposicion({ stock, velocidadDia, enCamino = 0, objeti
     diasCobertura: v > 0 ? Math.round(efectivo / v) : null,
     // sin ventas no hay cobertura que calcular, pero tampoco urgencia
     necesarioParaObjetivo: v > 0 ? Math.ceil(v * objetivoDias) : 0,
-    aEnviar: v > 0 ? Math.max(0, Math.ceil(v * objetivoDias) - efectivo) : 0,
+    // redondeado: un envío no se despacha con precisión unitaria, y las
+    // diferencias de dos o tres unidades solo hacen dudar del número
+    aEnviar: v > 0 ? redondearEnvio(Math.ceil(v * objetivoDias) - efectivo) : 0,
     objetivoDias,
   }
 }
