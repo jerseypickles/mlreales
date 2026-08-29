@@ -4,7 +4,7 @@ import { Nicho } from '../models/Nicho.js'
 import { Reporte } from '../models/Reporte.js'
 import { Snapshot } from '../models/Snapshot.js'
 import { Producto } from '../models/Producto.js'
-import { buscarNivel1, ejecutarActorAsync, construirInputDetalle } from '../services/apify.js'
+import { buscarListado, buscarDetalle } from '../services/scraper.js'
 import { normalizarScan } from '../services/normalizador.js'
 import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
 import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
@@ -57,11 +57,13 @@ export async function procesarScanNicho(job) {
   if (nicho.estado !== 'activo') return { omitido: true, motivo: `nicho en estado "${nicho.estado}"` }
 
   const fecha = new Date()
-  const { items: crudos, costoUsd } = await buscarNivel1(nicho.keyword, { domainCode: nicho.domainCode })
-  await registrarGasto(nicho._id, costoUsd, 'apify')
+  const { items: crudos, costoUsd, fuente } = await buscarListado(nicho.keyword, {
+    domainCode: nicho.domainCode,
+  })
+  await registrarGasto(nicho._id, costoUsd, fuente)
   if (!crudos.length) {
     throw new Error(
-      `Apify devolvió 0 items para "${nicho.keyword}": posible bloqueo del actor o keyword sin resultados`,
+      `${fuente} devolvió 0 items para "${nicho.keyword}": posible bloqueo o keyword sin resultados`,
     )
   }
 
@@ -195,13 +197,14 @@ export async function procesarScanDetalle(job) {
     const batch = pendientes.slice(i, i + config.detalleBatch)
     let crudos
     try {
-      const r = await ejecutarActorAsync(
-        config.actorDetails,
-        construirInputDetalle(config.actorDetails, batch.map((o) => o.url), { domainCode: nicho.domainCode }),
-        { pollMs: 10_000, timeoutMs: 12 * 60_000, conMeta: true },
-      )
+      const r = await buscarDetalle(batch.map((o) => o.url), {
+        domainCode: nicho.domainCode,
+        // el precio que ya midió el nivel 1, como testigo independiente del de
+        // la ficha (solo lo usa Zyte)
+        preciosListado: new Map(batch.filter((o) => o.url && o.precio).map((o) => [o.url, o.precio])),
+      })
       crudos = r.items
-      await registrarGasto(nichoId, r.costoUsd, 'apify')
+      await registrarGasto(nichoId, r.costoUsd, r.fuente)
     } catch (err) {
       // un batch caído no bota el scan completo; queda registrado en el resultado
       console.error(`[scan-detalle] batch ${i / config.detalleBatch + 1} falló: ${err.message}`)
@@ -286,12 +289,8 @@ export async function procesarScanDetalle(job) {
       const extra = productos.filter((p) => p.url).map((p) => ({ sku: p.sku, url: p.url }))
       if (!extra.length) break
       try {
-        const r = await ejecutarActorAsync(
-          config.actorDetails,
-          construirInputDetalle(config.actorDetails, extra.map((o) => o.url), { domainCode: nicho.domainCode }),
-          { pollMs: 10_000, timeoutMs: 12 * 60_000, conMeta: true },
-        )
-        await registrarGasto(nichoId, r.costoUsd, 'apify')
+        const r = await buscarDetalle(extra.map((o) => o.url), { domainCode: nicho.domainCode })
+        await registrarGasto(nichoId, r.costoUsd, r.fuente)
         const { porSku } = indexarDetallesPorSku(r.items, extra)
         const res = await aplicarDetalleScan({ porSku, fecha })
         aplicados += res.reviewsAplicadas

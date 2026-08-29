@@ -20,6 +20,8 @@ const snapshotSchema = new mongoose.Schema({
   selloMl: String, // "MÁS VENDIDO", "OFERTA IMPERDIBLE", "OFERTA RELÁMPAGO"
   stock: Number, // Fase 2 (nivel 2)
   posicion: Number,
+  // la posición es pagada (anuncio) u orgánica; null = proveedor que no lo dice
+  esAnuncio: Boolean,
   keyword: String,
   // ids de las preguntas visibles en la página (nivel 2): el diff entre scans
   // cuenta preguntas NUEVAS reales — segundo proxy de demanda, independiente

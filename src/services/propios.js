@@ -1,7 +1,7 @@
 import { config } from '../config/env.js'
 import { ProductoPropio } from '../models/ProductoPropio.js'
 import { Snapshot } from '../models/Snapshot.js'
-import { ejecutarActorAsync, construirInputDetalle } from './apify.js'
+import { buscarDetalle } from './scraper.js'
 import { indexarDetallesPorSku } from './normalizadorDetalle.js'
 import { registrarGasto } from './gastos.js'
 import { reviewsOficialesSeguro, itemOficialSeguro, visitasSeguro, precioParaGanarSeguro, meliGet } from './meli.js'
@@ -94,13 +94,9 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     )
   }
   if (sinOficial.length && !soloOficial) {
-    const r = await ejecutarActorAsync(
-      config.actorDetails,
-      construirInputDetalle(config.actorDetails, sinOficial.map((p) => p.url)),
-      { pollMs: 10_000, timeoutMs: 10 * 60_000, conMeta: true },
-    )
+    const r = await buscarDetalle(sinOficial.map((p) => p.url))
     costoUsd = r.costoUsd
-    await registrarGasto(null, costoUsd, 'apify')
+    await registrarGasto(null, costoUsd, r.fuente)
     porSku = indexarDetallesPorSku(r.items, sinOficial.map((p) => p.sku)).porSku
   }
 

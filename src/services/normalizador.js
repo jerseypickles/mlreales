@@ -146,6 +146,11 @@ export function normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal } =
     domainML: raw.produtoDomainID || null,
     vendedor: raw.Vendedor || null,
     sellerId: raw.sellerID || null, // vacío en nivel 1, lo completa el nivel 2
+    // id de CATÁLOGO de ML. El actor no lo daba y había que sacarlo con una
+    // llamada de ficha; el nivel 1 por Zyte lo trae para todo el listado. Es lo
+    // que necesita /reviews/item de la API oficial para devolver el agregado
+    // del catálogo en vez del bucket del item (ver sondaReviews.js).
+    catalogId: raw.catalogId || null,
     esTiendaOficial: Boolean(raw.esTiendaOficial),
     esFull: envio.esFull,
     envioRapido: envio.envioRapido,
@@ -182,6 +187,12 @@ export function normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal } =
     stock: null, // Fase 2
     // itemPosition del actor reinicia en cada página; el orden del dataset es la posición global
     posicion: posicionGlobal ?? parsearNumero(raw.itemPosition),
+    // SI ESTA POSICIÓN ESTÁ PAGADA. Medido en "depiladora laser" el
+    // 29-ago-2026: 10 de 48 resultados son anuncios y las primeras posiciones
+    // son todas pagadas, con un mismo item apareciendo dos veces —una como
+    // anuncio y otra orgánico—. Sin este campo la métrica de posición mezcla
+    // ranking real con publicidad comprada. Ningún actor lo entregaba.
+    esAnuncio: raw.esAnuncio === true ? true : raw.esAnuncio === false ? false : null,
     keyword: kw,
   }
 

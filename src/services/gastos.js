@@ -16,7 +16,7 @@ export const GastoMensual = mongoose.model('GastoMensual', gastoSchema)
 // Dos docs por día, sin migración: el mensual sigue mandando en el presupuesto.
 const gastoDiarioSchema = new mongoose.Schema({
   dia: { type: String }, // '2026-08-10' en hora de Chile
-  fuente: { type: String, enum: ['ia', 'apify'] },
+  fuente: { type: String, enum: ['ia', 'apify', 'zyte'] },
   usd: { type: Number, default: 0 },
   llamadas: { type: Number, default: 0 },
 })
@@ -34,12 +34,19 @@ export function diaActual(fecha = new Date()) {
   return enChile(fecha)
 }
 
-// fuente: 'ia' (llamada al LLM) | 'apify' (corrida de actor). Es obligatoria a
-// propósito: un gasto sin clasificar vuelve a mezclar las dos cosas.
+// fuente: 'ia' (llamada al LLM) | 'apify' (corrida de actor) | 'zyte' (request
+// de scraping). Es obligatoria a propósito: un gasto sin clasificar vuelve a
+// mezclar las cosas, y durante la migración de Apify a Zyte la comparación
+// diaria entre proveedores es justamente lo que decide si se apaga el viejo.
 export async function registrarGasto(nichoId, usd, fuente) {
   if (!usd || !Number.isFinite(usd)) return
-  if (fuente !== 'ia' && fuente !== 'apify') {
-    throw new Error(`registrarGasto: fuente debe ser 'ia' o 'apify' (llegó ${JSON.stringify(fuente)})`)
+  // 'zyte' entra en ago-2026 al migrar el scraping desde los actores de Apify.
+  // Se registran por separado a propósito: durante la convivencia hay que poder
+  // comparar el gasto de los dos proveedores día a día.
+  if (fuente !== 'ia' && fuente !== 'apify' && fuente !== 'zyte') {
+    throw new Error(
+      `registrarGasto: fuente debe ser 'ia', 'apify' o 'zyte' (llegó ${JSON.stringify(fuente)})`,
+    )
   }
   await Promise.all([
     // nichoId null = gasto del sistema sin nicho (ej: scan de productos propios)

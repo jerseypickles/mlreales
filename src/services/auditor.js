@@ -6,7 +6,7 @@ import { TendenciaBusqueda } from '../models/TendenciaBusqueda.js'
 import { pedirJSON } from './llm.js'
 import { obtenerProductosUltimoScan } from './metricas.js'
 import { sugerenciasReales, palabrasClave } from './busquedasReales.js'
-import { ejecutarActorAsync, construirInputDetalle } from './apify.js'
+import { buscarDetalle } from './scraper.js'
 import { indexarDetallesPorSku } from './normalizadorDetalle.js'
 import { itemOficialSeguro, descripcionOficialSegura } from './meli.js'
 import { registrarGasto } from './gastos.js'
@@ -210,13 +210,9 @@ export async function auditarPropio(propio) {
   let costoActorUsd = 0
   let porSku = new Map()
   try {
-    const r = await ejecutarActorAsync(
-      config.actorDetails,
-      construirInputDetalle(config.actorDetails, objetivos.map((o) => o.url), { domainCode: nicho.domainCode }),
-      { pollMs: 10_000, timeoutMs: 10 * 60_000, conMeta: true },
-    )
+    const r = await buscarDetalle(objetivos.map((o) => o.url), { domainCode: nicho.domainCode })
     costoActorUsd = r.costoUsd
-    await registrarGasto(nicho._id, costoActorUsd, 'apify')
+    await registrarGasto(nicho._id, costoActorUsd, r.fuente)
     porSku = indexarDetallesPorSku(r.items, objetivos).porSku
   } catch (err) {
     // sin detalle igual hay auditoría (títulos/precios/reviews del scan),

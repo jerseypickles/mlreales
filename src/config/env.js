@@ -13,6 +13,17 @@ export const config = {
   mongoUri: process.env.MONGO_URI,
   redisUrl: process.env.REDIS_URL,
   apifyToken: process.env.APIFY_TOKEN,
+  // Zyte pasa el bloqueo de ML en la ficha donde el actor de detalle no; ver
+  // la cabecera de src/services/detalleMl.js para las trampas medidas.
+  zyteApiKey: process.env.ZYTE_API_KEY,
+  // Estimados hasta tener factura: Zyte cobra por request de navegador según
+  // lo protegido que sea el sitio (US$1,01–16,08 por 1.000). Se registran como
+  // gasto para poder comparar contra Apify y calibrar con el cobro real.
+  zyteCostoListadoUsd: Number(process.env.ZYTE_COSTO_LISTADO_USD) || 0.008,
+  zyteCostoFichaUsd: Number(process.env.ZYTE_COSTO_FICHA_USD) || 0.006,
+  // 'zyte' | 'apify' — permite correr ambos en paralelo y comparar antes de apagar
+  scraperListado: process.env.SCRAPER_LISTADO || 'apify',
+  scraperDetalle: process.env.SCRAPER_DETALLE || 'apify',
   actorSearch: process.env.APIFY_ACTOR_SEARCH || 'karamelo~mercadolibre-scraper-espanol-castellano',
   // sourabhbgp desde 2026-07-17: pasó el muro nocturno de ML 10/10 donde ecomscrape
   // daba 0/30, cuesta ~US$0.05/10 urls sin arriendo y entrega seller+reputación+IDs.
