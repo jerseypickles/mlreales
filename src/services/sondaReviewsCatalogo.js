@@ -32,8 +32,30 @@ import { idDesdeUrl } from './normalizadorDetalle.js'
 // Solo lee. No escribe nada ni cambia el pipeline.
 
 const MUESTRA_FICHAS = 8
-// la ficha y la API pueden diferir en una reseña por el momento de la lectura
-const TOLERANCIA = 2
+
+// CUÁNTO PUEDE DIFERIR LA API DE LA FICHA SIN QUE IMPORTE.
+//
+// El primer criterio fue ±2 reseñas, absoluto. Estaba mal y lo delató la
+// medición: sobre "cama perro" la API dio 80/80, 74/74 y 109/109 —exacto— pero
+// 1529 contra 1549 en un producto grande, y eso lo marcaba como error. Son 20
+// reseñas sobre 1549: un 1,3%.
+//
+// Lo que este sistema usa NO es el conteo sino su DELTA entre scans. Un desfase
+// proporcional y estable no ensucia un delta —se cancela en la resta—; lo que
+// lo rompe es mezclar dos fuentes con escalas distintas, que fue el caso del
+// endpoint público (0,36 a 0,69 de la ficha, sin patrón).
+//
+// Así que se tolera lo que sea proporcional y chico, con un piso absoluto para
+// los conteos pequeños, donde un porcentaje no significa nada.
+const TOLERANCIA_ABS = 2
+const TOLERANCIA_PCT = 0.03
+
+export function calzaConteo(ficha, api) {
+  if (!Number.isFinite(ficha) || !Number.isFinite(api)) return false
+  const dif = Math.abs(ficha - api)
+  if (dif <= TOLERANCIA_ABS) return true
+  return ficha > 0 && dif / ficha <= TOLERANCIA_PCT
+}
 
 // Pura. El veredicto, separado para poder probarlo sin red.
 export function veredicto({ conCatalogo, total, responden, comparados, calzan }) {
@@ -105,7 +127,10 @@ export async function sondearReviewsPorCatalogo(keyword, { domainCode = 'CL' } =
       catalogId: i.catalogId ?? null,
       ficha: deFicha,
       api: deApi,
-      calza: Math.abs(deFicha - deApi) <= TOLERANCIA,
+      // la razón viaja: si el desfase es proporcional y estable se puede
+      // migrar la serie; si es errático, no
+      razon: deFicha > 0 ? Math.round((deApi / deFicha) * 1000) / 1000 : null,
+      calza: calzaConteo(deFicha, deApi),
     })
   }
   const calzan = comparaciones.filter((c) => c.calza).length
