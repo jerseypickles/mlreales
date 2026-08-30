@@ -5586,6 +5586,25 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
 /* en el encabezado la celda es solo texto, sin la columna flex */
 .op-fila-cab .op-fila-vend { display: block; }
 /* silueta del año en miniatura: forma, no números */
+/* De dónde salió el volumen cuando no es de la keyword exacta. Discreto: es
+   una nota al pie del número, no una alarma — salvo el de ortografía, que sí
+   es un error nuestro y viaja al scrapeo de ML. */
+.vol-medida {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--tinta-3);
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.vol-medida-typo {
+  color: var(--avisa-tinta);
+}
+
 .op-fila-curva {
   display: flex;
   align-items: flex-end;

@@ -20,6 +20,14 @@ const NIVELES = {
   nulo: { texto: 'nadie la busca', clase: 'nb-nulo' },
 }
 
+// ¿La keyword medida es la MISMA palabra mal escrita, o un mercado más amplio?
+// "pestanas postizas" → "pestañas postizas" es grafía; "waflera electrica" →
+// "waflera" es familia. Se ven iguales en el dato y significan cosas distintas:
+// la grafía es un error nuestro que además viaja al scrapeo de ML.
+const sinTildes = (t) =>
+  String(t ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+const esOrtografia = (keyword, medida) => Boolean(medida) && sinTildes(keyword) === sinTildes(medida)
+
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const fmtMes = (m) => (m ? MESES[Number(m.slice(5, 7)) - 1] + (m.slice(0, 4) !== String(new Date().getFullYear()) ? ` ${m.slice(2, 4)}` : '') : '')
 
@@ -403,9 +411,35 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
       ) : (
         <span className={`op-fila-score s-${o.score >= 75 ? 'alto' : o.score >= 55 ? 'medio' : 'bajo'}`}>{o.score ?? '—'}</span>
       )}
-      {/* ── GOOGLE: cuánta gente lo busca y cómo se reparte en el año ── */}
+      {/* ── GOOGLE: cuánta gente lo busca y cómo se reparte en el año ──
+          EL NÚMERO NO SIEMPRE ES DE ESTA KEYWORD. Cuando la frase exacta no
+          tiene volumen, el sistema mide sus prefijos y usa el mayor, para no
+          matar un nicho por su variante más específica. Es correcto, pero deja
+          dos cosas distintas con la misma cara: "manguera extensible" mide 260
+          de esa frase y "waflera electrica" muestra 22.200 que son de
+          "waflera" —su keyword tiene 140—. El importador lo cazó mirando la
+          tabla: "esa cantidad de búsqueda está bien? tal vez están sucios".
+          Ahora el número dice de dónde salió. */}
       <span className="op-fila-vol">
-        {c?.busquedasMes ? `${fmtNum(c.busquedasMes)}/mes` : <em>sin medir</em>}
+        {c?.busquedasMes ? (
+          <>
+            {fmtNum(c.busquedasMes)}/mes
+            {c.keywordMedida ? (
+              <b
+                className={`vol-medida${esOrtografia(o.keyword, c.keywordMedida) ? ' vol-medida-typo' : ''}`}
+                title={
+                  esOrtografia(o.keyword, c.keywordMedida)
+                    ? `La keyword del nicho está mal escrita: Google mide "${c.keywordMedida}", no "${o.keyword}". El error también viaja al scrapeo de ML.`
+                    : `Este volumen es de "${c.keywordMedida}", una búsqueda más amplia. La frase exacta del nicho tiene ${c.correccionFactor ? `${Math.round(c.correccionFactor)}× menos` : 'menos'}.`
+                }
+              >
+                {esOrtografia(o.keyword, c.keywordMedida) ? '✎' : '↗'} {c.keywordMedida}
+              </b>
+            ) : null}
+          </>
+        ) : (
+          <em>sin medir</em>
+        )}
       </span>
       {max ? (
         <span

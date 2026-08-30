@@ -811,7 +811,7 @@ router.get(
     // ¿la keyword del nicho es la que la gente escribe? El volumen de Google
     // mide LA PALABRA, no el producto: si nadie la escribe, el número es real y
     // a la vez irrelevante. Ver services/cruceKeywords.js.
-    const { evaluarKeyword, medirCandidatas, mereceRevision } = await import(
+    const { evaluarKeyword, medirCandidatas, mereceRevision, tipoDeCorreccion } = await import(
       '../../services/cruceKeywords.js'
     )
     const { CurvaEstacional } = await import('../../models/CurvaEstacional.js')
@@ -842,6 +842,10 @@ router.get(
         // nunca se enciende y la señal queda a medias.
         mereceRevision: mereceRevision({ evaluacion, busquedasMes: curva?.busquedasMes ?? null }),
         busquedasMesActual: curva?.busquedasMes ?? null,
+        // el volumen que se muestra puede no ser de esta frase: `familia` es
+        // deliberado, `ortografia` es un error nuestro que además scrapea mal
+        medidaComo: curva?.keywordMedida ?? null,
+        tipoCorreccion: tipoDeCorreccion(nicho.keyword, curva?.keywordMedida),
       },
     })
   }),

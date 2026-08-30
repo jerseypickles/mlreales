@@ -6,6 +6,7 @@ import {
   evaluarKeyword,
   medirCandidatas,
   mereceRevision,
+  tipoDeCorreccion,
 } from '../src/services/cruceKeywords.js'
 
 // Tendencias REALES que publica ML por categoría, medidas el 30-ago-2026.
@@ -98,4 +99,24 @@ test('solo alarma la variante con volumen bajo', () => {
   assert.equal(mereceRevision({ evaluacion: variante, busquedasMes: 22_200 }), false)
   assert.equal(mereceRevision({ evaluacion: { estado: 'coincide' }, busquedasMes: 100 }), false)
   assert.equal(mereceRevision({ evaluacion: variante, busquedasMes: null }), false)
+})
+
+// DOS CASOS MUY DISTINTOS EN EL MISMO CAMPO.
+//
+// `atractivoNicho` guarda en `keywordMedida` la variante que sí tenía volumen.
+// Medir la FAMILIA es deliberado y correcto —"no matar un nicho por su variante
+// más específica"—, pero medir la misma palabra BIEN ESCRITA delata un error de
+// tipeo. En pantalla se veían iguales, y el segundo además viaja al scrapeo de
+// ML, donde nadie lo corrige.
+test('la corrección de familia no se confunde con la de ortografía', () => {
+  // "pestanas postizas" sin ñ: Google le da 10/mes; con ñ, 8.100
+  assert.equal(tipoDeCorreccion('pestanas postizas', 'pestañas postizas'), 'ortografia')
+  // "waflera electrica" 140/mes, su familia "waflera" 22.200
+  assert.equal(tipoDeCorreccion('waflera electrica', 'waflera'), 'familia')
+  assert.equal(tipoDeCorreccion('scooter infantil', 'scooter'), 'familia')
+  // sin corrección no hay nada que clasificar
+  assert.equal(tipoDeCorreccion('cooler portatil', null), null)
+  assert.equal(tipoDeCorreccion('igual', 'igual'), null)
+  // una medida que no es ni prefijo ni la misma palabra
+  assert.equal(tipoDeCorreccion('taladro', 'sierra circular'), 'otra')
 })

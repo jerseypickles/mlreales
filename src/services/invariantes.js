@@ -359,6 +359,36 @@ async function ningunProveedorCaido() {
   )
 }
 
+// ── 14. Ninguna keyword de nicho está mal escrita ────────────────────────
+// `atractivoNicho` ya detecta cuando la frase exacta no tiene volumen y mide
+// una variante, guardándola en `keywordMedida`. Eso mete dos casos distintos en
+// el mismo campo: medir la FAMILIA ("waflera electrica" → "waflera") es
+// deliberado y correcto, pero medir la MISMA palabra bien escrita
+// ("pestanas postizas" → "pestañas postizas") delata un error de tipeo en el
+// nicho.
+//
+// Y ese error no se queda en Google: la keyword del nicho es la que se usa para
+// scrapear ML. Un nicho llamado "pestanas postizas" mide un listado que no es
+// el que ve el comprador, y ninguna otra invariante lo ve.
+async function keywordsBienEscritas() {
+  const { CurvaEstacional } = await import('../models/CurvaEstacional.js')
+  const { Nicho } = await import('../models/Nicho.js')
+  const { tipoDeCorreccion } = await import('./cruceKeywords.js')
+  const activos = await Nicho.find({ estado: 'activo' }).select('keyword').lean()
+  if (!activos.length) return ok('sin nichos activos')
+  const curvas = await CurvaEstacional.find({ keyword: { $in: activos.map((n) => n.keyword) } })
+    .select('keyword keywordMedida')
+    .lean()
+  const malas = curvas.filter((c) => tipoDeCorreccion(c.keyword, c.keywordMedida) === 'ortografia')
+  if (!malas.length) return ok(`las ${activos.length} keywords activas están bien escritas`)
+  return falla(
+    `${malas.length} nicho(s) con la keyword mal escrita, y esa keyword es la que scrapea ML: ${malas
+      .map((c) => `"${c.keyword}" → "${c.keywordMedida}"`)
+      .join(', ')}`,
+    { malas: malas.map((c) => ({ keyword: c.keyword, deberiaSer: c.keywordMedida })) },
+  )
+}
+
 export const INVARIANTES = [
   { id: 'reviews-no-retroceden', que: 'Las reseñas son acumulativas: una lectura que baja es scrapeo fallido', fn: reviewsNoRetroceden },
   { id: 'ads-cuadran', que: 'El gasto por campaña y por producto deben coincidir con ML', fn: adsCuadranConMl },
@@ -372,6 +402,7 @@ export const INVARIANTES = [
   { id: 'top-no-pagado', que: 'El ranking guardado es orgánico: ningún anuncio en el top 5', fn: elTopNoEsPagado },
   { id: 'cargos-clasificados', que: 'Los cargos de ML caen en su bolsillo, no en "otros"', fn: cargosClasificados },
   { id: 'scan-no-encoge', que: 'Un scan no trae la mitad de items que de costumbre: eso es scrapeo a medias', fn: elScanNoEncoge },
+  { id: 'keywords-bien-escritas', que: 'Ninguna keyword de nicho activo está mal escrita: esa keyword es la que scrapea ML', fn: keywordsBienEscritas },
   { id: 'proveedor-arriba', que: 'Ningún proveedor de scraping está caído (cuenta suspendida, cuota agotada)', fn: ningunProveedorCaido },
 ]
 

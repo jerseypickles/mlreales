@@ -122,6 +122,31 @@ export async function medirCandidatas(keyword, evaluacion, { volumenMensual }) {
   }
 }
 
+// DE QUÉ TIPO ES LA CORRECCIÓN QUE YA HIZO EL SISTEMA.
+//
+// Cuando la keyword exacta no tiene volumen, `atractivoNicho` mide sus prefijos
+// y guarda cuál usó en `keywordMedida`. Eso es deliberado —"no matar un nicho
+// por su variante más específica"— pero mete dos casos MUY distintos en el
+// mismo campo, y en pantalla se ven iguales:
+//
+//   familia      "waflera electrica" → midió "waflera" (22.200 contra 140).
+//                El número es de un mercado más amplio que el nicho. Sirve como
+//                referencia, pero no es el volumen de esta keyword.
+//
+//   ortografía   "pestanas postizas" → midió "pestañas postizas". Son LA MISMA
+//                palabra mal escrita: sin la ñ, Google le da 10 al mes. Éste no
+//                es un caso de familia, es un error de tipeo — y ese error
+//                viaja al scrapeo de ML, donde nadie lo está corrigiendo.
+export function tipoDeCorreccion(keyword, keywordMedida) {
+  if (!keywordMedida || keywordMedida === keyword) return null
+  const a = normalizar(keyword)
+  const b = normalizar(keywordMedida)
+  // mismas palabras una vez quitados acentos y ñ: es grafía, no otro mercado
+  if (a.length === b.length && a.every((t, i) => t === b[i])) return 'ortografia'
+  if (b.every((t) => a.includes(t))) return 'familia'
+  return 'otra'
+}
+
 // Pura. Cuándo esto merece que alguien lo mire.
 //
 // Una keyword variante NO es un problema por sí sola: muchas búsquedas
