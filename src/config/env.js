@@ -122,7 +122,16 @@ export const config = {
   // los últimos del ciclo de Apify y con US$36 de margen. Esto la reparte —
   // un nicho semanal escaneado el día 8 en vez del 7 no cambia ninguna
   // decisión de compra, y el tope de Apify sí.
-  scansMaxDia: Number(process.env.SCANS_MAX_DIA) || 12,
+  // Sube de 12 a 16 el 30-ago-2026. El 12 se calibró contra el costo de Apify;
+  // con Zyte el listado cuesta US$0,016 contra US$0,060 de karamelo —casi
+  // cuatro veces menos— y el techo había quedado atado a un precio que ya no
+  // existe: 37 nichos vencidos esperando turno con cupo de 12.
+  //
+  // La demanda en régimen es ~17,4/día (25 madurando cada 3 días = 8,3 más 59
+  // semanales cada 6,5 = 9,1). Con 16 queda apenas por debajo, y es a
+  // propósito: la cola se drena sola porque cada nicho que llega a sus 5 scans
+  // pasa de 3 días a 6,5, así que la carga de maduración baja con el tiempo.
+  scansMaxDia: Number(process.env.SCANS_MAX_DIA) || 16,
   // CADA CUÁNTO SE MIDE UN NICHO QUE MADURA.
   //
   // Era diario (umbral de 20 h) y no servía: la señal de demanda es el DELTA de
