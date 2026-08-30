@@ -124,15 +124,18 @@ const urgencia = (n) => ORDEN_VENTANA[n.ventana?.estado] ?? 3
 // reordenar la mesa por esa diferencia solo hace perder el hilo entre visitas.
 const BANDAS_BUSQUEDA = [20_000, 8_000, 3_000, 1_000, 300]
 
+// Sin volumen medido el nivel del autocompletado sigue siendo el mejor dato que
+// hay: es peor que el número, pero mucho mejor que nada. Se mapea a la misma
+// escala, en medias bandas, para que un volumen MEDIDO de 25.000 gane siempre a
+// un "alto" sin medir, y ese "alto" gane a un "medio" sin medir.
+const NIVEL_SIN_VOLUMEN = { alto: 1.5, medio: 2.5, bajo: 3.5, renombrar: 2.5 }
+
 export function bandaBusqueda(o) {
   // "nadie la busca" no es un volumen bajo: es otra cosa. Va al fondo aunque
   // Google le mida tráfico, porque en ML ese escaparate no se abre.
   if (o?.nivelBusqueda?.nivel === 'nulo') return 9
   const v = o?.curvaAnual?.busquedasMes
-  if (!Number.isFinite(v)) {
-    // sin medir queda en el medio: no adelanta a un nicho masivo ni cae al fondo
-    return 2.5
-  }
+  if (!Number.isFinite(v)) return NIVEL_SIN_VOLUMEN[o?.nivelBusqueda?.nivel] ?? 2.5
   const i = BANDAS_BUSQUEDA.findIndex((corte) => v >= corte)
   return i === -1 ? BANDAS_BUSQUEDA.length : i
 }
