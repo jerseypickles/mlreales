@@ -808,6 +808,19 @@ router.get(
       tendenciasDeCategoria(categoriaId),
     ])
 
+    // ¿la keyword del nicho es la que la gente escribe? El volumen de Google
+    // mide LA PALABRA, no el producto: si nadie la escribe, el número es real y
+    // a la vez irrelevante. Ver services/cruceKeywords.js.
+    const { evaluarKeyword, medirCandidatas, mereceRevision } = await import(
+      '../../services/cruceKeywords.js'
+    )
+    const { volumenMensual } = await import('../../services/volumenBusqueda.js')
+    const evaluacion = await medirCandidatas(
+      nicho.keyword,
+      evaluarKeyword(nicho.keyword, tendencias),
+      { volumenMensual },
+    ).catch(() => evaluarKeyword(nicho.keyword, tendencias))
+
     // los ids de ML pueden ser de catálogo o de publicación: se cruza contra
     // los tres que conocemos de cada producto
     const conocidos = productos.flatMap((p) => [p.sku, p.catalogId, p.itemId].filter(Boolean))
@@ -817,6 +830,16 @@ router.get(
       masVendidos: destacados,
       cruce: destacados ? cruceConDestacados(destacados, conocidos) : null,
       tendencias,
+      keyword: {
+        actual: nicho.keyword,
+        ...evaluacion,
+        // renombrar rompe la serie histórica del nicho: esto se muestra y
+        // decide el importador, nunca se aplica solo
+        mereceRevision: mereceRevision({
+          evaluacion,
+          busquedasMes: nicho.curvaAnual?.busquedasMes ?? null,
+        }),
+      },
     })
   }),
 )
