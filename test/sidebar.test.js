@@ -8,6 +8,8 @@ import {
   sinBusqueda,
   madurando,
   rechazadoPeroSeBusca,
+  compararOportunidades,
+  bandaBusqueda,
 } from '../frontend/src/lib/sidebar.js'
 
 // Casos tomados del tablero real al 9-ago-2026 (80 nichos, 65 con veredicto de
@@ -178,4 +180,58 @@ test('anidarFamilias: el hijo cuelga del líder solo si ambos están en el grupo
   const solo = anidarFamilias([hijo])
   assert.equal(solo.length, 1)
   assert.equal(solo[0].nicho.keyword, 'sabanillas perro 60x60')
+})
+
+// ── El orden de la mesa de compra ──────────────────────────────────────────
+//
+// EL NIVEL NO ES EL VOLUMEN, Y ORDENAR POR NIVEL ERA EL BUG.
+//
+// `nivelBusqueda.nivel` mide la posición de la keyword en el autocompletado de
+// ML dentro de SU PREFIJO: es relativo. Medido el 30-ago-2026 sobre los 76
+// nichos de la mesa, dentro de "alto" el volumen iba de 140 a 49.500 —354
+// veces— y "waflera electrica" con 22.200 al mes quedaba DEBAJO de un "alto"
+// de 140. El importador lo vio en pantalla: "máquina de coser tiene 1.000 por
+// mes, bien poco… lo veo bien raro".
+const opo = (extra = {}) => ({ keyword: 'x', score: 50, ...extra })
+const conVolumen = (busquedasMes, extra = {}) =>
+  opo({ curvaAnual: { busquedasMes }, ...extra })
+
+test('el orden lo manda el volumen absoluto, no el nivel del autocompletado', () => {
+  const grande = conVolumen(22_200, { keyword: 'waflera', nivelBusqueda: { nivel: 'medio' } })
+  const chico = conVolumen(140, { keyword: 'algo', nivelBusqueda: { nivel: 'alto' } })
+  assert.ok(compararOportunidades(grande, chico) < 0, 'el de 22.200 va antes que el de 140')
+})
+
+// En bandas y no por el número crudo: 8.100 y 8.200 son la misma decisión, y
+// reordenar la mesa por esa diferencia hace perder el hilo entre visitas.
+test('las bandas evitan que la mesa se reordene por diferencias que no deciden', () => {
+  assert.equal(bandaBusqueda(conVolumen(8_100)), bandaBusqueda(conVolumen(8_200)))
+  assert.notEqual(bandaBusqueda(conVolumen(25_000)), bandaBusqueda(conVolumen(9_000)))
+  // más volumen, banda más baja (mejor)
+  assert.ok(bandaBusqueda(conVolumen(30_000)) < bandaBusqueda(conVolumen(500)))
+})
+
+// "Nadie la busca" no es un volumen bajo: es otra cosa. Va al fondo aunque
+// Google le mida tráfico, porque en ML ese escaparate no se abre.
+test('el nicho que nadie busca cae al fondo aunque tenga volumen en Google', () => {
+  const nulo = conVolumen(40_000, { nivelBusqueda: { nivel: 'nulo' } })
+  const chico = conVolumen(400)
+  assert.ok(bandaBusqueda(nulo) > bandaBusqueda(chico))
+})
+
+test('sin volumen medido queda en el medio, no adelanta ni cae al fondo', () => {
+  const sinMedir = opo({})
+  assert.ok(bandaBusqueda(sinMedir) > bandaBusqueda(conVolumen(30_000)))
+  assert.ok(bandaBusqueda(sinMedir) < bandaBusqueda(conVolumen(200)))
+})
+
+// Dentro de la banda sigue mandando el momento: un nicho con la ventana
+// cerrada no se compra por bueno que sea.
+test('a igual banda manda la ventana, y después el score', () => {
+  const ahora = conVolumen(25_000, { ventana: { estado: 'ahora' }, score: 60 })
+  const futura = conVolumen(25_000, { ventana: { estado: 'futura' }, score: 95 })
+  assert.ok(compararOportunidades(ahora, futura) < 0)
+  const a = conVolumen(25_000, { ventana: { estado: 'ahora' }, score: 80 })
+  const b = conVolumen(25_000, { ventana: { estado: 'ahora' }, score: 60 })
+  assert.ok(compararOportunidades(a, b) < 0)
 })

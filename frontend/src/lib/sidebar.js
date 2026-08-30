@@ -106,16 +106,47 @@ const urgencia = (n) => ORDEN_VENTANA[n.ventana?.estado] ?? 3
 // Primero LA BÚSQUEDA (si nadie escribe la keyword, el resto de las métricas
 // describen un escaparate que no se abre), después EL MOMENTO (un nicho con la
 // ventana cerrada no se puede comprar por bueno que sea) y recién ahí el score.
-// Sin medir queda en el medio: no adelanta a una búsqueda alta ni cae al fondo.
-const ORDEN_BUSQUEDA = { alto: 0, medio: 1, bajo: 2, renombrar: 3, nulo: 4 }
-export const rangoBusqueda = (o) => ORDEN_BUSQUEDA[o?.nivelBusqueda?.nivel] ?? 1.5
+//
+// EL NIVEL NO ES EL VOLUMEN, Y ORDENAR POR NIVEL ERA EL BUG.
+//
+// `nivelBusqueda.nivel` mide la posición de la keyword en el autocompletado de
+// ML DENTRO DE SU PREFIJO: es relativo, no absoluto. "maquina coser" puede ser
+// la primera de su prefijo —y salir "alto"— con 1.000 búsquedas al mes, y
+// "waflera electrica" ser "medio" con 22.200.
+//
+// Medido el 30-ago-2026 sobre los 76 nichos de la mesa:
+//   · dentro de "alto" el volumen va de 140 a 49.500 — 354 veces
+//   · waflera (22.200, medio) quedaba DEBAJO de un "alto" de 140
+//   · los 76 tienen volumen de Google Ads medido: no hace falta el proxy
+//
+// Así que ordena el volumen ABSOLUTO, que es comparable entre nichos. Va en
+// BANDAS y no en el número crudo: 8.100 y 8.200 son la misma decisión, y
+// reordenar la mesa por esa diferencia solo hace perder el hilo entre visitas.
+const BANDAS_BUSQUEDA = [20_000, 8_000, 3_000, 1_000, 300]
+
+export function bandaBusqueda(o) {
+  // "nadie la busca" no es un volumen bajo: es otra cosa. Va al fondo aunque
+  // Google le mida tráfico, porque en ML ese escaparate no se abre.
+  if (o?.nivelBusqueda?.nivel === 'nulo') return 9
+  const v = o?.curvaAnual?.busquedasMes
+  if (!Number.isFinite(v)) {
+    // sin medir queda en el medio: no adelanta a un nicho masivo ni cae al fondo
+    return 2.5
+  }
+  const i = BANDAS_BUSQUEDA.findIndex((corte) => v >= corte)
+  return i === -1 ? BANDAS_BUSQUEDA.length : i
+}
+
 export const rangoVentana = (o) => ORDEN_VENTANA[o?.ventana?.estado] ?? 3
 
 export function compararOportunidades(a, b) {
   return (
-    rangoBusqueda(a) - rangoBusqueda(b) ||
+    bandaBusqueda(a) - bandaBusqueda(b) ||
     rangoVentana(a) - rangoVentana(b) ||
-    (b.score ?? -1) - (a.score ?? -1)
+    (b.score ?? -1) - (a.score ?? -1) ||
+    // dentro de la banda y con el mismo score manda el volumen real, para que
+    // el orden sea estable entre cargas
+    ((b.curvaAnual?.busquedasMes ?? 0) - (a.curvaAnual?.busquedasMes ?? 0))
   )
 }
 
