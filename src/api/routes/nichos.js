@@ -814,6 +814,8 @@ router.get(
     const { evaluarKeyword, medirCandidatas, mereceRevision } = await import(
       '../../services/cruceKeywords.js'
     )
+    const { CurvaEstacional } = await import('../../models/CurvaEstacional.js')
+    const curva = await CurvaEstacional.findOne({ keyword: nicho.keyword }).lean().catch(() => null)
     const { volumenMensual } = await import('../../services/volumenBusqueda.js')
     const evaluacion = await medirCandidatas(
       nicho.keyword,
@@ -835,10 +837,11 @@ router.get(
         ...evaluacion,
         // renombrar rompe la serie histórica del nicho: esto se muestra y
         // decide el importador, nunca se aplica solo
-        mereceRevision: mereceRevision({
-          evaluacion,
-          busquedasMes: nicho.curvaAnual?.busquedasMes ?? null,
-        }),
+        // la curva vive en su propia colección y se adjunta al listar; acá el
+        // nicho viene crudo de findById, así que se busca. Sin esto el flag
+        // nunca se enciende y la señal queda a medias.
+        mereceRevision: mereceRevision({ evaluacion, busquedasMes: curva?.busquedasMes ?? null }),
+        busquedasMesActual: curva?.busquedasMes ?? null,
       },
     })
   }),
