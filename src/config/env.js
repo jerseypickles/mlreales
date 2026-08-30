@@ -123,6 +123,27 @@ export const config = {
   // un nicho semanal escaneado el día 8 en vez del 7 no cambia ninguna
   // decisión de compra, y el tope de Apify sí.
   scansMaxDia: Number(process.env.SCANS_MAX_DIA) || 12,
+  // CADA CUÁNTO SE MIDE UN NICHO QUE MADURA.
+  //
+  // Era diario (umbral de 20 h) y no servía: la señal de demanda es el DELTA de
+  // reseñas, y en 24 h ese delta es casi todo ruido. Medido el 30-ago-2026
+  // sobre la mesa real —los tres nichos escaneados dos veces el mismo día
+  // dieron ventana de 0,04 días y CERO reseñas nuevas, resolución 25/día—
+  // mientras los de ventana ~3 días traían entre 16 y 135 reseñas nuevas.
+  //
+  // Además la ventana efectiva YA era de 2 a 8 días (mediana 8,3), porque el
+  // delta se calcula contra el scan anterior CON reseñas y el nivel 2 no corre
+  // en todos. O sea que escanear a diario no producía una señal diaria:
+  // producía el mismo dato pagando el doble.
+  //
+  // Se elige 68 h (~3 días) y no 48 porque la propia mesa lo muestra: los
+  // nichos con ventana de 2,21 días traían 5 a 35 reseñas nuevas, y los de
+  // 3,06 días entre 16 y 135. Tres días es donde la señal deja de ser ruido.
+  //
+  // De paso libera el cupo diario para los semanales atrasados —había 37
+  // vencidos con techo de 12— y baja el gasto de scraping a un tercio en la
+  // mitad de la mesa.
+  maduracionHoras: Number(process.env.MADURACION_HORAS) || 68,
   // API oficial de ML (OAuth, cuenta del propio vendedor) — opcionales: sin
   // ellas el resto del sistema funciona y /api/meli/conectar responde 503
   meliAppId: process.env.MELI_APP_ID || null,

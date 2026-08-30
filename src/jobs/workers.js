@@ -737,7 +737,16 @@ export async function procesarRadar() {
 // (diario ≈ 20 h, semanal ≈ 6.5 días). jobId por ventana de 3 h evita duplicados.
 export async function procesarProgramadorScans() {
   const ahora = Date.now()
-  const umbrales = { diario: 20 * 3600e3, semanal: 6.5 * 86400e3 }
+  // `madurando` era 20 h —a diario— y la señal no lo aguantaba: ver
+  // config.maduracionHoras. `semanal` queda igual: un nicho ya graduado medido
+  // el día 8 en vez del 7 no cambia ninguna decisión.
+  const umbrales = {
+    // el ciclo de propios sigue siendo diario: ahí la señal son ventas reales
+    // por API oficial, no un delta de reseñas
+    diario: 20 * 3600e3,
+    madurando: config.maduracionHoras * 3600e3,
+    semanal: 6.5 * 86400e3,
+  }
 
   // los productos propios se miden por la API oficial ($0), así que corren en
   // DOS ciclos: uno FRECUENTE solo-oficial (una venta se ve en minutos, no al
@@ -833,10 +842,14 @@ export async function procesarProgramadorScans() {
     const ultimo = nicho.ultimoScanEl ? new Date(nicho.ultimoScanEl).getTime() : 0
     const nuncaPuntuo = (ultimoScore.get(id) ?? null) == null
     const madurando = enMaduracion.has(id)
-    // la cadencia es AUTOMÁTICA desde el 29-jul: diario mientras el nicho está
-    // puntuando o madurando en cartera; semanal el resto. frecuenciaScan quedó
-    // como campo legado y ya no la decide nadie a mano.
-    const umbral = nuncaPuntuo || madurando ? umbrales.diario : umbrales.semanal
+    // la cadencia es AUTOMÁTICA desde el 29-jul: frecuente mientras el nicho
+    // madura, semanal el resto. frecuenciaScan quedó como campo legado y ya no
+    // la decide nadie a mano.
+    //
+    // Un nicho que NUNCA puntuó es otro caso: no está madurando, está fallando
+    // —el nivel 2 no le trajo reseñas—, y esperarlo 48 h lo deja invisible. Ése
+    // sí sigue a diario, que es lo que estaba antes para todos.
+    const umbral = nuncaPuntuo ? umbrales.diario : madurando ? umbrales.madurando : umbrales.semanal
     if (ahora - ultimo < umbral) continue
     if (nuncaPuntuo) sinScore++
     vencidos.push({ nicho, madurando, atraso: ahora - ultimo - umbral })
