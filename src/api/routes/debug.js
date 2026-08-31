@@ -203,4 +203,40 @@ router.post(
   }),
 )
 
+// Los meses crudos que devuelve Google para una keyword. Existe porque la
+// tendencia año-contra-año salió sospechosamente negativa en muchos nichos y
+// afirmarla sin ver los datos sería exactamente el error que este sistema trata
+// de no cometer.
+router.get(
+  '/volumen-crudo/:keyword',
+  autorizado,
+  manejar(async (req, res) => {
+    const { config } = await import('../../config/env.js')
+    const { desde4Anos, CHILE } = await import('../../services/volumenBusqueda.js')
+    const auth = Buffer.from(`${config.dataForSeoLogin}:${config.dataForSeoPassword}`).toString('base64')
+    const r = await fetch('https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live', {
+      method: 'POST',
+      headers: { authorization: `Basic ${auth}`, 'content-type': 'application/json' },
+      body: JSON.stringify([
+        {
+          keywords: [req.params.keyword],
+          location_code: CHILE,
+          language_code: 'es',
+          search_partners: false,
+          ...(req.query.sinFecha ? {} : { date_from: desde4Anos() }),
+        },
+      ]),
+    })
+    const j = await r.json()
+    const fila = j?.tasks?.[0]?.result?.[0] ?? null
+    res.json({
+      keyword: fila?.keyword,
+      search_volume: fila?.search_volume,
+      meses: (fila?.monthly_searches ?? []).length,
+      monthly_searches: fila?.monthly_searches ?? null,
+      costo: j?.cost,
+    })
+  }),
+)
+
 export default router
