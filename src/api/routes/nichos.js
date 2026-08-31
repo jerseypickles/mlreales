@@ -129,7 +129,7 @@ router.get(
     try {
       const { CurvaEstacional } = await import('../../models/CurvaEstacional.js')
       const curvas = await CurvaEstacional.find({ 'curva.11': { $exists: true } })
-        .select('keyword mesPico nombreMesPico ratioPico clasificacion fuente busquedasMes keywordMedida')
+        .select('keyword mesPico nombreMesPico ratioPico clasificacion fuente busquedasMes keywordMedida variacionInteranualPct salud')
         .lean()
       for (const c of curvas) curvaPorKeyword.set(c.keyword, c)
     } catch {

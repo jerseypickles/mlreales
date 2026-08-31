@@ -5591,6 +5591,18 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
    es un error nuestro y viaja al scrapeo de ML. */
 /* CPC caro: solo aparece en los nichos donde el clic vale el triple de la
    mediana. Rojo tenue, no alarma — es un costo a considerar, no un error. */
+/* Salud del nicho año contra año. Solo aparece cuando cambia una decisión:
+   se muere o despega. "Estable" es la mayoría de la mesa y no informa. */
+.vol-salud {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.vol-salud-mal { color: var(--peligro); }
+.vol-salud-bien { color: var(--exito-tinta); }
+
 .vol-cpc {
   display: block;
   font-size: 9.5px;

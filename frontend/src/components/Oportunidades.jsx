@@ -451,6 +451,19 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
                 ${c.cpcUsd}/clic
               </b>
             ) : null}
+            {/* ¿EL PRODUCTO ESTÁ VIVO? Últimos 12 meses contra los 12
+                anteriores, así la estacionalidad se cancela. Solo se marca lo
+                que cambia una decisión de compra: un nicho que se muere y uno
+                que despega. "Estable" es el 80% de la mesa y no informa. */}
+            {c.salud === 'muriendo' || c.salud === 'bajando' ? (
+              <b className="vol-salud vol-salud-mal" title={`Las búsquedas cayeron ${Math.abs(c.variacionInteranualPct)}% contra los 12 meses anteriores. Traer stock de un mercado que se achica es capital que se queda en bodega.`}>
+                ↓ {Math.abs(c.variacionInteranualPct)}% año
+              </b>
+            ) : c.salud === 'despegando' ? (
+              <b className="vol-salud vol-salud-bien" title={`Las búsquedas subieron ${c.variacionInteranualPct}% contra los 12 meses anteriores.`}>
+                ↑ {c.variacionInteranualPct}% año
+              </b>
+            ) : null}
             {c.keywordMedida ? (
               <b
                 className={`vol-medida${esOrtografia(o.keyword, c.keywordMedida) ? ' vol-medida-typo' : ''}`}

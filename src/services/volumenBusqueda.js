@@ -39,6 +39,14 @@ const URL_RELACIONADAS = 'https://api.dataforseo.com/v3/keywords_data/google_ads
 // country_iso_code: 'CL', location_type: 'Country'}
 export const CHILE = 2152
 
+// Cuatro años atrás, que es lo más lejos que acepta `date_from` en
+// google_ads/search_volume. Google no entrega el mes en curso.
+export function desde4Anos(hoy = new Date()) {
+  const d = new Date(hoy)
+  d.setFullYear(d.getFullYear() - 4)
+  return d.toISOString().slice(0, 10)
+}
+
 export function hayCredenciales() {
   return Boolean(config.dataForSeoLogin && config.dataForSeoPassword)
 }
@@ -62,15 +70,69 @@ export function curvaDeMonthlySearches(monthlySearches) {
   })
 }
 
+// ¿ESTE PRODUCTO ESTÁ VIVO O SE ESTÁ MURIENDO?
+//
+// La pregunta del importador, textual: "no voy a traer un producto que está
+// muerto en búsquedas". Y hasta ahora el sistema no la podía contestar.
+//
+// `curvaDeMonthlySearches` recibe los meses de VARIOS AÑOS y los promedia en
+// una forma de 12: eso deja bien la estacionalidad y TIRA la tendencia. Con una
+// sola curva de 12 valores no se puede separar "baja porque es su temporada
+// baja" de "baja porque el producto se está muriendo".
+//
+// Comparando los últimos 12 meses contra los 12 anteriores la estacionalidad se
+// cancela sola —cada mes se compara con el mismo mes del año anterior— y lo que
+// queda es la tendencia real.
+//
+// Hace falta pedir `date_from` de hace 4 años: sin eso Google devuelve solo 12
+// meses y no hay con qué comparar.
+export function variacionInteranual(monthlySearches) {
+  const filas = (monthlySearches ?? [])
+    .filter((m) => Number.isFinite(m?.search_volume) && Number.isInteger(m?.year) && Number.isInteger(m?.month))
+    .sort((a, b) => a.year - b.year || a.month - b.month)
+  if (filas.length < 24) return null
+
+  const ultimos = filas.slice(-12)
+  const previos = filas.slice(-24, -12)
+  const suma = (xs) => xs.reduce((a, m) => a + m.search_volume, 0)
+  const anterior = suma(previos)
+  if (!anterior) return null
+  const actual = suma(ultimos)
+  return {
+    pct: Math.round(((actual - anterior) / anterior) * 1000) / 10,
+    ultimos12: actual,
+    previos12: anterior,
+    mesesUsados: filas.length,
+  }
+}
+
+// Pura. El veredicto en una palabra. Los cortes son anchos a propósito: el
+// volumen de Google viene en baldes y un ±10% puede ser el mismo balde visto
+// dos veces, no un mercado que se mueve.
+export function saludDelNicho(variacion) {
+  if (!variacion) return null
+  const p = variacion.pct
+  if (p <= -30) return 'muriendo'
+  if (p <= -10) return 'bajando'
+  if (p >= 30) return 'despegando'
+  if (p >= 10) return 'subiendo'
+  return 'estable'
+}
+
 // Un resultado crudo de DataForSEO → lo que guardamos. Pura: testeable sin red.
 export function interpretar(resultado) {
   const curva = curvaDeMonthlySearches(resultado?.monthly_searches)
   const forma = curva ? describirCurva(curva) : null
   if (!forma) return null
+  const variacion = variacionInteranual(resultado?.monthly_searches)
   return {
     keyword: resultado.keyword,
     fuente: 'google-ads',
     ...forma,
+    // últimos 12 meses contra los 12 anteriores: la estacionalidad se cancela y
+    // queda la tendencia. null cuando Google devolvió menos de 24 meses.
+    variacionInteranualPct: variacion?.pct ?? null,
+    salud: saludDelNicho(variacion),
     // lo que Trends nunca pudo dar: el tamaño, comparable entre keywords
     busquedasMes: Number.isFinite(resultado.search_volume) ? resultado.search_volume : null,
     // intensidad publicitaria de la palabra en Google (no es el CPC de ML, pero
@@ -99,7 +161,15 @@ export async function volumenMensual(keywords, { locationCode = CHILE, languageC
       signal: AbortSignal.timeout(60_000),
       headers: { authorization: `Basic ${auth}`, 'content-type': 'application/json' },
       body: JSON.stringify([
-        { keywords: lote, location_code: locationCode, language_code: languageCode, search_partners: false },
+        {
+          keywords: lote,
+          location_code: locationCode,
+          language_code: languageCode,
+          search_partners: false,
+          // sin esto Google devuelve 12 meses y no hay con qué comparar año
+          // contra año. El mínimo que acepta son 4 años hacia atrás.
+          date_from: desde4Anos(),
+        },
       ]),
     })
     if (!res.ok) throw new Error(`DataForSEO respondió ${res.status}`)

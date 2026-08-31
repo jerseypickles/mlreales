@@ -24,6 +24,13 @@ const curvaEstacionalSchema = new mongoose.Schema({
   fuente: { type: String, enum: ['google-ads', 'trends'], default: 'trends' },
   // lo que Trends nunca pudo dar: el TAMAÑO, comparable entre keywords
   busquedasMes: Number,
+  // ¿EL PRODUCTO ESTÁ VIVO? Últimos 12 meses contra los 12 anteriores. La
+  // estacionalidad se cancela sola —cada mes contra el mismo mes del año
+  // pasado— y queda la tendencia. Sin esto no se podía distinguir "baja porque
+  // es su temporada baja" de "baja porque el mercado se muere", que es la
+  // pregunta del importador antes de girar plata a un contenedor.
+  variacionInteranualPct: Number,
+  salud: { type: String, enum: ['muriendo', 'bajando', 'estable', 'subiendo', 'despegando'], default: null },
   // La frase con la que se MIDIÓ en Google, que puede no ser la del nicho: las
   // keywords nacieron comprimidas ("rizador pelo" son 50 búsquedas/mes,
   // "rizador de pelo" 1.900). El nicho NO se renombra —rompería su serie— así
