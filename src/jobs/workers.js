@@ -735,6 +735,13 @@ export async function procesarRadar() {
 
 // Programador: encola scans de nichos activos cuyo último scan ya venció
 // (diario ≈ 20 h, semanal ≈ 6.5 días). jobId por ventana de 3 h evita duplicados.
+// La curva de búsqueda se medía una vez y nunca más: 54 de 84 nichos activos
+// tenían datos de hace ~46 días. Ver services/refrescoCurvas.js.
+export async function procesarRefrescoCurvas() {
+  const { refrescarCurvasVencidas } = await import('../services/refrescoCurvas.js')
+  return refrescarCurvasVencidas({ vigenciaDias: config.refrescoCurvasDias })
+}
+
 export async function procesarProgramadorScans() {
   const ahora = Date.now()
   // `madurando` era 20 h —a diario— y la señal no lo aguantaba: ver
@@ -1096,7 +1103,11 @@ export function iniciarWorkers() {
   // del ranking diario y la medición del nivel de búsqueda de cada nicho
   const workerTendencias = new Worker(
     COLA_TENDENCIAS,
-    (job) => (job.name === 'nivel-busqueda' ? procesarNivelBusqueda(job) : procesarTendencias(job)),
+    (job) => {
+      if (job.name === 'nivel-busqueda') return procesarNivelBusqueda(job)
+      if (job.name === 'refresco-curvas') return procesarRefrescoCurvas()
+      return procesarTendencias(job)
+    },
     {
       connection: crearConexionRedis(),
       concurrency: 1,

@@ -5589,6 +5589,16 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
 /* De dónde salió el volumen cuando no es de la keyword exacta. Discreto: es
    una nota al pie del número, no una alarma — salvo el de ortografía, que sí
    es un error nuestro y viaja al scrapeo de ML. */
+/* CPC caro: solo aparece en los nichos donde el clic vale el triple de la
+   mediana. Rojo tenue, no alarma — es un costo a considerar, no un error. */
+.vol-cpc {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--peligro);
+  white-space: nowrap;
+}
+
 .vol-medida {
   display: block;
   font-size: 9.5px;

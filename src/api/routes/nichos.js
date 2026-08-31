@@ -811,17 +811,28 @@ router.get(
     // ¿la keyword del nicho es la que la gente escribe? El volumen de Google
     // mide LA PALABRA, no el producto: si nadie la escribe, el número es real y
     // a la vez irrelevante. Ver services/cruceKeywords.js.
-    const { evaluarKeyword, medirCandidatas, mereceRevision, tipoDeCorreccion } = await import(
+    const { evaluarKeyword, medirCandidatas, mereceRevision, tipoDeCorreccion, cabeza } = await import(
       '../../services/cruceKeywords.js'
     )
     const { CurvaEstacional } = await import('../../models/CurvaEstacional.js')
     const curva = await CurvaEstacional.findOne({ keyword: nicho.keyword }).lean().catch(() => null)
     const { volumenMensual } = await import('../../services/volumenBusqueda.js')
+    // DOS FUENTES DE CANDIDATAS, NO UNA.
+    //
+    // ML publica ~20 tendencias por categoría y no siempre las que importan: el
+    // hallazgo de "cooler" (27.100/mes contra 480 de "cooler portatil") salió
+    // porque ML casualmente la listaba. Google responde qué se busca ALREDEDOR
+    // del sustantivo, así que el cruce deja de depender de esa casualidad.
+    //
+    // Si Google no responde, quedan las de ML y la señal sigue sirviendo.
+    const { relacionadasDe } = await import('../../services/volumenBusqueda.js')
+    const relacionadas = await relacionadasDe(cabeza(nicho.keyword)).catch(() => [])
+    const candidatas = [...new Set([...(tendencias ?? []), ...relacionadas.map((r) => r.keyword)])]
     const evaluacion = await medirCandidatas(
       nicho.keyword,
-      evaluarKeyword(nicho.keyword, tendencias),
+      evaluarKeyword(nicho.keyword, candidatas),
       { volumenMensual },
-    ).catch(() => evaluarKeyword(nicho.keyword, tendencias))
+    ).catch(() => evaluarKeyword(nicho.keyword, candidatas))
 
     // los ids de ML pueden ser de catálogo o de publicación: se cruza contra
     // los tres que conocemos de cada producto
@@ -832,6 +843,8 @@ router.get(
       masVendidos: destacados,
       cruce: destacados ? cruceConDestacados(destacados, conocidos) : null,
       tendencias,
+      // de dónde salieron las candidatas que se evaluaron
+      candidatas: { deMl: (tendencias ?? []).length, deGoogle: relacionadas.length },
       keyword: {
         actual: nicho.keyword,
         ...evaluacion,

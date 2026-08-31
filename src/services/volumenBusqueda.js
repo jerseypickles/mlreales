@@ -22,6 +22,18 @@ import { config } from '../config/env.js'
 // 1.000, así que siempre se pide en lote.
 
 const URL = 'https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live'
+// TODAS LAS VARIANTES DE UNA KEYWORD, CON SU VOLUMEN.
+//
+// `search_volume` responde "cuánto se busca ESTO" para una lista que uno ya
+// tiene. `keywords_for_keywords` responde la pregunta que faltaba: "qué más
+// busca la gente alrededor de esto". Es lo que hoy sacamos de las tendencias de
+// ML, que publica unas 20 por categoría y no siempre las que importan.
+//
+// El caso que lo justifica, medido el 30-ago-2026: "cooler portatil" tiene 480
+// búsquedas al mes y "cooler" tiene 27.100. Ese hallazgo salió de que ML
+// casualmente listaba "cooler" en sus tendencias. Con este endpoint no depende
+// de la casualidad.
+const URL_RELACIONADAS = 'https://api.dataforseo.com/v3/keywords_data/google_ads/keywords_for_keywords/live'
 
 // Chile. Se verificó contra el endpoint de locations: {location_code: 2152,
 // country_iso_code: 'CL', location_type: 'Country'}
@@ -103,4 +115,47 @@ export async function volumenMensual(keywords, { locationCode = CHILE, languageC
     }
   }
   return salida
+}
+
+// Las keywords que Google asocia a una semilla, con su volumen. Devuelve el
+// mismo shape que `volumenMensual` para que el resto no distinga la fuente.
+//
+// Nunca rompe: esto ENRIQUECE la elección de keyword, no la sostiene. Si la API
+// no responde, el cruce sigue funcionando con las tendencias de ML.
+export async function relacionadasDe(semilla, { locationCode = CHILE, languageCode = 'es', limite = 40 } = {}) {
+  if (!semilla || !hayCredenciales()) return []
+  const auth = Buffer.from(`${config.dataForSeoLogin}:${config.dataForSeoPassword}`).toString('base64')
+  try {
+    const res = await fetch(URL_RELACIONADAS, {
+      method: 'POST',
+      signal: AbortSignal.timeout(60_000),
+      headers: { authorization: `Basic ${auth}`, 'content-type': 'application/json' },
+      body: JSON.stringify([
+        {
+          keywords: [semilla],
+          location_code: locationCode,
+          language_code: languageCode,
+          search_partners: false,
+          // sin esto vuelven cientos de frases de cola larguísima que no son
+          // nichos, solo ruido con 10 búsquedas al mes
+          sort_by: 'search_volume',
+          limit: Math.min(limite, 200),
+        },
+      ]),
+    })
+    if (!res.ok) return []
+    const datos = await res.json()
+    if (datos?.status_code !== 20000) return []
+    const salida = []
+    for (const t of datos.tasks ?? []) {
+      for (const r of t.result ?? []) {
+        const dato = interpretar(r)
+        if (dato && Number.isFinite(dato.busquedasMes)) salida.push(dato)
+      }
+    }
+    return salida.sort((a, b) => b.busquedasMes - a.busquedasMes).slice(0, limite)
+  } catch (err) {
+    console.warn(`[volumen] relacionadas de "${semilla}": ${err.message}`)
+    return []
+  }
 }

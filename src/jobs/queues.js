@@ -87,6 +87,13 @@ export async function registrarProgramados() {
   } else {
     await colas.tendencias.removeJobScheduler('tendencias-diarias').catch(() => {})
   }
+  // el volumen de búsqueda envejece: Google devuelve el promedio móvil de 12
+  // meses y cada mes que pasa lo corre. Ver services/refrescoCurvas.js.
+  await colas.tendencias.upsertJobScheduler(
+    'refresco-curvas',
+    { pattern: config.refrescoCurvasCron, tz: 'America/Santiago' },
+    { name: 'refresco-curvas', data: {} },
+  )
   if (config.nivelBusquedaActivo) {
     await colas.tendencias.upsertJobScheduler(
       'nivel-busqueda-diario',

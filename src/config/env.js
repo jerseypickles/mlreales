@@ -72,6 +72,12 @@ export const config = {
   // y dejarían al radar sin canonización de keywords si corriera antes.
   tendenciasActivo: process.env.TENDENCIAS_ACTIVO !== 'false',
   tendenciasCron: process.env.TENDENCIAS_CRON || '30 8 * * *',
+  // Refresco de la curva de búsqueda. Corre a diario y solo toca las que
+  // pasaron los 30 días, así que en régimen re-mide unas pocas por día en vez
+  // de barrer la mesa de golpe. Cuesta una llamada de US$0,09 por pasada:
+  // DataForSEO cobra por REQUEST y no por keyword.
+  refrescoCurvasCron: process.env.REFRESCO_CURVAS_CRON || '15 9 * * *',
+  refrescoCurvasDias: Number(process.env.REFRESCO_CURVAS_DIAS) || 30,
   // nivel de búsqueda de la keyword de cada nicho contra el autocompletado
   // ($0, ni Apify ni LLM). Corre DESPUÉS de la captura de tendencias: reusa
   // los snapshots del día como respaldo cuando el WAF de ML bloquea.

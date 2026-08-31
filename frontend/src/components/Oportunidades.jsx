@@ -28,6 +28,10 @@ const sinTildes = (t) =>
   String(t ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
 const esOrtografia = (keyword, medida) => Boolean(medida) && sinTildes(keyword) === sinTildes(medida)
 
+// Mediana del CPC en la mesa: US$0,13. Se marca desde el triple, que es donde
+// la publicidad empieza a pesar de verdad sobre el margen.
+const CPC_CARO = 0.4
+
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const fmtMes = (m) => (m ? MESES[Number(m.slice(5, 7)) - 1] + (m.slice(0, 4) !== String(new Date().getFullYear()) ? ` ${m.slice(2, 4)}` : '') : '')
 
@@ -420,10 +424,33 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
           "waflera" —su keyword tiene 140—. El importador lo cazó mirando la
           tabla: "esa cantidad de búsqueda está bien? tal vez están sucios".
           Ahora el número dice de dónde salió. */}
-      <span className="op-fila-vol">
+      <span
+        className="op-fila-vol"
+        title={
+          c?.busquedasMes
+            ? `${fmtNum(c.busquedasMes)} búsquedas/mes en Chile (Google Ads, promedio de 12 meses).${
+                c.cpcUsd ? ` Clic en Ads: US$${c.cpcUsd}.` : ''
+              }${c.keywordMedida ? ` Medido sobre "${c.keywordMedida}".` : ''}`
+            : 'Todavía sin medir contra Google Ads'
+        }
+      >
         {c?.busquedasMes ? (
           <>
             {fmtNum(c.busquedasMes)}/mes
+            {/* EL CPC SOLO SE MUESTRA CUANDO ES CARO.
+                Está guardado para los 76 nichos y va de US$0,07 a US$1,01 —14
+                veces—, pero la mediana es US$0,13: ponerlo en todas las filas
+                sería repetir el mismo número 70 veces. `competenciaAds` ni
+                siquiera eso: es "HIGH" en 74 de 76, o sea que no distingue nada
+                y no se muestra.
+                Lo que sí cambia una decisión es el nicho donde el clic cuesta
+                el triple de lo normal, porque la publicidad ya es US$1.141 por
+                unidad vendida en la cartera real. */}
+            {c.cpcUsd >= CPC_CARO ? (
+              <b className="vol-cpc" title={`Un clic en Google cuesta US$${c.cpcUsd} en este nicho, contra US$0,13 de mediana. Entrar acá con publicidad sale caro.`}>
+                ${c.cpcUsd}/clic
+              </b>
+            ) : null}
             {c.keywordMedida ? (
               <b
                 className={`vol-medida${esOrtografia(o.keyword, c.keywordMedida) ? ' vol-medida-typo' : ''}`}
