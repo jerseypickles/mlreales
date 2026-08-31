@@ -120,6 +120,17 @@ export async function volumenMensual(keywords, { locationCode = CHILE, languageC
 // Las keywords que Google asocia a una semilla, con su volumen. Devuelve el
 // mismo shape que `volumenMensual` para que el resto no distinga la fuente.
 //
+// OJO CON EL COSTO Y LA TASA, que son distintos a los de `search_volume`:
+// la doc de DataForSEO dice "12 requests per minute per account for Google Ads
+// Live endpoints" y "accounts are charged for every request regardless of the
+// number of keywords returned". O sea que acá NO aplica el truco del lote: una
+// semilla es una llamada y una llamada es un cobro. Por eso quien llama debe
+// pedirlo solo cuando lo necesita, no para cada nicho de la mesa.
+//
+// `limit` NO es un parámetro válido de este endpoint —los válidos son keywords,
+// location, language, search_partners, sort_by, keywords_negative y fechas—, así
+// que el recorte se hace acá.
+//
 // Nunca rompe: esto ENRIQUECE la elección de keyword, no la sostiene. Si la API
 // no responde, el cruce sigue funcionando con las tendencias de ML.
 export async function relacionadasDe(semilla, { locationCode = CHILE, languageCode = 'es', limite = 40 } = {}) {
@@ -136,10 +147,9 @@ export async function relacionadasDe(semilla, { locationCode = CHILE, languageCo
           location_code: locationCode,
           language_code: languageCode,
           search_partners: false,
-          // sin esto vuelven cientos de frases de cola larguísima que no son
-          // nichos, solo ruido con 10 búsquedas al mes
+          // ordena por volumen y no por relevancia, que es el default: lo que
+          // buscamos es la variante MÁS BUSCADA, no la más parecida
           sort_by: 'search_volume',
-          limit: Math.min(limite, 200),
         },
       ]),
     })

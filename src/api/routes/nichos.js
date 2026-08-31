@@ -825,8 +825,15 @@ router.get(
     // del sustantivo, así que el cruce deja de depender de esa casualidad.
     //
     // Si Google no responde, quedan las de ML y la señal sigue sirviendo.
+    // Se le pregunta a Google SOLO si las tendencias de ML ya insinúan que la
+    // keyword no es la que se busca. `keywords_for_keywords` se cobra por
+    // request y está limitado a 12 por minuto, así que dispararlo para los 84
+    // nichos costaría 84 cobros y siete minutos para confirmar lo que ML ya
+    // había respondido bien en 72 de ellos.
     const { relacionadasDe } = await import('../../services/volumenBusqueda.js')
-    const relacionadas = await relacionadasDe(cabeza(nicho.keyword)).catch(() => [])
+    const previa = evaluarKeyword(nicho.keyword, tendencias)
+    const relacionadas =
+      previa.estado === 'coincide' ? [] : await relacionadasDe(cabeza(nicho.keyword)).catch(() => [])
     const candidatas = [...new Set([...(tendencias ?? []), ...relacionadas.map((r) => r.keyword)])]
     const evaluacion = await medirCandidatas(
       nicho.keyword,
