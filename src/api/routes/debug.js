@@ -185,4 +185,22 @@ router.get(
   }),
 )
 
+// Forzar el refresco de las curvas de búsqueda. El cron lo hace solo con las
+// vencidas a los 30 días; esto sirve para cuando cambió lo que se PIDE —como al
+// sumar `date_from` para poder medir la tendencia año contra año— y hay que
+// renovar todo de una vez.
+//
+// Cuesta poco porque DataForSEO cobra por REQUEST y no por keyword: los 84
+// nichos generan ~2.200 keywords con sus variantes, o sea 3 llamadas.
+router.post(
+  '/refrescar-curvas',
+  autorizado,
+  manejar(async (req, res) => {
+    const { refrescarCurvasVencidas } = await import('../../services/refrescoCurvas.js')
+    // dias=0 fuerza todas; sin parámetro respeta la vigencia normal
+    const dias = req.query.dias != null ? Number(req.query.dias) : undefined
+    res.json(await refrescarCurvasVencidas(dias != null ? { vigenciaDias: dias } : {}))
+  }),
+)
+
 export default router
