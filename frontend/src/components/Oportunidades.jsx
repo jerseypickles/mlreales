@@ -35,6 +35,25 @@ const CPC_CARO = 0.4
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const fmtMes = (m) => (m ? MESES[Number(m.slice(5, 7)) - 1] + (m.slice(0, 4) !== String(new Date().getFullYear()) ? ` ${m.slice(2, 4)}` : '') : '')
 
+// La salud del mercado, año contra año. Solo devuelve algo cuando cambia una
+// decisión: lo que se muere y lo que despega. `estable` y `subiendo` son el
+// caso normal y llenar la carta con ellos es ruido.
+function chipSalud(c) {
+  if (!c?.salud || !Number.isFinite(c.variacionInteranualPct)) return null
+  const p = c.variacionInteranualPct
+  const base = `Google: ${p > 0 ? '+' : ''}${p}% de búsquedas en los últimos 12 meses contra los 12 anteriores. La estacionalidad no cuenta acá — cada mes se compara con el mismo mes del año pasado.`
+  if (c.salud === 'muriendo') {
+    return { clase: 'mal', texto: `mercado cayendo ${Math.abs(p)}%`, ayuda: `${base} Traer stock de un mercado que se achica así es capital que se queda en bodega.` }
+  }
+  if (c.salud === 'bajando') {
+    return { clase: 'aviso', texto: `búsquedas −${Math.abs(p)}% al año`, ayuda: base }
+  }
+  if (c.salud === 'despegando') {
+    return { clase: 'bien', texto: `mercado creciendo ${p}%`, ayuda: base }
+  }
+  return null
+}
+
 function chipVentana(v) {
   if (!v || v.estado === 'sin-temporada') return null
   const pico = v.pico ? ` · pico ${fmtMes(v.pico)}` : ''
@@ -640,6 +659,7 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
   const nb = o.nivelBusqueda
   const nivel = nb?.nivel ? NIVELES[nb.nivel] : null
   const ven = chipVentana(o.ventana)
+  const salud = chipSalud(o.curvaAnual)
   const cot = o.cotizacion
 
   return (
@@ -695,6 +715,20 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
             <span className={`chip-ventana v-${ven.clase}`} title={ven.ayuda}>
               {ven.icono ? `${ven.icono} ` : ''}
               {ven.texto}
+            </span>
+          ) : null}
+          {/* ¿EL MERCADO ESTÁ VIVO? Últimos 12 meses de Google contra los 12
+              anteriores, así la estacionalidad se cancela sola y queda la
+              tendencia. Va acá arriba y no entre las métricas porque cambia si
+              el nicho se mira o no: traer un contenedor de algo que se está
+              muriendo es capital que se queda en bodega.
+              Medido el 31-ago-2026: "audifonos bluetooth" pasó de 60.500
+              búsquedas al mes en 2022 a 22.200 hoy, un -34% contra el año
+              pasado. No es un mes raro, es una caída sostenida de cuatro años.
+              "Estable" no se muestra: es el caso normal y no informa. */}
+          {salud && salud.clase ? (
+            <span className={`chip-salud cs-${salud.clase}`} title={salud.ayuda}>
+              {salud.texto}
             </span>
           ) : null}
           {o.tramites.map((t) => (

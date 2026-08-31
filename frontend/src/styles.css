@@ -21,6 +21,10 @@
   --avisa-tenue: #fdf0dd;
   --avisa-tinta: #b45309;
   --peligro: #dc2626;
+  /* faltaba el par tenue de peligro: existían los de éxito y aviso pero no
+     éste, así que cualquier fondo rojo suave quedaba hardcodeado y ciego al
+     modo oscuro */
+  --peligro-tenue: #fdeaea;
   --grad-acento: linear-gradient(135deg, var(--acento), var(--acento-2));
   --sombra-1: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.06);
   --sombra-2: 0 8px 24px rgba(15, 23, 42, 0.1), 0 2px 6px rgba(15, 23, 42, 0.06);
@@ -49,6 +53,7 @@
     --avisa-tenue: #33230e;
     --avisa-tinta: #e8a45e;
     --peligro: #f37f78;
+    --peligro-tenue: #331313;
     --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.4);
     --sombra-2: 0 10px 30px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35);
   }
@@ -4547,6 +4552,24 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
 }
 
 /* Ventana de compra: el momento manda tanto como el score */
+/* Salud del mercado año contra año. Mismo peso visual que el chip de ventana:
+   las dos responden "¿esto se puede comprar ahora?" desde ángulos distintos. */
+.chip-salud {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.cs-mal { background: var(--peligro-tenue); color: var(--peligro); border-color: currentColor; }
+.cs-aviso { background: var(--avisa-tenue); color: var(--avisa-tinta); }
+.cs-bien { background: var(--exito-tenue); color: var(--exito-tinta); }
+
 .chip-ventana {
   font-size: 10px;
   font-weight: 700;
