@@ -319,6 +319,77 @@ router.get(
   }),
 )
 
+// TODO LO VENDIDO POR PRODUCTO, DESDE SIEMPRE.
+//
+// El panel muestra ventanas de 7 y 30 días, que es lo que sirve para decidir
+// reposición. Pero para saber qué tan grande es cada apuesta hace falta el
+// acumulado: un producto que vende 4 unidades al mes lleva 12 desde julio y
+// otro lleva 200, y esa diferencia no se ve en ninguna ventana móvil.
+//
+// Sale de VentaMl, que son las órdenes PAGADAS de la cuenta —no estimaciones—.
+// Un pedido puede traer varias unidades del mismo item, así que se suma
+// `cantidad` y no órdenes.
+router.get(
+  '/ventas-totales',
+  manejar(async (_req, res) => {
+    const { VentaMl } = await import('../../models/VentaMl.js')
+    const { ProductoPropio } = await import('../../models/ProductoPropio.js')
+    const ventas = await VentaMl.find().select('fecha items').lean()
+    const propios = await ProductoPropio.find().select('sku itemIdMl titulo costoUnitarioClp').lean()
+
+    const porItem = new Map()
+    for (const v of ventas) {
+      for (const it of v.items ?? []) {
+        if (!it?.itemId) continue
+        const acc = porItem.get(it.itemId) ?? {
+          itemId: it.itemId,
+          titulo: it.titulo ?? null,
+          unidades: 0,
+          ingresosClp: 0,
+          ordenes: 0,
+          primera: null,
+          ultima: null,
+        }
+        acc.unidades += it.cantidad ?? 0
+        acc.ingresosClp += (it.precioUnitClp ?? 0) * (it.cantidad ?? 0)
+        acc.ordenes += 1
+        if (!acc.primera || v.fecha < acc.primera) acc.primera = v.fecha
+        if (!acc.ultima || v.fecha > acc.ultima) acc.ultima = v.fecha
+        porItem.set(it.itemId, acc)
+      }
+    }
+
+    // cablear con el producto propio para poder decir de cuál se trata aunque
+    // ML haya cambiado el título de la publicación
+    const porId = new Map(propios.map((p) => [p.itemIdMl ?? p.sku, p]))
+    const filas = [...porItem.values()].map((x) => {
+      const p = porId.get(x.itemId) ?? null
+      const dias =
+        x.primera && x.ultima ? Math.max(1, Math.round((x.ultima - x.primera) / 86400e3) + 1) : null
+      return {
+        ...x,
+        sku: p?.sku ?? null,
+        titulo: p?.titulo ?? x.titulo,
+        precioPromedioClp: x.unidades ? Math.round(x.ingresosClp / x.unidades) : null,
+        diasVendiendo: dias,
+        // sin costo unitario esto es CONTRIBUCIÓN, no ganancia: se dice cuál
+        // falta en vez de mostrar un margen que no existe
+        costoUnitarioClp: p?.costoUnitarioClp ?? null,
+      }
+    })
+    filas.sort((a, b) => b.unidades - a.unidades)
+    res.json({
+      productos: filas,
+      total: {
+        unidades: filas.reduce((s, f) => s + f.unidades, 0),
+        ingresosClp: filas.reduce((s, f) => s + f.ingresosClp, 0),
+        ordenes: ventas.length,
+        desde: ventas.length ? new Date(Math.min(...ventas.map((v) => +v.fecha))) : null,
+      },
+    })
+  }),
+)
+
 // Resumen para el chip del topbar: ventas de hoy (hora Chile) y de la semana
 router.get(
   '/ventas-resumen',
