@@ -24,8 +24,30 @@ test('un mercado que se achica se detecta aunque sea estacional', () => {
   const patron = [100, 100, 200, 400, 800, 1600, 1600, 800, 400, 200, 100, 100]
   const mitad = patron.map((v) => v / 2)
   const v = variacionInteranual(meses(2024, [...patron, ...mitad]))
-  assert.equal(v.pct, -50)
-  assert.equal(saludDelNicho(v), 'muriendo')
+  assert.equal(v.pct, -50, 'la temporada no tapa la caída')
+  // el veredicto duro necesita además que el mercado sea chico: caer a la mitad
+  // desde 27.000 búsquedas deja un mercado grande igual
+  assert.equal(saludDelNicho(v, { busquedasMes: 800 }), 'muriendo')
+  assert.equal(saludDelNicho(v, { busquedasMes: 27_100 }), 'bajando')
+})
+
+// LA CAÍDA SOLA NO CONDENA UN NICHO.
+//
+// Lo corrigió el importador: "está bien que cayó un 34% pero aún queda espacio
+// para ganar dinero, tampoco seamos tan pesimistas". Los números le dan la
+// razón: audífonos bluetooth cayó 34% y le quedan 27.100 búsquedas al mes —de
+// los mercados más grandes de la mesa— mientras máquina de coser está estable
+// con 1.000. El grande que se achica sigue siendo más grande que el chico
+// quieto.
+test('un mercado grande que cae sigue siendo grande', () => {
+  const cae34 = { pct: -34.2 }
+  assert.equal(saludDelNicho(cae34, { busquedasMes: 27_100 }), 'bajando')
+  // el mismo -34% en un mercado ya chico sí cambia la decisión
+  assert.equal(saludDelNicho(cae34, { busquedasMes: 260 }), 'muriendo')
+})
+
+test('sin volumen no se puede juzgar el tamaño: nunca "muriendo"', () => {
+  assert.equal(saludDelNicho({ pct: -50 }), 'bajando')
 })
 
 test('los cortes son anchos: el volumen de Google viene en baldes', () => {

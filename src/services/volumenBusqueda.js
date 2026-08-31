@@ -109,10 +109,29 @@ export function variacionInteranual(monthlySearches) {
 // Pura. El veredicto en una palabra. Los cortes son anchos a propósito: el
 // volumen de Google viene en baldes y un ±10% puede ser el mismo balde visto
 // dos veces, no un mercado que se mueve.
-export function saludDelNicho(variacion) {
+//
+// LA CAÍDA SOLA NO CONDENA UN NICHO, Y LA PRIMERA VERSIÓN SÍ LO HACÍA.
+//
+// Lo corrigió el importador: "está bien que cayó un 34% pero aún queda espacio
+// para ganar dinero, tampoco seamos tan pesimistas". Tiene razón y los números
+// lo respaldan: "audifonos bluetooth" cayó 34% y le quedan 27.100 búsquedas al
+// mes —de los mercados más grandes de la mesa— mientras "maquina coser" está
+// estable con 1.000. El grande que se achica sigue siendo más grande que el
+// chico que no se mueve.
+//
+// Lo que sí es un problema es la COMBINACIÓN: un mercado ya chico que además se
+// está yendo. Ahí el stock que traes llega a un mercado más chico todavía.
+// Medido el 31-ago-2026: scooter infantil 260 búsquedas y -33%, carpa camping
+// 1.300 y -24%.
+const VOLUMEN_CHICO = 3000
+
+export function saludDelNicho(variacion, { busquedasMes = null } = {}) {
   if (!variacion) return null
   const p = variacion.pct
-  if (p <= -30) return 'muriendo'
+  const chico = Number.isFinite(busquedasMes) && busquedasMes < VOLUMEN_CHICO
+  // "muriendo" queda para el que se va Y ya era chico: es el único caso donde
+  // la tendencia por sí sola cambia la decisión de comprar
+  if (p <= -20 && chico) return 'muriendo'
   if (p <= -10) return 'bajando'
   if (p >= 30) return 'despegando'
   if (p >= 10) return 'subiendo'
@@ -132,7 +151,7 @@ export function interpretar(resultado) {
     // últimos 12 meses contra los 12 anteriores: la estacionalidad se cancela y
     // queda la tendencia. null cuando Google devolvió menos de 24 meses.
     variacionInteranualPct: variacion?.pct ?? null,
-    salud: saludDelNicho(variacion),
+    salud: saludDelNicho(variacion, { busquedasMes: resultado?.search_volume }),
     // lo que Trends nunca pudo dar: el tamaño, comparable entre keywords
     busquedasMes: Number.isFinite(resultado.search_volume) ? resultado.search_volume : null,
     // intensidad publicitaria de la palabra en Google (no es el CPC de ML, pero

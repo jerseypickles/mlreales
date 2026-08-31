@@ -42,11 +42,22 @@ function chipSalud(c) {
   if (!c?.salud || !Number.isFinite(c.variacionInteranualPct)) return null
   const p = c.variacionInteranualPct
   const base = `Google: ${p > 0 ? '+' : ''}${p}% de búsquedas en los últimos 12 meses contra los 12 anteriores. La estacionalidad no cuenta acá — cada mes se compara con el mismo mes del año pasado.`
+  // "muriendo" ya sale solo cuando el mercado además es CHICO: la caída por sí
+  // sola no condena. Audífonos bluetooth cayó 34% y le quedan 27.100 búsquedas
+  // al mes, más que a casi toda la mesa — ahí la caída es contexto, no veto.
   if (c.salud === 'muriendo') {
-    return { clase: 'mal', texto: `mercado cayendo ${Math.abs(p)}%`, ayuda: `${base} Traer stock de un mercado que se achica así es capital que se queda en bodega.` }
+    return {
+      clase: 'mal',
+      texto: `chico y cayendo ${Math.abs(p)}%`,
+      ayuda: `${base} Y con ${fmtNum(c.busquedasMes)} búsquedas al mes ya era chico: el stock que traigas llega a un mercado más chico todavía.`,
+    }
   }
   if (c.salud === 'bajando') {
-    return { clase: 'aviso', texto: `búsquedas −${Math.abs(p)}% al año`, ayuda: base }
+    return {
+      clase: 'aviso',
+      texto: `búsquedas −${Math.abs(p)}% al año`,
+      ayuda: `${base} Sigue habiendo ${fmtNum(c.busquedasMes)} búsquedas al mes: la caída es contexto para negociar volumen, no un veto.`,
+    }
   }
   if (c.salud === 'despegando') {
     return { clase: 'bien', texto: `mercado creciendo ${p}%`, ayuda: base }
