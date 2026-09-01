@@ -358,7 +358,10 @@ const TONO_URGENCIA = {
   sin_ventas: null,
 }
 
-function Reposicion({ r }) {
+function Reposicion({ r, p, onGuardarEnCamino }) {
+  const [editando, setEditando] = useState(false)
+  const [unidades, setUnidades] = useState('')
+  const [guardando, setGuardando] = useState(false)
   if (!r) return null
   const tono = TONO_URGENCIA[r.urgencia]
   const texto =
@@ -368,6 +371,29 @@ function Reposicion({ r }) {
         ? `${fmtNum(r.stock)} en bodega · sin ventas que proyectar`
         : `Se quiebra en ${r.diasCobertura} días`
 
+  // lo que ya salió hacia Full: cuenta como stock y deja de pedir reponer.
+  // ML no lo expone por API, así que se anota acá y el scan lo descuenta
+  // cuando la bodega lo recibe.
+  async function guardar(ev) {
+    ev.preventDefault()
+    setGuardando(true)
+    try {
+      await onGuardarEnCamino(p, Number(unidades))
+      setEditando(false)
+      setUnidades('')
+    } finally {
+      setGuardando(false)
+    }
+  }
+  async function borrar() {
+    setGuardando(true)
+    try {
+      await onGuardarEnCamino(p, null)
+    } finally {
+      setGuardando(false)
+    }
+  }
+
   return (
     <div className={`pc-repo${tono ? ` pc-repo-${tono}` : ''}`}>
       <strong>{texto}</strong>
@@ -375,8 +401,52 @@ function Reposicion({ r }) {
         {fmtNum(r.stock)} en bodega
         {r.enCamino ? ` · ${fmtNum(r.enCamino)} en camino` : ''}
         {r.velocidadDia > 0 ? ` · ${r.velocidadDia}/día (${r.base})` : ''}
+        {/* un quiebre no es caída de demanda: se descuentan los días sin stock */}
+        {r.diasSinStock30 >= 1 ? ` · ${Math.round(r.diasSinStock30)} día(s) sin stock descontados` : ''}
       </span>
       {r.aEnviar > 0 ? <b className="pc-repo-accion">enviar {fmtNum(r.aEnviar)}</b> : null}
+      {onGuardarEnCamino ? (
+        <div className="pc-repo-camino" onClick={(ev) => ev.stopPropagation()}>
+          {r.enCamino ? (
+            <button
+              type="button"
+              className="pc-repo-camino-btn"
+              disabled={guardando}
+              onClick={borrar}
+              title="Se descuenta solo cuando la bodega lo recibe; esto lo borra a mano"
+            >
+              {fmtNum(r.enCamino)} en camino ✕
+            </button>
+          ) : editando ? (
+            <form className="pc-repo-camino-form" onSubmit={guardar}>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                autoFocus
+                value={unidades}
+                onChange={(ev) => setUnidades(ev.target.value)}
+                placeholder="unidades"
+              />
+              <button type="submit" disabled={guardando || !(Number(unidades) > 0)}>
+                ok
+              </button>
+              <button type="button" onClick={() => setEditando(false)}>
+                cancelar
+              </button>
+            </form>
+          ) : (
+            <button
+              type="button"
+              className="pc-repo-camino-btn"
+              onClick={() => setEditando(true)}
+              title="Anota lo que ya despachaste a Full: cuenta como stock y deja de pedir reponer"
+            >
+              ya lo envié
+            </button>
+          )}
+        </div>
+      ) : null}
       {r.retenido > 0 ? (
         <em className="pc-repo-retenido" title={r.motivosRetenido.map((m) => `${m.motivo}: ${m.unidades}`).join(' · ')}>
           {fmtNum(r.retenido)} retenida(s) en ML
@@ -395,7 +465,7 @@ function Reposicion({ r }) {
 // los tres que se miran para decidir; el resto baja al pliegue
 const PRINCIPALES = new Set(['Ventas 7d', 'Margen 30d', 'ML cobra 30d'])
 
-function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, expandida = false, onExpandir, prefijos = null }) {
+function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, onGuardarEnCamino, expandida = false, onExpandir, prefijos = null }) {
   const d = deltas(p.mediciones)
   const a = p.auditoria
   const generando =
@@ -612,7 +682,7 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
         </div>
       </header>
 
-      <Reposicion r={p.reposicion} />
+      <Reposicion r={p.reposicion} p={p} onGuardarEnCamino={onGuardarEnCamino} />
 
       <div className="pc-kpis" onClick={() => onAbrir(p)}>
         {kpis.filter((x) => PRINCIPALES.has(x.k)).map(({ k, v, extra, Icono, tono, ayuda }) => (
@@ -1328,6 +1398,18 @@ export function MisProductos() {
     }
   }
 
+  // lo que ya salió hacia Full y la bodega todavía no recibió: cuenta como
+  // stock para que el panel no pida reponer dos veces lo mismo
+  async function guardarEnCamino(p, unidades) {
+    setError(null)
+    try {
+      await api.ajustarPropio(p._id, { enCamino: unidades == null ? null : { unidades } })
+      cargar()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   // escribe el precio EN Mercado Libre (no es un campo local): se confirma
   // antes porque lo ve el comprador en cuanto ML lo procesa
   async function cambiarPrecio(p, precioClp) {
@@ -1563,6 +1645,7 @@ export function MisProductos() {
                 onAuditar={auditar}
                 onVerAuditoria={(x) => setAuditoriaDe(x._id)}
                 onGuardarCosto={guardarCosto}
+                onGuardarEnCamino={guardarEnCamino}
                 onCambiarPrecio={cambiarPrecio}
                 expandida={expandido === p._id}
                 onExpandir={setExpandido}

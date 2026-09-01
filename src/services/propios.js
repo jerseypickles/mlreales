@@ -7,8 +7,10 @@ import { registrarGasto } from './gastos.js'
 import { reviewsOficialesSeguro, itemOficialSeguro, visitasSeguro, precioParaGanarSeguro, meliGet } from './meli.js'
 import { promocionesDeItem } from './promociones.js'
 import { sincronizarOrdenes } from './ventasMl.js'
+import { diaChile } from './inventarioFull.js'
 
-const MAX_MEDICIONES = 180 // ~6 meses de serie diaria
+const MAX_MEDICIONES = 180 // con el ciclo de 45 min son ~6 días; la serie larga es stockDiario
+const MAX_STOCK_DIARIO = 120 // un registro por día
 
 // Importa las publicaciones del vendedor conectado como productos propios.
 // /users/:id/items/search entrega solo ids; el detalle /items/:id es tolerante
@@ -135,6 +137,17 @@ export async function escanearPropios({ soloOficial = false } = {}) {
       }
     }
     if (inventario) {
+      // RECEPCIÓN EN BODEGA: si el total subió desde la lectura anterior, llegó
+      // (parte de) lo que el importador anotó como en camino. Se descuenta y se
+      // borra al completarse. Las ventas de esos 45 min lo achican un poco:
+      // error hacia abajo, que en reposición es el barato.
+      const totalPrevio = propio.inventarioFull?.total
+      if (propio.enCamino?.unidades > 0 && Number.isFinite(totalPrevio) && inventario.total > totalPrevio) {
+        const recibido = inventario.total - totalPrevio
+        const restante = propio.enCamino.unidades - recibido
+        console.log(`[scan-propios] ${propio.sku} bodega recibió ${recibido}: en camino ${propio.enCamino.unidades} → ${Math.max(0, restante)}`)
+        propio.enCamino = restante > 0 ? { ...propio.enCamino, unidades: restante } : null
+      }
       propio.inventarioFull = {
         ...inventario,
         // lo que el item declara, para que el descuadre quede a la vista en vez
@@ -209,6 +222,18 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     propio.mediciones.push({ fecha, precio, precioEfectivo, numReviews, rating, stock, vendidos, visitas })
     if (propio.mediciones.length > MAX_MEDICIONES) {
       propio.mediciones = propio.mediciones.slice(-MAX_MEDICIONES)
+    }
+    // la serie diaria de stock: cuántas mediciones hubo hoy y cuántas con stock
+    if (Number.isFinite(stock)) {
+      const dia = diaChile(fecha)
+      const ultimo = propio.stockDiario.at(-1)
+      if (ultimo?.dia === dia) {
+        ultimo.mediciones += 1
+        if (stock > 0) ultimo.conStock += 1
+      } else {
+        propio.stockDiario.push({ dia, mediciones: 1, conStock: stock > 0 ? 1 : 0 })
+        if (propio.stockDiario.length > MAX_STOCK_DIARIO) propio.stockDiario = propio.stockDiario.slice(-MAX_STOCK_DIARIO)
+      }
     }
     await propio.save()
   }

@@ -6641,3 +6641,19 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 .cta-nota-alerta summary { color: var(--avisa-tinta); font-weight: 500; }
 .cta-nota-alerta summary::before { color: var(--avisa-tinta); }
 .cta-nota-alerta p { color: var(--avisa-tinta); }
+
+/* "ya lo envié": lo que va camino a Full se anota en la banda de reposición */
+.pc-repo-camino { display: flex; align-items: center; gap: 6px; }
+.pc-repo-camino-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px dashed var(--borde, #d4d4d8);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tinta-3);
+  cursor: pointer;
+}
+.pc-repo-camino-btn:hover { color: var(--tinta); border-style: solid; }
+.pc-repo-camino-form { display: flex; align-items: center; gap: 4px; }
+.pc-repo-camino-form input { width: 76px; font-size: 12px; padding: 2px 6px; }
+.pc-repo-camino-form button { font-size: 11px; padding: 2px 8px; }

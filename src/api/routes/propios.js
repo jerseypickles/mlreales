@@ -5,7 +5,15 @@ import { ProductoPropio } from '../../models/ProductoPropio.js'
 import { Nicho } from '../../models/Nicho.js'
 import { Snapshot } from '../../models/Snapshot.js'
 import { extraerSkuDeUrl, posicionesRecientes } from '../../services/propios.js'
-import { ventasPorItem } from '../../services/ventasMl.js'
+import { ventasPorItem, primeraVentaPorItem } from '../../services/ventasMl.js'
+import {
+  velocidadPonderada,
+  coberturaYReposicion,
+  urgencia,
+  stockPorDiaDe,
+  primerDiaConStock,
+  diasSinStockEnVentana,
+} from '../../services/inventarioFull.js'
 import { llmDisponible } from '../../services/llm.js'
 import { presupuesto } from '../../services/gastos.js'
 import { obtenerColas } from '../../jobs/queues.js'
@@ -134,6 +142,8 @@ router.get(
     const posiciones = await posicionesRecientes(propios.map((p) => p.sku))
     const ventas = await ventasPorItem({ dias: 30 }).catch(() => new Map())
     const ventas7 = await ventasPorItem({ dias: 7 }).catch(() => new Map())
+    // desde cuándo vende cada uno: nacimiento para la velocidad de reposición
+    const primeras = await primeraVentaPorItem().catch(() => new Map())
     const { evaluarImpacto } = await import('../../services/impacto.js')
     const { comisionMlExacta } = await import('../../services/comisionesMl.js')
     const { calibracionFactor } = await import('../../services/calibracion.js')
@@ -204,7 +214,7 @@ router.get(
           unidades: v30?.unidades ?? null,
         }).catch(() => null),
         // REPOSICIÓN: cuánto aguanta y cuánto mandar (ver services/inventarioFull)
-        reposicion: await reposicionDe(p, v30, v7).catch(() => null),
+        reposicion: reposicionSegura(p, v30, v7, { primeraVenta: primeras.get(p.itemIdMl ?? p.sku) ?? null }),
         impacto: evaluarImpacto(p),
         // lo que otros cerebros encontraron sobre este producto y sigue abierto
         hallazgos: (p.hallazgos ?? []).filter((h) => !h.resuelto),
@@ -466,6 +476,22 @@ router.patch(
       propio.costoUnitarioClp = costo
       await propio.save()
     }
+    // lo que ya salió hacia Full: {unidades} para anotarlo, null para borrarlo.
+    // Se guarda el total de la bodega al momento de anotar para que el scan
+    // pueda descontar lo que va llegando.
+    if ('enCamino' in (req.body ?? {})) {
+      const e = req.body.enCamino
+      if (e === null || e === '' || e === 0) {
+        propio.enCamino = null
+      } else {
+        const unidades = typeof e === 'object' ? e?.unidades : e
+        if (!Number.isInteger(unidades) || unidades <= 0) {
+          return res.status(400).json({ error: 'enCamino debe ser {unidades} entero > 0, o null para borrarlo' })
+        }
+        propio.enCamino = { unidades, fecha: new Date(), totalBodegaAlEnviar: propio.inventarioFull?.total ?? null }
+      }
+      await propio.save()
+    }
     res.json({ propio })
   }),
 )
@@ -604,59 +630,69 @@ router.delete(
   }),
 )
 
-// CUÁNTO AGUANTA Y CUÁNTO MANDAR.
-//
-// Dos correcciones sobre lo obvio, las dos medidas el 28-ago-2026:
+// REPOSICIÓN: cuánto aguanta el stock y cuánto mandar. Reglas que nacieron
+// de errores medidos:
 //
 //  1. El stock sale de la BODEGA de Full, no de `available_quantity` del item.
 //     En las Brochas Set 18 el item decía 20 y la bodega tenía 9.
-//  2. La velocidad se divide por los días que el producto ESTUVO disponible,
-//     no por la ventana del reporte. Un producto de 13 días de vida dividido
-//     por 30 muestra un tercio de su velocidad real, y parece que no hay que
-//     reponerlo justo cuando más hay que hacerlo.
-async function reposicionDe(p, v30, v7) {
-  const { velocidadPonderada, coberturaYReposicion, urgencia, movimientosFull, primeraEntrada } = await import(
-    '../../services/inventarioFull.js'
-  )
+//  2. La velocidad se divide por los días que el producto ESTUVO a la venta:
+//     desde su primera venta real (o su primer día con stock) y sin los días
+//     quebrado. Acá NO se consulta el libro de movimientos de ML: retiene ~14
+//     días y tiene cuota, y con eso el mismo producto daba un número distinto
+//     en cada recarga (ver services/inventarioFull). Todo lo que hace falta
+//     ya está en el documento, así que esto es puro y determinista.
+//  3. Lo que el importador ya despachó cuenta como stock (`enCamino`, anotado
+//     a mano y descontado por el scan al llegar).
+function reposicionDe(p, v30, v7, { primeraVenta = null, hoy = new Date() } = {}) {
   const inv = p.inventarioFull ?? null
   const stock = Number.isFinite(inv?.disponible) ? inv.disponible : (p.mediciones ?? []).at(-1)?.stock ?? null
   if (!Number.isFinite(stock)) return null
 
-  // desde cuándo se puede vender: la primera entrada a bodega
-  let desdeEl = null
-  try {
-    const { hayCuentaMeli } = await import('../../services/meli.js')
-    if (inv?.inventoryId && (await hayCuentaMeli())) {
-      const { meliGet } = await import('../../services/meli.js')
-      const me = await meliGet('/users/me')
-      const LIMITE = 50
-      const movs = await movimientosFull(inv.inventoryId, me.id, { limite: LIMITE })
-      // si el libro vino lleno hay operaciones más viejas que no vemos: la
-      // entrada más antigua de esta página NO es la primera
-      desdeEl = primeraEntrada(movs, { paginaLlena: movs.length >= LIMITE })
-    }
-  } catch {
-    // sin libro de movimientos se usa la ventana completa: peor, pero sirve
-  }
+  const stockPorDia = stockPorDiaDe({ stockDiario: p.stockDiario, mediciones: p.mediciones })
+  const nacimientos = [primeraVenta, primerDiaConStock(stockPorDia)]
+    .map((d) => (d ? new Date(d) : null))
+    .filter((d) => d && !Number.isNaN(d.getTime()))
+  const desdeEl = nacimientos.length ? new Date(Math.min(...nacimientos.map((d) => d.getTime()))) : null
+  const ultimaVenta = v30?.ultimaVenta ?? null
+  const sinStock = (ventanaDias) =>
+    diasSinStockEnVentana({ ventanaDias, stockPorDia, stockActual: stock, ultimaVenta, desdeEl, hoy })
+  const diasSinStock7 = sinStock(7)
+  const diasSinStock30 = sinStock(30)
 
-  // mezcla de ventanas, no interruptor: ver velocidadPonderada
   const velocidadDia = velocidadPonderada({
     unidades7: v7?.unidades ?? 0,
     unidades30: v30?.unidades ?? 0,
     desdeEl,
-    hoy: new Date(),
+    diasSinStock7,
+    diasSinStock30,
+    hoy,
   })
 
-  const r = coberturaYReposicion({ stock, velocidadDia })
+  const enCamino = Number.isFinite(p.enCamino?.unidades) && p.enCamino.unidades > 0 ? p.enCamino.unidades : 0
+  const r = coberturaYReposicion({ stock, velocidadDia, enCamino })
   return {
     ...r,
     urgencia: urgencia(r.diasCobertura),
     base: '7d+30d',
     vendiendoDesde: desdeEl,
+    // días de la ventana de 30 que se descontaron por quiebre: explica por qué
+    // un producto sin stock sigue teniendo velocidad
+    diasSinStock30,
+    enCaminoDesde: enCamino ? (p.enCamino.fecha ?? null) : null,
     retenido: inv?.noDisponible ?? 0,
     motivosRetenido: inv?.motivos ?? [],
     // el descuadre entre lo que el item declara y lo que hay en bodega
     descuadreItem: Number.isFinite(inv?.declaraElItem) ? inv.declaraElItem - stock : null,
+  }
+}
+
+// un producto con datos raros no puede tumbar la lista entera
+function reposicionSegura(p, v30, v7, opciones) {
+  try {
+    return reposicionDe(p, v30, v7, opciones)
+  } catch (err) {
+    console.warn(`[propios] reposición no calculada para ${p.sku}: ${err.message}`)
+    return null
   }
 }
 

@@ -103,6 +103,20 @@ const productoPropioSchema = new mongoose.Schema({
   // aparte de `mediciones.stock` porque el item declara otra cosa: el descuadre
   // entre ambos es un dato, no un error a esconder (ver services/inventarioFull).
   inventarioFull: { type: mongoose.Schema.Types.Mixed, default: null },
+  // UN REGISTRO POR DÍA de cuántas mediciones hubo y cuántas con stock. La
+  // serie `mediciones` es cada 45 min y se recorta a 180 (~6 días): no alcanza
+  // para saber cuántos días de los últimos 30 el producto estuvo quebrado, y
+  // ese es el denominador honesto de la velocidad (ver services/inventarioFull).
+  stockDiario: {
+    type: [{ _id: false, dia: String, mediciones: Number, conStock: Number }],
+    default: [],
+  },
+  // Lo que el importador YA DESPACHÓ a Full y la bodega todavía no recibió:
+  // {unidades, fecha, totalBodegaAlEnviar}. ML no lo expone por API (la ruta de
+  // inbounds devuelve 403), así que se anota a mano y el scan lo descuenta
+  // cuando ve subir el total de la bodega. Sin esto el panel pide reponer dos
+  // veces lo mismo.
+  enCamino: { type: mongoose.Schema.Types.Mixed, default: null },
 
   creadoEl: { type: Date, default: Date.now },
 })

@@ -73,3 +73,15 @@ export async function ventasPorItem({ dias = 30 } = {}) {
       ]),
   )
 }
+
+// DESDE CUÁNDO VENDE cada item: la primera orden pagada que se le conoce. Es el
+// nacimiento honesto para la velocidad de reposición — el libro de movimientos
+// de Full retiene ~14 días y confunde un reabastecimiento con el inicio.
+export async function primeraVentaPorItem() {
+  const filas = await VentaMl.aggregate([
+    { $unwind: '$items' },
+    { $match: { 'items.itemId': { $ne: null } } },
+    { $group: { _id: '$items.itemId', primera: { $min: '$fecha' } } },
+  ])
+  return new Map(filas.map((f) => [f._id, f.primera]))
+}

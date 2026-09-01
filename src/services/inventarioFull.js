@@ -90,16 +90,123 @@ export function primeraEntrada(movimientos = [], { paginaLlena = false } = {}) {
   return new Date(Math.min(...entradas.map((m) => m.fecha.getTime())))
 }
 
-// Pura. La velocidad honesta: unidades por día sobre los días que el producto
-// ESTUVO disponible, no sobre la ventana del reporte.
-export function velocidadDiaria({ unidades, ventanaDias, desdeEl, hoy = new Date() }) {
-  if (!Number.isFinite(unidades) || unidades <= 0) return 0
+// EL LIBRO NO ES EL NACIMIENTO (medido el 1-sep-2026).
+//
+// `primeraEntrada` buscaba el primer inbound en el libro de movimientos para
+// saber desde cuándo se vende. Pero el libro de ML RETIENE ~14 DÍAS: los ocho
+// productos arrancaban el 18-ago, y el Set 8, con 113 ventas en 30 días,
+// mostraba 81 operaciones desde el 22. Así que "la primera entrada del libro"
+// era el último REABASTECIMIENTO: el Set 18 entró a Full el 15-ago y el libro
+// decía "entrada 23-ago" con ventas anteriores en el mismo libro. Cuando esa
+// lectura funcionaba, la velocidad salía al doble (lanzador: 0,83/día contra
+// 0,44). Y cuando no —el endpoint devuelve 429 "over quota" tras seis
+// llamadas seguidas, y el panel recargaba cada 30 s con ocho llamadas por
+// carga— caía en silencio a la ventana completa. El mismo producto daba un
+// número distinto en cada recarga.
+//
+// Ahora "desde cuándo se vende" sale de la PRIMERA VENTA REAL (VentaMl, que
+// guarda 90 días de órdenes) y del primer día con stock conocido, y el libro
+// no se consulta en la pantalla. Lo que sigue es puro.
+
+// Día calendario en hora de Chile ("YYYY-MM-DD"): las ventas y el stock se
+// agrupan por el día del importador, no por el de UTC.
+export function diaChile(fecha = new Date()) {
+  return new Date(fecha).toLocaleDateString('en-CA', { timeZone: 'America/Santiago' })
+}
+
+function sumarDias(dia, n) {
+  const d = new Date(`${dia}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+// UN QUIEBRE NO ES UNA CAÍDA DE DEMANDA.
+//
+// El Set 9 vendió 30 unidades en 16 días y se quedó sin stock el 17-ago. Dos
+// semanas después el panel decía 0,7/día —30 dividido por 30 y amortiguado
+// por "semana en cero"— y el 16-sep iba a decir "sin ventas, enviar 0". Justo
+// el producto que más hay que reponer es el que pierde la señal.
+//
+// Días sin stock dentro de la ventana, para restarlos del denominador:
+//   - día conocido (serie diaria del scan): cuenta la fracción de mediciones
+//     sin stock, así el día en que se agotó a las 23:00 pesa casi nada;
+//   - día desconocido con stock actual 0 y posterior a la última venta: sin
+//     stock, porque la última unidad se fue en esa venta;
+//   - día desconocido en cualquier otro caso: con stock (estaba vendiendo).
+// Los días anteriores a `desdeEl` no cuentan: ya los recorta `diasVendibles`.
+export function diasSinStockEnVentana({
+  ventanaDias,
+  stockPorDia = new Map(),
+  stockActual = null,
+  ultimaVenta = null,
+  desdeEl = null,
+  hoy = new Date(),
+}) {
+  const hoyDia = diaChile(hoy)
+  const desdeDia = desdeEl ? diaChile(desdeEl) : null
+  const ultimaDia = ultimaVenta ? diaChile(ultimaVenta) : null
+  let sinStock = 0
+  for (let i = 0; i < ventanaDias; i++) {
+    const dia = sumarDias(hoyDia, -i)
+    if (desdeDia && dia < desdeDia) continue
+    const conocido = stockPorDia.get(dia)
+    if (conocido && conocido.mediciones > 0) {
+      sinStock += 1 - conocido.conStock / conocido.mediciones
+    } else if (stockActual === 0 && ultimaDia && dia > ultimaDia) {
+      sinStock += 1
+    }
+  }
+  return Math.round(sinStock * 10) / 10
+}
+
+// Serie diaria de stock a partir de lo que el scan guarda (`stockDiario`, un
+// registro por día) más las mediciones sueltas de los últimos días, que cubren
+// lo que la serie diaria aún no tiene.
+export function stockPorDiaDe({ stockDiario = [], mediciones = [] } = {}) {
+  const porDia = new Map()
+  for (const d of stockDiario) {
+    if (d?.dia && Number.isFinite(d.mediciones)) porDia.set(d.dia, { mediciones: d.mediciones, conStock: d.conStock ?? 0 })
+  }
+  const sueltas = new Map()
+  for (const x of mediciones) {
+    if (!x?.fecha || !Number.isFinite(x.stock)) continue
+    const dia = diaChile(x.fecha)
+    if (porDia.has(dia)) continue // la serie diaria ya tiene el día entero
+    const acc = sueltas.get(dia) ?? { mediciones: 0, conStock: 0 }
+    acc.mediciones++
+    if (x.stock > 0) acc.conStock++
+    sueltas.set(dia, acc)
+  }
+  for (const [dia, acc] of sueltas) porDia.set(dia, acc)
+  return porDia
+}
+
+// El primer día con stock conocido: para un producto que entró a bodega y
+// tardó en vender, el nacimiento es la entrada, no la primera venta.
+export function primerDiaConStock(stockPorDia) {
+  const dias = [...stockPorDia].filter(([, v]) => v.conStock > 0).map(([d]) => d)
+  return dias.length ? new Date(`${dias.sort()[0]}T12:00:00Z`) : null
+}
+
+// Pura. Días en que el producto ESTUVO a la venta dentro de la ventana: desde
+// que nació (si es más nuevo que la ventana) y sin los días quebrado.
+export function diasVendibles({ ventanaDias, desdeEl, diasSinStock = 0, hoy = new Date() }) {
   let dias = ventanaDias
   if (desdeEl instanceof Date && !Number.isNaN(desdeEl.getTime())) {
     const vividos = (hoy.getTime() - desdeEl.getTime()) / 86_400_000
     // si lleva menos tiempo que la ventana, manda el tiempo vivido
     if (vividos > 0 && vividos < ventanaDias) dias = vividos
   }
+  return Math.max(0, dias - (Number.isFinite(diasSinStock) ? diasSinStock : 0))
+}
+
+// Pura. La velocidad honesta: unidades por día sobre los días que el producto
+// ESTUVO disponible, no sobre la ventana del reporte. Devuelve null cuando no
+// estuvo a la venta ni un día: eso es "no se sabe", que no es lo mismo que cero.
+export function velocidadDiaria({ unidades, ventanaDias, desdeEl, diasSinStock = 0, hoy = new Date() }) {
+  const dias = diasVendibles({ ventanaDias, desdeEl, diasSinStock, hoy })
+  if (dias <= 0) return null
+  if (!Number.isFinite(unidades) || unidades <= 0) return 0
   // piso de 1 día: con 3 ventas en 6 horas la velocidad no es 12/día
   return unidades / Math.max(1, dias)
 }
@@ -118,13 +225,23 @@ export function velocidadDiaria({ unidades, ventanaDias, desdeEl, hoy = new Date
 // Ahora se MEZCLAN. La de 7 días aporta reacción y la de 30 estabilidad, con el
 // peso en la segunda. Y cuando la semana viene en cero no se ignora la historia:
 // se amortigua, porque un producto que vendió 30 en un mes y 0 esta semana está
-// bajando, no muerto.
+// bajando, no muerto. Salvo que la semana en cero sea por FALTA DE STOCK: ahí
+// no hay señal que amortiguar, manda el mes.
 const PESO_7D = 0.4
 const AMORTIGUA_SEMANA_MUERTA = 0.7
 
-export function velocidadPonderada({ unidades7, unidades30, desdeEl, hoy = new Date() }) {
-  const r7 = velocidadDiaria({ unidades: unidades7, ventanaDias: 7, desdeEl, hoy })
-  const r30 = velocidadDiaria({ unidades: unidades30, ventanaDias: 30, desdeEl, hoy })
+export function velocidadPonderada({
+  unidades7,
+  unidades30,
+  desdeEl,
+  diasSinStock7 = 0,
+  diasSinStock30 = 0,
+  hoy = new Date(),
+}) {
+  const r7 = velocidadDiaria({ unidades: unidades7, ventanaDias: 7, desdeEl, diasSinStock: diasSinStock7, hoy })
+  const r30 = velocidadDiaria({ unidades: unidades30, ventanaDias: 30, desdeEl, diasSinStock: diasSinStock30, hoy })
+  if (r30 == null) return r7 ?? 0
+  if (r7 == null) return r30
   if (!r30) return r7
   if (!r7) return r30 * AMORTIGUA_SEMANA_MUERTA
   return r7 * PESO_7D + r30 * (1 - PESO_7D)

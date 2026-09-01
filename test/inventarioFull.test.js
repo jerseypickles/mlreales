@@ -1,6 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { velocidadDiaria, velocidadPonderada, redondearEnvio, coberturaYReposicion, urgencia, primeraEntrada } from '../src/services/inventarioFull.js'
+import {
+  velocidadDiaria,
+  velocidadPonderada,
+  redondearEnvio,
+  coberturaYReposicion,
+  urgencia,
+  primeraEntrada,
+  diasSinStockEnVentana,
+  diasVendibles,
+  stockPorDiaDe,
+  primerDiaConStock,
+  diaChile,
+} from '../src/services/inventarioFull.js'
 
 // Medido el 28-ago-2026 sobre las Brochas Set 18 (inventario EKVS28895):
 // el item declaraba available_quantity 20 y la bodega tenía 9. El libro lo
@@ -159,4 +171,108 @@ test('el salto es MENOR que con el interruptor de ventanas', () => {
   const saltoNuevo = (nuevo(6) - nuevo(5)) / nuevo(5)
   const saltoViejo = (viejo(6) - viejo(5)) / viejo(5)
   assert.ok(saltoNuevo < saltoViejo / 2, `nuevo ${Math.round(saltoNuevo * 100)}% vs viejo ${Math.round(saltoViejo * 100)}%`)
+})
+
+// ── EL LIBRO NO ES EL NACIMIENTO (auditoría del 1-sep-2026) ─────────────────
+//
+// El libro de movimientos de ML retiene ~14 días, así que "la primera entrada
+// del libro" era el último reabastecimiento. Y el endpoint tiene cuota: con el
+// panel recargando cada 30 s, la lectura fallaba al azar y el mismo producto
+// daba un forecast distinto en cada carga. Ahora el nacimiento es la primera
+// venta real, y el denominador descuenta los días quebrado.
+
+// 22:00Z = 18:00 en Chile → el día es 2026-09-01
+const HOY_SEP = new Date('2026-09-01T22:00:00Z')
+
+test('diaChile: el día es el del importador, no el de UTC', () => {
+  assert.equal(diaChile(new Date('2026-08-17T03:47:00Z')), '2026-08-16', 'las 03:47Z son las 23:47 del día anterior en Chile')
+  assert.equal(diaChile(HOY_SEP), '2026-09-01')
+})
+
+test('Lanzador: la primera venta real manda, no la última entrada del libro', () => {
+  // 11 ventas en 30 días, 2 en 7, vendiendo desde el 12-ago (20 días)
+  const primeraVenta = new Date('2026-08-12T15:00:00Z')
+  const v = velocidadPonderada({ unidades7: 2, unidades30: 11, desdeEl: primeraVenta, hoy: HOY_SEP })
+  assert.ok(v > 0.4 && v < 0.5, `dio ${v}`)
+  // con el reabastecimiento del 23-ago como nacimiento salía casi el doble, y
+  // el panel pedía reponer 20 unidades de un producto con 19 en bodega
+  const conLibro = velocidadPonderada({ unidades7: 2, unidades30: 11, desdeEl: new Date('2026-08-23T18:00:00Z'), hoy: HOY_SEP })
+  assert.ok(conLibro > 0.8, `el libro daba ${conLibro}`)
+  assert.equal(coberturaYReposicion({ stock: 19, velocidadDia: v }).aEnviar, 1)
+})
+
+test('diasSinStockEnVentana: día conocido pesa por fracción, día quebrado tras la última venta pesa entero', () => {
+  const stockPorDia = new Map([
+    ['2026-09-01', { mediciones: 10, conStock: 0 }], // todo el día sin stock
+    ['2026-08-31', { mediciones: 10, conStock: 5 }], // se agotó a media tarde
+  ])
+  const ultimaVenta = new Date('2026-08-28T15:00:00Z')
+  // 1 + 0,5 + (30 y 29-ago desconocidos, posteriores a la última venta, con
+  // stock actual 0 → quebrados) = 3,5
+  assert.equal(diasSinStockEnVentana({ ventanaDias: 7, stockPorDia, stockActual: 0, ultimaVenta, hoy: HOY_SEP }), 3.5)
+})
+
+test('con stock en bodega, un día desconocido se asume vendible', () => {
+  const stockPorDia = new Map([['2026-09-01', { mediciones: 10, conStock: 0 }]])
+  const d = diasSinStockEnVentana({ ventanaDias: 30, stockPorDia, stockActual: 5, ultimaVenta: new Date('2026-08-10'), hoy: HOY_SEP })
+  assert.equal(d, 1, 'solo el día medido cuenta')
+})
+
+test('los días anteriores al nacimiento no cuentan como quiebre', () => {
+  const stockPorDia = new Map([['2026-08-20', { mediciones: 4, conStock: 0 }]])
+  const sin = diasSinStockEnVentana({ ventanaDias: 30, stockPorDia, stockActual: 3, hoy: HOY_SEP })
+  const con = diasSinStockEnVentana({ ventanaDias: 30, stockPorDia, stockActual: 3, desdeEl: new Date('2026-08-25'), hoy: HOY_SEP })
+  assert.equal(sin, 1)
+  assert.equal(con, 0, 'ya lo recorta diasVendibles; contarlo dos veces castigaría doble')
+})
+
+test('Set 9: quebrado desde el 17-ago, la velocidad es la de cuando tenía stock', () => {
+  // 30 ventas entre el 1 y el 17-ago; la bodega en cero desde entonces (medido
+  // cada 45 min desde el 25-ago, antes no hay serie)
+  const stockPorDia = new Map()
+  for (let d = 25; d <= 31; d++) stockPorDia.set(`2026-08-${d}`, { mediciones: 30, conStock: 0 })
+  stockPorDia.set('2026-09-01', { mediciones: 25, conStock: 0 })
+  const ultimaVenta = new Date('2026-08-17T03:47:00Z') // 16-ago en Chile
+  const desdeEl = new Date('2026-07-30T01:14:00Z')
+  const s7 = diasSinStockEnVentana({ ventanaDias: 7, stockPorDia, stockActual: 0, ultimaVenta, desdeEl, hoy: HOY_SEP })
+  const s30 = diasSinStockEnVentana({ ventanaDias: 30, stockPorDia, stockActual: 0, ultimaVenta, desdeEl, hoy: HOY_SEP })
+  assert.equal(s7, 7)
+  assert.equal(s30, 16, '17-ago..1-sep: 8 medidos en cero + 8 inferidos tras la última venta')
+  assert.equal(diasVendibles({ ventanaDias: 30, desdeEl, diasSinStock: s30, hoy: HOY_SEP }), 14)
+
+  const v = velocidadPonderada({ unidades7: 0, unidades30: 30, desdeEl, diasSinStock7: s7, diasSinStock30: s30, hoy: HOY_SEP })
+  assert.ok(Math.abs(v - 30 / 14) < 0.01, `dio ${v}: 30 ventas en 14 días vendibles`)
+  // el diseño viejo daba 0,7 (30/30 amortiguado por "semana en cero") y el
+  // 16-sep iba a decir "sin ventas, enviar 0"
+  const viejo = velocidadPonderada({ unidades7: 0, unidades30: 30, desdeEl, hoy: HOY_SEP })
+  assert.ok(viejo < 0.75, `el viejo daba ${viejo}`)
+  assert.ok(v > viejo * 2.5, 'la señal que se perdía era de más del doble')
+})
+
+test('una semana sin stock no es una semana muerta: manda el mes, sin amortiguar', () => {
+  const conStock = velocidadPonderada({ unidades7: 0, unidades30: 30, hoy: HOY_SEP })
+  const sinStock = velocidadPonderada({ unidades7: 0, unidades30: 30, diasSinStock7: 7, diasSinStock30: 7, hoy: HOY_SEP })
+  assert.ok(conStock < 1, 'con stock y cero ventas sí se amortigua')
+  assert.ok(Math.abs(sinStock - 30 / 23) < 0.01, `sin stock se usa el mes tal cual: dio ${sinStock}`)
+})
+
+test('velocidadDiaria: sin un solo día vendible no se sabe, y eso no es cero', () => {
+  assert.equal(velocidadDiaria({ unidades: 0, ventanaDias: 7, diasSinStock: 7, hoy: HOY_SEP }), null)
+  assert.equal(velocidadDiaria({ unidades: 0, ventanaDias: 7, hoy: HOY_SEP }), 0)
+})
+
+test('stockPorDiaDe: la serie diaria manda y las mediciones sueltas completan los días que faltan', () => {
+  const m = stockPorDiaDe({
+    stockDiario: [{ dia: '2026-08-30', mediciones: 32, conStock: 32 }],
+    mediciones: [
+      { fecha: new Date('2026-08-30T15:00:00Z'), stock: 0 }, // el día ya está en la serie: se ignora
+      { fecha: new Date('2026-08-31T15:00:00Z'), stock: 3 },
+      { fecha: new Date('2026-08-31T20:00:00Z'), stock: 0 },
+      { fecha: new Date('2026-08-31T21:00:00Z'), stock: null }, // sin dato no cuenta
+    ],
+  })
+  assert.deepEqual(m.get('2026-08-30'), { mediciones: 32, conStock: 32 })
+  assert.deepEqual(m.get('2026-08-31'), { mediciones: 2, conStock: 1 })
+  assert.equal(primerDiaConStock(m).toISOString().slice(0, 10), '2026-08-30')
+  assert.equal(primerDiaConStock(new Map()), null)
 })
