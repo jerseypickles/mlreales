@@ -3,6 +3,13 @@ import { api } from '../api.js'
 import { Badge, Cargando } from './ui.jsx'
 import { fmtPrecio, fmtPct, fmtFecha } from '../lib/formato.js'
 
+// por dónde recomienda vender el analista (recomendacion.logistica)
+const LOGISTICA = {
+  full: 'Full',
+  bodega_propia: 'Bodega propia · Mercado Envíos',
+  flete_propio: 'Bodega propia · flete propio',
+}
+
 const VEREDICTOS = {
   entrar: { etiqueta: 'ENTRAR', tipo: 'full' },
   entrar_con_condiciones: { etiqueta: 'ENTRAR CON CONDICIONES', tipo: 'cn' },
@@ -288,6 +295,16 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
                 <span className="dato-label">Pedido de prueba</span>
                 <span className="dato-valor">{rec.primeraCompra ?? '50-100 u'}</span>
               </div>
+              {/* por dónde se vende: Full no es la única puerta, un bulto
+                  voluminoso se despacha desde la bodega propia */}
+              {rec.logistica ? (
+                <div>
+                  <span className="dato-label">Se vende por</span>
+                  <span className="dato-valor" title={rec.perfilFisico ?? ''}>
+                    {LOGISTICA[rec.logistica] ?? rec.logistica}
+                  </span>
+                </div>
+              ) : null}
             </div>
           </>
         ) : (
@@ -317,6 +334,11 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
           <p>
             <strong>Especificación:</strong> {rec.especificacionProducto}
           </p>
+          {rec.perfilFisico ? (
+            <p>
+              <strong>Empaque y envío:</strong> {rec.perfilFisico}
+            </p>
+          ) : null}
           <p>
             <strong>Validación antes del embarque:</strong> {rec.comoValidar}
           </p>

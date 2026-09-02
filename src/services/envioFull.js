@@ -152,3 +152,60 @@ export async function costoEnvioFull({
     return null
   }
 }
+
+// LA TARIFA ES LA MISMA DESDE FULL QUE DESDE LA BODEGA (medido el 2-sep-2026
+// con la cuenta: fulfillment, cross_docking, drop_off y xd_drop_off devuelven
+// el mismo list_cost para la misma caja). Mercado Envíos cobra por peso
+// facturable y tramo de precio, no por dónde sale el bulto. Así que esta curva
+// sirve para juzgar un producto voluminoso se venda por Full o desde bodega
+// propia; lo único que la esquiva es el flete propio (envío a convenir).
+//
+// Medido a $19.990 con descuento de vendedor 50%: 5 kg $4.900 · 12-15 kg
+// $7.200 · 22-25 kg $10.000 · 27-30 kg $13.050. El analista antes adivinaba
+// "27 kg se comen el margen" sin saber que una caja de 15 kg paga la mitad.
+export const KG_CURVA_TARIFA = [1, 3, 5, 8, 10, 15, 20, 25, 30]
+
+// Pura. Una caja que factura exactamente `kg` por volumétrico: base 50x40
+// (2.000 cm², o sea cada centímetro de alto es medio kilo, sin redondeo) y
+// 1 kg real para que mande el volumétrico.
+export function dimensionesParaKgFacturables(kg) {
+  const altoCm = Math.max(1, Math.round((kg * DIVISOR_VOLUMETRICO) / (50 * 40)))
+  return { largoCm: 50, anchoCm: 40, altoCm, gramos: 1000 }
+}
+
+const cacheCurva = new Map()
+
+export async function curvaTarifaEnvio({ precioClp, tipoPublicacion = 'gold_pro' } = {}) {
+  if (!Number.isFinite(precioClp) || precioClp <= 0) return null
+  if (!(await hayCuentaMeli())) return null
+  const banda = precioClp >= 19_990 ? 19_990 : precioClp >= 9990 ? 9990 : Math.round(precioClp / 1000) * 1000
+  const clave = `${banda}|${tipoPublicacion}`
+  const hit = cacheCurva.get(clave)
+  if (hit && Date.now() - hit.el < TTL_MS) return hit.valor
+  const uid = await vendedor()
+  if (!uid) return null
+  const filas = []
+  for (const kg of KG_CURVA_TARIFA) {
+    const params = new URLSearchParams({
+      dimensions: formatoDimensiones(dimensionesParaKgFacturables(kg)),
+      logistic_type: 'cross_docking',
+      item_price: String(banda),
+      listing_type_id: tipoPublicacion,
+      condition: 'new',
+      verbose: 'true',
+    })
+    try {
+      const r = await meliGet(`/users/${uid}/shipping_options/free?${params.toString()}`)
+      const c = r?.coverage?.all_country
+      if (Number.isFinite(c?.list_cost)) {
+        filas.push({ kgFacturables: kg, envioClp: c.list_cost, pctDelPrecio: Math.round((c.list_cost / banda) * 100) })
+      }
+    } catch (err) {
+      console.warn(`[envio] curva de tarifa (${kg} kg) falló: ${err.message}`)
+      break
+    }
+  }
+  const valor = filas.length ? { precioClp: banda, filas } : null
+  cacheCurva.set(clave, { valor, el: Date.now() })
+  return valor
+}

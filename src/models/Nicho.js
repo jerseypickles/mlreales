@@ -64,6 +64,12 @@ const nichoSchema = new mongoose.Schema({
   // de 85 cm) es 23%. Se pide en la RFQ y se carga acá cuando llega.
   volumenM3: { type: Number, default: null },
   pesoKg: { type: Number, default: null },
+  // FLETE PROPIO POR BULTO (CLP): lo que le cuesta al importador despachar una
+  // venta desde su bodega con courier propio / envío a convenir. Es la única
+  // salida al volumétrico de Mercado Envíos, que cobra igual desde Full que
+  // desde bodega (medido 2-sep-2026). Con esto el analista compara las dos
+  // rutas en vez de vetar el nicho por "no entra a Full".
+  fletePropioClp: { type: Number, default: null },
   // PRECIO AL QUE VAS A VENDER TÚ, no el que el análisis infiere del mercado.
   // Regla del importador el 26-ago-2026: "no podemos saber lo que va a dejar
   // por un precio que va a competir solo; varios productos son de mejor

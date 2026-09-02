@@ -545,9 +545,10 @@ router.post(
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {
   const cambios = {}
-  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, costoPuestoClp, unidadesPedido, volumenM3, pesoKg, precioVentaObjetivoClp } = req.body ?? {}
+  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, costoPuestoClp, unidadesPedido, volumenM3, pesoKg, precioVentaObjetivoClp, fletePropioClp } = req.body ?? {}
   // cubicaje de la cotización: sin esto el flete del costo puesto es un supuesto
-  for (const [campo, valor] of [['volumenM3', volumenM3], ['pesoKg', pesoKg], ['precioVentaObjetivoClp', precioVentaObjetivoClp]]) {
+  // fletePropioClp: despacho por bulto con courier propio, la salida al volumétrico de ML
+  for (const [campo, valor] of [['volumenM3', volumenM3], ['pesoKg', pesoKg], ['precioVentaObjetivoClp', precioVentaObjetivoClp], ['fletePropioClp', fletePropioClp]]) {
     if (valor === undefined) continue
     if (valor === null || valor === '') { cambios[campo] = null; continue }
     const n = Number(valor)

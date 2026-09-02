@@ -40,3 +40,24 @@ test('dimensiones del item: los de Full suelen venir sin declarar', () => {
   assert.equal(dimensionesDeItem(null), null)
   assert.equal(dimensionesDeItem({ shipping: { dimensions: 'raro' } }), null)
 })
+
+// ── LA TARIFA ES LA MISMA DESDE FULL QUE DESDE LA BODEGA (2-sep-2026) ────────
+//
+// Mercado Envíos cobra por peso facturable y tramo de precio, no por dónde
+// sale el bulto. Para que el analista deje de adivinar "27 kg se comen el
+// margen", se le pasa la curva real de la cuenta; estas cajas sintéticas son
+// las que la generan.
+import { dimensionesParaKgFacturables, KG_CURVA_TARIFA } from '../src/services/envioFull.js'
+
+test('dimensionesParaKgFacturables: la caja factura exactamente los kg pedidos, por volumétrico', () => {
+  for (const kg of KG_CURVA_TARIFA) {
+    const caja = dimensionesParaKgFacturables(kg)
+    const facturable = pesoFacturableG(caja) / 1000
+    assert.ok(Math.abs(facturable - kg) < 0.1, `${kg} kg pedidos, factura ${facturable}`)
+    assert.equal(caja.gramos, 1000, 'el peso real queda chico para que mande el volumétrico')
+  }
+})
+
+test('dimensionesParaKgFacturables: formato que acepta la API', () => {
+  assert.match(formatoDimensiones(dimensionesParaKgFacturables(15)), /^50x40x\d+,1000$/)
+})

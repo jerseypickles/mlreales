@@ -384,6 +384,10 @@ export async function tableroOportunidades({ todos = false } = {}) {
     oportunidades.push({
       nichoId: n._id,
       keyword: n.keyword,
+      // despacho con courier propio por bulto, si el importador lo declaró
+      fletePropioClp: n.fletePropioClp ?? null,
+      // por dónde recomienda vender el analista: full / bodega_propia / flete_propio
+      logistica: n.conAnalisis?.[0]?.analisis?.recomendacion?.logistica ?? null,
       // ¿alguien busca esta keyword? La mesa de compra también tiene que
       // avisarlo: se cotiza con proveedores sobre esta fila
       nivelBusqueda: n.nivelBusqueda

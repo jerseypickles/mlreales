@@ -665,6 +665,86 @@ function Cotizacion({ o, onRecargar }) {
   )
 }
 
+// FLETE PROPIO POR BULTO. Mercado Envíos cobra lo mismo desde Full que desde
+// la bodega (medido 2-sep-2026), así que un producto voluminoso solo cierra
+// con courier propio o envío a convenir. El importador anota acá cuánto le
+// cuesta despachar un bulto por su cuenta, y el analista compara las dos rutas
+// en vez de vetar el nicho por "no entra a Full".
+const LOGISTICA_CHIP = {
+  full: { texto: 'Full', title: 'El analista propone vender por Full' },
+  bodega_propia: { texto: 'bodega', title: 'El analista propone despachar desde tu bodega por Mercado Envíos (misma tarifa que Full, sin bodegaje ML)' },
+  flete_propio: { texto: 'flete propio', title: 'El analista propone despachar desde tu bodega con courier propio: el volumétrico de Mercado Envíos no cierra' },
+}
+
+function FletePropio({ o, onRecargar }) {
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState(o.fletePropioClp ?? '')
+  const [guardando, setGuardando] = useState(false)
+  const chip = o.logistica ? LOGISTICA_CHIP[o.logistica] : null
+  // solo aparece cuando la logística importa: el analista no propone Full, o
+  // el importador ya anotó un flete
+  if (!chip && o.fletePropioClp == null) return null
+  if (o.logistica === 'full' && o.fletePropioClp == null) {
+    return null
+  }
+
+  async function guardar(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    setGuardando(true)
+    try {
+      await api.ajustarNicho(o.nichoId, { fletePropioClp: valor === '' ? null : Number(valor) })
+      setEditando(false)
+      onRecargar()
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (editando) {
+    return (
+      <form className="op-cot-form" onSubmit={guardar} onClick={(e) => e.stopPropagation()}>
+        <label>flete propio $/bulto</label>
+        <input type="number" min="0" step="1" autoFocus value={valor} onChange={(e) => setValor(e.target.value)} placeholder="lo que te cuesta despacharlo tú" />
+        <button type="submit" className="boton-secundario boton-chico" disabled={guardando}>
+          {guardando ? '…' : 'ok'}
+        </button>
+        <button
+          type="button"
+          className="boton-plano boton-chico"
+          onClick={(e) => {
+            e.stopPropagation()
+            setValor(o.fletePropioClp ?? '')
+            setEditando(false)
+          }}
+        >
+          cancelar
+        </button>
+      </form>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      className={`op-cotizacion op-cot-boton ${o.fletePropioClp != null ? 'bien' : 'pendiente'}`}
+      title={
+        (chip ? `${chip.title}. ` : '') +
+        (o.fletePropioClp != null
+          ? `Despachar un bulto con tu courier te cuesta ${fmtPrecio(o.fletePropioClp)} — clic para cambiarlo`
+          : 'Anota cuánto te cuesta despachar un bulto con courier propio: el analista lo compara contra la tarifa de Mercado Envíos, que es la misma desde Full que desde tu bodega')
+      }
+      onClick={(e) => {
+        e.stopPropagation()
+        setEditando(true)
+      }}
+    >
+      {chip ? `${chip.texto} · ` : ''}
+      {o.fletePropioClp != null ? `flete propio ${fmtPrecio(o.fletePropioClp)}` : 'flete propio ?'}
+    </button>
+  )
+}
+
 function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
   const flecha = o.tendenciaVentas ? FLECHA[o.tendenciaVentas] : null
   const nb = o.nivelBusqueda
@@ -869,6 +949,7 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
             </span>
           ) : null}
           <Cotizacion o={o} onRecargar={onRecargar} />
+          <FletePropio o={o} onRecargar={onRecargar} />
           <select
             className="etapa-select"
             value={o.etapaCompra ?? 'evaluando'}
