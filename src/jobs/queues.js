@@ -64,6 +64,14 @@ export async function encolarScanNicho(nichoId, { motivo = 'manual', jobId } = {
 // upsert es idempotente: se re-registra en cada arranque sin duplicar.
 export async function registrarProgramados() {
   const colas = obtenerColas()
+  if (config.mlActivo) {
+    await colas.tendencias.upsertJobScheduler(
+      'entrenar-ml', { pattern: config.mlCron, tz: 'America/Santiago' },
+      { name: 'entrenar-ml', data: {} },
+    )
+  } else {
+    await colas.tendencias.removeJobScheduler('entrenar-ml').catch(() => {})
+  }
   await colas.programador.upsertJobScheduler(
     'scans-pendientes',
     { pattern: config.programadorCron, tz: 'America/Santiago' },

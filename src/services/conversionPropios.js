@@ -34,14 +34,22 @@ export function conversionDe(propio, { dias = VENTANA_VISITAS_DIAS, hoy = Date.n
   const visitas = ultima.visitas
   if (!Number.isFinite(visitas) || visitas <= 0) return null
 
-  const corte = hoy - dias * 86400e3
-  const base = m.find((x) => new Date(x.fecha).getTime() >= corte)
+  const capturada = +new Date(ultima.fecha)
+  const hasta = +new Date(ultima.visitasHasta ?? ultima.fecha)
+  if (!Number.isFinite(hasta) || hasta > hoy || hoy - capturada > 86400e3) return null
+  const corte = ultima.visitasDesde ? +new Date(ultima.visitasDesde) : hasta - dias * 86400e3
+  if (!Number.isFinite(corte) || Math.abs(hasta - corte - dias * 86400e3) > 1000) return null
+  const final = [...m].reverse().find((x) => +new Date(x.fecha) <= hasta)
+  if (!final || hasta - +new Date(final.fecha) > 3600e3) return null
+  const base = [...m].reverse().find((x) => +new Date(x.fecha) <= corte)
   if (!base) return null
-  const diasReales = (new Date(ultima.fecha) - new Date(base.fecha)) / 86400e3
-  // sin al menos medio período de historia la tasa es ruido
-  if (diasReales < dias * 0.5) return null
+  const diasReales = (hasta - new Date(base.fecha)) / 86400e3
+  // Tolerancia de una hora para el ciclo de 45 min. Una serie de seis días
+  // no puede dividirse por visitas de siete y enseñarse como conversión.
+  if (corte - +new Date(base.fecha) > 3600e3 || diasReales < dias) return null
 
-  const ventas = Math.max(0, (ultima.vendidos ?? 0) - (base.vendidos ?? 0))
+  const ventas = final.vendidos - base.vendidos
+  if (ventas < 0) return null
   return {
     ventas,
     visitas,

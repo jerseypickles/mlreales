@@ -54,6 +54,43 @@ test('GET /api/salud reporta mongo ok y redis desconectado', async () => {
   assert.equal(cuerpo.ok, false)
 })
 
+test('aprendizaje expone cobertura sin inventar modelos y respeta la clave de acceso', async () => {
+  const r = await fetch(`${baseUrl}/api/aprendizaje`)
+  assert.equal(r.status, 200)
+  const estado = await r.json()
+  assert.equal(estado.modo, 'sombra')
+  assert.equal(estado.usaParaDecidir, false)
+  assert.deepEqual(estado.modelos, [])
+  assert.deepEqual(estado.alcance, { usaCostoCompra: false, estimaRentabilidad: false })
+  assert.deepEqual(estado.series, [])
+  assert.equal(estado.fuentes.demanda.ultimaCapturaEl, null)
+  assert.equal(estado.fuentes.comercial.ultimaVentanaEl, null)
+  assert.deepEqual((await (await fetch(`${baseUrl}/api/aprendizaje/perfiles`)).json()).perfiles, [])
+  assert.deepEqual((await (await fetch(`${baseUrl}/api/aprendizaje/pronosticos`)).json()).pronosticos, [])
+  assert.deepEqual((await (await fetch(`${baseUrl}/api/aprendizaje`)).json()).modelos, [],
+    'consultar la pantalla no crea un entrenamiento')
+  process.env.API_KEY = 'clave-de-prueba-ml'
+  try {
+    assert.equal((await fetch(`${baseUrl}/api/aprendizaje`)).status, 401)
+    assert.equal((await fetch(`${baseUrl}/api/aprendizaje`, { headers: { 'x-api-key': 'clave-de-prueba-ml' } })).status, 200)
+  } finally {
+    delete process.env.API_KEY
+  }
+})
+
+test('afinidad comercial valida los atributos y se abstiene cuando no hay entrenamiento', async () => {
+  assert.equal((await fetch(`${baseUrl}/api/aprendizaje/afinidad?precio=0`)).status, 400)
+  const r = await fetch(`${baseUrl}/api/aprendizaje/afinidad?categoria=MLC1&precio=10000&full=true`)
+  assert.equal(r.status, 200)
+  assert.equal((await r.json()).prediccion, null)
+  const baseAfinidad = `${baseUrl}/api/aprendizaje/afinidad?categoria=MLC1&precio=10000&full=true`
+  assert.equal((await fetch(`${baseAfinidad}&nichoId=invalido`)).status, 400)
+  const conNicho = await (await fetch(`${baseAfinidad}&nichoId=000000000000000000000001`)).json()
+  assert.equal(conNicho.objetivo, 'unidades-por-visita-contexto')
+  assert.equal(conNicho.prediccion, null)
+  assert.equal(conNicho.motivo, 'sin-captura-zyte-anterior')
+})
+
 test('POST /api/nichos valida keyword y frecuencia', async () => {
   const sinKeyword = await fetch(`${baseUrl}/api/nichos`, {
     method: 'POST',

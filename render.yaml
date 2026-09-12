@@ -11,10 +11,19 @@ services:
     envVars:
       - key: MONGO_URI
         sync: false
-      - key: APIFY_TOKEN
+      - key: ZYTE_API_KEY
         sync: false
+      - key: SCRAPER_LISTADO
+        value: "zyte"
+      - key: SCRAPER_DETALLE
+        value: "zyte"
       - key: APIFY_SEARCH_MAX_PAGES
         value: "2"
+      # Al desplegar: captura y entrenamiento en observación, sin afectar el radar.
+      - key: ML_ACTIVO
+        value: "true"
+      - key: ML_CRON
+        value: "30 10 * * 1"
       - key: REDIS_URL
         fromService:
           type: keyvalue

@@ -12,6 +12,8 @@ const curvaEstacionalSchema = new mongoose.Schema({
   anos: { type: Number, default: 5 },
   // 12 valores, enero a diciembre
   curva: { type: [Number], required: true },
+  // Vista actual; SerieNichoMl conserva las capturas y revisiones originales.
+  serieMensual: { type: [{ _id: false, periodo: String, valor: Number }], default: undefined },
   mesPico: Number,
   mesValle: Number,
   nombreMesPico: String,

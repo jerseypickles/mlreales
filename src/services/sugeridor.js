@@ -7,6 +7,7 @@ import { ProductoPropio } from '../models/ProductoPropio.js'
 import { ventasPorItem } from './ventasMl.js'
 import { criteriosActivos } from './criterios.js'
 import { leccionesAprendidas, hermanasDeLoQueVende } from './aprendizajes.js'
+import { config } from '../config/env.js'
 
 // Palabras que dominan el tablero: si una raíz aparece en 3+ keywords activas
 // (ej: "solar"), esa vertical está saturada y el radar no debe abrir más ahí.
@@ -168,6 +169,8 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   const lecciones = await leccionesAprendidas().catch(() => [])
   const hermanas = await hermanasDeLoQueVende().catch(() => [])
   const criterios = await criteriosActivos().catch(() => [])
+  // El ML observa esta salida: sus perfiles y predicciones no se incluyen en
+  // el prompt durante esta etapa, para poder evaluar el radar sin influirlo.
   const fecha = new Date().toLocaleDateString('es-CL', { month: 'long', year: 'numeric', timeZone: 'America/Santiago' })
 
   const user = [
@@ -238,6 +241,15 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   } catch (err) {
     // sin medición el radar sigue proponiendo como antes: mejor a ciegas que detenido
     console.warn(`[sugeridor] atractivo no medido: ${err.message}`)
+  }
+  // Predicciones congeladas para evaluar fuera de muestra. En esta primera
+  // versión el ML está en sombra: sus valores no reordenan las sugerencias.
+  try {
+    if (!config.mlActivo) return datos
+    const { registrarPronosticosMl } = await import('./ml/servicio.js')
+    datos.aprendizajeMl = await registrarPronosticosMl((datos.sugerencias ?? []).map((s) => s.atractivo?.keywordMedida ?? s.keyword))
+  } catch (err) {
+    console.warn('[ml] pronósticos del radar no registrados:', err.message)
   }
   return datos
 }

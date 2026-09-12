@@ -97,6 +97,12 @@ export async function procesarScanNicho(job) {
   }
 
   const resultado = await guardarScan({ items, fecha })
+  if (config.mlActivo && fuente === 'zyte') {
+    try {
+      const { registrarListadoNichoMl } = await import('../services/ml/integracion.js')
+      await registrarListadoNichoMl({ nicho, items, fecha, fuente })
+    } catch (err) { console.warn('[ml] listado Zyte no registrado:', err.message) }
+  }
 
   nicho.ultimoScanEl = fecha
   nicho.ultimoTotalResultados = totalResultados
@@ -246,7 +252,7 @@ export async function procesarScanDetalle(job) {
     // pausa entre batches: menos agresivo con ML = menos páginas vacías por bloqueo
     if (i > 0) await new Promise((resolver) => setTimeout(resolver, 20_000))
     const batch = pendientes.slice(i, i + config.detalleBatch)
-    let crudos
+    let crudos, fuenteDetalle
     try {
       const r = await buscarDetalle(batch.map((o) => o.url), {
         domainCode: nicho.domainCode,
@@ -255,6 +261,7 @@ export async function procesarScanDetalle(job) {
         preciosListado: new Map(batch.filter((o) => o.url && o.precio).map((o) => [o.url, o.precio])),
       })
       crudos = r.items
+      fuenteDetalle = r.fuente
       await registrarGasto(nichoId, r.costoUsd, r.fuente)
     } catch (err) {
       // un batch caído no bota el scan completo; queda registrado en el resultado
@@ -284,6 +291,12 @@ export async function procesarScanDetalle(job) {
       )
     }
     const res = await aplicarDetalleScan({ porSku, fecha })
+    if (config.mlActivo && fuenteDetalle === 'zyte') {
+      try {
+        const { registrarDetalleNichoMl } = await import('../services/ml/integracion.js')
+        await registrarDetalleNichoMl({ nichoId, porSku, fecha, fuente: fuenteDetalle })
+      } catch (err) { console.warn('[ml] detalle Zyte no registrado:', err.message) }
+    }
     // medido = con conteo de reseñas escrito, no con match de SKU: el caso
     // rodillo facial (2026-07-20) matcheó 8/10 pero casi ninguno traía
     // ratingCount y el scan pasó como éxito dejando el score en null sin reintento
@@ -344,6 +357,12 @@ export async function procesarScanDetalle(job) {
         await registrarGasto(nichoId, r.costoUsd, r.fuente)
         const { porSku } = indexarDetallesPorSku(r.items, extra)
         const res = await aplicarDetalleScan({ porSku, fecha })
+        if (config.mlActivo && r.fuente === 'zyte') {
+          try {
+            const { registrarDetalleNichoMl } = await import('../services/ml/integracion.js')
+            await registrarDetalleNichoMl({ nichoId, porSku, fecha, fuente: r.fuente })
+          } catch (err) { console.warn('[ml] detalle extendido Zyte no registrado:', err.message) }
+        }
         aplicados += res.reviewsAplicadas
         totalConDetalle += res.reviewsAplicadas
         console.log(
@@ -1104,6 +1123,7 @@ export function iniciarWorkers() {
   const workerTendencias = new Worker(
     COLA_TENDENCIAS,
     (job) => {
+      if (job.name === 'entrenar-ml') return import('../services/ml/servicio.js').then((m) => m.entrenarModelosMl())
       if (job.name === 'nivel-busqueda') return procesarNivelBusqueda(job)
       if (job.name === 'refresco-curvas') return procesarRefrescoCurvas()
       return procesarTendencias(job)

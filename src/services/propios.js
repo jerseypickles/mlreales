@@ -4,7 +4,7 @@ import { Snapshot } from '../models/Snapshot.js'
 import { buscarDetalle } from './scraper.js'
 import { indexarDetallesPorSku } from './normalizadorDetalle.js'
 import { registrarGasto } from './gastos.js'
-import { reviewsOficialesSeguro, itemOficialSeguro, visitasSeguro, precioParaGanarSeguro, meliGet } from './meli.js'
+import { reviewsOficialesSeguro, itemOficialSeguro, visitasConVentanaSeguro, precioParaGanarSeguro, meliGet } from './meli.js'
 import { promocionesDeItem } from './promociones.js'
 import { sincronizarOrdenes } from './ventasMl.js'
 import { diaChile } from './inventarioFull.js'
@@ -156,7 +156,8 @@ export async function escanearPropios({ soloOficial = false } = {}) {
       }
     }
     const vendidos = Number.isFinite(oficial?.sold_quantity) ? oficial.sold_quantity : null
-    const visitas = oficial ? await visitasSeguro(propio.itemIdMl ?? propio.sku) : null
+    const ventanaVisitas = oficial ? await visitasConVentanaSeguro(propio.itemIdMl ?? propio.sku) : null
+    const visitas = ventanaVisitas?.total ?? null
     // promoción vigente: el precio efectivo manda sobre el de lista
     const promo = oficial ? await promocionesDeItem(propio.itemIdMl ?? propio.sku) : null
     if (promo) propio.promoMl = { ...promo, fecha }
@@ -219,7 +220,8 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     propio.ultimoScanEl = fecha
     // solo la pasada completa mueve su propio reloj (ver ProductoPropio)
     if (!soloOficial) propio.ultimoScanCompletoEl = fecha
-    propio.mediciones.push({ fecha, precio, precioEfectivo, numReviews, rating, stock, vendidos, visitas })
+    propio.mediciones.push({ fecha, precio, precioEfectivo, numReviews, rating, stock, vendidos, visitas,
+      visitasDesde: ventanaVisitas?.desde ?? null, visitasHasta: ventanaVisitas?.hasta ?? null })
     if (propio.mediciones.length > MAX_MEDICIONES) {
       propio.mediciones = propio.mediciones.slice(-MAX_MEDICIONES)
     }
@@ -272,6 +274,15 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     ordenes = await sincronizarOrdenes()
   } catch (err) {
     console.warn(`[scan-propios] sincronizar órdenes falló: ${err.message}`)
+  }
+
+  if (config.mlActivo) {
+    try {
+      const { registrarObservacionesPropias } = await import('./ml/registro.js')
+      await registrarObservacionesPropias(ordenes)
+    } catch (err) {
+      console.warn('[ml] observaciones propias no registradas:', err.message)
+    }
   }
 
   // documento tributario de cada venta: es lo que hace que la posición de IVA

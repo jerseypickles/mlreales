@@ -179,9 +179,9 @@ export async function registrarConversionPropios() {
     const leccion =
       `Subidas de precio medidas en mis publicaciones: ${subidas.length} casos, y en ${noBajaron} ` +
       `la conversión NO bajó (ej: ${subidas[0].titulo.slice(0, 28)} de $${subidas[0].de} a $${subidas[0].a}, ` +
-      `${subidas[0].convAntes}% → ${subidas[0].convDespues}%). En mi rango de precio la demanda no es ` +
-      `sensible al precio: no degrades un nicho por ticket alto. Advertencia: la publicidad subió en las ` +
-      `mismas fechas, así que esto prueba que el precio no hunde la conversión, no que subirlo la mejore.`
+      `${subidas[0].convAntes}% → ${subidas[0].convDespues}%). Son asociaciones observadas, ` +
+      `no una medición causal de sensibilidad al precio. Las ventanas de tráfico son móviles ` +
+      `y puede haber cambios simultáneos de publicidad: no extrapoles la tasa a otros productos.`
     await Aprendizaje.findOneAndUpdate(
       { tipo: 'formato-gana', keyword: '__precio-vs-conversion__' },
       { $set: { leccion, evidencia: { casos: subidas.length, noBajaron, detalle: subidas.slice(0, 6) }, actualizadoEl: new Date() } },

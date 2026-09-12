@@ -11,6 +11,7 @@ import { Oportunidades } from './components/Oportunidades.jsx'
 import { Radar } from './components/Sugerencias.jsx'
 import { Busqueda } from './components/Busqueda.jsx'
 import { Contabilidad } from './components/Contabilidad.jsx'
+import { Aprendizaje } from './components/Aprendizaje.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
 import { Radar as RadarIcono, Landmark } from 'lucide-react'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
@@ -812,6 +813,12 @@ export default function App() {
           >
             Publicidad
           </button>
+          <button
+            className={vista === 'aprendizaje' ? 'seccion activa' : 'seccion'}
+            onClick={() => setVista('aprendizaje')}
+          >
+            Aprendizaje
+          </button>
         </nav>
         <VentasChip />
       </header>
@@ -829,6 +836,8 @@ export default function App() {
         <MisProductos />
       ) : vista === 'publicidad' ? (
         <Publicidad />
+      ) : vista === 'aprendizaje' ? (
+        <Aprendizaje />
       ) : (
       <div className="cuerpo">
         <aside>

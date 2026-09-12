@@ -1,9 +1,12 @@
 import 'dotenv/config'
 
-const REQUERIDAS = ['MONGO_URI', 'REDIS_URL', 'APIFY_TOKEN']
+const REQUERIDAS = ['MONGO_URI', 'REDIS_URL']
 
 export function validarEnv() {
-  const faltantes = REQUERIDAS.filter((clave) => !process.env[clave])
+  const proveedores = [config.scraperListado, config.scraperDetalle]
+  if (proveedores.some((p) => !['zyte', 'apify'].includes(p))) throw new Error('SCRAPER_LISTADO y SCRAPER_DETALLE deben ser zyte o apify')
+  const claves = [...REQUERIDAS, ...(proveedores.includes('zyte') ? ['ZYTE_API_KEY'] : []), ...(proveedores.includes('apify') ? ['APIFY_TOKEN'] : [])]
+  const faltantes = claves.filter((clave) => !process.env[clave])
   if (faltantes.length) {
     throw new Error(`Faltan variables de entorno: ${faltantes.join(', ')} (ver .env.example)`)
   }
@@ -21,9 +24,9 @@ export const config = {
   // gasto para poder comparar contra Apify y calibrar con el cobro real.
   zyteCostoListadoUsd: Number(process.env.ZYTE_COSTO_LISTADO_USD) || 0.008,
   zyteCostoFichaUsd: Number(process.env.ZYTE_COSTO_FICHA_USD) || 0.006,
-  // 'zyte' | 'apify' — permite correr ambos en paralelo y comparar antes de apagar
-  scraperListado: process.env.SCRAPER_LISTADO || 'apify',
-  scraperDetalle: process.env.SCRAPER_DETALLE || 'apify',
+  // Zyte es el proveedor en uso. Apify solo si se configura explícitamente.
+  scraperListado: process.env.SCRAPER_LISTADO || 'zyte',
+  scraperDetalle: process.env.SCRAPER_DETALLE || 'zyte',
   actorSearch: process.env.APIFY_ACTOR_SEARCH || 'karamelo~mercadolibre-scraper-espanol-castellano',
   // sourabhbgp desde 2026-07-17: pasó el muro nocturno de ML 10/10 donde ecomscrape
   // daba 0/30, cuesta ~US$0.05/10 urls sin arriendo y entrega seller+reputación+IDs.
@@ -164,5 +167,9 @@ export const config = {
   meliAppId: process.env.MELI_APP_ID || null,
   meliAppSecret: process.env.MELI_APP_SECRET || null,
   meliRedirectUri: process.env.MELI_REDIRECT_URI || null,
+  // Captura de evidencia y entrenamiento de modelos en modo sombra.
+  // No alimenta el prompt ni altera el ranking. Reusa los datos ya consultados.
+  mlActivo: process.env.ML_ACTIVO !== 'false',
+  mlCron: process.env.ML_CRON || '30 10 * * 1',
   port: Number(process.env.PORT) || 3000,
 }

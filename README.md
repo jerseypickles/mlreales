@@ -1,5 +1,32 @@
 # MELI Intel — Inteligencia de mercado para Mercado Libre Chile
 
+## Aprendizaje de nichos (septiembre de 2026)
+
+La implementación actual incorpora modelos supervisados de demanda estacional,
+unidades por visita de productos propios y ventas con contexto del nicho, uniendo
+**Zyte + DataForSEO + la API de Mercado Libre** con evaluación temporal, versiones y
+pronósticos en modo observación (sombra). La evidencia ML queda fuera del prompt
+y del orden del radar mientras se valida el desempeño con datos reales.
+La captura y el entrenamiento semanal están habilitados por defecto al desplegar
+esta versión; si faltan datos, se registra el motivo sin inventar predicciones.
+Ver [operación, límites y diseño](docs/aprendizaje-continuo.md).
+
+La pestaña **Aprendizaje** permite observar la cobertura, las fuentes y los
+resultados sin modificar recomendaciones. El stock antiguo aporta ventas y
+visitas válidas aunque su costo de compra sea desconocido; este aprendizaje no
+calcula rentabilidad ni completa costos faltantes.
+El bloque de integración identifica qué nichos y semanas tienen las tres fuentes
+y por qué otras semanas quedan fuera. Zyte es el scraper por defecto tanto para
+listado como para detalle; configurar `ZYTE_API_KEY` en el servidor.
+
+```bash
+npm run ml:estado           # auditar la cobertura en MongoDB
+npm run ml:capturar-series  # recuperar historia con DataForSEO configurado
+npm run ml:entrenar         # entrenar y evaluar los datos almacenados
+```
+
+El contenido de fases que sigue describe el MVP original y no todo el alcance actual.
+
 Backend que analiza nichos de productos en mercadolibre.cl para decidir qué importar y vender vía Mercado Libre Full. Por nicho responde: ¿cuánta demanda hay?, ¿quién compite y qué tan fuerte?, ¿hay espacio de margen y posicionamiento?
 
 **Estado: Fase 1 (MVP)** — scan nivel 1 vía Apify, normalización, persistencia con serie temporal y reporte de precio/competencia. `demanda` y `scoreOportunidad` quedan en `null` hasta la Fase 2 (nivel 2: vendidos, sellers).

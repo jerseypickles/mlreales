@@ -10,7 +10,10 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node --test \"test/**/*.test.js\""
+    "test": "node --test \"test/**/*.test.js\"",
+    "ml:estado": "node scripts/ml.js estado",
+    "ml:entrenar": "node scripts/ml.js entrenar",
+    "ml:capturar-series": "node scripts/ml.js capturar-series"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
@@ -18,6 +21,7 @@
     "dotenv": "^16.4.5",
     "express": "^5.1.0",
     "ioredis": "^5.4.1",
+    "ml-matrix": "6.15.0",
     "mongoose": "^8.9.0",
     "undici": "^8.7.0"
   },

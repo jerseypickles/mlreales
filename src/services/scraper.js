@@ -12,8 +12,8 @@ import { conCortacircuito } from './cortacircuito.js'
 // entorno y registran su gasto por separado, para poder comparar datos y costo
 // sobre nichos reales antes de apagar el viejo.
 //
-//   SCRAPER_LISTADO=zyte|apify     (default apify)
-//   SCRAPER_DETALLE=zyte|apify     (default apify)
+//   SCRAPER_LISTADO=zyte|apify     (default zyte)
+//   SCRAPER_DETALLE=zyte|apify     (default zyte)
 //
 // Ambos devuelven la misma forma que devolvía Apify —{items, costoUsd}— y los
 // items llevan los nombres de campo de los actores, así que ni los

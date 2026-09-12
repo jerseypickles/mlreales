@@ -229,10 +229,24 @@ export async function descripcionOficialSegura(idMl) {
 // Visitas del item en los últimos N días. Schema tolerante (total_visits no
 // está validado contra output en vivo — si no calza, el warn lo dirá).
 export async function visitasSeguro(idMl, dias = 7) {
+  return (await visitasConVentanaSeguro(idMl, dias))?.total ?? null
+}
+
+export function interpretarVisitas(datos) {
+  if (!Number.isFinite(datos?.total_visits) || datos.total_visits < 0) return null
+  const desde = datos.date_from ? new Date(datos.date_from) : null
+  const hasta = datos.date_to ? new Date(datos.date_to) : null
+  const ventanaValida = desde && hasta && Number.isFinite(+desde) && Number.isFinite(+hasta) && hasta > desde
+  return { total: datos.total_visits, desde: ventanaValida ? desde : null, hasta: ventanaValida ? hasta : null }
+}
+
+// El endpoint puede cerrar su ventana a medianoche, no al instante del scan.
+// Retener date_from/date_to permite contar órdenes exactamente en ese intervalo.
+export async function visitasConVentanaSeguro(idMl, dias = 7) {
   try {
     if (!(await MeliCuenta.exists({}))) return null
     const datos = await meliGet(`/items/${idMl}/visits/time_window?last=${dias}&unit=day`)
-    return Number.isFinite(datos?.total_visits) ? datos.total_visits : null
+    return interpretarVisitas(datos)
   } catch (err) {
     console.warn(`[meli] visitas de ${idMl} no disponibles: ${err.message}`)
     return null

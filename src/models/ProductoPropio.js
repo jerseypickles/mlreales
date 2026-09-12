@@ -95,6 +95,8 @@ const productoPropioSchema = new mongoose.Schema({
         stock: Number,
         vendidos: Number, // acumulado real — su delta entre scans = ventas reales
         visitas: Number, // últimos 7 días
+        visitasDesde: Date, // límites declarados por la API, no la hora del scan
+        visitasHasta: Date,
       },
     ],
     default: [],

@@ -10,12 +10,14 @@ export async function sincronizarOrdenes({ dias = 90 } = {}) {
   const desde = new Date(Date.now() - dias * 24 * 3600e3)
   let nuevas = 0
   let vistas = 0
+  let completa = false
   for (let offset = 0; offset < 1000; offset += 50) {
     const pagina = await meliGet(
       `/orders/search?seller=${me.id}&order.status=paid&sort=date_desc&limit=50&offset=${offset}`,
     )
-    const resultados = pagina.results ?? []
-    if (!resultados.length) break
+    if (!Array.isArray(pagina.results)) throw new Error('ML devolvió una página de órdenes sin results')
+    const resultados = pagina.results
+    if (!resultados.length) { completa = true; break }
     let fueraDeVentana = false
     for (const o of resultados) {
       const fecha = new Date(o.date_closed ?? o.date_created ?? Date.now())
@@ -43,9 +45,9 @@ export async function sincronizarOrdenes({ dias = 90 } = {}) {
       if (r.upsertedCount) nuevas++
       else vistas++
     }
-    if (fueraDeVentana || resultados.length < 50) break
+    if (fueraDeVentana || resultados.length < 50) { completa = true; break }
   }
-  return { nuevas, vistas }
+  return { nuevas, vistas, completa, desde }
 }
 
 // Ventas reales por item en una ventana: Map itemId → {unidades, ingresosClp,

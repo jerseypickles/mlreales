@@ -48,6 +48,9 @@ export const api = {
   contabilidad: (periodo) => pedir(`/api/contabilidad${periodo ? `?periodo=${periodo}` : ''}`),
   generarListing: (id) => pedir(`/api/nichos/${id}/listing`, { method: 'POST' }),
   listarPropios: () => pedir('/api/propios'),
+  aprendizaje: (opciones) => pedir('/api/aprendizaje', opciones),
+  aprendizajePerfiles: (opciones) => pedir('/api/aprendizaje/perfiles', opciones),
+  aprendizajePronosticos: (opciones) => pedir('/api/aprendizaje/pronosticos', opciones),
   tendencias: (dias) => pedir(`/api/tendencias${dias ? `?dias=${dias}` : ''}`),
   oportunidades: (opts) => pedir(`/api/oportunidades${opts?.todos ? '?todos=1' : ''}`),
   // forzar: el clic manual regenera el tablero completo con la evidencia

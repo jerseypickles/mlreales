@@ -1,5 +1,6 @@
 import { describirCurva } from './estacionalidad.js'
 import { config } from '../config/env.js'
+import { normalizarMeses, indiceMes } from './ml/series.js'
 
 // CUÁNTA GENTE BUSCA ESTO, en números absolutos.
 //
@@ -87,14 +88,14 @@ export function curvaDeMonthlySearches(monthlySearches) {
 // Hace falta pedir `date_from` de hace 4 años: sin eso Google devuelve solo 12
 // meses y no hay con qué comparar.
 export function variacionInteranual(monthlySearches) {
-  const filas = (monthlySearches ?? [])
-    .filter((m) => Number.isFinite(m?.search_volume) && Number.isInteger(m?.year) && Number.isInteger(m?.month))
-    .sort((a, b) => a.year - b.year || a.month - b.month)
+  const completos = normalizarMeses(monthlySearches)
+  const filas = completos.slice(-24)
   if (filas.length < 24) return null
+  if (filas.some((f, i) => i && indiceMes(f.periodo) !== indiceMes(filas[i - 1].periodo) + 1)) return null
 
   const ultimos = filas.slice(-12)
   const previos = filas.slice(-24, -12)
-  const suma = (xs) => xs.reduce((a, m) => a + m.search_volume, 0)
+  const suma = (xs) => xs.reduce((a, m) => a + m.valor, 0)
   const anterior = suma(previos)
   if (!anterior) return null
   const actual = suma(ultimos)
@@ -102,7 +103,7 @@ export function variacionInteranual(monthlySearches) {
     pct: Math.round(((actual - anterior) / anterior) * 1000) / 10,
     ultimos12: actual,
     previos12: anterior,
-    mesesUsados: filas.length,
+    mesesUsados: completos.length,
   }
 }
 
@@ -147,6 +148,7 @@ export function interpretar(resultado) {
   return {
     keyword: resultado.keyword,
     fuente: 'google-ads',
+    serieMensual: normalizarMeses(resultado.monthly_searches),
     ...forma,
     // últimos 12 meses contra los 12 anteriores: la estacionalidad se cancela y
     // queda la tendencia. null cuando Google devolvió menos de 24 meses.
@@ -195,6 +197,17 @@ export async function volumenMensual(keywords, { locationCode = CHILE, languageC
     const datos = await res.json()
     if (datos?.status_code !== 20000) {
       throw new Error(`DataForSEO: ${datos?.status_message ?? 'respuesta inesperada'}`)
+    }
+    if (config.mlActivo) {
+      // Conservar también las series en cero antes de que interpretar descarte
+      // las que no tienen forma. La captura no añade llamadas al proveedor.
+      try {
+        const { guardarSeriesMl } = await import('./ml/registro.js')
+        await guardarSeriesMl((datos.tasks ?? []).filter((t) => t.status_code === 20000).flatMap((t) => t.result ?? []),
+          { pais: locationCode, idioma: languageCode })
+      } catch (err) {
+        console.warn('[ml] serie no persistida:', err.message)
+      }
     }
     for (const t of datos.tasks ?? []) {
       for (const r of t.result ?? []) {
