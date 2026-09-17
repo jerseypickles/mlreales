@@ -39,9 +39,9 @@ function Chispa({ puntos, campo, alto = 36, etiqueta, clase = '' }) {
 function Fuente({ Icono, titulo, valor, unidad, detalle, estado = 'bien', children }) {
   return (
     <article className={`apr-fuente apr-fuente-${estado}`}>
-      <header><span className="apr-icono"><Icono size={17} aria-hidden="true" /></span><h3>{titulo}</h3>
+      <div className="apr-cabeza"><span className="apr-icono"><Icono size={17} aria-hidden="true" /></span><h3>{titulo}</h3>
         <span className={`apr-punto apr-punto-${estado}`} title={estado === 'bien' ? 'Capturando' : estado === 'espera' ? 'Esperando la primera pasada' : 'Revisar'} />
-      </header>
+      </div>
       <p className="apr-cifra">{valor}<small>{unidad}</small></p>
       {children}
       <p className="apr-fuente-detalle">{detalle}</p>
@@ -123,9 +123,9 @@ function Modelo({ modelo, Icono, titulo, pregunta, children }) {
     : null
   return (
     <article className="apr-modelo">
-      <header><span className="apr-icono"><Icono size={18} aria-hidden="true" /></span>
+      <div className="apr-cabeza"><span className="apr-icono"><Icono size={18} aria-hidden="true" /></span>
         <div><h3>{titulo}</h3><p>{pregunta}</p></div>
-      </header>
+      </div>
       <span className={`apr-chip apr-chip-${estado}`}><Chip size={13} aria-hidden="true" />{textoChip}</span>
       {filas && <>
         <p className={`apr-veredicto apr-veredicto-${gana ? 'bien' : 'aviso'}`}>
@@ -146,7 +146,9 @@ function estadoSemana(d, minimoVisitas) {
   if (!d) return { clase: 'espera', Icono: CircleDashed, texto: 'Sin medir' }
   if (d.admisible && d.visitas >= minimoVisitas) return { clase: 'bien', Icono: CheckCircle2, texto: 'Semana válida' }
   if (d.admisible) return { clase: 'aviso', Icono: Eye, texto: `Pocas visitas · ${fmtNum(d.visitas)} de ${minimoVisitas}` }
-  if (/stock/i.test(d.motivo ?? '')) return { clase: 'mal', Icono: PackageX, texto: 'Sin stock esta semana' }
+  const quiebre = /sin stock parte del (\d{4}-\d{2}-\d{2})/.exec(d.motivo ?? '')
+  if (quiebre) return { clase: 'mal', Icono: PackageX, texto: `Quiebre de stock el ${fecha(quiebre[1])}` }
+  if (/stock/i.test(d.motivo ?? '')) return { clase: 'aviso', Icono: PackageX, texto: 'Stock sin medir algún día' }
   if (/sin visitas/i.test(d.motivo ?? '')) return { clase: 'espera', Icono: CircleDashed, texto: 'Sin visitas' }
   return { clase: 'aviso', Icono: AlertTriangle, texto: d.motivo ?? 'Sin dato' }
 }
@@ -154,6 +156,13 @@ function estadoSemana(d, minimoVisitas) {
 function Productos({ libro, diagnostico, minimoVisitas }) {
   const porItem = new Map((diagnostico ?? []).map((d) => [d.itemId, d]))
   if (!libro?.porProducto?.length) return <p className="apr-vacio">El libro de ventas se llena con el próximo scan de tus productos.</p>
+  // todas las filas comparten el mismo eje de días: un producto más nuevo
+  // empieza más a la derecha, no se estira
+  const eje = (libro.serie ?? []).map((d) => d.dia)
+  const alinear = (serie) => {
+    const porDia = new Map((serie ?? []).map((d) => [d.dia, d]))
+    return eje.length ? eje.map((dia) => porDia.get(dia) ?? { dia, unidades: 0 }) : serie
+  }
   return (
     <div className="tabla-envoltura apr-tabla">
       <table>
@@ -166,7 +175,7 @@ function Productos({ libro, diagnostico, minimoVisitas }) {
           const s = estadoSemana(porItem.get(p.itemId), minimoVisitas)
           return <tr key={p.itemId}>
             <td className="celda-titulo apr-producto">{p.titulo || p.itemId}<small>{fmtNum(p.dias)} días guardados · desde {fecha(p.desde)}</small></td>
-            <td className="apr-celda-chispa"><Chispa puntos={p.serie} campo="unidades" alto={30} etiqueta={`Unidades por día de ${p.titulo}`} /></td>
+            <td className="apr-celda-chispa"><Chispa puntos={alinear(p.serie)} campo="unidades" alto={30} etiqueta={`Unidades por día de ${p.titulo}`} /></td>
             <td className="num"><strong>{fmtNum(p.unidades)}</strong></td><td className="num">{fmtNum(p.visitas)}</td>
             <td className="num">{p.visitas ? decimal((p.unidades / p.visitas) * 100) : '—'}</td>
             <td><span className={`apr-chip apr-chip-${s.clase}`}><s.Icono size={13} aria-hidden="true" />{s.texto}</span></td>
