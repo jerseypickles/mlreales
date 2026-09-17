@@ -10,6 +10,11 @@ test('miniatura: cambia la foto de 500 px de ML por la variante chica a 2X', () 
   assert.equal(miniatura('https://http2.mlstatic.com/D_Q_NP_2X_649363-MLC97802594558_112025-F.webp'), 'https://http2.mlstatic.com/D_Q_NP_2X_649363-MLC97802594558_112025-I.webp')
 })
 
+test('miniatura: sobre 90 px pide la variante de 250 px, no la de 500', () => {
+  assert.equal(miniatura('https://http2.mlstatic.com/D_NQ_NP_800631-MLA96099595841_102025-O.webp', 96), 'https://http2.mlstatic.com/D_NQ_NP_800631-MLA96099595841_102025-V.webp')
+  assert.equal(miniatura('https://http2.mlstatic.com/D_NQ_NP_800631-MLA96099595841_102025-O.webp', 78), 'https://http2.mlstatic.com/D_NQ_NP_2X_800631-MLA96099595841_102025-I.webp')
+})
+
 test('miniatura: lo que no es una foto de ML se deja igual (solo pasa a https)', () => {
   assert.equal(miniatura('http://otro.cdn.com/foto-O.jpg'), 'https://otro.cdn.com/foto-O.jpg')
   assert.equal(miniatura('https://http2.mlstatic.com/resources/logo.png'), 'https://http2.mlstatic.com/resources/logo.png')

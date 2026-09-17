@@ -6,9 +6,11 @@
 // que alcanza hasta ~90 px en pantalla retina.
 const ML = /^(https?:\/\/http2\.mlstatic\.com\/D_(?:N?Q_)?NP_)(?:2X_)?(.+)-[A-Z]\.(?:webp|jpe?g|png)(\?.*)?$/i
 
-export function miniatura(url) {
+export function miniatura(url, lado = 40) {
   if (typeof url !== 'string' || !url) return null
   const segura = url.replace(/^http:/, 'https:')
   const m = ML.exec(segura)
-  return m ? `${m[1]}2X_${m[2]}-I.webp${m[3] ?? ''}` : segura
+  if (!m) return segura
+  // hasta ~90 px alcanza la -I a 2X (180 px); más grande, la -V (250 px, ~10 KB)
+  return lado > 90 ? `${m[1]}${m[2]}-V.webp${m[3] ?? ''}` : `${m[1]}2X_${m[2]}-I.webp${m[3] ?? ''}`
 }

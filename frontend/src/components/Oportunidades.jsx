@@ -772,7 +772,7 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronos
       }}
     >
       <div className="op-lateral">
-        {o.imagen ? <img className="op-lateral-foto" src={o.imagen} alt="" loading="lazy" /> : null}
+        {o.imagen ? <Miniatura className="op-lateral-foto" src={o.imagen} lado={96} /> : null}
         <span className="op-rank">#{rank}</span>
         {o.madurando ? (
           <span className="mini-madurando mini-madurando-carta" title="Midiendo entrabilidad: el veredicto firme llega al completar la serie">
@@ -1186,7 +1186,7 @@ function VitrinaTemporada({ oportunidades, onElegir }) {
           const ultimo = o.ventana.estado === 'ultimo-mes'
           return (
             <button key={o.nichoId} type="button" role="listitem" className={`op-vitrina-carta${ultimo ? ' op-vitrina-urgente' : ''}`} onClick={() => onElegir(o)}>
-              <span className="op-vitrina-foto">{o.imagen ? <img src={o.imagen} alt="" loading="lazy" /> : <ImageOff size={22} aria-hidden="true" />}</span>
+              <span className="op-vitrina-foto">{o.imagen ? <Miniatura src={o.imagen} lado={78} /> : <ImageOff size={22} aria-hidden="true" />}</span>
               <span className="op-vitrina-cuerpo">
                 <strong>{o.keyword}</strong>
                 <span className={`op-vitrina-plazo${ultimo ? ' urgente' : ''}`}><CalendarClock size={12} aria-hidden="true" />{ultimo ? 'último mes para pedir' : `pedir hasta ${mesDe(o.ventana.hasta) ?? '—'}`}</span>
