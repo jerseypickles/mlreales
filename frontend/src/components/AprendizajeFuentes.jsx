@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, CircleDashed, Clock, PackageX, RefreshCw, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
 import { api } from '../api.js'
-import { Cargando } from './ui.jsx'
+import { Cargando, Miniatura } from './ui.jsx'
 import { fmtFecha, fmtNum, fmtPrecio } from '../lib/formato.js'
 
 // DOS FUENTES QUE SE PUEDEN MIRAR POR DENTRO. El importador: "necesito ver qué
@@ -47,19 +47,29 @@ function Medidor({ ahora, antes, compacto = false }) {
   )
 }
 
+// Se pregunta decenas de veces por publicación (filtros, orden, barras, tarjetas):
+// se calcula una vez por objeto y se guarda.
+const cacheUltimas = new WeakMap()
 const ultimas = (f) => {
-  const buenas = (f.serie ?? []).filter((l) => l.ok && l.stock != null)
-  return { ahora: buenas.at(-1) ?? null, antes: buenas.at(-2) ?? null, cuantas: buenas.length }
+  let u = cacheUltimas.get(f)
+  if (!u) {
+    const buenas = (f.serie ?? []).filter((l) => l.ok && l.stock != null)
+    u = { ahora: buenas.at(-1) ?? null, antes: buenas.at(-2) ?? null, cuantas: buenas.length }
+    u.escalon = escalonDe(u.ahora)
+    cacheUltimas.set(f, u)
+  }
+  return u
 }
+const dejaVer = (f) => { const e = ultimas(f).escalon; return e >= 1 && e <= 4 }
 
 // Un vendedor: foto, medidor grande, y lo que se sabe de sus ventas.
-function TarjetaVendedor({ f }) {
+const TarjetaVendedor = memo(function TarjetaVendedor({ f }) {
   const { ahora, antes, cuantas } = ultimas(f)
   const vendio = f.unidadesPiso > 0
   return (
     <article className={`sv${vendio ? ' sv-vendio' : ''}${f.activo === false ? ' sv-fuera' : ''}`}>
       <a className="sv-foto" href={f.url} target="_blank" rel="noreferrer" aria-label={`Abrir la publicación de ${f.vendedor ?? 'este vendedor'} en Mercado Libre`}>
-        {f.imagen ? <img src={f.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" /> : <PackageX size={22} aria-hidden="true" />}
+        {f.imagen ? <Miniatura src={f.imagen} lado={76} /> : <PackageX size={22} aria-hidden="true" />}
       </a>
       <div className="sv-cuerpo">
         <strong className="sv-nombre">{f.esPropio ? 'Tu publicación' : (f.vendedor ?? 'vendedor')}</strong>
@@ -75,13 +85,13 @@ function TarjetaVendedor({ f }) {
       </div>
     </article>
   )
-}
+})
 
 // Cuántos de los seguidos caen en cada escalón: qué tanto del mercado se deja ver.
 function Visibilidad({ publicaciones, alto = 12 }) {
   const cuenta = [0, 0, 0, 0, 0, 0]
   let sinLeer = 0
-  for (const f of publicaciones) { const e = escalonDe(ultimas(f).ahora); if (e === -1) sinLeer++; else cuenta[e]++ }
+  for (const f of publicaciones) { const e = ultimas(f).escalon; if (e === -1) sinLeer++; else cuenta[e]++ }
   const total = publicaciones.length || 1
   return (
     <span className="vis" style={{ height: alto }} role="img" aria-label={`De ${total} publicaciones: ${cuenta[4]} con número exacto, ${cuenta[3] + cuenta[2] + cuenta[1]} en rangos visibles, ${cuenta[0]} en +50 y ${sinLeer} sin leer`}>
@@ -94,9 +104,32 @@ function Visibilidad({ publicaciones, alto = 12 }) {
 const FILTROS_STOCK = [
   ['todos', 'Todos', () => true],
   ['ventas', 'Con ventas vistas', (n) => n.vendiendo > 0],
-  ['visibles', 'Dejan ver su stock', (n) => n.publicaciones.some((f) => [1, 2, 3, 4].includes(escalonDe(ultimas(f).ahora)))],
-  ['sinleer', 'Aún sin leer', (n) => n.publicaciones.every((f) => escalonDe(ultimas(f).ahora) === -1)],
+  ['visibles', 'Dejan ver su stock', (n) => n.publicaciones.some(dejaVer)],
+  ['sinleer', 'Aún sin leer', (n) => n.publicaciones.every((f) => ultimas(f).escalon === -1)],
 ]
+
+// Un nicho de la grilla. Memoizado: escribir en el buscador o abrir OTRO nicho no
+// vuelve a dibujar las 60 tarjetas con sus fotos y medidores.
+const TarjetaNicho = memo(function TarjetaNicho({ n, abierto, alAlternar }) {
+  const visiblesN = n.publicaciones.filter(dejaVer).length
+  const leidas = n.publicaciones.filter((f) => ultimas(f).escalon !== -1).length
+  return (
+    <div className={`sn${abierto ? ' sn-abierto' : ''}${n.vendiendo ? ' sn-vende' : ''}`}>
+      <button type="button" className="sn-cab" aria-expanded={abierto} onClick={() => alAlternar(n.keyword)}>
+        <span className="sn-titulo"><strong>{n.keyword}</strong>
+          {n.vendiendo ? <span className="apr-chip apr-chip-bien"><TrendingDown size={13} aria-hidden="true" />{n.vendiendo} vendiendo · ≥{fmtNum(n.unidadesPisoSemana)} u/sem</span>
+            : !leidas ? <span className="apr-chip"><CircleDashed size={13} aria-hidden="true" />en fila para leer</span>
+              : visiblesN ? <span className="apr-chip apr-chip-mini-azul">{visiblesN} de {n.publicaciones.length} dejan ver stock</span>
+                : <span className="apr-chip">todos en “+50”: no se ve</span>}</span>
+        <Visibilidad publicaciones={n.publicaciones} alto={8} />
+        <span className="sn-fotos">{n.publicaciones.map((f) => (
+          <span key={f.sku} className="sn-mini">{f.imagen ? <Miniatura src={f.imagen} lado={44} /> : <span className="mv-sinfoto" />}<Medidor ahora={ultimas(f).ahora} antes={ultimas(f).antes} compacto /></span>
+        ))}</span>
+      </button>
+      {abierto ? <div className="sv-grilla sn-detalle">{n.publicaciones.map((f) => <TarjetaVendedor key={f.sku} f={f} />)}</div> : null}
+    </div>
+  )
+})
 
 export function StockCompetidores() {
   const [d, setD] = useState(null)
@@ -104,7 +137,20 @@ export function StockCompetidores() {
   const [abierto, setAbierto] = useState(null)
   const [filtro, setFiltro] = useState('todos')
   const [busca, setBusca] = useState('')
-  const cargar = useCallback(() => api.seguimiento().then((r) => { setD(r); setError(null) }).catch((e) => setError(e.message)), [])
+  // El refresco de cada minuto casi siempre trae lo mismo (las lecturas son cada
+  // 2 h): si nada cambió no se toca el estado y no se re-dibuja nada.
+  const huella = useRef('')
+  const cargar = useCallback(() => api.seguimiento().then((r) => {
+    const h = JSON.stringify(r)
+    if (h !== huella.current) { huella.current = h; setD(r) }
+    setError(null)
+  }).catch((e) => setError(e.message)), [])
+  const alAlternar = useCallback((k) => setAbierto((a) => (a === k ? null : k)), [])
+  const ordenados = useMemo(() => {
+    const valor = (n) => n.unidadesPisoSemana * 1000 + n.vendiendo * 100 + n.publicaciones.filter(dejaVer).length
+    return (d?.nichos ?? []).map((n) => [valor(n), n]).sort((a, b) => b[0] - a[0]).map(([, n]) => n)
+  }, [d])
+  const conteos = useMemo(() => Object.fromEntries(FILTROS_STOCK.map(([id, , f]) => [id, (d?.nichos ?? []).filter(f).length])), [d])
   useEffect(() => {
     cargar()
     const t = setInterval(() => { if (document.visibilityState === 'visible') cargar() }, 60_000)
@@ -115,10 +161,9 @@ export function StockCompetidores() {
   const pct = Math.min(100, (d.gasto.mesUsd / d.topeUsdMes) * 100)
   const cal = d.calibracion
   const todas = d.nichos.flatMap((n) => n.publicaciones)
-  const visibles = todas.filter((f) => [1, 2, 3, 4].includes(escalonDe(ultimas(f).ahora))).length
+  const visibles = todas.filter(dejaVer).length
   const fn = FILTROS_STOCK.find(([id]) => id === filtro)[2]
-  const valor = (n) => n.unidadesPisoSemana * 1000 + n.vendiendo * 100 + n.publicaciones.filter((f) => [1, 2, 3, 4].includes(escalonDe(ultimas(f).ahora))).length
-  const nichos = d.nichos.filter(fn).filter((n) => !busca.trim() || n.keyword.includes(busca.trim().toLowerCase())).sort((a, b) => valor(b) - valor(a))
+  const nichos = ordenados.filter(fn).filter((n) => !busca.trim() || n.keyword.includes(busca.trim().toLowerCase()))
   return (
     <>
       <section className="apr-seccion">
@@ -158,30 +203,10 @@ export function StockCompetidores() {
         <div className="apr-controles">
           <label className="apr-buscar"><PackageX size={14} aria-hidden="true" /><span className="apr-solo-lector">Buscar nicho</span>
             <input type="search" placeholder="Buscar nicho…" value={busca} onChange={(e) => setBusca(e.target.value)} /></label>
-          <div className="apr-segmentos" role="group" aria-label="Filtrar nichos">{FILTROS_STOCK.map(([id, nombre, f]) =>
-            <button key={id} type="button" className={filtro === id ? 'activo' : ''} aria-pressed={filtro === id} onClick={() => setFiltro(id)}>{nombre} <small>{d.nichos.filter(f).length}</small></button>)}</div>
+          <div className="apr-segmentos" role="group" aria-label="Filtrar nichos">{FILTROS_STOCK.map(([id, nombre]) =>
+            <button key={id} type="button" className={filtro === id ? 'activo' : ''} aria-pressed={filtro === id} onClick={() => setFiltro(id)}>{nombre} <small>{conteos[id]}</small></button>)}</div>
         </div>
-        {!nichos.length ? <p className="apr-vacio">Ningún nicho con ese filtro todavía.</p> : <div className="sn-grilla">{nichos.map((n) => {
-          const abiertoEste = abierto === n.keyword
-          const visiblesN = n.publicaciones.filter((f) => [1, 2, 3, 4].includes(escalonDe(ultimas(f).ahora))).length
-          const leidas = n.publicaciones.filter((f) => escalonDe(ultimas(f).ahora) !== -1).length
-          return (
-            <div key={n.keyword} className={`sn${abiertoEste ? ' sn-abierto' : ''}${n.vendiendo ? ' sn-vende' : ''}`}>
-              <button type="button" className="sn-cab" aria-expanded={abiertoEste} onClick={() => setAbierto(abiertoEste ? null : n.keyword)}>
-                <span className="sn-titulo"><strong>{n.keyword}</strong>
-                  {n.vendiendo ? <span className="apr-chip apr-chip-bien"><TrendingDown size={13} aria-hidden="true" />{n.vendiendo} vendiendo · ≥{fmtNum(n.unidadesPisoSemana)} u/sem</span>
-                    : !leidas ? <span className="apr-chip"><CircleDashed size={13} aria-hidden="true" />en fila para leer</span>
-                      : visiblesN ? <span className="apr-chip apr-chip-mini-azul">{visiblesN} de {n.publicaciones.length} dejan ver stock</span>
-                        : <span className="apr-chip">todos en “+50”: no se ve</span>}</span>
-                <Visibilidad publicaciones={n.publicaciones} alto={8} />
-                <span className="sn-fotos">{n.publicaciones.map((f) => (
-                  <span key={f.sku} className="sn-mini">{f.imagen ? <img src={f.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" /> : <span className="mv-sinfoto" />}<Medidor ahora={ultimas(f).ahora} antes={ultimas(f).antes} compacto /></span>
-                ))}</span>
-              </button>
-              {abiertoEste ? <div className="sv-grilla sn-detalle">{n.publicaciones.map((f) => <TarjetaVendedor key={f.sku} f={f} />)}</div> : null}
-            </div>
-          )
-        })}</div>}
+        {!nichos.length ? <p className="apr-vacio">Ningún nicho con ese filtro todavía.</p> : <div className="sn-grilla">{nichos.map((n) => <TarjetaNicho key={n.keyword} n={n} abierto={abierto === n.keyword} alAlternar={alAlternar} />)}</div>}
       </section>
 
       <details className="apr-plegable apr-tecnico">
@@ -236,7 +261,7 @@ export function MasVendidosMl() {
             </button>
             {abierta === c.categoriaId ? <ol className="mv-lista st-mv">{c.items.map((i) => (
               <li key={i.id} className="mv-fila"><span className="mv-pos">{i.posicion}</span>
-                {i.imagen ? <img src={i.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" width="40" height="40" /> : <span className="mv-sinfoto" aria-hidden="true" />}
+                {i.imagen ? <Miniatura src={i.imagen} lado={40} /> : <span className="mv-sinfoto" aria-hidden="true" />}
                 <span className="mv-titulo">{i.url ? <a href={i.url} target="_blank" rel="noreferrer">{i.titulo ?? 'ver en Mercado Libre'}</a> : (i.titulo ?? i.id)}{i.precio ? <small>{fmtPrecio(i.precio)}</small> : null}</span>
                 <span className="mv-chips">{i.nuevo ? <em className="mv-chip mv-nuevo">entró al top</em> : null}{i.subio >= 2 ? <em className="mv-chip mv-sube">▲ {i.subio}</em> : null}{i.subio <= -2 ? <em className="mv-chip mv-baja">▼ {Math.abs(i.subio)}</em> : null}
                   {i.enNuestroScan ? <em className="mv-chip">en tu scan</em> : null}<em className="mv-chip" title="Días de los guardados en que estuvo en el top 20">{i.diasEnElTop}/{i.diasGuardados} d</em></span></li>))}</ol> : null}

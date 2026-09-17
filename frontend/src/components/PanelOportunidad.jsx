@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { fmtNum, fmtPrecio } from '../lib/formato.js'
+import { Miniatura } from './ui.jsx'
 
 // LOS TRES GRÁFICOS DE LA DECISIÓN, al abrir una oportunidad.
 //
@@ -151,7 +152,7 @@ export function MasVendidosCategoria({ nicho }) {
       <ol className="mv-lista">{datos.items.slice(0, 10).map((i) => (
         <li key={i.id} className="mv-fila">
           <span className="mv-pos">{i.posicion}</span>
-          {i.imagen ? <img src={i.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" width="40" height="40" /> : <span className="mv-sinfoto" aria-hidden="true" />}
+          {i.imagen ? <Miniatura src={i.imagen} lado={40} /> : <span className="mv-sinfoto" aria-hidden="true" />}
           <span className="mv-titulo">{i.url ? <a href={i.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{i.titulo ?? 'ver en Mercado Libre'}</a> : (i.titulo ?? i.id)}
             {i.precio ? <small>{fmtPrecio(i.precio)}</small> : null}</span>
           <span className="mv-chips">
@@ -191,7 +192,7 @@ export function VendedoresSeguidos({ nicho }) {
         <span className="og-cifra">{n.vendiendo} de {n.publicaciones.length} vendiendo{n.unidadesPisoSemana ? ` · ≥${fmtNum(n.unidadesPisoSemana)} u/semana` : ''}</span></div>
       <ol className="mv-lista">{n.publicaciones.map((f) => (
         <li key={f.sku} className="mv-fila">
-          {f.imagen ? <img src={f.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" width="40" height="40" /> : <span className="mv-sinfoto" aria-hidden="true" />}
+          {f.imagen ? <Miniatura src={f.imagen} lado={40} /> : <span className="mv-sinfoto" aria-hidden="true" />}
           <span className="mv-titulo"><a href={f.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{f.vendedor ?? 'vendedor'}</a>
             <small>{f.titulo}</small></span>
           <span className="mv-chips">

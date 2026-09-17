@@ -1,3 +1,14 @@
+import { miniatura } from '../lib/imagen.js'
+
+// Foto chica de un producto: pide la miniatura de ML en vez de la de 500 px, con
+// tamaño fijo (no salta el diseño) y, si esa variante no existiera, cae a la original.
+export function Miniatura({ src, lado = 40, className, alt = '' }) {
+  const chica = miniatura(src)
+  const original = typeof src === 'string' ? src.replace(/^http:/, 'https:') : src
+  return <img className={className} src={chica} alt={alt} width={lado} height={lado} loading="lazy" decoding="async"
+    onError={(e) => { if (e.currentTarget.src !== original) e.currentTarget.src = original }} />
+}
+
 export function StatTile({ label, value, detalle, destacado = false }) {
   return (
     <div className={destacado ? 'tile tile-destacado' : 'tile'}>

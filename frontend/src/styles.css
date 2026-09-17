@@ -7057,7 +7057,7 @@ em.mg-agotado { color: var(--peligro); }
 .sv-quieto { color: var(--tinta-3); }
 .sv-cuando { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; color: var(--tinta-3); font-size: 11px; }
 
-.sn-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+.sn-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; grid-auto-flow: dense; }
 .sn { border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie); box-shadow: var(--sombra-1); overflow: hidden; transition: box-shadow 0.18s ease, border-color 0.18s ease; }
 .sn:hover { border-color: var(--borde-fuerte); box-shadow: var(--sombra-2); }
 .sn-vende { border-color: var(--exito); }
@@ -7079,3 +7079,9 @@ em.mg-agotado { color: var(--peligro); }
 .apr-segmentos button small { margin-left: 4px; color: var(--tinta-3); font-size: 11px; font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) { .mg-leyenda { grid-template-columns: repeat(3, minmax(0, 1fr)); } .mg-leyenda-paso > i { display: none; } }
 @media (prefers-reduced-motion: reduce) { .sn { transition: none; } }
+
+/* RENDIMIENTO de "Competidores por nicho": ~60 tarjetas con 6 fotos y 6 medidores
+   cada una. El navegador no calcula ni pinta las que están fuera de pantalla; el
+   alto reservado evita que salte la barra de desplazamiento. */
+.sn { content-visibility: auto; contain-intrinsic-size: auto 200px; }
+.sn.sn-abierto { content-visibility: visible; }

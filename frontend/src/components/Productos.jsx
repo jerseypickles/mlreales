@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
-import { Badge, IconoExterno, RepSeller, Cargando } from './ui.jsx'
+import { Badge, IconoExterno, Miniatura, RepSeller, Cargando } from './ui.jsx'
 import { MiniSerie } from './graficos.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 import { Planilla } from './Planilla.jsx'
@@ -47,7 +47,7 @@ function FilaProducto({ p, onAbrir }) {
         onKeyDown={(e) => { if (e.key === 'Enter') onAbrir(p) }}>
       <td className="num">{p.posicion ?? '—'}</td>
       <td className="celda-imagen">
-        {p.imagen ? <img src={p.imagen} alt="" loading="lazy" width="36" height="36" /> : <span className="sin-imagen" />}
+        {p.imagen ? <Miniatura src={p.imagen} lado={36} /> : <span className="sin-imagen" />}
       </td>
       <td className="celda-titulo" title={p.titulo ?? p.sku}>
         {p.titulo ?? p.sku}

@@ -4,7 +4,7 @@ import {
   RefreshCw, Search, ShoppingBag, Store, TrendingDown, TrendingUp,
 } from 'lucide-react'
 import { api } from '../api.js'
-import { Cargando } from './ui.jsx'
+import { Cargando, Miniatura } from './ui.jsx'
 import { fmtFecha, fmtNum, fmtPrecio } from '../lib/formato.js'
 import { StockCompetidores, MasVendidosMl } from './AprendizajeFuentes.jsx'
 
@@ -176,7 +176,7 @@ function Productos({ libro, diagnostico, minimoVisitas }) {
           const s = estadoSemana(porItem.get(p.itemId), minimoVisitas)
           return <tr key={p.itemId}>
             <td className="celda-titulo apr-producto"><div className="apr-producto-fila">
-              {p.imagen ? <img src={p.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" width="48" height="48" /> : <span className="apr-foto-vacia" aria-hidden="true"><ShoppingBag size={18} /></span>}
+              {p.imagen ? <Miniatura src={p.imagen} lado={48} /> : <span className="apr-foto-vacia" aria-hidden="true"><ShoppingBag size={18} /></span>}
               <div>{p.url ? <a href={p.url} target="_blank" rel="noreferrer">{p.titulo || p.itemId}</a> : (p.titulo || p.itemId)}
                 <small>{fmtNum(p.dias)} días guardados · desde {fecha(p.desde)}{p.estadoMl === 'paused' ? ' · pausada en ML' : ''}</small></div>
             </div></td>

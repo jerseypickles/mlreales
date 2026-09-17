@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Search, Sun } from 'lucide-react'
 import { api } from '../api.js'
-import { Cargando, ScoreRing } from './ui.jsx'
+import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
 import { compararOportunidades } from '../lib/sidebar.js'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -438,7 +438,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
     >
       <span className="op-fila-rank">
         <i>{rank}</i>
-        {o.imagen ? <img src={o.imagen} alt="" loading="lazy" width="36" height="36" /> : <b className="op-fila-sinfoto" aria-hidden="true"><ImageOff size={14} /></b>}
+        {o.imagen ? <Miniatura src={o.imagen} lado={36} /> : <b className="op-fila-sinfoto" aria-hidden="true"><ImageOff size={14} /></b>}
       </span>
       <span className="op-fila-kw">
         <MioBadge mios={o.mios} />
@@ -1298,7 +1298,7 @@ function ProductosEscaneados({ nichoId }) {
             <span className="prod-pos">{p.posicion ?? '·'}</span>
 
             {p.imagen ? (
-              <img className="prod-foto" src={p.imagen} alt="" loading="lazy" width="44" height="44" />
+              <Miniatura className="prod-foto" src={p.imagen} lado={44} />
             ) : (
               <span className="prod-foto prod-foto-vacia" aria-hidden="true" />
             )}
