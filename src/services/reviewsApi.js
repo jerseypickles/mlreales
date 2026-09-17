@@ -1,4 +1,3 @@
-import { reviewsOficialesSeguro } from './meli.js'
 
 // RESEÑAS POR LA API OFICIAL, PARA TODO EL LISTADO Y GRATIS.
 //
@@ -23,40 +22,67 @@ import { reviewsOficialesSeguro } from './meli.js'
 // Es best-effort de punta a punta: esto se cuelga de un scan que ya funciona y
 // jamás debe voltearlo.
 
-// la API oficial responde en ~285 ms; de a 6 el listado entero sale en ~5 s
-const CONCURRENCIA = 5
-// techo duro: con 100 items y todo lento, antes que retrasar el scan se entrega
+// ML CORTA DESPUÉS DE ~115 CONSULTAS SEGUIDAS. Medido el 17-sep-2026 en el primer
+// scan de 4 páginas ("gafas de sol", 202 publicaciones): las primeras 116
+// respondieron y las 86 siguientes volvieron 429 "too many requests", todas en 4
+// segundos. Con 100 publicaciones por scan el límite casi no se tocaba; con 200
+// se pierde el 43% de la canasta. Tres cosas: menos en paralelo, y ante un 429
+// TODOS los obreros se frenan unos segundos y esa publicación se reintenta — sin
+// el freno compartido cada obrero sigue disparando y el castigo se alarga.
+const CONCURRENCIA = 3
+// techo duro: con 200 items y todo lento, antes que retrasar el scan se entrega
 // lo que se alcanzó a medir
-const PRESUPUESTO_MS = 90_000
+const PRESUPUESTO_MS = 150_000
+const PAUSA_429_MS = 4_000
+const REINTENTOS = 3
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
 
-export async function conteosPorItem(itemIds, { concurrencia = CONCURRENCIA, presupuestoMs = PRESUPUESTO_MS } = {}) {
-  const pendientes = [...new Set((itemIds ?? []).filter(Boolean))]
+// Una consulta que distingue "ML me frenó" de "no hay dato": la versión segura
+// de meli.js se traga el error y acá hace falta verlo.
+async function contarUna(id) {
+  try {
+    const { meliGet } = await import('./meli.js')
+    const { resumenReviewsOficiales } = await import('./meli.js')
+    return { numReviews: resumenReviewsOficiales(await meliGet(`/reviews/item/${id}`))?.numReviews ?? null }
+  } catch (err) {
+    return { frenado: /\b429\b|too many/i.test(err.message), error: err.message }
+  }
+}
+
+export async function conteosPorItem(itemIds, { concurrencia = CONCURRENCIA, presupuestoMs = PRESUPUESTO_MS, contar = contarUna, pausaMs = PAUSA_429_MS } = {}) {
+  const pendientes = [...new Set((itemIds ?? []).filter(Boolean))].map((id) => ({ id, intentos: 0 }))
   const porItem = new Map()
   if (!pendientes.length) return porItem
 
   const limite = Date.now() + presupuestoMs
-  let cursor = 0
   let agotado = false
+  let frenadoHasta = 0
+  let frenos = 0
 
   async function obrero() {
-    while (cursor < pendientes.length) {
+    while (pendientes.length) {
       if (Date.now() > limite) {
         agotado = true
         return
       }
-      const id = pendientes[cursor++]
-      // reviewsOficialesSeguro ya nunca lanza: devuelve null y loguea
-      const r = await reviewsOficialesSeguro(id)
-      if (Number.isFinite(r?.numReviews)) porItem.set(id, r.numReviews)
+      if (Date.now() < frenadoHasta) await esperar(frenadoHasta - Date.now())
+      const tarea = pendientes.shift()
+      if (!tarea) return
+      const r = await contar(tarea.id)
+      if (Number.isFinite(r?.numReviews)) porItem.set(tarea.id, r.numReviews)
+      else if (r?.frenado && ++tarea.intentos < REINTENTOS) {
+        // freno compartido y creciente; la publicación vuelve a la fila
+        frenos++
+        frenadoHasta = Math.max(frenadoHasta, Date.now() + pausaMs * tarea.intentos)
+        pendientes.push(tarea)
+      }
     }
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrencia, pendientes.length) }, () => obrero()))
 
-  if (agotado) {
-    console.warn(
-      `[reviews-api] presupuesto agotado: ${porItem.size}/${pendientes.length} items medidos`,
-    )
+  if (agotado || frenos) {
+    console.warn(`[reviews-api] ${porItem.size}/${new Set(itemIds.filter(Boolean)).size} publicaciones medidas · ${frenos} frenos de ML${agotado ? ' · presupuesto de tiempo agotado' : ''}`)
   }
   return porItem
 }

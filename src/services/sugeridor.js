@@ -173,6 +173,8 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   const lecciones = await leccionesAprendidas().catch(() => [])
   const hermanas = await hermanasDeLoQueVende().catch(() => [])
   const criterios = await criteriosActivos().catch(() => [])
+  // lo que ENTRÓ al top 20 de más vendidos de ML esta semana: demanda dicha por ML
+  const entradas = await import('./rankingMasVendidos.js').then((m) => m.entradasAlTop()).catch(() => [])
   // El ML observa esta salida: sus perfiles y predicciones no se incluyen en
   // el prompt durante esta etapa, para poder evaluar el radar sin influirlo.
   const hoy = new Date()
@@ -200,6 +202,11 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
       ? `CATEGORÍAS HERMANAS de lo que YA VENDE, según el árbol real de Mercado Libre — las candidatas más fuertes porque comparten comprador y rama:\n${hermanas
           .map((h) => `- "${h.nombre}" (rama ${h.rama}, hermana de lo que vendes en "${h.hermanaDe}")`)
           .join('\n')}\nConviértelas en keywords que la gente ESCRIBA: el nombre de la categoría casi nunca es la búsqueda real.`
+      : '',
+    entradas.length
+      ? `PRODUCTOS QUE ENTRARON O SUBIERON EN EL RANKING OFICIAL DE MÁS VENDIDOS de Mercado Libre Chile esta semana (dato de ML, no una estimación). Es la evidencia más fuerte de demanda que recibes: si alguno abre un nicho que el tablero no cubre y cumple las demás reglas, propónlo con la keyword que un comprador escribiría (no el título del producto):\n${entradas
+          .map((e) => `- #${e.posicion} ${e.nuevo ? 'NUEVO en el top 20' : `subió ${e.subio} puestos`}: "${e.titulo}"${e.nichos?.length ? ` (categoría de: ${e.nichos.slice(0, 3).join(', ')})` : ''}`)
+          .join('\n')}`
       : '',
     tendencias?.length
       ? `Búsquedas EN ALZA esta semana según el autocompletado real de ML (gente escribiéndolas más que antes — priorízalas como candidatas si cumplen las demás reglas):\n${tendencias.join('\n')}`

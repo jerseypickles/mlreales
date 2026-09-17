@@ -39,6 +39,10 @@ export async function registrarDetalleNichoMl({ nichoId, porSku, fecha, fuente, 
       ...(Number.isFinite(d.precio) && d.precio > 0 ? { precio: d.precio } : {}),
       ...(typeof d.esFull === 'boolean' ? { esFull: d.esFull } : {}),
       ...(Number.isFinite(d.numReviews) && d.numReviews >= 0 ? { resenasZyte: d.numReviews } : {}),
+      // stock visible del vendedor (exacto hasta 50, topado en 51). Congelado con
+      // su fecha: la baja entre dos capturas es venta real del competidor, la
+      // única etiqueta de ventas ajenas que no pasa por reseñas ni por baldes.
+      ...(Number.isFinite(d.stock) && d.stock >= 0 ? { stock: d.stock, stockTopado: d.stockTopado === true } : {}),
     }
   })
   return guardar({ nichoId: anterior.nichoId, keyword: anterior.keyword, keywordDemanda: anterior.keywordDemanda,

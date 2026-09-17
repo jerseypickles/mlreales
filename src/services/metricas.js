@@ -832,6 +832,17 @@ export function calcularMetricas({
 }
 
 // Vista producto+snapshot del último scan (tabla del dashboard y análisis IA).
+// Pura. Dos lecturas de stock de la misma publicación → unidades vendidas.
+export function ventaEntreLecturas(antes, ahora) {
+  if (!antes || !ahora || antes.topado || ahora.topado) return null
+  if (!Number.isFinite(antes.stock) || !Number.isFinite(ahora.stock)) return null
+  const dias = (new Date(ahora.fecha) - new Date(antes.fecha)) / 86_400_000
+  if (!(dias >= 0.5)) return null
+  if (ahora.stock > antes.stock) return { repuso: true, dias: redondear(dias, 1), stockAntes: antes.stock, stockAhora: ahora.stock }
+  const unidades = antes.stock - ahora.stock
+  return { unidades, dias: redondear(dias, 1), porDia: redondear(unidades / dias, 2), stockAntes: antes.stock, stockAhora: ahora.stock }
+}
+
 export async function obtenerProductosUltimoScan(nicho) {
   const ultimo = await Snapshot.findOne({ keyword: nicho.keyword }).sort({ fecha: -1 }).lean()
   if (!ultimo) return null
@@ -903,6 +914,22 @@ export async function obtenerProductosUltimoScan(nicho) {
     })
   }
 
+  // VENTA REAL DEL COMPETIDOR, POR BAJA DE STOCK. Las dos últimas lecturas de
+  // stock de cada publicación; solo vale cuando ninguna está topada (51 = "más
+  // de 50") y el stock bajó o se mantuvo. Si subió, repuso: no se sabe cuánto
+  // vendió en el medio y no se inventa.
+  const lecturasStock = await Snapshot.aggregate([
+    { $match: { sku: { $in: snapshots.map((s) => s.sku) }, stock: { $ne: null } } },
+    { $sort: { fecha: -1 } },
+    { $group: { _id: '$sku', l: { $push: { fecha: '$fecha', stock: '$stock', topado: '$stockTopado' } } } },
+    { $project: { l: { $slice: ['$l', 2] } } },
+  ])
+  const ventaPorStock = new Map()
+  for (const { _id, l } of lecturasStock) {
+    const v = ventaEntreLecturas(l[1], l[0])
+    if (v) ventaPorStock.set(_id, v)
+  }
+
   return {
     fechaScan: ultimo.fecha,
     productos: snapshots.map((s) => {
@@ -918,6 +945,11 @@ export async function obtenerProductosUltimoScan(nicho) {
         descuentoPct: s.descuentoPct,
         rating: s.rating,
         numReviews: s.numReviews,
+        // stock visible del vendedor (exacto hasta 50, topado en 51): su baja entre
+        // scans es venta real de ese competidor. Solo lo trae la ficha por Zyte.
+        stock: s.stock ?? null,
+        stockTopado: s.stockTopado ?? null,
+        ventaStock: ventaPorStock.get(s.sku) ?? null,
         // badge público acumulado de ML, en baldes (25/50/100/500/...): dice
         // trayectoria del listing, NO ritmo. Ver senalVendidos().
         vendidos: s.vendidos ?? null,

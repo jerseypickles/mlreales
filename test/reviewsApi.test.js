@@ -36,3 +36,21 @@ test('sin items o sin mapa no explota', () => {
   assert.equal(aplicarConteos(undefined, new Map()), 0)
   assert.equal(aplicarConteos([], new Map()), 0)
 })
+
+test('cuando ML frena con 429 todos esperan y la publicación se reintenta, en vez de perder la canasta', async () => {
+  const { conteosPorItem } = await import('../src/services/reviewsApi.js')
+  let llamadas = 0
+  // las primeras 5 pasan, después ML frena dos veces, y luego vuelve a responder
+  const contar = async (id) => {
+    llamadas++
+    if (llamadas > 5 && llamadas <= 7) return { frenado: true }
+    return { numReviews: Number(id.slice(3)) }
+  }
+  const ids = Array.from({ length: 12 }, (_, i) => `MLC${i + 1}`)
+  const r = await conteosPorItem(ids, { contar, pausaMs: 5, concurrencia: 3 })
+  assert.equal(r.size, 12, 'ninguna publicación se pierde por el freno')
+  assert.equal(r.get('MLC7'), 7)
+  // una que falla siempre no bloquea a las demás ni se reintenta infinito
+  const r2 = await conteosPorItem(['MLC1', 'MLC2'], { contar: async (id) => (id === 'MLC2' ? { frenado: true } : { numReviews: 1 }), pausaMs: 1 })
+  assert.deepEqual([...r2.keys()], ['MLC1'])
+})

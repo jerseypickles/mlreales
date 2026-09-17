@@ -84,6 +84,32 @@ anteriores; el precio anterior al primer cambio conservado se marca
 nicho. Primera pasada en seco: 394 días de 8 productos desde el 20-jul, 32
 semanas derivables, 3 entrenables sin solapar.
 
+### Tres fuentes nuevas para el aprendizaje (17-sep-2026, tarde)
+
+Pedido del importador: "llevar el scraper a otro nivel", y que lo que funcione
+"se lo entregaremos también al learning machine".
+
+- **Reseñas de todo el listado.** La demanda del nicho se cuenta con la API
+  oficial de ML (`numReviewsApi`) sobre el listado orgánico entero —4 páginas,
+  ~200 publicaciones— cuando compara al menos 1,5× los productos de la ficha
+  pagada. El reporte guarda `fuenteResenas` y las dos señales. ML frena después
+  de ~115 consultas seguidas (medido: 116 de 202 en el primer scan de 4
+  páginas), así que el contador va de a 3, con freno compartido y reintento.
+- **Stock del competidor.** La ficha que ya se paga trae `"quantity"` en su
+  evento de telemetría: el stock del vendedor, exacto hasta 50 y topado en 51.
+  `Snapshot.stock` / `stockTopado` lo guardan, `CapturaNichoMl` lo congela con
+  su fecha, y `ventaEntreLecturas` convierte dos lecturas en unidades vendidas
+  —solo si ninguna está topada y el stock no subió—. Es la única etiqueta de
+  ventas AJENAS que no pasa por reseñas ni por baldes; hoy solo se captura, y
+  entra a un modelo cuando haya serie suficiente y se valide contra las ventas
+  propias, donde se conoce la verdad.
+- **Ranking oficial de más vendidos.** `/highlights/MLC/category/{id}`, gratis,
+  guardado cada día a las 07:40 por categoría dominante de cada nicho
+  (`RankingMasVendidos`). Lo que entra al top 20 o sube cinco puestos llega al
+  radar con nombre, como evidencia de demanda dicha por ML; la carta abierta de
+  cada oportunidad muestra el top 10 con lo que se movió. La posición diaria es
+  además una serie de demanda relativa por producto, disponible para entrenar.
+
 ### Auditoría de huecos de captura (17-sep-2026)
 
 Qué se estaba dejando pasar que después no se recupera, y qué se hizo:

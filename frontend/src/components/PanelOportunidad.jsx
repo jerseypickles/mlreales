@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+import { api } from '../api.js'
 import { fmtNum, fmtPrecio } from '../lib/formato.js'
 
 // LOS TRES GRÁFICOS DE LA DECISIÓN, al abrir una oportunidad.
@@ -126,6 +128,41 @@ export function GraficoPronostico({ pronostico, modeloGana }) {
       <p className="og-leyenda"><span><i className="og-l og-l-pasado" />año pasado</span><span><i className="og-l og-l-modelo" />lo que espera el modelo</span></p>
       <p className="og-lectura">{modeloGana ? 'El modelo le gana a repetir el año pasado en la prueba.' : 'El modelo todavía se equivoca más que repetir el año pasado: para decidir cantidad, guíate por la barra gris.'}
         {pronostico.keywordMedida && pronostico.keywordMedida !== pronostico.nicho ? <> Medido como «{pronostico.keywordMedida}».</> : null}</p>
+    </div>
+  )
+}
+
+// LOS MÁS VENDIDOS DE LA CATEGORÍA, SEGÚN MERCADO LIBRE. No es una estimación:
+// es el ranking que ML publica por su API. Guardado a diario muestra quién entró
+// al top y quién viene subiendo — la señal que se adelanta a las reseñas.
+export function MasVendidosCategoria({ nicho }) {
+  const [datos, setDatos] = useState(null)
+  useEffect(() => {
+    let vivo = true
+    api.masVendidos(nicho).then((d) => vivo && setDatos(d.categorias?.[0] ?? false)).catch(() => vivo && setDatos(false))
+    return () => { vivo = false }
+  }, [nicho])
+  if (datos === null) return null
+  if (!datos) return <div className="og og-mv"><div className="og-cab"><h4>Más vendidos de la categoría, según Mercado Libre</h4></div><p className="og-lectura">Todavía sin ranking guardado para esta categoría: se captura todos los días a las 07:40 desde el 17-sep.</p></div>
+  return (
+    <div className="og og-mv">
+      <div className="og-cab"><h4>Más vendidos de la categoría, según Mercado Libre</h4>
+        <span className="og-cifra og-cifra-suave">{datos.comparadoCon ? `hoy contra el ${datos.comparadoCon.slice(8)}/${datos.comparadoCon.slice(5, 7)}` : `día 1 de ${datos.diasGuardados}: mañana se ve quién se movió`}</span></div>
+      <ol className="mv-lista">{datos.items.slice(0, 10).map((i) => (
+        <li key={i.id} className="mv-fila">
+          <span className="mv-pos">{i.posicion}</span>
+          {i.imagen ? <img src={i.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" width="40" height="40" /> : <span className="mv-sinfoto" aria-hidden="true" />}
+          <span className="mv-titulo">{i.url ? <a href={i.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{i.titulo ?? 'ver en Mercado Libre'}</a> : (i.titulo ?? i.id)}
+            {i.precio ? <small>{fmtPrecio(i.precio)}</small> : null}</span>
+          <span className="mv-chips">
+            {i.nuevo ? <em className="mv-chip mv-nuevo">entró al top</em> : null}
+            {i.subio >= 2 ? <em className="mv-chip mv-sube">▲ {i.subio}</em> : null}
+            {i.subio <= -2 ? <em className="mv-chip mv-baja">▼ {Math.abs(i.subio)}</em> : null}
+            {i.enNuestroScan ? <em className="mv-chip" title="Este producto aparece en el listado que escaneamos para este nicho">en tu scan</em> : null}
+          </span>
+        </li>
+      ))}</ol>
+      <p className="og-lectura">Ranking oficial de ML para la categoría dominante de este nicho{datos.nichos?.length > 1 ? ` (compartida con ${datos.nichos.filter((n) => n !== nicho).slice(0, 3).join(', ')})` : ''}. Un producto que entra y se sostiene es demanda real antes de que se note en las reseñas.</p>
     </div>
   )
 }
