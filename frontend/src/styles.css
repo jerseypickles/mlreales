@@ -6822,3 +6822,72 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
   .apr-girando { animation: none; }
   .apr-fuente, .apr-medidor span, .apr-barra span, .apr-plegable summary svg { transition: none; }
 }
+
+
+/* OPORTUNIDADES · pase visual del 17-sep-2026.
+   Overrides al final a propósito: la mesa tiene ~1.500 líneas de estilos
+   acumulados y tocarlos en su lugar arriesga el resto. Tres cosas: la temporada
+   con ventana abierta sube arriba con foto, cada fila lleva la foto del
+   producto, y el resumen deja de ser una línea de texto. */
+.op-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 16px 0 14px; }
+.op-kpi { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--borde); border-radius: 12px; background: var(--superficie); box-shadow: var(--sombra-1); text-align: left; color: inherit; font: inherit; }
+.op-kpi b { display: block; font-size: 22px; font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.op-kpi small { display: block; margin-top: 2px; color: var(--tinta-3); font-size: 12px; }
+.op-kpi-icono { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; background: var(--acento-tenue); color: var(--acento); }
+.op-kpi-ambar { background: var(--avisa-tenue); color: var(--avisa-tinta); }
+.op-kpi-verde { background: var(--exito-tenue); color: var(--exito-tinta); }
+.op-kpi-accion { cursor: pointer; transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+.op-kpi-accion:hover { border-color: var(--avisa-tinta); box-shadow: var(--sombra-2); }
+.op-kpi-accion:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.op-kpi-aviso b { color: var(--avisa-tinta); }
+
+.op-vitrina { margin: 6px 0 22px; padding: 16px 16px 12px; border: 1px solid var(--borde); border-radius: var(--radio-g); background: linear-gradient(180deg, var(--avisa-tenue), var(--superficie) 72px); }
+.op-vitrina-cab { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.op-vitrina-icono { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: var(--superficie); color: var(--avisa-tinta); box-shadow: var(--sombra-1); }
+.op-vitrina-cab h3 { margin: 0; font-size: 16px; text-transform: none; letter-spacing: -0.01em; }
+.op-vitrina-cab p { margin: 2px 0 0; color: var(--tinta-2); font-size: 12.5px; }
+.op-vitrina-alerta { color: var(--peligro); }
+.op-vitrina-carril { display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 10px; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.op-vitrina-carta { display: flex; gap: 12px; flex: 0 0 292px; padding: 10px; border: 1px solid var(--borde); border-radius: 12px; background: var(--superficie); color: inherit; font: inherit; text-align: left; cursor: pointer; scroll-snap-align: start; transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+.op-vitrina-carta:hover { border-color: var(--acento-borde); box-shadow: var(--sombra-2); }
+.op-vitrina-carta:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.op-vitrina-urgente { border-color: var(--peligro); }
+.op-vitrina-foto { display: inline-flex; align-items: center; justify-content: center; width: 78px; height: 78px; flex-shrink: 0; border-radius: 9px; border: 1px solid var(--borde); background: #fff; color: var(--tinta-3); overflow: hidden; }
+.op-vitrina-foto img { width: 100%; height: 100%; object-fit: contain; }
+.op-vitrina-cuerpo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.op-vitrina-cuerpo strong { font-size: 14px; line-height: 1.25; text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.op-vitrina-plazo { display: inline-flex; align-items: center; gap: 5px; color: var(--avisa-tinta); font-size: 12px; font-weight: 600; }
+.op-vitrina-plazo.urgente { color: var(--peligro); }
+.op-vitrina-datos { color: var(--tinta-3); font-size: 11.5px; }
+.op-vitrina-pie { display: flex; align-items: center; gap: 6px; margin-top: auto; }
+.op-vitrina-pie em { font-style: normal; }
+.op-vitrina-score { padding: 1px 7px; border-radius: 6px; background: var(--superficie-2); color: var(--tinta-2); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.op-pildora { padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
+.op-pildora.veredicto-entrar { background: var(--exito-tenue); color: var(--exito-tinta); }
+.op-pildora.veredicto-entrar_con_condiciones { background: var(--avisa-tenue); color: var(--avisa-tinta); }
+.op-pildora-cot { background: var(--acento); color: #fff; }
+
+/* la fila: foto, veredicto en píldora, y el chip de tendencia sin encimarse */
+.op-fila { grid-template-columns: 68px minmax(108px, 1fr) 30px 98px 56px 66px 38px 44px minmax(92px, 120px) 92px 30px; min-height: 52px; }
+.op-fila-rank { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.op-fila-rank i { font-style: normal; }
+.op-fila-rank img, .op-fila-sinfoto { width: 36px; height: 36px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--borde); background: #fff; object-fit: contain; }
+.op-fila-sinfoto { display: inline-flex; align-items: center; justify-content: center; background: var(--superficie-2); color: var(--tinta-3); }
+.op-fila.op-fila-cab, .op-fila.op-fila-bandas { min-height: 0; }
+.op-fila-vol { min-width: 0; }
+.vol-salud, .vol-cpc { overflow: hidden; text-overflow: ellipsis; }
+.op-fila-ver { justify-self: end; padding: 3px 9px; border-radius: 999px; font-size: 9.5px; }
+.op-fila-ver.veredicto-entrar { background: var(--exito-tenue); }
+.op-fila-ver.veredicto-entrar_con_condiciones { background: var(--avisa-tenue); }
+.op-fila-ver.op-fila-faltan { padding: 0; background: none; }
+/* 34 filas con fondo azul eran un bloque: el estado va en el borde y en su etiqueta */
+.op-fila.op-cotizando { background: none; border-left-color: var(--acento); }
+.op-fila.op-cotizando:hover, .op-fila.op-cotizando.op-fila-abierta { background: var(--acento-tenue); }
+.op-grupo, .op-item { scroll-margin-top: 96px; }
+.op-grupo-cab h3 { text-transform: none; letter-spacing: -0.01em; font-size: 16px; }
+@media (max-width: 900px) {
+  .op-fila { grid-template-columns: 60px minmax(108px, 1fr) 30px 92px 76px 30px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .op-kpi-accion, .op-vitrina-carta { transition: none; }
+}

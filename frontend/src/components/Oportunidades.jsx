@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Search, Sun } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
@@ -434,7 +435,10 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
       }}
       aria-expanded={abierta}
     >
-      <span className="op-fila-rank">{rank}</span>
+      <span className="op-fila-rank">
+        <i>{rank}</i>
+        {o.imagen ? <img src={o.imagen} alt="" loading="lazy" width="36" height="36" /> : <b className="op-fila-sinfoto" aria-hidden="true"><ImageOff size={14} /></b>}
+      </span>
       <span className="op-fila-kw">
         <MioBadge mios={o.mios} />
         {o.keyword}
@@ -494,7 +498,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
                 que despega. "Estable" es el 80% de la mesa y no informa. */}
             {(c.salud === 'muriendo' || c.salud === 'bajando' || c.salud === 'despegando') && chipSalud(c) ? (
               <b className={`vol-salud ${c.salud === 'despegando' ? 'vol-salud-bien' : 'vol-salud-mal'}`} title={chipSalud(c).ayuda}>
-                {c.salud === 'despegando' ? '↑' : '↓'} {Math.abs(c.variacionRelativaPct ?? c.variacionInteranualPct)}% {Number.isFinite(c.variacionRelativaPct) ? 'vs mercado' : 'año'}
+                {c.salud === 'despegando' ? '↑' : '↓'}{Math.round(Math.abs(c.variacionRelativaPct ?? c.variacionInteranualPct))}% {Number.isFinite(c.variacionRelativaPct) ? 'vs mercado' : 'año'}
               </b>
             ) : null}
             {c.keywordMedida ? (
@@ -1143,11 +1147,62 @@ const GRUPOS_OP = [
   },
 ]
 
+// LA TEMPORADA QUE HAY QUE PEDIR AHORA, ARRIBA Y CON FOTO.
+//
+// La mesa abre con los de todo el año —71 filas— y los estacionales con la
+// ventana abierta quedaban 3.700 px más abajo. El importador lo dijo el 17-sep:
+// "he estado solo eligiendo lo que se vende todo el año, y se me ha ido traer lo
+// que se viene ahora, verano". Tenía 28 con la ventana abierta y ninguno en
+// cotización. Una ventana que se cierra no puede depender de que alguien baje
+// con la rueda del mouse.
+const MES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const mesDe = (periodo) => (/^\d{4}-\d{2}$/.test(periodo ?? '') ? MES_LARGO[Number(periodo.slice(5)) - 1] : null)
+
+function VitrinaTemporada({ oportunidades, onElegir }) {
+  const abiertas = oportunidades
+    .filter((o) => !o.midiendo && !esPlano(o) && ['ahora', 'ultimo-mes'].includes(o.ventana?.estado))
+    .sort((a, b) => (a.ventana.estado === 'ultimo-mes' ? 0 : 1) - (b.ventana.estado === 'ultimo-mes' ? 0 : 1)
+      || String(a.ventana.hasta).localeCompare(String(b.ventana.hasta)) || (b.score ?? 0) - (a.score ?? 0))
+  if (!abiertas.length) return null
+  const cotizando = abiertas.filter((o) => ['cotizando', 'pedido'].includes(o.etapaCompra)).length
+  return (
+    <section className="op-vitrina" aria-labelledby="op-vitrina-titulo">
+      <div className="op-vitrina-cab">
+        <span className="op-vitrina-icono"><Sun size={18} aria-hidden="true" /></span>
+        <div>
+          <h3 id="op-vitrina-titulo">Temporada que hay que pedir ahora</h3>
+          <p>{abiertas.length} nichos con la ventana de compra abierta · <strong className={cotizando ? '' : 'op-vitrina-alerta'}>{cotizando ? `${cotizando} en cotización` : 'ninguno en cotización todavía'}</strong>. Pidiendo hoy, el stock llega en 50 a 70 días.</p>
+        </div>
+      </div>
+      <div className="op-vitrina-carril" role="list">
+        {abiertas.map((o) => {
+          const ultimo = o.ventana.estado === 'ultimo-mes'
+          return (
+            <button key={o.nichoId} type="button" role="listitem" className={`op-vitrina-carta${ultimo ? ' op-vitrina-urgente' : ''}`} onClick={() => onElegir(o)}>
+              <span className="op-vitrina-foto">{o.imagen ? <img src={o.imagen} alt="" loading="lazy" /> : <ImageOff size={22} aria-hidden="true" />}</span>
+              <span className="op-vitrina-cuerpo">
+                <strong>{o.keyword}</strong>
+                <span className={`op-vitrina-plazo${ultimo ? ' urgente' : ''}`}><CalendarClock size={12} aria-hidden="true" />{ultimo ? 'último mes para pedir' : `pedir hasta ${mesDe(o.ventana.hasta) ?? '—'}`}</span>
+                <span className="op-vitrina-datos">pico en {mesDe(o.ventana.pico) ?? o.curvaAnual?.nombreMesPico ?? '—'}{o.curvaAnual?.busquedasMes ? ` · ${fmtNum(o.curvaAnual.busquedasMes)} búsq/mes` : ''}</span>
+                <span className="op-vitrina-pie">
+                  <em className={`op-pildora veredicto-${o.veredicto}`}>{o.veredicto === 'entrar' ? 'entrar' : 'condiciones'}</em>
+                  {Number.isFinite(o.score) ? <em className="op-vitrina-score">{o.score}</em> : null}
+                  {o.etapaCompra === 'cotizando' ? <em className="op-pildora op-pildora-cot">cotizando</em> : null}
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 function GrupoOportunidades({ grupo, filas, children }) {
   const [abierto, setAbierto] = useState(grupo.abierto)
   if (!filas.length) return null
   return (
-    <section className="op-grupo">
+    <section className="op-grupo" id={`grupo-${grupo.id}`}>
       <button type="button" className="op-grupo-cab" onClick={() => setAbierto((v) => !v)} aria-expanded={abierto}>
         <span className={`op-grupo-flecha${abierto ? ' abierto' : ''}`} aria-hidden="true">▸</span>
         <h3>{grupo.titulo}</h3>
@@ -1341,14 +1396,25 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
         </div>
       </div>
 
-      <div className="op-resumen">
-        <span><b>{cuenta((o) => o.nivelBusqueda?.nivel === 'alto')}</b> con búsqueda alta</span>
-        <span><b>{cuenta((o) => ['ahora', 'ultimo-mes'].includes(o.ventana?.estado))}</b> con ventana abierta</span>
-        <span><b>{cuenta((o) => o.confirmacion === 'confirmado')}</b> confirmados</span>
-        <span><b>{cuenta((o) => Boolean(o.cotizacion))}</b> cotizados</span>
-        {porArreglar ? <span className="op-resumen-aviso"><b>{porArreglar}</b> con la keyword por arreglar</span> : null}
-        {sinMedir ? <span className="op-resumen-aviso"><b>{sinMedir}</b> sin medir la búsqueda</span> : null}
+      <div className="op-kpis">
+        <div className="op-kpi"><span className="op-kpi-icono"><Search size={16} aria-hidden="true" /></span><div><b>{cuenta((o) => o.nivelBusqueda?.nivel === 'alto')}</b><small>con búsqueda alta</small></div></div>
+        <button type="button" className="op-kpi op-kpi-accion" onClick={() => document.getElementById('grupo-ahora')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+          <span className="op-kpi-icono op-kpi-ambar"><CalendarClock size={16} aria-hidden="true" /></span><div><b>{cuenta((o) => ['ahora', 'ultimo-mes'].includes(o.ventana?.estado))}</b><small>con ventana abierta</small></div></button>
+        <div className="op-kpi"><span className="op-kpi-icono op-kpi-verde"><BadgeCheck size={16} aria-hidden="true" /></span><div><b>{cuenta((o) => o.confirmacion === 'confirmado')}</b><small>confirmados</small></div></div>
+        <div className="op-kpi"><span className="op-kpi-icono"><FileSpreadsheet size={16} aria-hidden="true" /></span><div><b>{cuenta((o) => Boolean(o.cotizacion))}</b><small>cotizados</small></div></div>
+        {porArreglar ? <div className="op-kpi op-kpi-aviso"><span className="op-kpi-icono op-kpi-ambar"><AlertTriangle size={16} aria-hidden="true" /></span><div><b>{porArreglar}</b><small>keyword por arreglar</small></div></div> : null}
+        {sinMedir ? <div className="op-kpi op-kpi-aviso"><span className="op-kpi-icono op-kpi-ambar"><AlertTriangle size={16} aria-hidden="true" /></span><div><b>{sinMedir}</b><small>sin medir la búsqueda</small></div></div> : null}
       </div>
+
+      {!activos.length && !q ? (
+        <VitrinaTemporada
+          oportunidades={todas}
+          onElegir={(o) => {
+            setExpandido(o.nichoId)
+            requestAnimationFrame(() => document.getElementById(`op-${o.nichoId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+          }}
+        />
+      ) : null}
 
       <div className="chips op-filtros">
         <div className="op-buscador">
@@ -1401,7 +1467,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
             }
             const abierta = expandido === o.nichoId
             return (
-              <div key={o.nichoId} className="op-item">
+              <div key={o.nichoId} className="op-item" id={`op-${o.nichoId}`}>
                 <FilaCompacta
                   o={o}
                   rank={rank}

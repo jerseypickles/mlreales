@@ -101,7 +101,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
           { $match: { $expr: { $eq: ['$nichoId', '$$nid'] } } },
           { $sort: { fecha: -1 } },
           { $limit: 2 },
-          { $project: { fecha: 1, scoreOportunidad: 1, metricas: 1 } },
+          // las fotos del top: con el puro nombre del nicho no se reconoce el producto
+          { $project: { fecha: 1, scoreOportunidad: 1, metricas: 1, imagenes: '$topProductos.imagen' } },
         ],
         as: 'ultimos',
       },
@@ -269,6 +270,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
   }
 
   const oportunidades = []
+  const fotoDe = (n) => (n.ultimos ?? []).flatMap((r) => r.imagenes ?? []).find((u) => typeof u === 'string' && u)?.replace(/^http:/, 'https:') ?? null
   for (const n of filas) {
     const docAnalisis = n.conAnalisis?.[0]
     const analisis = docAnalisis?.analisis
@@ -295,6 +297,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       oportunidades.push({
         nichoId: String(n._id),
         keyword: n.keyword,
+        imagen: fotoDe(n),
         creadoEl: n.creadoEl ?? null,
         midiendo: true,
         scansConDemanda: scans,
@@ -387,6 +390,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
     oportunidades.push({
       nichoId: n._id,
       keyword: n.keyword,
+      imagen: fotoDe(n),
       // despacho con courier propio por bulto, si el importador lo declaró
       fletePropioClp: n.fletePropioClp ?? null,
       // por dónde recomienda vender el analista: full / bodega_propia / flete_propio
