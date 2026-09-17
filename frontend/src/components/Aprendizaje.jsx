@@ -238,6 +238,9 @@ export function Aprendizaje() {
         <div className="tiles ml-resumen">
           <StatTile label="Búsquedas con historial" value={fmtNum(c.keywords)} detalle={`${fmtNum(c.con24Meses)} con 24 meses continuos al final de la serie`} />
           <StatTile label="Productos con datos válidos" value={fmtNum(c.productos)} detalle={`${fmtNum(c.ventanasIndependientes)} semanas sin solapar, cerradas en los últimos 2 años`} />
+          <StatTile label="Días de venta en el libro" value={fmtNum(e.fuentes.comercial.libro?.dias)} detalle={e.fuentes.comercial.libro?.dias
+            ? `${fmtNum(e.fuentes.comercial.libro.productos)} productos desde ${fecha(e.fuentes.comercial.libro.desde)} · ${fmtNum(e.fuentes.comercial.libro.unidades)} unidades y ${fmtNum(e.fuentes.comercial.libro.visitas)} visitas`
+            : 'Se llena con el próximo scan de tus productos'} />
           <StatTile label="Predicciones guardadas" value={fmtNum(c.predicciones)} detalle="Estimaciones de búsquedas para meses futuros" />
           <StatTile label="Predicciones contrastadas" value={fmtNum(c.evaluadas)} detalle="Con una medición posterior; no equivale a aciertos" />
         </div>

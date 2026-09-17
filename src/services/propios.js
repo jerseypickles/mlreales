@@ -286,6 +286,16 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     } catch (err) {
       console.warn('[ml] observaciones propias no registradas:', err.message)
     }
+    // el libro diario congela lo que las series embebidas van botando
+    try {
+      const { actualizarLibroPropios } = await import('./ml/libro.js')
+      const libro = await actualizarLibroPropios(ordenes)
+      if (libro.productos || libro.errores?.length) {
+        console.log(`[ml] libro diario: ${libro.dias} días de ${libro.productos} producto(s), ${libro.semanas} semana(s) nuevas${libro.errores?.length ? ` — errores: ${libro.errores.join(' · ')}` : ''}`)
+      }
+    } catch (err) {
+      console.warn('[ml] libro diario no actualizado:', err.message)
+    }
   }
 
   // documento tributario de cada venta: es lo que hace que la posición de IVA

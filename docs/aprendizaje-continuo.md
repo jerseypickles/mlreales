@@ -55,6 +55,35 @@ Los perfiles propios observados y el modelo comercial se pueden consultar por
 API; su incorporación a las recomendaciones requiere la validación real posterior.
 Los modelos con más de noventa días no generan nuevas estimaciones.
 
+### Libro diario de productos propios (17-sep-2026)
+
+Pedido del importador: que el aprendizaje empiece a leer TODAS las ventas ya,
+porque el catálogo está creciendo y el tiempo de captura no se recupera. Las
+series embebidas en `ProductoPropio` son rodantes —`mediciones` guarda seis
+días, `historialPrecios` veinte cambios, que con una campaña cada cuatro días
+son dos meses y medio— así que lo que no se congela se pierde.
+
+`DiaProductoMl` guarda un renglón por producto y día UTC (el día con que ML
+reporta visitas): visitas, unidades y órdenes pagadas, precio efectivo promedio
+del día con mínimo y máximo, logística, y la fracción de mediciones con stock.
+Guarda todos los días —cero visitas, quiebres, promociones—; qué entra a un
+entrenamiento se decide al entrenar. Medido contra la cuenta: ML entrega
+visitas por día hasta 150 días atrás y omite los días en cero (la suma de los
+presentes es el total), así que la primera pasada recupera la historia completa
+de cada producto. Después corre una vez al día por producto dentro del scan de
+propios, agrega el día cerrado y recalcula los últimos catorce por las órdenes
+que se pagan o anulan tarde. Un producto nuevo entra solo, con su historia, el
+día en que el importador automático lo reconoce.
+
+Del libro se derivan semanas con el mismo contrato del registro en vivo (siete
+días con stock medido y completo, una logística, precio conocido) y se guardan
+en `ObservacionProductoMl` con `fuente: 'libro-diario'`. Límites honestos: el
+stock se mide desde el 1-sep-2026, así que no hay semanas entrenables
+anteriores; el precio anterior al primer cambio conservado se marca
+`precioInferido` y no entra a semanas; a los días recuperados no se les atribuye
+nicho. Primera pasada en seco: 394 días de 8 productos desde el 20-jul, 32
+semanas derivables, 3 entrenables sin solapar.
+
 ### Primer entrenamiento real (14-sep-2026) y por qué pierde
 
 El modelo de demanda entrenó con 113 series y 7.119 ejemplos y quedó **19,9%

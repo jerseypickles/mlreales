@@ -10,6 +10,7 @@ import { indiceMes, normalizarMeses, variablesDemanda } from './series.js'
 import { config } from '../../config/env.js'
 import { datosConContexto, estadoIntegracion } from './integracion.js'
 import { OBJETIVO_CONTEXTO, VERSION_CONTEXTO } from './contexto.js'
+import { resumenLibro } from './libro.js'
 
 export async function seriesActuales({ keywords } = {}) {
   return SerieNichoMl.aggregate([
@@ -118,11 +119,11 @@ function coeficientesLegibles(resultado) {
 }
 
 export async function estadoMl({ ahora = new Date() } = {}) {
-  const [capturas, observaciones, modelos, predicciones, evaluadas, integracion, diagnostico] = await Promise.all([
+  const [capturas, observaciones, modelos, predicciones, evaluadas, integracion, diagnostico, libro] = await Promise.all([
     seriesActuales(), ObservacionProductoMl.find({ hasta: { $gte: new Date(+ahora - 730 * 86400e3), $lte: ahora } }).lean(),
     ModeloMl.aggregate([{ $sort: { creadoEl: -1 } }, { $group: { _id: '$objetivo', modelo: { $first: '$$ROOT' } } }]),
     PrediccionMl.countDocuments(), PrediccionMl.countDocuments({ evaluacion: { $ne: null } }),
-    estadoIntegracion({ ahora }), diagnosticoObservacionesPropias({ ahora }),
+    estadoIntegracion({ ahora }), diagnosticoObservacionesPropias({ ahora }), resumenLibro(),
   ])
   const ventanas = ventanasIndependientes(observaciones)
   const mesActual = indiceMes(ahora.toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }).slice(0, 7))
@@ -139,7 +140,7 @@ export async function estadoMl({ ahora = new Date() } = {}) {
     alcance: { usaCostoCompra: false, estimaRentabilidad: false }, integracion,
     fuentes: { demanda: { ultimaCapturaEl: ultimaCaptura ? new Date(ultimaCaptura) : null },
       comercial: { ultimaVentanaEl: ventanas.at(-1)?.hasta ?? null, historialDias: 730, perfilDias: 90,
-        semanasGuardadas: observaciones.length, diagnostico } },
+        semanasGuardadas: observaciones.length, diagnostico, libro } },
     cobertura: { keywords: series.length, con24Meses: series.filter((s) => s.continua24Meses).length,
       productos: new Set(ventanas.map((o) => o.itemId)).size, ventanasIndependientes: ventanas.length, predicciones, evaluadas },
     series: series.slice(0, 100),
