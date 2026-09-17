@@ -5,7 +5,7 @@ import { PrediccionMl } from '../../models/PrediccionMl.js'
 import { pronosticarDemanda, VERSION_DEMANDA } from './demanda.js'
 import { ventanasIndependientes, VERSION_COMERCIAL } from './comercial.js'
 import { ejecutarEntrenamiento } from './ejecutar.js'
-import { huellaDe } from './registro.js'
+import { huellaDe, diagnosticoObservacionesPropias } from './registro.js'
 import { indiceMes, normalizarMeses, variablesDemanda } from './series.js'
 import { config } from '../../config/env.js'
 import { datosConContexto, estadoIntegracion } from './integracion.js'
@@ -109,11 +109,11 @@ export async function perfilesPropiosMl({ ahora = new Date() } = {}) {
 }
 
 export async function estadoMl({ ahora = new Date() } = {}) {
-  const [capturas, observaciones, modelos, predicciones, evaluadas, integracion] = await Promise.all([
+  const [capturas, observaciones, modelos, predicciones, evaluadas, integracion, diagnostico] = await Promise.all([
     seriesActuales(), ObservacionProductoMl.find({ hasta: { $gte: new Date(+ahora - 730 * 86400e3), $lte: ahora } }).lean(),
     ModeloMl.aggregate([{ $sort: { creadoEl: -1 } }, { $group: { _id: '$objetivo', modelo: { $first: '$$ROOT' } } }]),
     PrediccionMl.countDocuments(), PrediccionMl.countDocuments({ evaluacion: { $ne: null } }),
-    estadoIntegracion({ ahora }),
+    estadoIntegracion({ ahora }), diagnosticoObservacionesPropias({ ahora }),
   ])
   const ventanas = ventanasIndependientes(observaciones)
   const mesActual = indiceMes(ahora.toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }).slice(0, 7))
@@ -129,7 +129,8 @@ export async function estadoMl({ ahora = new Date() } = {}) {
   return { modo: 'sombra', usaParaDecidir: false, consultadoEl: ahora,
     alcance: { usaCostoCompra: false, estimaRentabilidad: false }, integracion,
     fuentes: { demanda: { ultimaCapturaEl: ultimaCaptura ? new Date(ultimaCaptura) : null },
-      comercial: { ultimaVentanaEl: ventanas.at(-1)?.hasta ?? null, historialDias: 730, perfilDias: 90 } },
+      comercial: { ultimaVentanaEl: ventanas.at(-1)?.hasta ?? null, historialDias: 730, perfilDias: 90,
+        semanasGuardadas: observaciones.length, diagnostico } },
     cobertura: { keywords: series.length, con24Meses: series.filter((s) => s.continua24Meses).length,
       productos: new Set(ventanas.map((o) => o.itemId)).size, ventanasIndependientes: ventanas.length, predicciones, evaluadas },
     series: series.slice(0, 100),

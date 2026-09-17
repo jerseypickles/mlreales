@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { config } from '../../config/env.js'
 import { obtenerColas } from '../../jobs/queues.js'
-import { estadoMl, perfilesPropiosMl } from '../../services/ml/servicio.js'
+import { estadoMl, perfilesPropiosMl, seriesActuales } from '../../services/ml/servicio.js'
 import { PrediccionMl } from '../../models/PrediccionMl.js'
 import { ModeloMl } from '../../models/ModeloMl.js'
 import { predecirComercial } from '../../services/ml/comercial.js'
@@ -12,6 +12,12 @@ import { OBJETIVO_CONTEXTO } from '../../services/ml/contexto.js'
 const router = Router()
 router.get('/', async (_req, res) => res.json({ activo: config.mlActivo, ...await estadoMl() }))
 router.get('/perfiles', async (_req, res) => res.json({ perfiles: await perfilesPropiosMl() }))
+// La historia mensual tal como se entrena: permite reproducir una evaluación
+// fuera del servidor sin volver a pagarle al proveedor.
+router.get('/series', async (_req, res) => {
+  const series = await seriesActuales()
+  res.json({ series: series.map((s) => ({ keyword: s.keyword, capturadoEl: s.capturadoEl, meses: s.meses.map((m) => ({ periodo: m.periodo, valor: m.valor })) })) })
+})
 router.get('/afinidad', async (req, res) => {
   const precio = Number(req.query.precio)
   const categoria = typeof req.query.categoria === 'string' ? req.query.categoria : null

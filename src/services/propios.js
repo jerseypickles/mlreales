@@ -276,10 +276,13 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     console.warn(`[scan-propios] sincronizar órdenes falló: ${err.message}`)
   }
 
+  let ml = null
   if (config.mlActivo) {
     try {
       const { registrarObservacionesPropias } = await import('./ml/registro.js')
-      await registrarObservacionesPropias(ordenes)
+      ml = await registrarObservacionesPropias(ordenes)
+      const motivos = ml.descartes.map((d) => `${d.itemId}: ${d.motivo}`).join(' · ')
+      console.log(`[ml] semanas propias: ${ml.validas} admisibles, ${ml.guardadas} nuevas${motivos ? ` — fuera: ${motivos}` : ''}`)
     } catch (err) {
       console.warn('[ml] observaciones propias no registradas:', err.message)
     }

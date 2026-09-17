@@ -114,7 +114,7 @@ function HistorialNichos({ series, total }) {
   )
 }
 
-function ProductosObservados({ perfiles }) {
+function ProductosObservados({ perfiles, diagnostico }) {
   return (
     <section className="ml-seccion" aria-labelledby="ml-productos">
       <div className="ml-seccion-titulo"><h3 id="ml-productos">Productos con datos observados</h3><span className="ml-etiqueta">Semanas cerradas en 90 días</span></div>
@@ -130,13 +130,19 @@ function ProductosObservados({ perfiles }) {
           <td className="num">{fmtNum(p.unidades)}</td><td className="num">{decimal(p.unidadesPor100Visitas)}</td>
         </tr>)}</tbody></table>
       </div>}
+      {diagnostico?.length > 0 && <details className="ml-detalle" open={!perfiles.length}>
+        <summary>Qué le falta hoy a cada producto</summary>
+        <ul>{diagnostico.map((d) => <li key={d.itemId}><strong>{d.titulo || d.itemId}</strong>: {d.admisible
+          ? (d.visitas >= 30 ? 'semana admisible' : `semana guardada, con ${fmtNum(d.visitas)} visitas (se entrena desde 30)`)
+          : d.motivo}</li>)}</ul>
+      </details>}
       <p className="ml-meta">Se suman semanas de siete días sin solaparlas; puede haber huecos entre ellas. Unidades por 100 visitas describe lo observado, no la probabilidad de compra ni la ganancia.</p>
       <details className="ml-detalle">
         <summary>Criterios para admitir una semana</summary>
         <ul>
           <li>Órdenes pagadas sincronizadas y visitas con las mismas fechas de inicio y fin.</li>
           <li>Al menos 30 visitas y registros de stock disponible cada día de la ventana.</li>
-          <li>Sin cambios registrados de precio o logística dentro de la ventana.</li>
+          <li>Sin cambio de logística dentro de la ventana. El precio es el promedio de la semana; si varió más de 15% (una promoción grande) la semana se guarda pero no se usa para entrenar.</li>
           <li>Cero ventas es un resultado válido cuando existen visitas y mediciones completas.</li>
         </ul>
         <p className="ml-meta">El stock se comprueba en las mediciones disponibles; no es una garantía de disponibilidad entre mediciones.</p>
@@ -263,7 +269,7 @@ export function Aprendizaje() {
         </div>
         <IntegracionFuentes datos={e.integracion} />
         <HistorialNichos series={e.series} total={c.keywords} />
-        <ProductosObservados perfiles={datos.perfiles} />
+        <ProductosObservados perfiles={datos.perfiles} diagnostico={e.fuentes.comercial.diagnostico} />
         <Pronosticos pronosticos={datos.pronosticos} />
       </>}
     </main>

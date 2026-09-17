@@ -4,6 +4,9 @@ import { contextoValido, VERSION_CONTEXTO, OBJETIVO_CONTEXTO, VARIABLES_CONTEXTO
 
 export const VERSION_COMERCIAL = 'unidades-visitas-v1'
 const DIA = 86400e3
+// Una promo de ML mueve el precio 5-15%; más que eso ya son dos precios
+// distintos y el promedio de la semana no describe ninguno.
+export const VARIACION_PRECIO_MAX = 1.15
 const grupoPrueba = (id) => createHash('sha256').update(String(id)).digest()[0] % 4 === 0
 
 // Muestreo determinista sin ventanas solapadas dentro de un mismo producto.
@@ -16,6 +19,7 @@ export function ventanasIndependientes(observaciones) {
       if (!o.itemId || !o.categoria || !Number.isFinite(desde) || !Number.isFinite(hasta) ||
         Math.abs(hasta - desde - 7 * DIA) > 1000 || !Number.isFinite(o.visitas) || o.visitas < 30 ||
         !Number.isFinite(o.unidades) || o.unidades < 0 || !Number.isFinite(o.precio) || o.precio <= 0 || typeof o.full !== 'boolean') return false
+      if (o.precioMin > 0 && o.precioMax / o.precioMin > VARIACION_PRECIO_MAX) return false
       if (desde < (ultima.get(o.itemId) ?? -Infinity)) return false
       ultima.set(o.itemId, hasta)
       return true

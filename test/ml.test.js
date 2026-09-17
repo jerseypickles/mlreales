@@ -146,3 +146,23 @@ test('el entrenamiento real corre en un worker y devuelve el mismo artefacto que
   const datos = seriesSinteticas()
   assert.deepEqual(await ejecutarEntrenamiento('busquedas-google', datos), entrenarDemanda(datos))
 })
+
+test('una promo dentro de la ventana no anula la semana: el precio es el promedio ponderado y el motivo de descarte se declara', async () => {
+  const { diagnosticoObservacion } = await import('../src/services/ml/registro.js')
+  const hasta = new Date('2026-09-11T00:00:00Z'), desde = new Date(+hasta - 7 * 86400e3)
+  const p = { sku: 'MLC1', categoriaMl: 'CAT', envioMl: { logistica: 'fulfillment' },
+    mediciones: [{ fecha: new Date(+hasta + 3600e3), visitas: 100, visitasDesde: desde, visitasHasta: hasta, precioEfectivo: 9000 }],
+    stockDiario: Array.from({ length: 9 }, (_, i) => ({ dia: `2026-09-${String(11 - i).padStart(2, '0')}`, mediciones: 24, conStock: 24 })),
+    // 3,5 días a 10.000 y 3,5 a 9.000
+    historialPrecios: [{ fecha: new Date(+desde + 3.5 * 86400e3), anterior: 10000, nuevo: 9000 }] }
+  const opts = { desdeSincronizado: new Date('2026-08-01'), ahora: new Date(+hasta + 3600e3) }
+  const { observacion } = diagnosticoObservacion(p, [], opts)
+  assert.equal(observacion.precio, 9500)
+  assert.deepEqual([observacion.precioMin, observacion.precioMax, observacion.cambiosPrecio], [9000, 10000, 1])
+  assert.equal(ventanasIndependientes([observacion]).length, 1, '11% de variación entra al entrenamiento')
+  const grande = diagnosticoObservacion({ ...p, historialPrecios: [{ fecha: new Date(+desde + 86400e3), anterior: 10000, nuevo: 6900 }] }, [], opts).observacion
+  assert.equal(grande.cambiosPrecio, 1)
+  assert.equal(ventanasIndependientes([grande]).length, 0, 'una rebaja de 31% se guarda pero no entrena')
+  assert.match(diagnosticoObservacion({ ...p, stockDiario: p.stockDiario.map((s, i) => i === 3 ? { ...s, conStock: 0 } : s) }, [], opts).motivo, /sin stock parte del 2026-09-08/)
+  assert.match(diagnosticoObservacion({ ...p, historialLogistica: [{ fecha: new Date(+desde + 86400e3) }] }, [], opts).motivo, /logística/)
+})

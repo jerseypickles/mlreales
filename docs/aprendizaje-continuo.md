@@ -37,7 +37,13 @@ al entrenar y al consultar. Un dataset sin cambios no vuelve a entrenarse.
 La captura mensual usa las consultas que ya se hacen a DataForSEO y conserva
 ceros, huecos y revisiones por separado. El scan de propios registra ventanas
 comerciales solo después de una sincronización completa de órdenes, con stock
-observado y precio/logística estables. Se conservan `date_from` y `date_to` de la
+observado y logística estable. Desde el 17-sep-2026 un cambio de precio ya no
+anula la semana: medido en producción, las campañas de ML movían el precio
+efectivo cada 4-5 días y en cinco días no se guardó ninguna observación. El
+precio de la semana es el promedio ponderado por tiempo, se guardan mínimo,
+máximo y número de cambios, y el entrenamiento excluye las semanas cuyo precio
+varió más de 15%. Cada descarte declara su motivo en el log del scan y en la
+pestaña Aprendizaje. Se conservan `date_from` y `date_to` de la
 API de visitas y las órdenes se cuentan en esos límites, que pueden diferir de
 la hora del scan. Sin fechas verificables no se crea una observación. Al entrenar se seleccionan ventanas que
 no se solapan por producto. La tasa antigua de seis días de ventas sobre siete

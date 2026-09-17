@@ -10,7 +10,11 @@ const schema = new mongoose.Schema({
   dia: { type: String, required: true },
   visitas: { type: Number, required: true },
   unidades: { type: Number, required: true },
+  // promedio ponderado por tiempo del precio efectivo en la ventana
   precio: { type: Number, required: true },
+  precioMin: Number,
+  precioMax: Number,
+  cambiosPrecio: Number,
   full: { type: Boolean, required: true },
   // Ventas pagadas observadas, no pedidos ni rentabilidad realizada.
   fuente: { type: String, default: 'ordenes-pagadas-y-visitas-7d' },
