@@ -859,7 +859,7 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronos
           <Hecho etiqueta="se mueve">
             {o.resenasNuevas != null && o.ventanaDias ? (
               <span
-                title={`${o.resenasNuevas} reseñas nuevas en ${o.ventanaDias} días, contadas sobre ${o.canasta} productos del top${
+                title={`${o.resenasNuevas} reseñas nuevas en ${o.ventanaDias} días, contadas sobre ${o.canasta} productos ${o.fuenteResenas === 'api' ? 'de todo el listado (API oficial de ML)' : 'del top (ficha)'}${
                   o.saltosFiltrados ? ` · ${o.saltosFiltrados} saltos de catálogo descartados` : ''
                 }`}
               >
@@ -1177,7 +1177,7 @@ function VitrinaTemporada({ oportunidades, onElegir }) {
         <span className="op-vitrina-icono"><Sun size={18} aria-hidden="true" /></span>
         <div>
           <h3 id="op-vitrina-titulo">Temporada que hay que pedir ahora</h3>
-          <p>{abiertas.length} nichos con la ventana de compra abierta · <strong className={cotizando ? '' : 'op-vitrina-alerta'}>{cotizando ? `${cotizando} en cotización` : 'ninguno en cotización todavía'}</strong>. Pidiendo hoy, el stock llega en 50 a 70 días.</p>
+          <p>{abiertas.length} nichos con la ventana de compra abierta · <strong className={cotizando ? '' : 'op-vitrina-alerta'}>{cotizando ? `${cotizando} en cotización` : 'ninguno en cotización todavía'}</strong>. Pidiendo hoy, el stock llega en unos 45 días.</p>
         </div>
       </div>
       <div className="op-vitrina-carril" role="list">

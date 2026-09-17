@@ -51,7 +51,7 @@ const SCHEMA_SUGERENCIAS = {
           },
           ventanaImportacion: {
             type: 'string',
-            description: 'Cuándo habría que comprar en China considerando 35-50 días de tránsito marítimo',
+            description: 'La fecha límite de pago que dice el calendario de importación para su temporada; "cuando se quiera" si es todo el año',
           },
           riesgo: { type: 'string' },
         },

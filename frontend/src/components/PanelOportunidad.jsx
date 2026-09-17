@@ -13,7 +13,7 @@ import { fmtNum, fmtPrecio } from '../lib/formato.js'
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const DIA = 86400e3
 // mismos días que services/calendarioTemporadas.js
-const LEAD_MIN = 50, LEAD_MAX = 70, RAMPA = 15
+const LEAD_MIN = 45, LEAD_MAX = 55, RAMPA = 15
 
 const mesesEntre = (desde, hasta) => {
   const m = new Set()

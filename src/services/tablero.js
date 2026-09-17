@@ -432,6 +432,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
       // estimación plegada con su aritmética a la vista.
       resenasNuevas: ultimo?.metricas?.demanda?.reviews?.delta ?? null,
       canasta: ultimo?.metricas?.demanda?.reviews?.itemsComparables ?? null,
+      // 'api' = todo el listado por la API oficial de ML; 'ficha' = el top pagado
+      fuenteResenas: ultimo?.metricas?.demanda?.fuenteResenas ?? 'ficha',
       ventanaDias: ultimo?.metricas?.demanda?.reviews?.periodoDias ?? null,
       saltosFiltrados:
         (ultimo?.metricas?.demanda?.reviews?.saltosFiltrados ?? 0) +

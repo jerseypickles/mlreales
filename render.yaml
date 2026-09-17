@@ -18,7 +18,7 @@ services:
       - key: SCRAPER_DETALLE
         value: "zyte"
       - key: APIFY_SEARCH_MAX_PAGES
-        value: "2"
+        value: "4"
       # Al desplegar: captura y entrenamiento en observación, sin afectar el radar.
       - key: ML_ACTIVO
         value: "true"

@@ -542,3 +542,20 @@ test('calcularDemanda: declara qué fracción del listado se midió', () => {
   assert.equal(d.coberturaReviews.itemsDelScan, 96)
   assert.equal(d.coberturaReviews.pct, 31, 'sin esto, el total se lee como si midiera todo')
 })
+
+test('la demanda se cuenta con las reseñas de la API cuando cubren bastante más listado que la ficha', async () => {
+  const { calcularDemanda } = await import('../src/services/metricas.js')
+  const antes = new Date('2026-09-10T12:00:00Z'), ahora = new Date('2026-09-17T12:00:00Z')
+  // 40 productos en el listado; la ficha (pagada) midió 8, la API los 40
+  const snap = (i, fecha, suma) => ({ sku: `MLC${i}`, fecha, posicion: i, numReviews: i < 8 ? 100 + i + suma : null, numReviewsApi: 30 + i * 3 + suma })
+  const previos = Array.from({ length: 40 }, (_, i) => snap(i, antes, 0))
+  const listado = Array.from({ length: 40 }, (_, i) => snap(i, ahora, 2))
+  const d = calcularDemanda(listado.slice(0, 20), previos, { listado })
+  assert.equal(d.fuenteResenas, 'api')
+  assert.deepEqual([d.reviews.itemsComparables, d.reviews.delta], [40, 80])
+  assert.deepEqual([d.reviewsFicha.itemsComparables, d.reviewsFicha.delta], [8, 16], 'la señal de la ficha se conserva para auditar')
+  assert.equal(d.coberturaReviews.pct, 100)
+  // si la API casi no midió, manda la ficha
+  const pocaApi = listado.map((s, i) => ({ ...s, numReviewsApi: i < 9 ? s.numReviewsApi : null }))
+  assert.equal(calcularDemanda(pocaApi.slice(0, 20), previos, { listado: pocaApi }).fuenteResenas, 'ficha')
+})

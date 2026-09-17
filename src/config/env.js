@@ -32,7 +32,10 @@ export const config = {
   // daba 0/30, cuesta ~US$0.05/10 urls sin arriendo y entrega seller+reputación+IDs.
   // Rollback: APIFY_ACTOR_DETAILS=ecomscrape~mercadolibre-product-details-scraper
   actorDetails: process.env.APIFY_ACTOR_DETAILS || 'sourabhbgp~mercadolibre-scraper',
-  maxPagesBusqueda: Number(process.env.APIFY_SEARCH_MAX_PAGES) || 2,
+  // 4 páginas (~200 publicaciones) desde el 17-sep-2026: los productos caros
+  // viven bajo la posición 100 y con 2 páginas no se veían. Cuesta US$0,008 por
+  // página en Zyte. La variable conserva el nombre de cuando el listado era de Apify.
+  maxPagesBusqueda: Number(process.env.APIFY_SEARCH_MAX_PAGES) || 4,
   // Volumen de búsqueda absoluto de Google Ads (services/volumenBusqueda.js).
   // El password es la clave de API de DataForSEO, no la del panel.
   dataForSeoLogin: process.env.DATAFORSEO_LOGIN || null,

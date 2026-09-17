@@ -347,12 +347,48 @@ function profundidadStock(snapshots) {
 }
 
 // reseñas nuevas en la ventana: lo único que se cuenta de verdad.
+// DE DÓNDE SALE EL CONTEO DE RESEÑAS.
+//
+// Hasta el 17-sep-2026 salía solo de la FICHA (nivel 2, un request pagado por
+// producto, sobre el top 20-30). Desde el 29-ago se guarda en paralelo el conteo
+// de la API oficial de ML (`numReviewsApi`), gratis y para todo el listado.
+// Medido sobre 10 nichos antes de cambiar:
+//   · la ficha cubre 41% del listado; la API, 95%
+//   · en publicaciones sueltas las dos dan lo mismo (11 de 11)
+//   · en catálogo coinciden en 115 de 259; en 81 la API da menos de la mitad
+//     (cuenta la publicación y no el agregado del catálogo) y en 28 da más
+//   · la API repite el mismo conteo entre hermanas de catálogo (105 de 375
+//     sobre 50 reseñas): la deduplicación de `extraerSenal` ya lo resuelve
+//   · lo que la ficha no veía: 613 items, 514 con reseñas, 65.633 en total
+// O sea: por producto no son intercambiables, pero como CANASTA la de la API ve
+// 2,3 veces más productos y no cuesta nada. Manda la API cuando compara al
+// menos 1,5× los productos de la ficha; las dos señales se guardan siempre
+// (`reviewsFicha`, `reviewsApi`) para poder auditar el cambio, y el reporte dice
+// cuál mandó. DEMANDA_FUENTE=ficha|api lo fuerza.
+function elegirFuente(ficha, api) {
+  const forzada = process.env.DEMANDA_FUENTE
+  if (forzada === 'ficha') return ficha ? 'ficha' : null
+  if (forzada === 'api') return api ? 'api' : ficha ? 'ficha' : null
+  if (!api) return ficha ? 'ficha' : null
+  if (!ficha) return 'api'
+  // sin scan previo todavía no hay canasta comparable: gana la que midió más productos
+  const [a, f] = api.itemsComparables != null || ficha.itemsComparables != null
+    ? [api.itemsComparables ?? 0, ficha.itemsComparables ?? 0]
+    : [api.itemsConDato, ficha.itemsConDato]
+  return a >= 1.5 * f ? 'api' : 'ficha'
+}
+
+// reseñas nuevas en la ventana: lo único que se cuenta de verdad.
 export function calcularDemanda(
   snapshots,
   snapshotsPrevios = null,
-  { minItems = scoring.umbrales.minItemsDemanda } = {},
+  { minItems = scoring.umbrales.minItemsDemanda, listado = null } = {},
 ) {
-  const reviews = extraerSenal(snapshots, snapshotsPrevios, 'numReviews', { depurar: true })
+  const reviewsFicha = extraerSenal(snapshots, snapshotsPrevios, 'numReviews', { depurar: true })
+  // la API mide el listado entero, no solo el top: es gratis y es más canasta
+  const reviewsApi = extraerSenal(listado ?? snapshots, snapshotsPrevios, 'numReviewsApi', { depurar: true })
+  const fuente = elegirFuente(reviewsFicha, reviewsApi)
+  const reviews = fuente === 'api' ? reviewsApi : reviewsFicha
   if (!reviews) return null
 
   // representatividad: si la señal sale de una muestra ínfima (detalle aplicado
@@ -364,7 +400,11 @@ export function calcularDemanda(
     // La base es SIEMPRE reseñas. `vendidos` existe desde el 14-ago pero es un
     // balde acumulado: no se le puede sacar delta ni tasa (ver senalVendidos).
     base: 'reviews',
+    // 'api' = todo el listado por la API oficial; 'ficha' = el top pagado
+    fuenteResenas: fuente,
     reviews,
+    reviewsFicha: reviewsFicha ? { itemsConDato: reviewsFicha.itemsConDato, itemsComparables: reviewsFicha.itemsComparables, delta: reviewsFicha.delta, porDia: reviewsFicha.porDia, total: reviewsFicha.total } : null,
+    reviewsApi: reviewsApi ? { itemsConDato: reviewsApi.itemsConDato, itemsComparables: reviewsApi.itemsComparables, delta: reviewsApi.delta, porDia: reviewsApi.porDia, total: reviewsApi.total } : null,
     preguntas: extraerSenalPreguntas(snapshots, snapshotsPrevios),
     // NO HAY VENTAS ACÁ, Y NO LAS VA A HABER.
     //
@@ -387,8 +427,8 @@ export function calcularDemanda(
     coberturaReviews: reviews
       ? {
           itemsConDato: reviews.itemsConDato,
-          itemsDelScan: snapshots.length,
-          pct: redondear((reviews.itemsConDato / snapshots.length) * 100, 0),
+          itemsDelScan: (fuente === 'api' ? listado ?? snapshots : snapshots).length,
+          pct: redondear((reviews.itemsConDato / (fuente === 'api' ? listado ?? snapshots : snapshots).length) * 100, 0),
         }
       : null,
     // resolución de la ventana: con esta cantidad de días, el delta más chico
@@ -706,7 +746,7 @@ export function calcularMetricas({
     itemsConRating: ratings.length,
   }
 
-  const demanda = calcularDemanda(top, snapshotsPrevios)
+  const demanda = calcularDemanda(top, snapshotsPrevios, { listado: organicos })
   const vendidosHist = senalVendidos(top)
   // LO QUE QUEDA DE UNA VENTA AL PRECIO MEDIANO DEL NICHO.
   //
@@ -739,6 +779,8 @@ export function calcularMetricas({
   // Sin cobertura de reseñas el reporte se guarda igual —el listado, los
   // precios y la competencia siguen sirviendo— pero sin score. El reintento
   // (escalera 2/4/8 h en workers.js) traerá la medición de verdad.
+  // con la API midiendo gratis, "hay reseñas" ya no depende de que la ficha
+  // haya llegado: basta cualquiera de las dos fuentes
   const detalleLlego = Number.isFinite(demanda?.reviews?.itemsConDato)
     ? demanda.reviews.itemsConDato > 0
     : false

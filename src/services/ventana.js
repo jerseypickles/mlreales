@@ -19,8 +19,8 @@ const MESES_ES = {
 // CUÁNTO ANTES DEL PICO HAY QUE PEDIR.
 //
 // El reloj arranca cuando se le paga al proveedor en China, no cuando zarpa:
-// producción + 35-50 días de mar + internación + ingreso a Full = 50-70 días
-// (~2 a 2,5 meses) antes de tener la primera unidad vendible.
+// el importador mide 45 días con su forwarder (17-sep-2026), más ~15 de rampa:
+// ~2 meses antes de tener la primera unidad vendiendo con posición.
 //
 //   pedir a pico−4  →  el stock llega ~1,5 meses ANTES del pico (holgado, y
 //                      alcanza a juntar reseñas y ranking antes de la ola)

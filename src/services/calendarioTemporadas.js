@@ -12,14 +12,18 @@
 // acaba en una fecha de una que sigue dos meses más.
 //
 // El reloj, en días desde que se le paga al proveedor:
-//   producción + mar + internación + ingreso a Full ......... 50 a 70 días
+//   producción + mar + internación + ingreso a bodega ....... 45 días
+//     (lo corrigió el importador el 17-sep-2026: "ojo, son 45 días"; la primera
+//      versión suponía 50-70). Para las temporadas de fin duro se suman 10 días
+//      de holgura por si el barco se atrasa: con 45 clavados, Navidad todavía
+//      "alcanzaba" el 17-sep, y él mismo dijo que ya no se pide.
 //   publicar, juntar las primeras ventas y ganar posición ... 15 días
 // Una temporada de FIN DURO (Navidad, vuelta a clases, Halloween) exige el caso
 // pesimista: si el barco se atrasa, el stock duerme un año. Una temporada larga
 // (verano, invierno) tolera llegar con ella empezada, hasta un tercio adentro.
 
-export const LEAD_DIAS_MIN = Number(process.env.LEAD_DIAS_MIN) || 50
-export const LEAD_DIAS_MAX = Number(process.env.LEAD_DIAS_MAX) || 70
+export const LEAD_DIAS_MIN = Number(process.env.LEAD_DIAS_MIN) || 45
+export const LEAD_DIAS_MAX = Number(process.env.LEAD_DIAS_MAX) || 55
 export const RAMPA_DIAS = Number(process.env.RAMPA_DIAS) || 15
 // más lejos que esto no se propone todavía: comprar antes es capital dormido
 const HORIZONTE_PROPUESTA_DIAS = 90
@@ -91,7 +95,8 @@ function evaluar(t, { pico, fin }, hoy) {
 export function calendarioTemporadas(hoy = new Date()) {
   const anio = Number(hoy.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' }).slice(0, 4))
   return TEMPORADAS.map((t) => {
-    const candidatas = [anio - 1, anio, anio + 1].map((a) => ocurrencia(t, a)).filter((o) => +o.fin > +hoy)
+    // hasta dos años adelante: San Valentín perdido en noviembre tiene su próxima en 15 meses
+    const candidatas = [anio - 1, anio, anio + 1, anio + 2].map((a) => ocurrencia(t, a)).filter((o) => +o.fin > +hoy)
     const actual = evaluar(t, candidatas[0], hoy)
     const siguiente = actual.estado === 'ya-no-llega' ? evaluar(t, candidatas[1], hoy) : null
     return { id: t.id, nombre: t.nombre, productos: t.productos, finDuro: t.finDuro, palabras: t.palabras ?? null, ...actual,

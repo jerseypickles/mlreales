@@ -22,12 +22,14 @@ test('17 de septiembre: queda verano, vienen vuelta a clases y San Valentín, y 
 })
 
 test('una temporada larga tolera llegar empezada; una de fin duro exige el caso pesimista', () => {
-  // 5-oct: el peor barco deja el stock vendiendo el 29-dic, con el verano empezado pero dos meses por delante
-  assert.equal(estado(calendarioTemporadas(el('2026-10-05')), 'verano'), 'justo')
-  assert.equal(estado(calendarioTemporadas(el('2026-10-25')), 'verano'), 'ya-no-llega')
-  // Navidad: el 1-sep es el último día; el 2 ya no, aunque el barco rápido alcanzaría
-  assert.equal(estado(calendarioTemporadas(el('2026-09-01')), 'navidad'), 'a-tiempo')
-  assert.equal(estado(calendarioTemporadas(el('2026-09-03')), 'navidad'), 'ya-no-llega')
+  // 45 días de tránsito (+10 de holgura) + 15 de rampa. Verano: holgado hasta el
+  // 11-oct; después solo llegando con la temporada empezada, hasta el 3-nov
+  assert.equal(estado(calendarioTemporadas(el('2026-10-05')), 'verano'), 'a-tiempo')
+  assert.equal(estado(calendarioTemporadas(el('2026-10-25')), 'verano'), 'justo')
+  assert.equal(estado(calendarioTemporadas(el('2026-11-10')), 'verano'), 'ya-no-llega')
+  // Navidad: el 16-sep fue el último día; el 17 ya no, aunque el barco rápido alcanzaría
+  assert.equal(estado(calendarioTemporadas(el('2026-09-15')), 'navidad'), 'a-tiempo')
+  assert.equal(estado(calendarioTemporadas(el('2026-09-17')), 'navidad'), 'ya-no-llega')
   // en julio toca Navidad y todavía no vuelta a clases
   const julio = calendarioTemporadas(el('2026-07-01'))
   assert.equal(estado(julio, 'navidad'), 'a-tiempo')
@@ -38,7 +40,7 @@ test('la guarda en código y la mesa obedecen el mismo calendario', () => {
   assert.equal(temporadaInalcanzableDe('luces led navidad', el('2026-09-17'))?.id, 'navidad')
   assert.equal(temporadaInalcanzableDe('luces led navidad', el('2026-07-01')), null)
   assert.equal(temporadaInalcanzableDe('mochila escolar', el('2026-09-17')), null)
-  assert.equal(temporadaInalcanzableDe('quitasol playa', el('2026-10-25')), null, 'sin palabra de temporada no hay guarda: decide la curva medida')
+  assert.equal(temporadaInalcanzableDe('quitasol playa', el('2026-11-25')), null, 'sin palabra de temporada no hay guarda: decide la curva medida')
   // el árbol de Navidad, pico en noviembre: por meses decía "último mes para pedir"
   const curva = { clasificacion: 'estacional', mesPico: 11, ratioPico: 5.3 }
   const sin = ventanaDeCompra({ curvaAnual: curva }, { hoy: el('2026-09-17') })

@@ -24,10 +24,10 @@ import { reviewsOficialesSeguro } from './meli.js'
 // jamás debe voltearlo.
 
 // la API oficial responde en ~285 ms; de a 6 el listado entero sale en ~5 s
-const CONCURRENCIA = 6
+const CONCURRENCIA = 5
 // techo duro: con 100 items y todo lento, antes que retrasar el scan se entrega
 // lo que se alcanzó a medir
-const PRESUPUESTO_MS = 60_000
+const PRESUPUESTO_MS = 90_000
 
 export async function conteosPorItem(itemIds, { concurrencia = CONCURRENCIA, presupuestoMs = PRESUPUESTO_MS } = {}) {
   const pendientes = [...new Set((itemIds ?? []).filter(Boolean))]
