@@ -1,0 +1,131 @@
+import { fmtNum, fmtPrecio } from '../lib/formato.js'
+
+// LOS TRES GRÁFICOS DE LA DECISIÓN, al abrir una oportunidad.
+//
+// La carta tenía los datos como una línea de texto y un gráfico del año de 40 px
+// donde todas las barras se veían iguales. El importador: "ya estamos teniendo
+// mejor data, mejor gráfico para tomar decisión". Cada gráfico contesta una
+// pregunta de compra y cruza dos datos que antes vivían separados:
+//   · Temporada  → ¿mi stock llega antes del pico?   (curva + ventana + tránsito)
+//   · Precio     → ¿dónde cae mi precio en el listado? (rango real + tramo de envío)
+//   · Pronóstico → ¿se espera más o menos búsqueda que el año pasado?
+
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+const DIA = 86400e3
+// mismos días que services/calendarioTemporadas.js
+const LEAD_MIN = 50, LEAD_MAX = 70, RAMPA = 15
+
+const mesesEntre = (desde, hasta) => {
+  const m = new Set()
+  if (!/^\d{4}-\d{2}$/.test(desde ?? '') || !/^\d{4}-\d{2}$/.test(hasta ?? '')) return m
+  let [a, b] = [desde, hasta].map((p) => Number(p.slice(0, 4)) * 12 + Number(p.slice(5)) - 1)
+  for (let i = a; i <= b && i < a + 12; i++) m.add(i % 12)
+  return m
+}
+
+export function GraficoTemporada({ curva, ventana, hoy = new Date() }) {
+  if (!curva?.curva?.length) {
+    return <div className="og og-vacio"><h4>Cuándo se busca</h4><p>Todavía sin curva de búsquedas medida para este nicho.</p></div>
+  }
+  const max = Math.max(...curva.curva) || 1
+  const mesHoy = hoy.getMonth()
+  const pedir = ventana?.tipo === 'estacional' ? mesesEntre(ventana.desde, ventana.hasta) : new Set()
+  const llega = new Set()
+  for (let d = LEAD_MIN; d <= LEAD_MAX + RAMPA; d += 5) llega.add(new Date(+hoy + d * DIA).getMonth())
+  const esGoogle = curva.fuente === 'google-ads'
+  const pico = curva.curva.indexOf(max)
+  // ¿el barco lento llega antes del pico? distancia hacia adelante, en meses
+  const ultimoMesLlegada = new Date(+hoy + (LEAD_MAX + RAMPA) * DIA).getMonth()
+  const llegaAntes = ventana?.tipo !== 'estacional' ? null : (pico - ultimoMesLlegada + 12) % 12 <= 6
+  return (
+    <div className="og">
+      <div className="og-cab">
+        <h4>Cuándo se busca, y cuándo llega tu stock</h4>
+        <span className="og-cifra">{curva.busquedasMes != null ? `${fmtNum(curva.busquedasMes)} búsq/mes` : ''}</span>
+      </div>
+      <div className="og-barras" role="img" aria-label={`Búsquedas por mes. Pico en ${MESES[pico]}.`}>
+        {curva.curva.map((v, i) => (
+          <div key={i} className="og-col" title={`${MESES[i]}: ${esGoogle ? `${fmtNum(v)} búsquedas` : `índice ${v}`}`}>
+            <span className="og-valor">{i === pico && esGoogle ? fmtNum(v) : ''}</span>
+            <span className={`og-barra${v >= max * 0.8 ? ' og-pico' : ''}${i === mesHoy ? ' og-hoy' : ''}`} style={{ height: `${Math.max(4, (v / max) * 100)}%` }} />
+          </div>
+        ))}
+      </div>
+      <div className="og-eje">{MESES.map((m, i) => <span key={m} className={i === mesHoy ? 'og-hoy-txt' : ''}>{i === mesHoy ? 'hoy' : m}</span>)}</div>
+      {pedir.size ? <div className="og-tira" aria-hidden="true">{MESES.map((m, i) => <span key={m} className={pedir.has(i) ? 'og-t-pedir' : ''} />)}</div> : null}
+      <div className="og-tira" aria-hidden="true">{MESES.map((m, i) => <span key={m} className={llega.has(i) ? 'og-t-llega' : ''} />)}</div>
+      <p className="og-leyenda">
+        <i className="og-l og-l-pico" /> meses fuertes
+        {pedir.size ? <><i className="og-l og-l-pedir" /> ventana para pedir</> : null}
+        <i className="og-l og-l-llega" /> pidiendo hoy, tu stock vende aquí
+      </p>
+      <p className="og-lectura">
+        {curva.clasificacion === 'estacional'
+          ? <>Temporada real: pico en <strong>{curva.nombreMesPico}</strong>, {curva.ratioPico}× el promedio. {llegaAntes === false ? 'Pidiendo hoy el stock llega con el pico ya pasado.' : 'Pidiendo hoy, el stock alcanza a estar vendiendo para el pico.'}</>
+          : curva.clasificacion === 'alza-suave'
+            ? <>Se busca todo el año, con una leve alza en <strong>{curva.nombreMesPico}</strong> ({curva.ratioPico}×). No hay fecha límite para pedir.</>
+            : <>Se busca parejo todo el año: no hay fecha límite para pedir.</>}
+        {curva.keywordMedida && curva.keywordMedida !== curva.keyword ? <> Medido como «{curva.keywordMedida}».</> : null}
+      </p>
+    </div>
+  )
+}
+
+const TRAMO = { desde: 10_000, hasta: 19_989 }
+
+export function GraficoPrecio({ precios, precioVenta }) {
+  if (!precios?.mediana) return <div className="og og-vacio"><h4>Dónde cae tu precio</h4><p>El último scan no dejó rango de precios.</p></div>
+  const tope = Math.max(precios.p75 * 1.5, (precioVenta ?? 0) * 1.25, TRAMO.hasta * 1.05)
+  const x = (v) => `${Math.min(100, Math.max(0, (v / tope) * 100))}%`
+  const ancho = (a, b) => `${Math.max(0, ((Math.min(b, tope) - a) / tope) * 100)}%`
+  const dif = precioVenta ? Math.round((precioVenta / precios.mediana - 1) * 100) : null
+  const enTramo = precioVenta >= TRAMO.desde && precioVenta <= TRAMO.hasta
+  return (
+    <div className="og">
+      <div className="og-cab"><h4>Dónde cae tu precio en el listado</h4><span className="og-cifra">mediana {fmtPrecio(precios.mediana)}</span></div>
+      <div className="og-precio" role="img" aria-label={`La mitad del listado vende entre ${fmtPrecio(precios.p25)} y ${fmtPrecio(precios.p75)}`}>
+        <span className="og-p-tramo" style={{ left: x(TRAMO.desde), width: ancho(TRAMO.desde, TRAMO.hasta) }} title="Tramo $10.000–$19.989: donde el envío de Full pesa menos" />
+        <span className="og-p-caja" style={{ left: x(precios.p25), width: ancho(precios.p25, precios.p75) }} title={`La mitad del listado: ${fmtPrecio(precios.p25)} a ${fmtPrecio(precios.p75)}`} />
+        <span className="og-p-mediana" style={{ left: x(precios.mediana) }} />
+        {precioVenta ? <span className="og-p-tuyo" style={{ left: x(precioVenta) }}><b>{fmtPrecio(precioVenta)}</b></span> : null}
+      </div>
+      <div className="og-p-eje"><span>$0</span><span>{fmtPrecio(Math.round(tope / 2 / 1000) * 1000)}</span><span>{fmtPrecio(Math.round(tope / 1000) * 1000)}</span></div>
+      <p className="og-leyenda"><i className="og-l og-l-caja" /> la mitad del listado <i className="og-l og-l-tramo" /> tramo de envío barato <i className="og-l og-l-tuyo" /> precio sugerido</p>
+      <p className="og-lectura">
+        {precioVenta
+          ? <>Vendiendo a <strong>{fmtPrecio(precioVenta)}</strong> quedas {dif === 0 ? 'en la mediana' : <>{Math.abs(dif)}% {dif < 0 ? 'bajo' : 'sobre'} la mediana</>}
+            {enTramo ? ', dentro del tramo $10.000–$19.989 donde el envío pesa menos.' : precioVenta < TRAMO.desde ? ', bajo $10.000: el envío fijo y la publicidad se comen el margen.' : ', sobre $19.990: el envío de Full salta a $3.600.'}</>
+          : <>La mitad del listado vende entre {fmtPrecio(precios.p25)} y {fmtPrecio(precios.p75)}.</>}
+      </p>
+    </div>
+  )
+}
+
+export function GraficoPronostico({ pronostico, modeloGana }) {
+  const meses = (pronostico?.meses ?? []).filter((m) => m.referencia > 0).slice(0, 3)
+  if (!meses.length) return <div className="og og-vacio"><h4>Los próximos meses</h4><p>Todavía sin pronóstico: aparece con el entrenamiento del lunes.</p></div>
+  const max = Math.max(...meses.flatMap((m) => [m.referencia, m.estimado ?? 0])) || 1
+  const total = (k) => meses.reduce((a, m) => a + (m[k] ?? 0), 0)
+  const cambio = Math.round((total('estimado') / total('referencia') - 1) * 100)
+  return (
+    <div className="og">
+      <div className="og-cab"><h4>Búsquedas de los próximos meses</h4>
+        <span className={`og-cifra ${cambio >= 3 ? 'og-sube' : cambio <= -3 ? 'og-baja' : ''}`}>{cambio > 0 ? '+' : ''}{cambio}% vs año pasado</span></div>
+      <div className="og-pares" role="img" aria-label="Año pasado contra lo que espera el modelo">
+        {meses.map((m) => (
+          <div key={m.periodo} className="og-par">
+            <div className="og-par-barras">
+              <span className="og-par-pasado" style={{ height: `${(m.referencia / max) * 100}%` }} title={`Año pasado: ${fmtNum(m.referencia)}`} />
+              <span className="og-par-modelo" style={{ height: `${((m.estimado ?? 0) / max) * 100}%` }} title={`Modelo: ${fmtNum(m.estimado)}`} />
+            </div>
+            <strong>{MESES[Number(m.periodo.slice(5)) - 1]}</strong>
+            <small>{fmtNum(m.referencia)} → {fmtNum(m.estimado)}</small>
+          </div>
+        ))}
+      </div>
+      <p className="og-leyenda"><i className="og-l og-l-pasado" /> año pasado <i className="og-l og-l-modelo" /> lo que espera el modelo</p>
+      <p className="og-lectura">{modeloGana ? 'El modelo le gana a repetir el año pasado en la prueba.' : 'El modelo todavía se equivoca más que repetir el año pasado: para decidir cantidad, guíate por la barra gris.'}
+        {pronostico.keywordMedida && pronostico.keywordMedida !== pronostico.nicho ? <> Medido como «{pronostico.keywordMedida}».</> : null}</p>
+    </div>
+  )
+}

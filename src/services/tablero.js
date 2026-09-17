@@ -270,6 +270,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
   }
 
   const oportunidades = []
+  // el rango de precios del listado, para dibujar dónde cae el precio propio
+  const preciosDe = (p) => (p && Number.isFinite(p.mediana) ? { min: p.min ?? null, p25: p.p25 ?? null, mediana: p.mediana, p75: p.p75 ?? null, max: p.max ?? null, banda: p.bandaDominante ?? null } : null)
   const fotoDe = (n) => (n.ultimos ?? []).flatMap((r) => r.imagenes ?? []).find((u) => typeof u === 'string' && u)?.replace(/^http:/, 'https:') ?? null
   for (const n of filas) {
     const docAnalisis = n.conAnalisis?.[0]
@@ -305,6 +307,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         score: null,
         veredicto: null,
         mediana: met?.precio?.mediana ?? null,
+        precios: preciosDe(met?.precio),
         vendidosHistoricos: met?.vendidosHistoricos ?? null,
         profundidadStock: met?.profundidadStock ?? null,
         pctFull: met?.competencia?.pctFull ?? null,
@@ -421,6 +424,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       ...nivelScore(n.serieScore, ultimo?.scoreOportunidad ?? docAnalisis.scoreOportunidad ?? null),
       fechaScan: ultimo?.fecha ?? null,
       mediana: ultimo?.metricas?.precio?.mediana ?? null,
+      precios: preciosDe(ultimo?.metricas?.precio),
       // LO CONTADO va primero y LO DERIVADO va marcado. `ventasDia` es delta de
       // reseñas × factor 25 — un factor que la calibración propia desmiente (54
       // ventas reales dieron 3 reseñas: factor 18) y que en 41 de 367 mediciones

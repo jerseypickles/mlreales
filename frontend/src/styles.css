@@ -6891,3 +6891,71 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 @media (prefers-reduced-motion: reduce) {
   .op-kpi-accion, .op-vitrina-carta { transition: none; }
 }
+
+
+/* LA CARTA ABIERTA · panel de decisión (17-sep-2026). Los datos dejan de ser una
+   línea de texto: foto, fichas con etiqueta arriba, y tres gráficos que cruzan
+   la curva con el tránsito, el precio con el listado y el año pasado con el
+   pronóstico. */
+.op-item > .op-carta { padding: 20px 22px; gap: 20px; cursor: default; }
+.op-item > .op-carta:hover { transform: none; }
+.op-lateral { min-width: 96px; gap: 10px; }
+.op-lateral-foto { width: 96px; height: 96px; border-radius: 12px; border: 1px solid var(--borde); background: #fff; object-fit: contain; }
+.op-item > .op-carta .op-keyword { font-size: 19px; text-transform: capitalize; letter-spacing: -0.015em; }
+.op-item > .op-carta .op-titular { font-size: 15px; line-height: 1.45; margin: 2px 0 4px; }
+.op-item > .op-carta .op-hechos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 6px 0 2px; }
+.op-item > .op-carta .op-hecho { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 10px 12px; border-radius: 10px; background: var(--superficie-2); font-size: 14px; font-weight: 600; color: var(--tinta); font-variant-numeric: tabular-nums; }
+.op-item > .op-carta .op-hecho-etiqueta { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--tinta-3); }
+.op-item > .op-carta .op-hecho i { font-style: normal; font-weight: 500; color: var(--tinta-3); font-size: 12px; }
+
+.op-graficos { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin: 10px 0 6px; }
+.og { display: flex; flex-direction: column; min-width: 0; padding: 14px 16px; border: 1px solid var(--borde); border-radius: 12px; background: var(--superficie); }
+.og-vacio { justify-content: center; color: var(--tinta-3); font-size: 12.5px; }
+.og-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.og h4 { margin: 0; font-size: 13px; font-weight: 600; color: var(--tinta-2); }
+.og-cifra { flex-shrink: 0; font-size: 13px; font-weight: 700; color: var(--tinta); font-variant-numeric: tabular-nums; }
+.og-sube { color: var(--exito-tinta); }
+.og-baja { color: var(--peligro); }
+.og-barras { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 5px; height: 132px; align-items: end; }
+.og-col { position: relative; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+.og-barra { display: block; width: 100%; border-radius: 4px 4px 0 0; background: var(--acento-borde); transition: opacity 0.15s ease; }
+.og-barra.og-pico { background: var(--acento); }
+.og-barra.og-hoy { outline: 2px solid var(--tinta); outline-offset: 1px; }
+.og-col:hover .og-barra { opacity: 0.8; }
+.og-valor { margin-bottom: 3px; font-size: 10.5px; font-weight: 700; text-align: center; color: var(--tinta); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.og-eje, .og-tira { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 5px; }
+.og-eje { margin-top: 6px; font-size: 10.5px; color: var(--tinta-3); text-align: center; }
+.og-hoy-txt { color: var(--tinta); font-weight: 700; }
+.og-tira { margin-top: 5px; }
+.og-tira span { height: 6px; border-radius: 999px; background: var(--superficie-2); }
+.og-tira .og-t-pedir { background: var(--avisa-tinta); }
+.og-tira .og-t-llega { background: var(--exito); }
+.og-leyenda { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 10px 0 0; font-size: 11px; color: var(--tinta-3); }
+.og-l { display: inline-block; width: 9px; height: 9px; margin-left: 8px; border-radius: 3px; }
+.og-l:first-child { margin-left: 0; }
+.og-l-pico, .og-l-modelo { background: var(--acento); }
+.og-l-pedir { background: var(--avisa-tinta); }
+.og-l-llega, .og-l-tramo { background: var(--exito); }
+.og-l-tramo { opacity: 0.35; }
+.og-l-caja, .og-l-pasado { background: var(--borde-fuerte); }
+.og-l-tuyo { background: var(--tinta); }
+.og-lectura { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--tinta-2); }
+.og-precio { position: relative; height: 56px; margin-top: 22px; border-radius: 8px; background: var(--superficie-2); }
+.og-precio > span { position: absolute; top: 0; bottom: 0; }
+.og-p-tramo { background: var(--exito); opacity: 0.16; }
+.og-p-caja { top: 14px !important; bottom: 14px !important; border-radius: 6px; background: var(--borde-fuerte); }
+.og-p-mediana { width: 2px; margin-left: -1px; background: var(--tinta-2); }
+.og-p-tuyo { width: 3px; margin-left: -1.5px; background: var(--tinta); border-radius: 2px; }
+.og-p-tuyo b { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 5px; background: var(--tinta); color: var(--superficie); font-size: 10.5px; white-space: nowrap; }
+.og-p-eje { display: flex; justify-content: space-between; margin-top: 5px; font-size: 10.5px; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
+.og-pares { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.og-par { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.og-par-barras { display: flex; align-items: flex-end; justify-content: center; gap: 4px; width: 100%; height: 96px; }
+.og-par-barras span { display: block; width: 38%; max-width: 30px; min-height: 3px; border-radius: 4px 4px 0 0; }
+.og-par-pasado { background: var(--borde-fuerte); }
+.og-par-modelo { background: var(--acento); }
+.og-par strong { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tinta-2); }
+.og-par small { font-size: 10.5px; color: var(--tinta-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 1100px) { .op-graficos { grid-template-columns: 1fr 1fr; } .op-graficos .og:first-child { grid-column: 1 / -1; } }
+@media (max-width: 720px) { .op-graficos { grid-template-columns: 1fr; } .op-lateral { min-width: 64px; } .op-lateral-foto { width: 64px; height: 64px; } }
+@media (prefers-reduced-motion: reduce) { .og-barra { transition: none; } }

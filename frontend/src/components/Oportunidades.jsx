@@ -5,6 +5,7 @@ import { Cargando, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
 import { compararOportunidades } from '../lib/sidebar.js'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
+import { GraficoTemporada, GraficoPrecio, GraficoPronostico } from './PanelOportunidad.jsx'
 
 // LA MESA DE COMPRA. El orden es el mensaje: primero si la gente BUSCA eso
 // (una keyword que nadie escribe mide un escaparate que no se abre), después
@@ -752,7 +753,7 @@ function FletePropio({ o, onRecargar }) {
   )
 }
 
-function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
+function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronostico, modeloGana }) {
   const flecha = o.tendenciaVentas ? FLECHA[o.tendenciaVentas] : null
   const nb = o.nivelBusqueda
   const nivel = nb?.nivel ? NIVELES[nb.nivel] : null
@@ -771,6 +772,7 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
       }}
     >
       <div className="op-lateral">
+        {o.imagen ? <img className="op-lateral-foto" src={o.imagen} alt="" loading="lazy" /> : null}
         <span className="op-rank">#{rank}</span>
         {o.madurando ? (
           <span className="mini-madurando mini-madurando-carta" title="Midiendo entrabilidad: el veredicto firme llega al completar la serie">
@@ -925,7 +927,11 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar }) {
           ) : null}
         </div>
 
-        <CurvaAno curva={o.curvaAnual} />
+        <div className="op-graficos" onClick={(e) => e.stopPropagation()}>
+          <GraficoTemporada curva={o.curvaAnual} ventana={o.ventana} />
+          <GraficoPrecio precios={o.precios} precioVenta={o.precioVentaClp} />
+          <GraficoPronostico pronostico={pronostico} modeloGana={modeloGana} />
+        </div>
 
         {/* la estimación existe pero no manda: plegada y con su aritmética a la
             vista, para que nadie la confunda con una medición */}
@@ -1357,6 +1363,16 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   // una sola fila abierta a la vez: el detalle es para decidir, no para comparar
   const [expandido, setExpandido] = useState(null)
   const [busca, setBusca] = useState('')
+  // pronósticos del aprendizaje, por nicho: alimentan el gráfico de la carta
+  const [pron, setPron] = useState({ porNicho: new Map(), modeloGana: false })
+  useEffect(() => {
+    Promise.all([api.aprendizajePronosticosNichos(), api.aprendizaje()])
+      .then(([p, e]) => setPron({
+        porNicho: new Map((p.nichos ?? []).map((n) => [String(n.nichoId), n])),
+        modeloGana: Boolean(e.modelos?.find((m) => m.objetivo === 'busquedas-google')?.evaluacion?.superaReferencias),
+      }))
+      .catch(() => {}) // sin pronósticos la carta funciona igual
+  }, [])
 
   const cargar = useCallback(() => {
     api
@@ -1494,7 +1510,8 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
                         </button>
                       </div>
                     ) : (
-                      <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} onRecargar={cargar} />
+                      <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} onRecargar={cargar}
+                        pronostico={pron.porNicho.get(String(o.nichoId))} modeloGana={pron.modeloGana} />
                     )}
                     <ProductosEscaneados nichoId={o.nichoId} />
                     {o.familiaMiembros?.length ? (
