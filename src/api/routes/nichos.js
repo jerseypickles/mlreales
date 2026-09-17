@@ -146,6 +146,7 @@ router.get(
       // ordena el sidebar por sobre el score.
       n.curvaAnual = curvaPorKeyword.get(n.keyword) ?? null
       n.ventana = ventanaDeCompra({
+        keyword: n.keyword,
         ventanaCompra: n.ventanaCompra,
         estacionalidad: n.radarInfo?.estacionalidad,
         curvaAnual: n.curvaAnual,

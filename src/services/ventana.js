@@ -9,6 +9,8 @@
 // con sus meses pico. De ahí sale la ventana sin gastar un peso de IA —
 // pico menos el lead time de importación.
 
+import { temporadaDuraPerdida } from './calendarioTemporadas.js'
+
 const MESES_ES = {
   enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
   julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
@@ -62,7 +64,24 @@ function estadoDesde(absHoy, desde, hasta) {
 
 // Devuelve la ventana accionable del nicho, o null si no hay señal de temporada.
 // `ventanaCompra` (la que declara el analista) manda sobre el cálculo.
-export function ventanaDeCompra(
+export function ventanaDeCompra(entrada = {}, opciones = {}) {
+  const v = ventanaPorMeses(entrada, opciones)
+  // NAVIDAD EN SEPTIEMBRE. La cuenta por meses (pico − 2) deja "último mes para
+  // pedir" un árbol de Navidad el 17-sep, cuando el contenedor entra a mitad de
+  // noviembre o en diciembre y la temporada se acaba el 24. Las temporadas de
+  // fin duro se resuelven en días (calendarioTemporadas.js): si esta ocurrencia
+  // ya no se alcanza, la ventana es la del año que viene y se dice que se perdió.
+  if (!v || v.tipo !== 'estacional' || !entrada.keyword) return v
+  const perdida = temporadaDuraPerdida(entrada.keyword, opciones.hoy ?? new Date())
+  if (!perdida || !['ahora', 'ultimo-mes', 'pronto'].includes(v.estado)) return v
+  const mas12 = (aaaamm) => (aaaamm ? aTexto(aAbsoluto(aaaamm) + 12) : null)
+  const absHoy = aAbsoluto(mesChile(opciones.hoy ?? new Date()))
+  return { ...v, estado: 'futura', desde: mas12(v.desde), hasta: mas12(v.hasta), picoPerdido: v.pico ?? null, pico: mas12(v.pico),
+    mesesAl: Math.max(0, aAbsoluto(mas12(v.desde)) - absHoy), perdioLaTemporada: true,
+    motivo: `${perdida.nombre} de este año ya no se alcanza por mar: pagando hoy el stock recién vende con posición desde el ${perdida.vendibleMin.toLocaleDateString('es-CL', { day: 'numeric', month: 'short', timeZone: 'America/Santiago' })} y la temporada termina el ${perdida.fin.toLocaleDateString('es-CL', { day: 'numeric', month: 'short', timeZone: 'America/Santiago' })}.` }
+}
+
+function ventanaPorMeses(
   { ventanaCompra = null, estacionalidad = null, curvaAnual = null } = {},
   { hoy = new Date(), leadMax = LEAD_MAX_MESES, leadMin = LEAD_MIN_MESES } = {},
 ) {

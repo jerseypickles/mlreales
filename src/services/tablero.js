@@ -313,6 +313,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         sellersUnicos: met?.competencia?.sellersUnicos ?? null,
         curvaAnual: curvaPorKeyword.get(n.keyword) ?? null,
         ventana: ventanaDeCompra({
+          keyword: n.keyword,
           estacionalidad: n.radarInfo?.estacionalidad,
           curvaAnual: curvaPorKeyword.get(n.keyword),
         }),
@@ -497,6 +498,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       // mesa junto con el nivel de búsqueda: un nicho de score alto con la
       // ventana cerrada no se puede comprar y no puede ir arriba.
       ventana: ventanaDeCompra({
+        keyword: n.keyword,
         ventanaCompra: analisis.ventanaCompra,
         estacionalidad: n.radarInfo?.estacionalidad,
         curvaAnual: curvaPorKeyword.get(n.keyword),

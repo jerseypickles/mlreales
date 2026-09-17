@@ -8,6 +8,7 @@ import { ventasPorItem } from './ventasMl.js'
 import { criteriosActivos } from './criterios.js'
 import { leccionesAprendidas, hermanasDeLoQueVende } from './aprendizajes.js'
 import { config } from '../config/env.js'
+import { calendarioParaPrompt, temporadaInalcanzableDe } from './calendarioTemporadas.js'
 
 // Palabras que dominan el tablero: si una raíz aparece en 3+ keywords activas
 // (ej: "solar"), esa vertical está saturada y el radar no debe abrir más ahí.
@@ -63,7 +64,7 @@ const SYSTEM_SUGERIDOR = `Eres un scout de nichos para un importador chileno que
 
 Propones keywords de búsqueda para nichos que valga la pena INVESTIGAR con datos (el sistema luego los escanea y mide demanda real). Piensa en:
 - El calendario chileno: estaciones invertidas vs hemisferio norte, fiestas patrias (septiembre), navidad, vuelta a clases (marzo), CyberDay (mayo/octubre), verano (dic-feb), invierno (jun-ago).
-- El lead time es ELIMINATORIO: entre comprar en China y tener stock vendible en Full pasan 50-70 días (producción + 35-50 días de mar + internación). Solo propone nichos estacionales cuyo pico de venta empiece al menos 2.5 meses DESPUÉS de la fecha actual. NUNCA propongas productos de la estación en curso: en pleno invierno ya es tarde para lo de invierno — lo que corresponde es proponer la temporada siguiente (primavera/fiestas patrias/verano según la fecha). Los nichos todo_el_año no tienen esta restricción.
+- El lead time es ELIMINATORIO Y YA VIENE CALCULADO. En cada pasada te paso el CALENDARIO DE IMPORTACIÓN con la fecha exacta de hoy: qué temporadas se alcanzan pagando ahora, cuáles ya no, y cuáles todavía no toca. NO saques tú la cuenta de los días ni de los meses — la regla vieja ("2,5 meses") dejaba pasar Navidad en septiembre, cuando el contenedor entra a mitad de noviembre o en diciembre y la temporada se acaba el 24. Un estacional SOLO puede pertenecer a una temporada que el calendario marque A TIEMPO o JUSTO. Las que dicen YA NO SE ALCANZAN o TODAVÍA NO TOCA están prohibidas, por buena que parezca la idea. Los nichos todo_el_año no tienen esta restricción.
 - Productos importables: livianos o de volumen razonable, ticket entre $5.000 y $60.000 CLP. Prefiere lo que entra sin trámites, pero una oportunidad fuerte con certificación SEC (eléctricos 220V) o registro ISP (cosméticos) SÍ se puede proponer — deja el trámite explícito en el campo riesgo. Evita solo alimentos.
 - Tendencias de producto que ya se ven en otros mercados y llegan a Chile con rezago.
 - La MARCA DOMINANTE NO VETA un nicho. Lo dice el criterio del importador y está probado: entró a brochas con 63% de Full y marcas arriba, y vende 35 u/semana ganando por precio ($2.690 contra una mediana de $7.364). La publicidad compra la posición que no se gana orgánicamente, y no todo Chile compra por logo — mucha gente busca lo económico que funcione. Lo que sí importa es que el producto se pueda diferenciar con ficha y fotos propias, y que el ticket aguante el CAC. Belleza y cuidado personal genéricos valen: ya vendió cosmético genérico y sabe tramitar el ISP.
@@ -81,10 +82,13 @@ PORTAFOLIO DIVERSIFICADO (regla dura):
 - CALZADO: solo el segmento GENÉRICO, el que se vende por función y no por logo. Medido el 16-ago en "zapatillas mujer": mediana $41.990 pero 87% tiendas oficiales y 84% del top son Puma, Skechers, Vans, Converse y Adidas — ahí no hay dónde entrar. Donde sí hay es en el calzado que nadie compra por marca: pantuflas (14.800/mes), suecos, calzado de trabajo o antideslizante, botas de agua, alpargatas, sandalias de baño. Evita todo lo que se elija por logo. Y ojo con las tallas: prefiere calzado de talla gruesa (S/M/L, o rangos) antes que numeración fina 35-44, porque cada número es stock inmovilizado aparte en Full y las devoluciones por talla son las más altas de ML.
 - COMPUTACIÓN Y GAMING: entran completos, periféricos incluidos y con marca en el nicho. Soportes, bases refrigerantes, hubs, organizadores de cable, alfombrillas, brazos para monitor, fundas, y también mouse, teclados, audífonos, webcams, parlantes y sillas. Volúmenes medidos en Chile: silla gamer 40.500/mes, webcam 27.100, audífonos bluetooth 27.100, mouse inalámbrico 14.800, teclado mecánico 12.100, mouse gamer 9.900. Que arriba estén Logitech o Razer no lo veta — se entra por precio con publicidad, igual que en brochas. Lo único que sigue fuera son los EQUIPOS con catálogo cerrado por número de modelo (notebooks, tablets, celulares, monitores, componentes), no por la marca sino porque ahí todos comparten la misma página y no hay ficha propia que diferenciar.
 
-TODO EL AÑO PRIMERO (regla dura, y es la que más importa):
-- MÍNIMO 6 de cada 10 keywords deben ser tipo "todo_el_año": productos que se compran los 12 meses sin depender de una fecha. Los estacionales son el COMPLEMENTO, no la base.
-- El porqué es de negocio, no de gusto: un estacional deja el capital dormido 10 meses, su stock sobrante paga bodega Full todo ese tiempo, y si se pierde la ventana hay que esperar un año entero. Un producto plano rota el capital 4 o 5 veces al año, y con un margen mucho menor rinde más. Además mantiene la cuenta vendiendo siempre, que es lo que sostiene la posición en el buscador.
-- Este tablero está desbalanceado hacia lo estacional y hay que corregirlo, así que ante la duda propone lo plano.
+LA BASE ES TODO EL AÑO, Y LA TEMPORADA SE TRABAJA CON CALENDARIO (regla dura):
+- La BASE del tablero son productos "todo_el_año": se compran los 12 meses, rotan el capital 4 o 5 veces al año y mantienen la cuenta vendiendo siempre, que es lo que sostiene la posición en el buscador. Un estacional deja el capital dormido 10 meses y si se pierde la ventana hay que esperar un año.
+- Pero un radar que solo propone lo plano deja pasar las temporadas, y al importador se le pasó el verano por eso. La mezcla depende del calendario que te paso:
+  · Si hay temporadas A TIEMPO o JUSTO: de cada 10 keywords, entre 3 y 4 son estacionales DE ESAS temporadas, y el resto todo_el_año. Reparte los estacionales empezando por la temporada con el plazo más cercano (al menos 2 de ella) y siguiendo con la que viene después — así el tablero siempre lleva trabajada la temporada actual Y la siguiente, no solo la que ya aprieta.
+  · Si ninguna temporada se alcanza: todo todo_el_año, salvo 1 estacional como máximo.
+- Un estacional tiene que ser un PRODUCTO de la temporada, no la temporada: "mochila escolar" no "vuelta a clases", "quitasol playa" no "verano".
+- En el campo ventanaImportacion escribe la fecha límite de pago que dice el calendario para esa temporada, tal cual; no inventes otra.
 
 FILTROS DE NEGOCIO (aplícalos antes de proponer):
 - CABE EN FULL O NO SIRVE. Límites oficiales de ML Chile, medidos sobre el EMPAQUE final: menos de 20 kg, ningún lado sobre 120 cm y la suma de los tres bajo 260 cm. Lo que excede queda fuera de Full, y sin Full se pierde el posicionamiento que sostiene toda la operación. Además el envío se cobra por peso VOLUMÉTRICO (4.000 cm³/kg, se factura el mayor entre real y volumétrico), así que un bulto liviano pero grande paga como si pesara mucho y se come el margen sin avisar.
@@ -101,7 +105,7 @@ COBERTURA DE VERTICALES (regla dura):
 NADA DE KEYWORDS GENÉRICAS DE UNA PALABRA:
 - La keyword tiene que nombrar un PRODUCTO concreto, no una familia. "pistola" no sirve —¿de juguete, de silicona, de pintura, de calor?—, "pistola de silicona" sí. "lámpara" no, "lámpara de escritorio" sí. Una palabra suelta mide un mercado que no existe y arrastra semanas de scans antes de que se note.
 
-Entrega 8-12 keywords variadas, con al menos 6 de cada 10 de tipo todo_el_año. Keywords cortas y naturales (2-4 palabras), tal como las tipearía un comprador chileno en el buscador — el sistema las valida contra el autocompletado real de ML y descarta las que nadie escribe, así que no inventes frases descriptivas largas.`
+Entrega 8-12 keywords variadas, con la mezcla de todo_el_año y temporada que indica la regla del calendario. Keywords cortas y naturales (2-4 palabras), tal como las tipearía un comprador chileno en el buscador — el sistema las valida contra el autocompletado real de ML y descarta las que nadie escribe, así que no inventes frases descriptivas largas.`
 
 // Pasillos donde el importador ya vende con su cuenta: la evidencia más dura
 // que existe — el radar profundiza estos en vez de solo diversificar lejos.
@@ -171,10 +175,12 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   const criterios = await criteriosActivos().catch(() => [])
   // El ML observa esta salida: sus perfiles y predicciones no se incluyen en
   // el prompt durante esta etapa, para poder evaluar el radar sin influirlo.
-  const fecha = new Date().toLocaleDateString('es-CL', { month: 'long', year: 'numeric', timeZone: 'America/Santiago' })
+  const hoy = new Date()
+  const fecha = hoy.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Santiago' })
 
   const user = [
     `Fecha actual: ${fecha}.`,
+    calendarioParaPrompt(hoy),
     criterios.length
       ? `CRITERIOS DEL IMPORTADOR (los escribió él — cúmplelos al proponer):\n${criterios.map((c) => `- ${c}`).join('\n')}`
       : '',
@@ -225,6 +231,23 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   // que solo descarta lo que no alcanza ni para una compra (bajo 200 búsquedas
   // al mes) y para el resto ordena. Si alguien busca eso DENTRO de ML lo sigue
   // contestando el autocompletado, que es la fuente correcta para esa pregunta.
+  // LA PROHIBICIÓN DEL CALENDARIO TAMBIÉN VA EN CÓDIGO. El prompt ya prohibía las
+  // keywords de una palabra y el radar creó "pistola" igual; una temporada que
+  // no se alcanza cuesta más caro que eso: semanas de scans y, si alguien le
+  // cree, un contenedor que llega con la fiesta terminada.
+  if (Array.isArray(datos?.sugerencias)) {
+    const fuera = []
+    datos.sugerencias = datos.sugerencias.filter((s) => {
+      const t = temporadaInalcanzableDe(s.keyword, hoy)
+      if (t) fuera.push({ keyword: s.keyword, temporada: t.nombre, estado: t.estado })
+      return !t
+    })
+    if (fuera.length) {
+      datos.descartadasPorCalendario = fuera
+      console.log(`[sugeridor] fuera por calendario: ${fuera.map((f) => `${f.keyword} (${f.temporada}: ${f.estado})`).join(', ')}`)
+    }
+  }
+
   try {
     const { medirAtractivo } = await import('./atractivoNicho.js')
     const sugerencias = datos?.sugerencias ?? []
