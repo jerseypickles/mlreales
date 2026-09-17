@@ -109,11 +109,20 @@ export async function gastoDelMes({ ahora = new Date() } = {}) {
 }
 
 // Lee lo que toca, hasta donde alcanza la plata. Dos frenos: el del mes y uno
-// diario (tope ÷ 30) para que un día malo no se coma la semana.
+// diario, para que un día malo no se coma la semana.
 export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle } = {}) {
   const gasto = await gastoDelMes({ ahora })
   const costo = config.zyteCostoFichaUsd
-  const porPlata = Math.floor(Math.min(TOPE_USD_MES - gasto.mesUsd, TOPE_USD_MES / 30 - gasto.ultimas24hUsd) / costo)
+  // EL FRENO DIARIO REPARTE LO QUE QUEDA DEL MES, no un treintavo fijo. El primer
+  // día (17-sep) el treintavo se agotó a las 10 de la mañana con US$29 del mes
+  // sin tocar, y la segunda lectura —la que dice si alguien vendió— quedó para
+  // el día siguiente. Lo disponible hoy es lo que queda del mes dividido por los
+  // días que faltan: en un mes completo da US$1 al día; empezando a mitad de
+  // mes, más. El tope mensual no se mueve.
+  const finDeMes = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth() + 1, 1))
+  const diasQueQuedan = Math.max(1, Math.ceil((+finDeMes - +ahora) / DIA))
+  const paraHoy = (TOPE_USD_MES - (gasto.mesUsd - gasto.ultimas24hUsd)) / diasQueQuedan
+  const porPlata = Math.floor(Math.min(TOPE_USD_MES - gasto.mesUsd, paraHoy - gasto.ultimas24hUsd) / costo)
   if (porPlata <= 0) return { leidas: 0, motivo: 'tope de gasto alcanzado', gasto }
   // A QUIÉN SE LEE PRIMERO. Ordenar solo por atraso dejaba a los 300 que nunca se
   // habían leído por delante de la SEGUNDA lectura de los que ya se leyeron —y la
