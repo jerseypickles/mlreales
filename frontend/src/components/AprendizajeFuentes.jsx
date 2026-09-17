@@ -8,7 +8,6 @@ import { fmtFecha, fmtNum, fmtPrecio } from '../lib/formato.js'
 // está obteniendo". El resumen dice cuánto se guardó; esto muestra QUÉ se leyó,
 // publicación por publicación, tal como llegó de Mercado Libre.
 
-const stockTexto = (l) => (l?.stock == null ? '—' : l.topado ? `+${l.stock - 1}` : l.stock === 0 ? 'agotado' : String(l.stock))
 const dentroDe = (fecha) => {
   const h = (new Date(fecha) - Date.now()) / 3600e3
   if (h <= 0) return 'toca ahora'
@@ -19,58 +18,92 @@ const hace = (fecha) => {
   return h < 1 ? 'hace minutos' : h < 24 ? `hace ${Math.round(h)} h` : `hace ${Math.round(h / 24)} d`
 }
 
-// La serie de lecturas como una fila de fichas: "+25 → +10 → 4 → 1 → +25".
-// Verde cuando bajó (vendió), azul cuando subió (repuso), gris si no se movió.
-function SerieStock({ serie }) {
-  const buenas = (serie ?? []).filter((l) => l.ok && l.stock != null)
-  if (!buenas.length) return <span className="st-vacio">sin lecturas todavía</span>
+// EL STOCK COMO MEDIDOR. ML lo muestra en seis escalones, de "mucho" a "nada":
+// +50 · +25 · +10 · +5 · número exacto (1-5) · agotado. Un vendedor que vende se
+// mueve hacia la derecha; uno que repone, salta a la izquierda. Dibujarlo así
+// hace visible de un vistazo lo que en una tabla eran chips de texto.
+const ESCALONES = [
+  { id: 'mas50', etiqueta: '+50', ayuda: 'más de 50: no se ve nada' },
+  { id: 'mas25', etiqueta: '+25', ayuda: 'entre 26 y 50' },
+  { id: 'mas10', etiqueta: '+10', ayuda: 'entre 11 y 25' },
+  { id: 'mas5', etiqueta: '+5', ayuda: 'entre 6 y 10' },
+  { id: 'exacto', etiqueta: '1-5', ayuda: 'número exacto: cada baja es una venta contada' },
+  { id: 'agotado', etiqueta: '0', ayuda: 'agotado' },
+]
+const escalonDe = (l) => {
+  if (!l || l.stock == null) return -1
+  if (l.topado) return l.stock >= 51 ? 0 : l.stock >= 26 ? 1 : l.stock >= 11 ? 2 : 3
+  return l.stock === 0 ? 5 : 4
+}
+
+function Medidor({ ahora, antes, compacto = false }) {
+  const a = escalonDe(ahora), p = escalonDe(antes)
+  if (a === -1) return <span className={`mg mg-vacio${compacto ? ' mg-compacto' : ''}`}>{ESCALONES.map((e) => <i key={e.id} />)}<em>sin leer</em></span>
   return (
-    <span className="st-serie">
-      {buenas.slice(-10).map((l, i, arr) => {
-        const previa = arr[i - 1]
-        const clase = !previa ? '' : l.stock < previa.stock ? 'st-bajo' : l.stock > previa.stock ? 'st-subio' : ''
-        return <span key={l.fecha} className={`st-ficha ${clase}${l.topado ? ' st-balde' : ''}`} title={`${fmtFecha(l.fecha)}${l.topado ? ' · rango, no número exacto' : ' · número exacto'}${l.precio ? ` · ${fmtPrecio(l.precio)}` : ''}`}>{stockTexto(l)}</span>
-      })}
+    <span className={`mg${compacto ? ' mg-compacto' : ''}`} title={`${ESCALONES[a].ayuda}${p !== -1 && p !== a ? ` · antes: ${ESCALONES[p].etiqueta}` : ''}`}>
+      {ESCALONES.map((e, i) => <i key={e.id} className={`${i === a ? `mg-aqui mg-${e.id}` : ''}${i === p && p !== a ? ' mg-antes' : ''}`} />)}
+      <em className={`mg-${ESCALONES[a].id}`}>{a === 4 ? `${ahora.stock} ${ahora.stock === 1 ? 'exacta' : 'exactas'}` : a === 5 ? 'agotado' : ESCALONES[a].etiqueta}</em>
     </span>
   )
 }
 
-function FilaSeguida({ f }) {
+const ultimas = (f) => {
+  const buenas = (f.serie ?? []).filter((l) => l.ok && l.stock != null)
+  return { ahora: buenas.at(-1) ?? null, antes: buenas.at(-2) ?? null, cuantas: buenas.length }
+}
+
+// Un vendedor: foto, medidor grande, y lo que se sabe de sus ventas.
+function TarjetaVendedor({ f }) {
+  const { ahora, antes, cuantas } = ultimas(f)
+  const vendio = f.unidadesPiso > 0
   return (
-    <tr className={f.activo === false ? 'st-baja' : ''}>
-      <td className="celda-titulo apr-producto"><div className="apr-producto-fila">
-        {f.imagen ? <img src={f.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" width="48" height="48" /> : <span className="apr-foto-vacia" aria-hidden="true"><PackageX size={18} /></span>}
-        <div><a href={f.url} target="_blank" rel="noreferrer">{f.esPropio ? (f.titulo ?? f.sku) : (f.vendedor ?? 'vendedor')}</a>
-          <small>{f.esPropio ? 'publicación tuya · leída desde afuera' : f.titulo}</small></div>
-      </div></td>
-      <td><SerieStock serie={f.serie} /></td>
-      <td className="num">{f.unidadesPiso > 0 ? <strong title={`${f.unidadesExactas} contadas exactas; el resto es el mínimo que implica el cambio de rango`}>≥{fmtNum(f.unidadesPiso)}</strong> : f.lecturas < 2 ? '—' : '0'}
-        {f.porSemana ? <small className="st-sub">≥{fmtNum(f.porSemana)} / semana</small> : null}</td>
-      <td className="num">{f.reposiciones || '—'}</td>
-      <td className="num">{fmtNum(f.lecturas)}<small className="st-sub">{f.dias ? `en ${f.dias} d` : ''}</small></td>
-      <td>{f.activo === false
-        ? <span className="apr-chip apr-chip-aviso"><AlertTriangle size={13} aria-hidden="true" />{f.motivoBaja ?? 'fuera de la lista'}</span>
-        : <span className="apr-chip"><Clock size={13} aria-hidden="true" />{dentroDe(f.proximaLecturaEl)}</span>}</td>
-    </tr>
+    <article className={`sv${vendio ? ' sv-vendio' : ''}${f.activo === false ? ' sv-fuera' : ''}`}>
+      <a className="sv-foto" href={f.url} target="_blank" rel="noreferrer" aria-label={`Abrir la publicación de ${f.vendedor ?? 'este vendedor'} en Mercado Libre`}>
+        {f.imagen ? <img src={f.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" /> : <PackageX size={22} aria-hidden="true" />}
+      </a>
+      <div className="sv-cuerpo">
+        <strong className="sv-nombre">{f.esPropio ? 'Tu publicación' : (f.vendedor ?? 'vendedor')}</strong>
+        <span className="sv-titulo">{f.titulo}</span>
+        <Medidor ahora={ahora} antes={antes} />
+        <div className="sv-pie">
+          {vendio ? <span className="sv-venta"><TrendingDown size={14} aria-hidden="true" />vendió al menos <b>{fmtNum(f.unidadesPiso)}</b> en {f.dias} d</span>
+            : cuantas >= 2 ? <span className="sv-quieto">sin baja visible en {f.dias} d</span>
+              : cuantas === 1 ? <span className="sv-quieto">1ª lectura · falta la 2ª para saber si vende</span> : <span className="sv-quieto">todavía sin leer</span>}
+          {f.reposiciones ? <span className="apr-chip apr-chip-mini">repuso ×{f.reposiciones}</span> : null}
+          {f.activo === false ? <span className="apr-chip apr-chip-aviso apr-chip-mini">{f.motivoBaja}</span> : <span className="sv-cuando"><Clock size={12} aria-hidden="true" />{dentroDe(f.proximaLecturaEl)}</span>}
+        </div>
+      </div>
+    </article>
   )
 }
 
-function TablaSeguidos({ filas }) {
+// Cuántos de los seguidos caen en cada escalón: qué tanto del mercado se deja ver.
+function Visibilidad({ publicaciones, alto = 12 }) {
+  const cuenta = [0, 0, 0, 0, 0, 0]
+  let sinLeer = 0
+  for (const f of publicaciones) { const e = escalonDe(ultimas(f).ahora); if (e === -1) sinLeer++; else cuenta[e]++ }
+  const total = publicaciones.length || 1
   return (
-    <div className="tabla-envoltura apr-tabla">
-      <table><thead><tr>
-        <th scope="col">Publicación</th><th scope="col">Stock leído, de más antiguo a más nuevo</th>
-        <th scope="col" className="num">Vendió como mínimo</th><th scope="col" className="num">Repuso</th>
-        <th scope="col" className="num">Lecturas</th><th scope="col">Próxima lectura</th>
-      </tr></thead><tbody>{filas.map((f) => <FilaSeguida key={f.sku} f={f} />)}</tbody></table>
-    </div>
+    <span className="vis" style={{ height: alto }} role="img" aria-label={`De ${total} publicaciones: ${cuenta[4]} con número exacto, ${cuenta[3] + cuenta[2] + cuenta[1]} en rangos visibles, ${cuenta[0]} en +50 y ${sinLeer} sin leer`}>
+      {[4, 5, 3, 2, 1, 0].map((e) => cuenta[e] ? <i key={e} className={`mg-${ESCALONES[e].id}`} style={{ width: `${(cuenta[e] / total) * 100}%` }} title={`${cuenta[e]} en ${ESCALONES[e].etiqueta}`} /> : null)}
+      {sinLeer ? <i className="vis-sinleer" style={{ width: `${(sinLeer / total) * 100}%` }} title={`${sinLeer} sin leer todavía`} /> : null}
+    </span>
   )
 }
+
+const FILTROS_STOCK = [
+  ['todos', 'Todos', () => true],
+  ['ventas', 'Con ventas vistas', (n) => n.vendiendo > 0],
+  ['visibles', 'Dejan ver su stock', (n) => n.publicaciones.some((f) => [1, 2, 3, 4].includes(escalonDe(ultimas(f).ahora)))],
+  ['sinleer', 'Aún sin leer', (n) => n.publicaciones.every((f) => escalonDe(ultimas(f).ahora) === -1)],
+]
 
 export function StockCompetidores() {
   const [d, setD] = useState(null)
   const [error, setError] = useState(null)
   const [abierto, setAbierto] = useState(null)
+  const [filtro, setFiltro] = useState('todos')
+  const [busca, setBusca] = useState('')
   const cargar = useCallback(() => api.seguimiento().then((r) => { setD(r); setError(null) }).catch((e) => setError(e.message)), [])
   useEffect(() => {
     cargar()
@@ -81,62 +114,87 @@ export function StockCompetidores() {
   if (!d) return <Cargando texto="Leyendo el seguimiento de stock…" />
   const pct = Math.min(100, (d.gasto.mesUsd / d.topeUsdMes) * 100)
   const cal = d.calibracion
+  const todas = d.nichos.flatMap((n) => n.publicaciones)
+  const visibles = todas.filter((f) => [1, 2, 3, 4].includes(escalonDe(ultimas(f).ahora))).length
+  const fn = FILTROS_STOCK.find(([id]) => id === filtro)[2]
+  const valor = (n) => n.unidadesPisoSemana * 1000 + n.vendiendo * 100 + n.publicaciones.filter((f) => [1, 2, 3, 4].includes(escalonDe(ultimas(f).ahora))).length
+  const nichos = d.nichos.filter(fn).filter((n) => !busca.trim() || n.keyword.includes(busca.trim().toLowerCase())).sort((a, b) => valor(b) - valor(a))
   return (
     <>
       <section className="apr-seccion">
-        <div className="apr-seccion-cabeza"><h3>Cómo va el seguimiento de stock</h3>
-          <p>Mercado Libre muestra el stock en rangos (“+25”, “+10”, “+5”) y el número exacto solo al final. Se lee seguido a vendedores chicos: cuando el stock baja de un rango a otro, eso es venta real — como mínimo.</p></div>
+        <div className="apr-seccion-cabeza"><h3>Cómo leer el stock de un competidor</h3>
+          <p>Mercado Libre no muestra el número: muestra un escalón. Cuando un vendedor vende, su marcador se corre hacia la derecha; cuando repone, salta a la izquierda. De “+50” no se ve nada; en “1-5” cada baja es una venta contada.</p></div>
+        <div className="mg-leyenda">{ESCALONES.map((e, i) => (
+          <div key={e.id} className="mg-leyenda-paso"><span className={`mg-leyenda-barra mg-${e.id}`} /><strong>{e.etiqueta === '0' ? 'agotado' : e.etiqueta}</strong><small>{e.ayuda}</small>{i < 5 ? <i aria-hidden="true">→</i> : null}</div>
+        ))}</div>
+      </section>
+
+      <section className="apr-seccion">
         <div className="apr-fuentes">
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><Wallet size={17} aria-hidden="true" /></span><h3>Gasto del mes</h3></div>
             <p className="apr-cifra">US${d.gasto.mesUsd.toFixed(2)}<small> de US${d.topeUsdMes}</small></p>
-            <div className="apr-medidor"><span style={{ width: `${pct}%` }} /></div>
-            <p className="apr-fuente-detalle">{fmtNum(d.gasto.lecturasMes)} lecturas este mes · tope fijo, no se pasa</p></article>
-          <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><PackageX size={17} aria-hidden="true" /></span><h3>Publicaciones seguidas</h3></div>
-            <p className="apr-cifra">{fmtNum(d.seguidos)}<small> activas</small></p>
-            <p className="apr-fuente-detalle">{fmtNum(d.nichos.length)} nichos · {fmtNum(d.propios.length)} tuyas para calibrar · {fmtNum(d.pendientesAhora ?? 0)} esperando lectura</p></article>
-          <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><TrendingDown size={17} aria-hidden="true" /></span><h3>Vendiendo</h3></div>
-            <p className="apr-cifra">{fmtNum(d.nichos.reduce((a, n) => a + n.vendiendo, 0))}<small> publicaciones con baja vista</small></p>
-            <p className="apr-fuente-detalle">{fmtNum(d.nichos.reduce((a, n) => a + n.reposiciones, 0))} reposiciones detectadas</p></article>
+            <div className="apr-medidor"><span style={{ width: `${Math.max(2, pct)}%` }} /></div>
+            <p className="apr-fuente-detalle">{fmtNum(d.gasto.lecturasMes)} lecturas · el tope es fijo</p></article>
+          <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><PackageX size={17} aria-hidden="true" /></span><h3>Cuánto se deja ver</h3></div>
+            <p className="apr-cifra">{fmtNum(visibles)}<small> de {fmtNum(todas.length)} vendedores</small></p>
+            <Visibilidad publicaciones={todas} />
+            <p className="apr-fuente-detalle">verde = número exacto · azul = rango visible · gris = “+50” · rayado = sin leer</p></article>
+          <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><TrendingDown size={17} aria-hidden="true" /></span><h3>Ventas vistas</h3></div>
+            <p className="apr-cifra">{fmtNum(d.nichos.reduce((a, n) => a + n.vendiendo, 0))}<small> vendedores con baja de stock</small></p>
+            <p className="apr-fuente-detalle">{fmtNum(d.nichos.reduce((a, n) => a + n.reposiciones, 0))} reposiciones · {fmtNum(d.pendientesAhora ?? 0)} esperando lectura. Las ventas aparecen desde la 2ª lectura de cada vendedor.</p></article>
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><CheckCircle2 size={17} aria-hidden="true" /></span><h3>Cuánto ve el método</h3></div>
             <p className="apr-cifra">{cal?.pctVisto != null ? `${cal.pctVisto}%` : '—'}<small>{cal?.pctVisto != null ? ' de tus ventas reales' : ''}</small></p>
-            <p className="apr-fuente-detalle">{cal ? `En ${cal.productos} publicaciones tuyas: vio ${fmtNum(cal.unidadesVistas)} de ${fmtNum(cal.unidadesReales)} unidades vendidas` : 'Se mide con tus publicaciones, donde la venta real se conoce. Necesita unos días de lecturas.'}</p></article>
+            <p className="apr-fuente-detalle">{cal ? `En ${cal.productos} publicaciones tuyas vio ${fmtNum(cal.unidadesVistas)} de ${fmtNum(cal.unidadesReales)} unidades` : 'Se mide leyendo tus publicaciones desde afuera. Necesita unos días.'}</p></article>
         </div>
       </section>
 
       <section className="apr-seccion">
-        <div className="apr-seccion-cabeza"><h3>Tus publicaciones, leídas desde afuera</h3><p>Se leen igual que un competidor. Como su venta real se conoce, dicen cuánto confiarle al método.</p></div>
-        {d.propios.length ? <TablaSeguidos filas={d.propios} /> : <p className="apr-vacio">Sin publicaciones propias en seguimiento.</p>}
+        <div className="apr-seccion-cabeza"><h3>Tus publicaciones, vistas como las ve un competidor</h3><p>Sirven de regla: acá la venta real se conoce, así que dicen cuánto del total alcanza a ver este método.</p></div>
+        <div className="sv-grilla">{d.propios.map((f) => <TarjetaVendedor key={f.sku} f={f} />)}</div>
       </section>
 
       <section className="apr-seccion">
-        <div className="apr-seccion-cabeza"><h3>Competidores por nicho</h3><p>Nichos en cotización o con la ventana de compra abierta. Hasta 6 vendedores por nicho, uno por tienda, sin tiendas oficiales.</p></div>
-        {!d.nichos.length ? <p className="apr-vacio">Todavía no hay competidores en la lista. Se suman solos en la próxima pasada (corre cada 2 horas).</p>
-          : d.nichos.sort((a, b) => b.unidadesPisoSemana - a.unidadesPisoSemana || b.seguidos - a.seguidos).map((n) => (
-            <div key={n.keyword} className="st-nicho">
-              <button type="button" className="st-nicho-cab" aria-expanded={abierto === n.keyword} onClick={() => setAbierto(abierto === n.keyword ? null : n.keyword)}>
-                <strong>{n.keyword}</strong>
-                <span className={`apr-chip ${n.vendiendo ? 'apr-chip-bien' : ''}`}>{n.vendiendo} de {n.publicaciones.length} vendiendo</span>
-                {n.unidadesPisoSemana ? <span className="apr-chip apr-chip-bien"><TrendingDown size={13} aria-hidden="true" />≥{fmtNum(n.unidadesPisoSemana)} u / semana</span> : null}
-                {n.reposiciones ? <span className="apr-chip">{n.reposiciones} reposiciones</span> : null}
-                <span className="st-nicho-mini">{n.publicaciones.slice(0, 6).map((f) => <em key={f.sku} className="st-ficha st-balde">{stockTexto({ stock: f.stockAhora, topado: f.topadoAhora })}</em>)}</span>
+        <div className="apr-seccion-cabeza"><h3>Competidores por nicho</h3><p>Nichos en cotización o con la ventana de compra abierta. Hasta 6 vendedores chicos por nicho, uno por tienda.</p></div>
+        <div className="apr-controles">
+          <label className="apr-buscar"><PackageX size={14} aria-hidden="true" /><span className="apr-solo-lector">Buscar nicho</span>
+            <input type="search" placeholder="Buscar nicho…" value={busca} onChange={(e) => setBusca(e.target.value)} /></label>
+          <div className="apr-segmentos" role="group" aria-label="Filtrar nichos">{FILTROS_STOCK.map(([id, nombre, f]) =>
+            <button key={id} type="button" className={filtro === id ? 'activo' : ''} aria-pressed={filtro === id} onClick={() => setFiltro(id)}>{nombre} <small>{d.nichos.filter(f).length}</small></button>)}</div>
+        </div>
+        {!nichos.length ? <p className="apr-vacio">Ningún nicho con ese filtro todavía.</p> : <div className="sn-grilla">{nichos.map((n) => {
+          const abiertoEste = abierto === n.keyword
+          const visiblesN = n.publicaciones.filter((f) => [1, 2, 3, 4].includes(escalonDe(ultimas(f).ahora))).length
+          const leidas = n.publicaciones.filter((f) => escalonDe(ultimas(f).ahora) !== -1).length
+          return (
+            <div key={n.keyword} className={`sn${abiertoEste ? ' sn-abierto' : ''}${n.vendiendo ? ' sn-vende' : ''}`}>
+              <button type="button" className="sn-cab" aria-expanded={abiertoEste} onClick={() => setAbierto(abiertoEste ? null : n.keyword)}>
+                <span className="sn-titulo"><strong>{n.keyword}</strong>
+                  {n.vendiendo ? <span className="apr-chip apr-chip-bien"><TrendingDown size={13} aria-hidden="true" />{n.vendiendo} vendiendo · ≥{fmtNum(n.unidadesPisoSemana)} u/sem</span>
+                    : !leidas ? <span className="apr-chip"><CircleDashed size={13} aria-hidden="true" />en fila para leer</span>
+                      : visiblesN ? <span className="apr-chip apr-chip-mini-azul">{visiblesN} de {n.publicaciones.length} dejan ver stock</span>
+                        : <span className="apr-chip">todos en “+50”: no se ve</span>}</span>
+                <Visibilidad publicaciones={n.publicaciones} alto={8} />
+                <span className="sn-fotos">{n.publicaciones.map((f) => (
+                  <span key={f.sku} className="sn-mini">{f.imagen ? <img src={f.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" /> : <span className="mv-sinfoto" />}<Medidor ahora={ultimas(f).ahora} antes={ultimas(f).antes} compacto /></span>
+                ))}</span>
               </button>
-              {abierto === n.keyword ? <TablaSeguidos filas={n.publicaciones} /> : null}
+              {abiertoEste ? <div className="sv-grilla sn-detalle">{n.publicaciones.map((f) => <TarjetaVendedor key={f.sku} f={f} />)}</div> : null}
             </div>
-          ))}
+          )
+        })}</div>}
       </section>
 
-      <section className="apr-seccion">
-        <div className="apr-seccion-cabeza"><h3>Lo último que se leyó</h3><p>El registro tal como llegó. Una lectura fallida también se paga.</p></div>
+      <details className="apr-plegable apr-tecnico">
+        <summary><RefreshCw size={14} aria-hidden="true" />Registro de lo último que se leyó ({fmtNum(d.ultimasLecturas?.length ?? 0)})</summary>
         {!d.ultimasLecturas?.length ? <p className="apr-vacio">Sin lecturas todavía.</p> : <div className="tabla-envoltura apr-tabla apr-tabla-corta"><table>
-          <thead><tr><th scope="col">Cuándo</th><th scope="col">De quién</th><th scope="col">Nicho</th><th scope="col" className="num">Stock leído</th><th scope="col">Resultado</th></tr></thead>
+          <thead><tr><th scope="col">Cuándo</th><th scope="col">De quién</th><th scope="col">Nicho</th><th scope="col">Stock leído</th></tr></thead>
           <tbody>{d.ultimasLecturas.map((l, i) => <tr key={`${l.sku}-${l.fecha}-${i}`}>
             <td title={fmtFecha(l.fecha)}>{hace(l.fecha)}</td>
             <td className="celda-titulo">{l.esPropio ? 'tuya' : (l.vendedor ?? '—')}<small className="st-sub">{l.titulo}</small></td>
             <td>{l.keyword ?? '—'}</td>
-            <td className="num"><span className={`st-ficha${l.topado ? ' st-balde' : ''}`}>{l.ok ? stockTexto(l) : '—'}</span></td>
-            <td>{l.ok ? (l.topado ? 'rango' : l.stock === 0 ? 'agotado' : 'número exacto') : <span className="apr-chip apr-chip-aviso">la ficha no respondió</span>}</td>
+            <td>{l.ok ? <Medidor ahora={l} compacto /> : <span className="apr-chip apr-chip-aviso">la ficha no respondió</span>}</td>
           </tr>)}</tbody></table></div>}
-      </section>
+      </details>
     </>
   )
 }

@@ -7006,3 +7006,76 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 
 .apr-fuentes-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1100px) { .apr-fuentes-3 { grid-template-columns: 1fr; } }
+
+/* STOCK DE COMPETIDORES · tablero visual (17-sep-2026). La primera versión eran
+   62 filas de texto. El stock se dibuja como un medidor de seis escalones
+   —de "+50" a "agotado"—: vender es correrse a la derecha. */
+.mg { display: inline-flex; align-items: center; gap: 3px; }
+.mg i { display: block; width: 26px; height: 9px; border-radius: 3px; background: var(--superficie-2); border: 1px solid var(--borde); }
+.mg em { margin-left: 8px; font-style: normal; font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; background: none !important; }
+.mg i.mg-aqui { border-color: transparent; height: 13px; }
+.mg i.mg-antes { border: 2px dashed var(--tinta-3); background: transparent; }
+.mg-compacto i { width: 9px; height: 6px; border-radius: 2px; }
+.mg-compacto i.mg-aqui { height: 9px; }
+.mg-compacto em { margin-left: 5px; font-size: 10.5px; font-weight: 600; }
+.mg-vacio i { border-style: dashed; background: transparent; }
+.mg-vacio em { color: var(--tinta-3); font-weight: 500; }
+/* colores por escalón: gris = no se ve, azules = rangos, verde = exacto, rojo = agotado */
+i.mg-mas50, span.mg-mas50 { background: var(--borde-fuerte); }
+i.mg-mas25, span.mg-mas25 { background: var(--acento-borde); }
+i.mg-mas10, span.mg-mas10 { background: var(--acento); opacity: 0.75; }
+i.mg-mas5, span.mg-mas5 { background: var(--acento); }
+i.mg-exacto, span.mg-exacto { background: var(--exito); }
+i.mg-agotado, span.mg-agotado { background: var(--peligro); }
+em.mg-mas50 { color: var(--tinta-3); }
+em.mg-mas25, em.mg-mas10, em.mg-mas5 { color: var(--acento); }
+em.mg-exacto { color: var(--exito-tinta); }
+em.mg-agotado { color: var(--peligro); }
+.mg-leyenda { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; padding: 16px 18px; border: 1px solid var(--borde); border-radius: var(--radio-g); background: var(--superficie); }
+.mg-leyenda-paso { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mg-leyenda-barra { display: block; height: 10px; border-radius: 4px; }
+.mg-leyenda-paso strong { font-size: 14px; letter-spacing: -0.01em; }
+.mg-leyenda-paso small { color: var(--tinta-3); font-size: 11.5px; line-height: 1.35; }
+.mg-leyenda-paso > i { position: absolute; top: -4px; right: -9px; color: var(--tinta-3); font-style: normal; font-size: 13px; }
+.vis { display: flex; width: 100%; margin: 12px 0 2px; border-radius: 999px; overflow: hidden; background: var(--superficie-2); }
+.vis i { display: block; height: 100%; min-width: 3px; }
+.vis-sinleer { background: repeating-linear-gradient(135deg, var(--superficie-2) 0 4px, var(--borde) 4px 8px); }
+
+.sv-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
+.sv { display: flex; gap: 14px; padding: 14px; border: 1px solid var(--borde); border-radius: 12px; background: var(--superficie); box-shadow: var(--sombra-1); }
+.sv-vendio { border-color: var(--exito); box-shadow: 0 0 0 3px var(--exito-tenue); }
+.sv-fuera { opacity: 0.6; }
+.sv-foto { display: inline-flex; align-items: center; justify-content: center; width: 76px; height: 76px; flex-shrink: 0; border-radius: 10px; border: 1px solid var(--borde); background: #fff; color: var(--tinta-3); overflow: hidden; }
+.sv-foto img { width: 100%; height: 100%; object-fit: contain; }
+.sv-foto:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.sv-cuerpo { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.sv-nombre { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-titulo { color: var(--tinta-3); font-size: 11.5px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin-bottom: 4px; }
+.sv-pie { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; font-size: 12px; }
+.sv-venta { display: inline-flex; align-items: center; gap: 5px; color: var(--exito-tinta); font-weight: 600; }
+.sv-venta b { font-size: 15px; }
+.sv-quieto { color: var(--tinta-3); }
+.sv-cuando { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; color: var(--tinta-3); font-size: 11px; }
+
+.sn-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+.sn { border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie); box-shadow: var(--sombra-1); overflow: hidden; transition: box-shadow 0.18s ease, border-color 0.18s ease; }
+.sn:hover { border-color: var(--borde-fuerte); box-shadow: var(--sombra-2); }
+.sn-vende { border-color: var(--exito); }
+.sn-abierto { grid-column: 1 / -1; }
+.sn-abierto .sn-fotos, .sn-abierto .sn-cab .vis { max-width: 460px; }
+.sn-cab { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 14px 16px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.sn-cab:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; }
+.sn-titulo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.sn-titulo strong { font-size: 15px; text-transform: capitalize; letter-spacing: -0.01em; }
+.sn-cab .vis { margin: 0; }
+.sn-fotos { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-top: 4px; }
+.sn-mini { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+.sn-mini img, .sn-mini .mv-sinfoto { width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--borde); background: #fff; object-fit: contain; }
+.sn-mini .mg { flex-wrap: wrap; justify-content: center; gap: 2px; }
+.sn-mini .mg i { width: 5px; }
+.sn-mini .mg em { margin: 1px 0 0; width: 100%; text-align: center; }
+.sn-detalle { padding: 4px 16px 16px; border-top: 1px solid var(--borde); padding-top: 14px; background: var(--superficie-2); }
+.apr-chip-mini-azul { background: var(--acento-tenue); color: var(--acento); border-color: transparent; }
+.apr-segmentos button small { margin-left: 4px; color: var(--tinta-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { .mg-leyenda { grid-template-columns: repeat(3, minmax(0, 1fr)); } .mg-leyenda-paso > i { display: none; } }
+@media (prefers-reduced-motion: reduce) { .sn { transition: none; } }
