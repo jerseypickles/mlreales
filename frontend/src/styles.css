@@ -7003,3 +7003,6 @@ a.ads-nombre:focus-visible { outline: 2px solid var(--acento); outline-offset: 2
 .st-nicho .apr-tabla { border: 0; border-top: 1px solid var(--borde); border-radius: 0; box-shadow: none; }
 .st-mv { padding: 6px 16px 12px; border-top: 1px solid var(--borde); }
 @media (prefers-reduced-motion: reduce) { .apr-submenu button { transition: none; } }
+
+.apr-fuentes-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .apr-fuentes-3 { grid-template-columns: 1fr; } }

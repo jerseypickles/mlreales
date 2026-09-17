@@ -354,6 +354,17 @@ export function Aprendizaje() {
           </div>
         </Seccion>
 
+        <Seccion titulo="Guardado, pero todavía no lo usa ningún modelo" bajada="Se captura con fecha desde hoy para no perder tiempo. Entra a un modelo cuando haya serie suficiente y se haya medido contra tus ventas reales cuánto vale.">
+          <div className="apr-fuentes apr-fuentes-3">
+            <Fuente Icono={PackageX} titulo="Stock de competidores" valor={fmtNum(e.fuentes.enEspera?.stock?.lecturas)} unidad=" lecturas" estado={e.fuentes.enEspera?.stock?.lecturas ? 'bien' : 'espera'}
+              detalle={`${fmtNum(e.fuentes.enEspera?.stock?.competidoresSeguidos)} vendedores chicos seguidos · ${fmtNum(e.fuentes.enEspera?.stock?.publicacionesConDosLecturas)} ya con dos lecturas (desde ahí se ve si venden)`} />
+            <Fuente Icono={TrendingUp} titulo="Ranking de más vendidos de ML" valor={fmtNum(e.fuentes.enEspera?.ranking?.diasGuardados)} unidad={e.fuentes.enEspera?.ranking?.diasGuardados === 1 ? ' día guardado' : ' días guardados'} estado={e.fuentes.enEspera?.ranking?.diasGuardados ? 'bien' : 'espera'}
+              detalle={`${fmtNum(e.fuentes.enEspera?.ranking?.categorias)} categorías · la posición diaria de cada producto es una serie de demanda`} />
+            <Fuente Icono={Megaphone} titulo="Publicidad por producto" valor={fmtNum(com.publicidad?.dias)} unidad=" días" estado={com.publicidad?.dias ? 'bien' : 'espera'}
+              detalle="Guardada día por día; falta cruzarla con las visitas para separar lo que vendió el producto de lo que compró el anuncio" />
+          </div>
+        </Seccion>
+
         <Seccion titulo="Cuánto falta para que aprenda de tus ventas" bajada={`Una semana cuenta cuando el producto tuvo stock los siete días y al menos ${min.visitasSemana} visitas. Cada producto nuevo suma.`}>
           <div className="apr-avances">
             <Avance etiqueta="Productos con semanas válidas" valor={c.productos} meta={min.productos} ayuda={`Tienes ${fmtNum(com.libro?.productos ?? 0)} publicados; hoy califican ${fmtNum(c.productos)}.`} />

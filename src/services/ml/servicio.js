@@ -169,12 +169,27 @@ function coeficientesLegibles(resultado) {
   return Object.fromEntries(resultado.variables.map((nombre, j) => [nombre, a.coeficientes[j + 1] / a.escalas[j]]))
 }
 
+// Las fuentes que se guardan PARA el aprendizaje pero que ningún modelo usa
+// todavía como variable. Se declaran aparte para no confundir "guardado" con
+// "aprendido": el importador preguntó si el learning machine "está leyendo todo
+// eso", y la respuesta honesta tiene dos partes.
+async function fuentesEnEspera() {
+  const { RankingMasVendidos } = await import('../../models/RankingMasVendidos.js')
+  const { SeguimientoStock, LecturaStock } = await import('../../models/SeguimientoStock.js')
+  const [diasRanking, categorias, seguidos, lecturas, conDosLecturas] = await Promise.all([
+    RankingMasVendidos.distinct('dia').then((d) => d.length), RankingMasVendidos.distinct('categoriaId').then((d) => d.length),
+    SeguimientoStock.countDocuments({ activo: true, esPropio: false }), LecturaStock.countDocuments({ ok: { $ne: false } }),
+    LecturaStock.aggregate([{ $match: { ok: { $ne: false } } }, { $group: { _id: '$sku', n: { $sum: 1 } } }, { $match: { n: { $gte: 2 } } }, { $count: 'n' }]).then((r) => r[0]?.n ?? 0),
+  ])
+  return { ranking: { diasGuardados: diasRanking, categorias }, stock: { competidoresSeguidos: seguidos, lecturas, publicacionesConDosLecturas: conDosLecturas } }
+}
+
 export async function estadoMl({ ahora = new Date() } = {}) {
-  const [capturas, observaciones, modelos, predicciones, evaluadas, integracion, diagnostico, libro, publicidad, nichos] = await Promise.all([
+  const [capturas, observaciones, modelos, predicciones, evaluadas, integracion, diagnostico, libro, publicidad, nichos, enEspera] = await Promise.all([
     seriesActuales(), ObservacionProductoMl.find({ hasta: { $gte: new Date(+ahora - 730 * 86400e3), $lte: ahora } }).lean(),
     ModeloMl.aggregate([{ $sort: { creadoEl: -1 } }, { $group: { _id: '$objetivo', modelo: { $first: '$$ROOT' } } }]),
     PrediccionMl.countDocuments(), PrediccionMl.countDocuments({ evaluacion: { $ne: null } }),
-    estadoIntegracion({ ahora }), diagnosticoObservacionesPropias({ ahora }), resumenLibro({ ahora }), resumenAdsDiario({ ahora }), coberturaDeNichos(),
+    estadoIntegracion({ ahora }), diagnosticoObservacionesPropias({ ahora }), resumenLibro({ ahora }), resumenAdsDiario({ ahora }), coberturaDeNichos(), fuentesEnEspera().catch(() => null),
   ])
   const ventanas = ventanasIndependientes(observaciones)
   const mesActual = indiceMes(ahora.toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }).slice(0, 7))
@@ -191,7 +206,9 @@ export async function estadoMl({ ahora = new Date() } = {}) {
     alcance: { usaCostoCompra: false, estimaRentabilidad: false }, integracion, minimos: MINIMOS_COMERCIAL,
     fuentes: { demanda: { ultimaCapturaEl: ultimaCaptura ? new Date(ultimaCaptura) : null },
       comercial: { ultimaVentanaEl: ventanas.at(-1)?.hasta ?? null, historialDias: 730, perfilDias: 90,
-        semanasGuardadas: observaciones.length, diagnostico, libro, publicidad } },
+        semanasGuardadas: observaciones.length, diagnostico, libro, publicidad },
+      // guardadas para entrenar, todavía sin modelo que las use
+      enEspera },
     cobertura: { nichos, keywords: series.length, con24Meses: series.filter((s) => s.continua24Meses).length,
       productos: new Set(ventanas.map((o) => o.itemId)).size, ventanasIndependientes: ventanas.length, predicciones, evaluadas },
     series: series.slice(0, 100),
