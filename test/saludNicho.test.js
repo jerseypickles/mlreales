@@ -78,3 +78,29 @@ test('se piden 4 años de historia', () => {
   const d = desde4Anos(new Date('2026-08-31T00:00:00Z'))
   assert.equal(d, '2022-08-31')
 })
+
+test('la salud se lee contra el mercado: caer con la marea no es caer', async () => {
+  const { saludRelativaAlMercado } = await import('../src/services/volumenBusqueda.js')
+  // 21 keywords: la mediana del mercado es −13%
+  const curvas = Array.from({ length: 19 }, (_, i) => ({ keyword: `k${i}`, variacionInteranualPct: -13 + (i - 9) * 0.5, salud: 'bajando', busquedasMes: 5000 }))
+  curvas.push({ keyword: 'con la marea', variacionInteranualPct: -13, salud: 'bajando', busquedasMes: 5000 })
+  curvas.push({ keyword: 'se va de verdad', variacionInteranualPct: -35, salud: 'muriendo', busquedasMes: 800 })
+  curvas.push({ keyword: 'sin medir', salud: null })
+  saludRelativaAlMercado(curvas)
+  const de = (k) => curvas.find((c) => c.keyword === k)
+  assert.equal(de('con la marea').variacionMercadoPct, -13)
+  assert.equal(de('con la marea').variacionRelativaPct, 0)
+  assert.equal(de('con la marea').salud, 'estable')
+  assert.equal(de('con la marea').saludAbsoluta, 'bajando')
+  assert.equal(de('se va de verdad').variacionRelativaPct, -25.3)
+  assert.equal(de('se va de verdad').salud, 'muriendo')
+  assert.equal(de('sin medir').salud, null)
+  // plano en un mercado que cae = le gana al mercado
+  const plano = [...curvas.slice(0, 20).map((c) => ({ ...c, variacionInteranualPct: -13 })), { keyword: 'plano', variacionInteranualPct: 0, busquedasMes: 5000 }]
+  saludRelativaAlMercado(plano)
+  assert.equal(plano.at(-1).salud, 'subiendo')
+  // con pocas keywords no hay mercado que estimar
+  const pocas = [{ keyword: 'a', variacionInteranualPct: -30, salud: 'bajando' }]
+  saludRelativaAlMercado(pocas)
+  assert.deepEqual([pocas[0].salud, pocas[0].variacionRelativaPct], ['bajando', undefined])
+})

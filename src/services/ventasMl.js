@@ -47,7 +47,28 @@ export async function sincronizarOrdenes({ dias = 90 } = {}) {
     }
     if (fueraDeVentana || resultados.length < 50) { completa = true; break }
   }
-  return { nuevas, vistas, completa, desde }
+  // UNA ORDEN PAGADA PUEDE DEJAR DE SERLO. La búsqueda de arriba solo trae las
+  // que HOY están pagadas: la que se reembolsa desaparece de ahí y acá seguía
+  // guardada como venta para siempre. Medido el 17-sep-2026: ML tenía 285
+  // pagadas y 8 anuladas, y esta colección 290 — cinco ventas que no existen.
+  // Solo se marca lo que ya estaba guardado; una anulada que nunca se vio
+  // pagada no es una venta que corregir.
+  let anuladas = 0
+  try {
+    for (let offset = 0; offset < 500; offset += 50) {
+      const pagina = await meliGet(`/orders/search?seller=${me.id}&order.status=cancelled&sort=date_desc&limit=50&offset=${offset}`)
+      const resultados = Array.isArray(pagina.results) ? pagina.results : []
+      for (const o of resultados) {
+        const r = await VentaMl.updateOne({ orderId: String(o.id), estado: { $ne: 'cancelled' } },
+          { $set: { estado: 'cancelled', anuladaEl: new Date(o.date_closed ?? o.last_updated ?? Date.now()) } })
+        anuladas += r.modifiedCount
+      }
+      if (resultados.length < 50 || resultados.some((o) => new Date(o.date_created) < desde)) break
+    }
+  } catch (err) {
+    console.warn(`[ventas] no se pudieron leer las órdenes anuladas: ${err.message}`)
+  }
+  return { nuevas, vistas, completa, desde, anuladas }
 }
 
 // Ventas reales por item en una ventana: Map itemId → {unidades, ingresosClp,
@@ -55,7 +76,7 @@ export async function sincronizarOrdenes({ dias = 90 } = {}) {
 export async function ventasPorItem({ dias = 30 } = {}) {
   const desde = new Date(Date.now() - dias * 24 * 3600e3)
   const filas = await VentaMl.aggregate([
-    { $match: { fecha: { $gte: desde } } },
+    { $match: { fecha: { $gte: desde }, estado: { $ne: 'cancelled' } } },
     { $unwind: '$items' },
     {
       $group: {

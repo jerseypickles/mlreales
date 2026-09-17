@@ -139,6 +139,38 @@ export function saludDelNicho(variacion, { busquedasMes = null } = {}) {
   return 'estable'
 }
 
+// LA CAÍDA SE LEE CONTRA EL MERCADO, NO CONTRA CERO.
+//
+// Medido el 17-sep-2026 sobre 188 keywords con cuatro años de historia: todas
+// se mueven juntas. La mediana del cambio interanual fue +22% en 2024, −13% a
+// −16% a mediados de 2025 y +7% en agosto de 2026 — un factor común, del
+// mercado o de cómo Google recalibra sus volúmenes, que no dice nada de ningún
+// producto. Un nicho que cae 13% cuando todo cae 13% está plano; el que cae 35%
+// sí se está yendo. Con la vara absoluta, en 2025 medio tablero salía "bajando"
+// por una marea que no era suya.
+//
+// Pura. Recibe las curvas guardadas y les agrega la variación del mercado, la
+// relativa, y la salud recalculada con la relativa. Con menos de 20 keywords
+// medidas no hay mercado que estimar y las deja como están.
+const MERCADO_MIN = 20
+
+export function saludRelativaAlMercado(curvas) {
+  const pcts = (curvas ?? []).map((c) => c?.variacionInteranualPct).filter(Number.isFinite).sort((a, b) => a - b)
+  if (pcts.length < MERCADO_MIN) return curvas
+  const medio = Math.floor(pcts.length / 2)
+  const mercado = pcts.length % 2 ? pcts[medio] : (pcts[medio - 1] + pcts[medio]) / 2
+  if (mercado <= -100) return curvas
+  for (const c of curvas) {
+    if (!Number.isFinite(c?.variacionInteranualPct)) continue
+    const relativa = Math.round(((1 + c.variacionInteranualPct / 100) / (1 + mercado / 100) - 1) * 1000) / 10
+    c.variacionMercadoPct = Math.round(mercado * 10) / 10
+    c.variacionRelativaPct = relativa
+    c.saludAbsoluta = c.salud ?? null
+    c.salud = saludDelNicho({ pct: relativa }, { busquedasMes: c.busquedasMes })
+  }
+  return curvas
+}
+
 // Un resultado crudo de DataForSEO → lo que guardamos. Pura: testeable sin red.
 export function interpretar(resultado) {
   const curva = curvaDeMonthlySearches(resultado?.monthly_searches)

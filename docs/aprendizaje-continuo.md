@@ -84,6 +84,35 @@ anteriores; el precio anterior al primer cambio conservado se marca
 nicho. Primera pasada en seco: 394 días de 8 productos desde el 20-jul, 32
 semanas derivables, 3 entrenables sin solapar.
 
+### Auditoría de huecos de captura (17-sep-2026)
+
+Qué se estaba dejando pasar que después no se recupera, y qué se hizo:
+
+- **Publicidad por producto y día — no se guardaba.** Se leía en vivo para la
+  pantalla; ML la retiene ~90 días. Es el 25% del bruto y lo que explica buena
+  parte de las visitas: sin ella ningún modelo separa lo que vendió el producto
+  de lo que compró el anuncio. `AdsDiaMl` guarda impresiones, clics, gasto y
+  unidades atribuidas/orgánicas por producto y día de Chile, más el total de la
+  cuenta. Una vez al día relee la última semana (la atribución llega tarde) y
+  recupera hacia atrás hasta 40 días por pasada.
+- **Órdenes reembolsadas contadas como ventas.** La sincronización solo pedía
+  las pagadas, así que una orden que se reembolsaba quedaba guardada como venta
+  para siempre: ML 285 pagadas + 8 anuladas, la base 290. Ahora se leen también
+  las anuladas, se marcan, salen de los agregados de ventas, y ese día el libro
+  se rehace completo. La contabilidad no se tocó: ahí mandan boletas y notas de
+  crédito.
+- **Cierre del día.** El libro ahora congela unidades en bodega, reseñas, nota
+  y la campaña de ML vigente; antes vivían solo en los seis días de `mediciones`.
+- **La salud del nicho se lee contra el mercado** (`saludRelativaAlMercado`): la
+  variación de cada keyword dividida por la mediana de todas las medidas.
+
+Siguen abiertos, y no se arreglan con código: el **costo unitario** de los
+propios (sin él hay contribución, no margen), los **ciclos de importación**
+(fecha de compra, llegada, cantidad y costo puesto por lote — hoy no existe
+dónde anotarlos y es lo que une una recomendación con su resultado), y la
+**posición orgánica** de cada propio en su nicho, que solo se ve cuando el scan
+semanal del nicho lo encuentra.
+
 ### Primer entrenamiento real (14-sep-2026) y por qué pierde
 
 El modelo de demanda entrenó con 113 series y 7.119 ejemplos y quedó **19,9%

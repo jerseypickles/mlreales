@@ -131,6 +131,9 @@ router.get(
       const curvas = await CurvaEstacional.find({ 'curva.11': { $exists: true } })
         .select('keyword mesPico nombreMesPico ratioPico clasificacion fuente busquedasMes keywordMedida variacionInteranualPct salud')
         .lean()
+      // la salud se lee contra la mediana de todas las keywords medidas
+      const { saludRelativaAlMercado } = await import('../../services/volumenBusqueda.js')
+      saludRelativaAlMercado(curvas)
       for (const c of curvas) curvaPorKeyword.set(c.keyword, c)
     } catch {
       // sin curvas el sidebar funciona igual, con la estacionalidad del radar

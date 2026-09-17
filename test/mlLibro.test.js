@@ -45,3 +45,22 @@ test('del libro salen semanas con el contrato del registro en vivo, y un día si
   assert.equal(semanasDelLibro(quebrado).length, 0)
   assert.equal(semanasDelLibro(dias.map((x) => ({ ...x, stockFraccion: null }))).length, 0, 'stock sin medir no es stock')
 })
+
+test('el libro congela el cierre del día y la campaña vigente, y la publicidad se guarda por producto y día', async () => {
+  const p = { ...propio, mediciones: [{ fecha: new Date('2026-09-16T20:00:00Z'), precioEfectivo: 9000, stock: 7, numReviews: 3, rating: 4.7 }],
+    historialPrecios: [{ fecha: new Date('2026-09-10T12:00:00Z'), anterior: 10000, nuevo: 9000, motivo: 'promo SEPTIEMBRE ' },
+      { fecha: new Date('2026-09-15T12:00:00Z'), anterior: 9000, nuevo: 10000, motivo: 'precio de lista' }] }
+  const d = Object.fromEntries(diasDelLibro(p, visitasPorDia(respuesta), ventas, { ahora }).map((x) => [x.dia, x]))
+  assert.deepEqual([d['2026-09-16'].stockUnidades, d['2026-09-16'].numReviews, d['2026-09-16'].rating], [7, 3, 4.7])
+  assert.equal(d['2026-09-13'].stockUnidades, null, 'fuera de las mediciones conservadas no se inventa el cierre')
+  assert.deepEqual([d['2026-09-09'].promo, d['2026-09-12'].promo, d['2026-09-16'].promo], [null, 'SEPTIEMBRE', null])
+
+  const { filasDeAds } = await import('../src/services/ml/adsDiario.js')
+  const filas = filasDeAds({ results: [
+    { item_id: 'MLC1', campaign_id: 9, status: 'active', metrics: { prints: 1000, clicks: 20, cost: 1500, units_quantity: 2, direct_units_quantity: 1, indirect_units_quantity: 1, organic_units_quantity: 3, total_amount: 8000 } },
+    { item_id: 'MLC2', status: 'paused', metrics: { prints: 0, clicks: 0, cost: 0 } },
+  ] }, '2026-09-16')
+  assert.deepEqual(filas.map((f) => f.itemId), ['MLC1', '*'], 'un anuncio sin actividad no es fila; el total marca el día como leído')
+  assert.deepEqual([filas[1].costo, filas[1].clicks, filas[1].anuncios, filas[0].unidadesOrganicas], [1500, 20, 2, 3])
+  assert.deepEqual(filasDeAds({ results: [] }, '2026-08-01').map((f) => [f.itemId, f.costo]), [['*', 0]])
+})

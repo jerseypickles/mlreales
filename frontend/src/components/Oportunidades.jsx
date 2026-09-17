@@ -40,27 +40,34 @@ const fmtMes = (m) => (m ? MESES[Number(m.slice(5, 7)) - 1] + (m.slice(0, 4) !==
 // caso normal y llenar la carta con ellos es ruido.
 function chipSalud(c) {
   if (!c?.salud || !Number.isFinite(c.variacionInteranualPct)) return null
-  const p = c.variacionInteranualPct
-  const base = `Google: ${p > 0 ? '+' : ''}${p}% de búsquedas en los últimos 12 meses contra los 12 anteriores. La estacionalidad no cuenta acá — cada mes se compara con el mismo mes del año pasado.`
+  const bruto = c.variacionInteranualPct
+  // contra el mercado cuando se pudo estimar; si no, la variación tal cual
+  const relativo = Number.isFinite(c.variacionRelativaPct)
+  const p = relativo ? c.variacionRelativaPct : bruto
+  const signo = (n) => `${n > 0 ? '+' : ''}${n}%`
+  const base = relativo
+    ? `Google: ${signo(bruto)} de búsquedas en los últimos 12 meses contra los 12 anteriores, mientras la mediana de todas las keywords medidas hizo ${signo(c.variacionMercadoPct)}. Contra el mercado queda en ${signo(p)}: eso es lo que le pasa a ESTE producto y no la marea general. La estacionalidad no cuenta — cada mes se compara con el mismo mes del año pasado.`
+    : `Google: ${signo(bruto)} de búsquedas en los últimos 12 meses contra los 12 anteriores. La estacionalidad no cuenta acá — cada mes se compara con el mismo mes del año pasado.`
+  const contra = relativo ? ' vs mercado' : ' al año'
   // "muriendo" ya sale solo cuando el mercado además es CHICO: la caída por sí
   // sola no condena. Audífonos bluetooth cayó 34% y le quedan 27.100 búsquedas
   // al mes, más que a casi toda la mesa — ahí la caída es contexto, no veto.
   if (c.salud === 'muriendo') {
     return {
       clase: 'mal',
-      texto: `chico y cayendo ${Math.abs(p)}%`,
+      texto: `chico y cayendo ${Math.abs(p)}%${relativo ? contra : ''}`,
       ayuda: `${base} Y con ${fmtNum(c.busquedasMes)} búsquedas al mes ya era chico: el stock que traigas llega a un mercado más chico todavía.`,
     }
   }
   if (c.salud === 'bajando') {
     return {
       clase: 'aviso',
-      texto: `búsquedas −${Math.abs(p)}% al año`,
+      texto: `búsquedas −${Math.abs(p)}%${contra}`,
       ayuda: `${base} Sigue habiendo ${fmtNum(c.busquedasMes)} búsquedas al mes: la caída es contexto para negociar volumen, no un veto.`,
     }
   }
   if (c.salud === 'despegando') {
-    return { clase: 'bien', texto: `mercado creciendo ${p}%`, ayuda: base }
+    return { clase: 'bien', texto: `creciendo ${p}%${relativo ? contra : ''}`, ayuda: base }
   }
   return null
 }
@@ -485,13 +492,9 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
                 anteriores, así la estacionalidad se cancela. Solo se marca lo
                 que cambia una decisión de compra: un nicho que se muere y uno
                 que despega. "Estable" es el 80% de la mesa y no informa. */}
-            {c.salud === 'muriendo' || c.salud === 'bajando' ? (
-              <b className="vol-salud vol-salud-mal" title={`Las búsquedas cayeron ${Math.abs(c.variacionInteranualPct)}% contra los 12 meses anteriores. Traer stock de un mercado que se achica es capital que se queda en bodega.`}>
-                ↓ {Math.abs(c.variacionInteranualPct)}% año
-              </b>
-            ) : c.salud === 'despegando' ? (
-              <b className="vol-salud vol-salud-bien" title={`Las búsquedas subieron ${c.variacionInteranualPct}% contra los 12 meses anteriores.`}>
-                ↑ {c.variacionInteranualPct}% año
+            {(c.salud === 'muriendo' || c.salud === 'bajando' || c.salud === 'despegando') && chipSalud(c) ? (
+              <b className={`vol-salud ${c.salud === 'despegando' ? 'vol-salud-bien' : 'vol-salud-mal'}`} title={chipSalud(c).ayuda}>
+                {c.salud === 'despegando' ? '↑' : '↓'} {Math.abs(c.variacionRelativaPct ?? c.variacionInteranualPct)}% {Number.isFinite(c.variacionRelativaPct) ? 'vs mercado' : 'año'}
               </b>
             ) : null}
             {c.keywordMedida ? (

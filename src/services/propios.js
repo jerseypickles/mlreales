@@ -296,6 +296,14 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     } catch (err) {
       console.warn('[ml] libro diario no actualizado:', err.message)
     }
+    // la publicidad de cada día: ML la retiene ~90 días y no se guardaba
+    try {
+      const { actualizarAdsDiario } = await import('./ml/adsDiario.js')
+      const ads = await actualizarAdsDiario()
+      if (ads.dias) console.log(`[ml] publicidad diaria: ${ads.dias} día(s) leídos, ${ads.filas} fila(s) por producto, faltan ${ads.faltan} por recuperar`)
+    } catch (err) {
+      console.warn('[ml] publicidad diaria no actualizada:', err.message)
+    }
   }
 
   // documento tributario de cada venta: es lo que hace que la posición de IVA
@@ -313,6 +321,7 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     medidos,
     costoUsd,
     ordenesNuevas: ordenes?.nuevas ?? null,
+    ordenesAnuladas: ordenes?.anuladas ?? null,
     cargosMl: cargos?.guardados ?? null,
     boletas: boletas?.traidas ?? null,
   }

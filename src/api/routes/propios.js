@@ -317,7 +317,7 @@ router.get(
       console.warn(`[propios] comparador de cartera no disponible: ${err.message}`)
     }
 
-    const todasLasVentas = await VentaMl.find().lean().catch(() => [])
+    const todasLasVentas = await VentaMl.find({ estado: { $ne: 'cancelled' } }).lean().catch(() => [])
     res.json({
       propios: lista,
       carteras,
@@ -344,7 +344,7 @@ router.get(
   manejar(async (_req, res) => {
     const { VentaMl } = await import('../../models/VentaMl.js')
     const { ProductoPropio } = await import('../../models/ProductoPropio.js')
-    const ventas = await VentaMl.find().select('fecha items').lean()
+    const ventas = await VentaMl.find({ estado: { $ne: 'cancelled' } }).select('fecha items').lean()
     const propios = await ProductoPropio.find().select('sku itemIdMl titulo costoUnitarioClp').lean()
 
     const porItem = new Map()
@@ -407,7 +407,7 @@ router.get(
     const { VentaMl } = await import('../../models/VentaMl.js')
     const { diaChile } = await import('../../services/tendencias.js')
     const desde = new Date(Date.now() - 7 * 86400e3)
-    const ventas = await VentaMl.find({ fecha: { $gte: desde } }).lean()
+    const ventas = await VentaMl.find({ fecha: { $gte: desde }, estado: { $ne: 'cancelled' } }).lean()
     const hoy = diaChile()
     const sumar = (lista) => ({
       unidades: lista.reduce((s, v) => s + (v.items ?? []).reduce((a, i) => a + (i.cantidad ?? 0), 0), 0),

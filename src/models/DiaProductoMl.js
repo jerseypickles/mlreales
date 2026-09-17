@@ -28,6 +28,12 @@ const schema = new mongoose.Schema({
   cambioLogistica: { type: Boolean, default: false },
   // fracción de las mediciones del día con stock; null = no se midió
   stockFraccion: { type: Number, default: null },
+  promo: { type: String, default: null }, // campaña de ML vigente al cierre del día
+  // cierre del día según la última medición; null fuera de los ~6 días que
+  // conserva `mediciones` (la historia recuperada no los trae)
+  stockUnidades: { type: Number, default: null },
+  numReviews: { type: Number, default: null },
+  rating: { type: Number, default: null },
   actualizadoEl: { type: Date, required: true },
 }, { versionKey: false })
 schema.index({ itemId: 1, dia: 1 }, { unique: true })

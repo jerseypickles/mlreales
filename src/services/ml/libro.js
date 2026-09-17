@@ -64,6 +64,12 @@ export function diasDelLibro(propio, visitas, ventas, { ahora = new Date(), desd
   const ultima = [...(propio.mediciones ?? [])].sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha)).at(-1)
   const precioActual = ultima?.precioEfectivo ?? ultima?.precio ?? null
   const stock = new Map((propio.stockDiario ?? []).map((s) => [s.dia, s]))
+  // última medición de cada día: unidades en bodega, reseñas y nota. Solo
+  // existe para los ~6 días que conserva `mediciones`; más atrás queda sin dato.
+  const cierre = new Map()
+  for (const m of [...(propio.mediciones ?? [])].sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha))) {
+    if (Number.isFinite(+new Date(m.fecha))) cierre.set(diaUtc(m.fecha), m)
+  }
   const filas = []
   for (let t = inicioDe(inicio); diaUtc(t) < hoy; t += DIA) {
     const dia = diaUtc(t)
@@ -72,6 +78,10 @@ export function diasDelLibro(propio, visitas, ventas, { ahora = new Date(), desd
     const preciosOk = valores.every((v) => Number.isFinite(v) && v > 0)
     const l = tramos(propio.historialLogistica, t, t + DIA, propio.envioMl?.logistica ?? null)
     const s = stock.get(dia)
+    const m = cierre.get(dia)
+    // la campaña vigente al cierre del día, leída del motivo del último cambio
+    const motivo = (propio.historialPrecios ?? []).filter((c) => +new Date(c.fecha) < t + DIA)
+      .sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha)).at(-1)?.motivo ?? null
     filas.push({ itemId, dia, titulo: propio.titulo ?? null, categoria: propio.categoriaMl ?? null,
       // el nicho se anota solo en los días que se escriben en su fecha
       nichoId: +ahora - t <= 2 * DIA ? propio.nichoId ?? null : null,
@@ -80,7 +90,11 @@ export function diasDelLibro(propio, visitas, ventas, { ahora = new Date(), desd
       precioMin: preciosOk ? Math.min(...valores) : null, precioMax: preciosOk ? Math.max(...valores) : null,
       cambiosPrecio: p.cambios, precioInferido: p.inferido,
       logistica: l.tramos.at(-1).valor ?? null, cambioLogistica: l.cambios > 0,
-      stockFraccion: s && s.mediciones > 0 ? s.conStock / s.mediciones : null })
+      stockFraccion: s && s.mediciones > 0 ? s.conStock / s.mediciones : null,
+      promo: typeof motivo === 'string' && motivo.startsWith('promo ') ? motivo.slice(6).trim() : null,
+      stockUnidades: Number.isFinite(m?.stock) ? m.stock : null,
+      numReviews: Number.isFinite(m?.numReviews) ? m.numReviews : null,
+      rating: Number.isFinite(m?.rating) ? m.rating : null })
   }
   return filas
 }
@@ -120,13 +134,15 @@ export function semanasDelLibro(dias) {
 export async function actualizarLibroPropios(sincronizacion, { ahora = new Date(), pedir = meliGet } = {}) {
   if (!sincronizacion?.completa) return { productos: 0, dias: 0, semanas: 0, motivo: 'sin sincronización completa de órdenes' }
   const ayer = diaUtc(+ahora - DIA)
+  const rehacer = sincronizacion.anuladas > 0
   const propios = await ProductoPropio.find({}).lean()
   let productos = 0, escritos = 0
   const errores = []
   for (const propio of propios) {
     const itemId = propio.itemIdMl ?? propio.sku
     if (!itemId || !/^MLC\d+$/.test(itemId)) continue
-    const ultimo = await DiaProductoMl.findOne({ itemId }).sort({ dia: -1 }).lean()
+    // una orden que se anuló puede ser de cualquier fecha: ese día se rehace todo
+    const ultimo = rehacer ? null : await DiaProductoMl.findOne({ itemId }).sort({ dia: -1 }).lean()
     if (ultimo?.dia >= ayer) continue
     try {
       // si el libro quedó atrasado más de 14 días, se recupera el hueco entero
@@ -138,10 +154,11 @@ export async function actualizarLibroPropios(sincronizacion, { ahora = new Date(
         fecha: { $gte: new Date(+ahora - (HISTORIA_DIAS + 1) * DIA) } }).lean()
       const filas = diasDelLibro(propio, visitasPorDia(respuesta), ventas, { ahora, desdeDia })
       if (!filas.length) continue
+      const sinNulos = (f) => Object.fromEntries(Object.entries(f).filter(([k, v]) => v !== null || !['stockUnidades', 'numReviews', 'rating', 'stockFraccion'].includes(k)))
       await DiaProductoMl.bulkWrite(filas.map(({ nichoId, ...f }) => ({ updateOne: {
         filter: { itemId: f.itemId, dia: f.dia },
         // el nicho se anota una vez: recalcular no le atribuye el de hoy a un día viejo
-        update: { $set: { ...f, actualizadoEl: ahora }, $setOnInsert: { nichoId } }, upsert: true,
+        update: { $set: { ...sinNulos(f), actualizadoEl: ahora }, $setOnInsert: { nichoId } }, upsert: true,
       } })))
       productos++
       escritos += filas.length
@@ -158,6 +175,13 @@ export async function actualizarLibroPropios(sincronizacion, { ahora = new Date(
       filter: { itemId: o.itemId, dia: o.dia }, update: { $setOnInsert: o }, upsert: true,
     } })))
     nuevas = r.upsertedCount
+    // las semanas que salen del libro se corrigen con él; las del registro en
+    // vivo no se tocan
+    if (rehacer) {
+      await ObservacionProductoMl.bulkWrite(semanas.map((o) => ({ updateOne: {
+        filter: { itemId: o.itemId, dia: o.dia, fuente: 'libro-diario' }, update: { $set: o },
+      } })))
+    }
   }
   return { productos, dias: escritos, semanas: nuevas, errores }
 }

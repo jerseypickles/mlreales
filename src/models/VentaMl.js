@@ -7,6 +7,8 @@ const ventaMlSchema = new mongoose.Schema({
   orderId: { type: String, required: true, unique: true },
   fecha: { type: Date, required: true },
   estado: String,
+  // una orden pagada que ML después reembolsó: deja de contar como venta
+  anuladaEl: { type: Date, default: null },
   totalClp: Number,
   items: [
     {

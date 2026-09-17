@@ -241,6 +241,9 @@ export function Aprendizaje() {
           <StatTile label="Días de venta en el libro" value={fmtNum(e.fuentes.comercial.libro?.dias)} detalle={e.fuentes.comercial.libro?.dias
             ? `${fmtNum(e.fuentes.comercial.libro.productos)} productos desde ${fecha(e.fuentes.comercial.libro.desde)} · ${fmtNum(e.fuentes.comercial.libro.unidades)} unidades y ${fmtNum(e.fuentes.comercial.libro.visitas)} visitas`
             : 'Se llena con el próximo scan de tus productos'} />
+          <StatTile label="Días de publicidad guardados" value={fmtNum(e.fuentes.comercial.publicidad?.dias)} detalle={e.fuentes.comercial.publicidad?.dias
+            ? `Desde ${fecha(e.fuentes.comercial.publicidad.desde)} · ${fmtPrecio(e.fuentes.comercial.publicidad.costo)} de gasto y ${fmtNum(e.fuentes.comercial.publicidad.clicks)} clics, por producto`
+            : 'Se llena con el próximo scan de tus productos'} />
           <StatTile label="Predicciones guardadas" value={fmtNum(c.predicciones)} detalle="Estimaciones de búsquedas para meses futuros" />
           <StatTile label="Predicciones contrastadas" value={fmtNum(c.evaluadas)} detalle="Con una medición posterior; no equivale a aciertos" />
         </div>

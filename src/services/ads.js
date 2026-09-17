@@ -3,7 +3,7 @@ import { meliGet, hayCuentaMeli } from './meli.js'
 // Product Ads de la cuenta conectada. Rutas /marketplace/advertising validadas
 // en vivo el 4-ago contra las campañas reales (Api-Version: 2 obligatorio).
 const SITE = 'MLC'
-const METRICAS =
+export const METRICAS_ADS =
   'clicks,prints,cost,cpc,acos,organic_units_quantity,direct_units_quantity,indirect_units_quantity,units_quantity,direct_amount,indirect_amount,total_amount'
 
 // LAS FECHAS SE CUENTAN EN CHILE, NO EN UTC, Y AMBOS EXTREMOS ENTRAN.
@@ -26,7 +26,7 @@ const rangoDias = (dias) => {
 }
 
 let cacheAdvertiser = null
-async function advertiserId() {
+export async function advertiserId() {
   if (cacheAdvertiser) return cacheAdvertiser
   const r = await meliGet('/advertising/advertisers?product_id=PADS', { headers: { 'Api-Version': '1' } })
   cacheAdvertiser = r?.advertisers?.[0]?.advertiser_id ?? null
@@ -40,7 +40,7 @@ export async function campanasConMetricas({ dias = 30 } = {}) {
   if (!adv) return null
   const { desde, hasta } = rangoDias(dias)
   const r = await meliGet(
-    `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/campaigns/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS}`,
+    `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/campaigns/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS_ADS}`,
     { headers: { 'Api-Version': '2' } },
   )
   // CUÁNTOS DÍAS LLEVA VIVA LA CAMPAÑA, no cuántos pide la ventana.
@@ -85,7 +85,7 @@ export async function adsPorItem({ dias = 30 } = {}) {
   if (!adv) return new Map()
   const { desde, hasta } = rangoDias(dias)
   const r = await meliGet(
-    `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/ads/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS}`,
+    `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/ads/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS_ADS}`,
     { headers: { 'Api-Version': '2' } },
   )
   const porItem = new Map()
@@ -215,7 +215,7 @@ export async function ventanaDesde(campanaId, desde) {
   const r = await meliGet(
     `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/campaigns/search?limit=20&date_from=${dia(
       new Date(desde),
-    )}&date_to=${dia(hasta)}&metrics=${METRICAS}`,
+    )}&date_to=${dia(hasta)}&metrics=${METRICAS_ADS}`,
     { headers: { 'Api-Version': '2' } },
   )
   const c = (r?.results ?? []).find((x) => x.id === campanaId)
