@@ -52,8 +52,10 @@ async function resolverFichas(ids, { ahora = new Date(), pedir = meliGet } = {})
           url: r.permalink ?? `https://www.mercadolibre.cl/p/${id}`, fuente: 'catalogo' }
       } catch { /* sin ficha: queda el enlace */ }
     }
-    await FichaMasVendido.updateOne({ id }, { $set: { tipo, ...(ficha ?? {}), ...(ficha ? { resueltoEl: ahora } : {}) },
-      $setOnInsert: { url: ficha?.url ?? (tipo === 'catalogo' ? `https://www.mercadolibre.cl/p/${id}` : `https://articulo.mercadolibre.cl/${id.replace(/^MLC/, 'MLC-')}`) }, $inc: { intentos: 1 } }, { upsert: true })
+    // la url va SOLO en $set: repetirla en $setOnInsert es un conflicto de ruta
+    // que Mongo rechaza, y como el error se tragaba, ninguna ficha se resolvía
+    const url = ficha?.url ?? (tipo === 'catalogo' ? `https://www.mercadolibre.cl/p/${id}` : `https://articulo.mercadolibre.cl/${id.replace(/^MLC/, 'MLC-')}`)
+    await FichaMasVendido.updateOne({ id }, { $set: { tipo, ...(ficha ?? {}), url, ...(ficha ? { resueltoEl: ahora } : {}) }, $inc: { intentos: 1 } }, { upsert: true })
     if (ficha) resueltas++
   }
   return resueltas
@@ -70,8 +72,14 @@ export async function capturarRankings({ ahora = new Date(), obtener = masVendid
     const items = await obtener(categoriaId)
     if (!items?.length) { sinRespuesta++; continue }
     await RankingMasVendidos.updateOne({ categoriaId, dia }, { $setOnInsert: { categoriaId, dia, nichos, items, capturadoEl: ahora } }, { upsert: true })
-    fichas += await resolverFichas(items, { ahora }).catch(() => 0)
+    fichas += await resolverFichas(items, { ahora }).catch((err) => { console.warn(`[ranking] fichas de ${categoriaId}: ${err.message}`); return 0 })
     capturadas++
+  }
+  // lo ya capturado hoy que siga sin nombre (una corrida anterior que falló)
+  if (!capturadas) {
+    for (const r of await RankingMasVendidos.find({ dia }).select('items categoriaId').lean()) {
+      fichas += await resolverFichas(r.items, { ahora }).catch((err) => { console.warn(`[ranking] fichas de ${r.categoriaId}: ${err.message}`); return 0 })
+    }
   }
   return { dia, categorias: categorias.size, capturadas, yaEstaban: hechas.size, sinRespuesta, fichasResueltas: fichas }
 }
