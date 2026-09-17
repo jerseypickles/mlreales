@@ -72,15 +72,38 @@ sus propios pronósticos en producción, con residuo de redondeo:
 | intercepto | −0,045 |
 
 Manda `estacionObjetivo`: el modelo borra ~43% de la distancia entre el mes de
-referencia y el promedio anual. Una billetera con diciembre en 12.100 sale
-pronosticada en 7.528; una lámpara en su valle de 3.600 sale en 4.167. Causa
-probable, sin confirmar con datos: el mes de referencia entra con signo opuesto
-en la etiqueta (`log real − log referencia`) y en la variable (`log referencia −
-log promedio`), así que el ruido de un solo mes de Google —que además viene en
-baldes— fabrica correlación negativa. Parte de esa regresión a la media es real,
-pero la magnitud aprendida no se sostuvo en la prueba. Candidatas a probar con
-`GET /api/aprendizaje/series`: referencia estacional promediando dos años, y
-acotar o retirar la variable. No se cambió el modelo a ciegas.
+referencia y el promedio anual. La primera hipótesis fue que esa variable era
+la culpable. **Probado el 17-sep con las 188 series reales y el mismo protocolo
+de evaluación: era falsa.** Quitarla empeora (de −13,6% a −24,7% contra la
+referencia estacional).
+
+Lo que pasa es otra cosa: **todas las variantes subestiman** (sesgo −0,11 a
+−0,17 en log, creciente con el corte), porque las 188 keywords se mueven juntas.
+Mediana del cambio interanual de los últimos tres meses, por mes de origen:
+
+| 2024-01 a 08 | 2024-12 | 2025-06 a 11 | 2026-03 | 2026-04 | 2026-08 |
+| --- | --- | --- | --- | --- | --- |
+| +22% | 0% | −13% a −16% | −6% | 0% | +7% |
+
+Es un factor común —del mercado o de cómo Google recalibra sus volúmenes— y no
+una señal de cada producto. El entrenamiento cayó entero en la fase de bajada y
+la prueba en la de recuperación: cualquier variable de crecimiento extrapola la
+bajada justo cuando se da vuelta. Probado y descartado, todo contra la
+referencia estacional (MAE 0,2443): sin estacionObjetivo 0,3047 · solo
+crecimiento 0,3000 · referencia promediando dos años 0,2659 (y sola, sin modelo,
+0,2595) · referencia suavizada a tres meses 0,2782 · modelo encogido a la cuarta
+parte 0,2506 · deriva del mercado como variable 0,2734 · referencia × deriva del
+mercado 0,2828. **Nada le gana a repetir el año anterior.**
+
+Conclusiones: (1) el pronóstico vigente para decidir compras es la referencia
+estacional; el ridge sigue en sombra y no se promueve. (2) Con cuatro años de
+historia hay como mucho un ciclo de ese factor común: no es un problema de
+variables sino de cantidad de regímenes observados, y se resuelve con tiempo, no
+con ingeniería. (3) Consecuencia fuera de este módulo: la salud del nicho
+("bajando / muriendo", 30-ago) compara los últimos doce meses contra los doce
+anteriores, y durante 2025 el mercado entero marcaba −13%. Una caída así no
+distingue al nicho: habría que leerla RELATIVA a la mediana del mercado.
+Pendiente de decisión del importador.
 
 ### Unión de Zyte, DataForSEO y Mercado Libre
 
