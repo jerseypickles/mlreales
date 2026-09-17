@@ -108,6 +108,15 @@ export async function perfilesPropiosMl({ ahora = new Date() } = {}) {
   }).sort((a, b) => b.unidades - a.unidades).slice(0, 20)
 }
 
+// Coeficientes en unidades de la variable (no estandarizados): cuánto mueve el
+// log del pronóstico cada punto de la variable. Sin esto el modelo es una caja
+// negra incluso cuando pierde contra su referencia.
+function coeficientesLegibles(resultado) {
+  const a = resultado?.ajuste
+  if (!a?.coeficientes || !Array.isArray(resultado.variables)) return null
+  return Object.fromEntries(resultado.variables.map((nombre, j) => [nombre, a.coeficientes[j + 1] / a.escalas[j]]))
+}
+
 export async function estadoMl({ ahora = new Date() } = {}) {
   const [capturas, observaciones, modelos, predicciones, evaluadas, integracion, diagnostico] = await Promise.all([
     seriesActuales(), ObservacionProductoMl.find({ hasta: { $gte: new Date(+ahora - 730 * 86400e3), $lte: ahora } }).lean(),
@@ -136,5 +145,6 @@ export async function estadoMl({ ahora = new Date() } = {}) {
     series: series.slice(0, 100),
     modelos: modelos.map(({ modelo: m }) => ({ id: m._id, objetivo: m.objetivo, creadoEl: m.creadoEl,
       vigente: m.resultado.estado === 'sombra' && +new Date(m.creadoEl) <= +ahora && +ahora - +new Date(m.creadoEl) <= 90 * 86400e3,
-      estado: m.resultado.estado, cobertura: m.resultado.cobertura, evaluacion: m.resultado.evaluacion ?? null })) }
+      estado: m.resultado.estado, cobertura: m.resultado.cobertura, evaluacion: m.resultado.evaluacion ?? null,
+      coeficientes: coeficientesLegibles(m.resultado) })) }
 }

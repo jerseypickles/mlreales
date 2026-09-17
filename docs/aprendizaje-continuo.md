@@ -55,6 +55,33 @@ Los perfiles propios observados y el modelo comercial se pueden consultar por
 API; su incorporación a las recomendaciones requiere la validación real posterior.
 Los modelos con más de noventa días no generan nuevas estimaciones.
 
+### Primer entrenamiento real (14-sep-2026) y por qué pierde
+
+El modelo de demanda entrenó con 113 series y 7.119 ejemplos y quedó **19,9%
+peor que repetir el mismo mes del año anterior** (MAE log 0,328 contra 0,274;
+le gana a mantener el último valor, 0,458). Los coeficientes se recuperaron de
+sus propios pronósticos en producción, con residuo de redondeo:
+
+| variable | coeficiente |
+| --- | --- |
+| estacionObjetivo | **−0,427** |
+| crecimiento12m | +0,191 |
+| crecimiento6m | +0,039 |
+| horizonte | −0,010 |
+| impulso3m | −0,004 |
+| intercepto | −0,045 |
+
+Manda `estacionObjetivo`: el modelo borra ~43% de la distancia entre el mes de
+referencia y el promedio anual. Una billetera con diciembre en 12.100 sale
+pronosticada en 7.528; una lámpara en su valle de 3.600 sale en 4.167. Causa
+probable, sin confirmar con datos: el mes de referencia entra con signo opuesto
+en la etiqueta (`log real − log referencia`) y en la variable (`log referencia −
+log promedio`), así que el ruido de un solo mes de Google —que además viene en
+baldes— fabrica correlación negativa. Parte de esa regresión a la media es real,
+pero la magnitud aprendida no se sostuvo en la prueba. Candidatas a probar con
+`GET /api/aprendizaje/series`: referencia estacional promediando dos años, y
+acotar o retirar la variable. No se cambió el modelo a ciegas.
+
 ### Unión de Zyte, DataForSEO y Mercado Libre
 
 Zyte es el proveedor por defecto de listado y detalle. `SCRAPER_LISTADO=zyte`
