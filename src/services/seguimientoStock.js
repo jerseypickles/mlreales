@@ -203,7 +203,11 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
 // El trabajo programado: la lista se refresca una vez al día; las lecturas,
 // en cada pasada.
 export async function pasadaDeSeguimiento({ ahora = new Date() } = {}) {
-  const ultimoAgregado = await SeguimientoStock.findOne().sort({ agregadoEl: -1 }).select('agregadoEl').lean()
-  const lista = !ultimoAgregado || +ahora - +ultimoAgregado.agregadoEl > 20 * HORA ? await actualizarLista({ ahora }) : null
+  // La lista se refresca una vez al día, MIRANDO A LOS COMPETIDORES. La primera
+  // versión miraba el último agregado de cualquier tipo: las publicaciones
+  // propias entraron primero y la lista se dio por actualizada sin un solo
+  // competidor adentro.
+  const ultimo = await SeguimientoStock.findOne({ esPropio: false }).sort({ agregadoEl: -1 }).select('agregadoEl').lean()
+  const lista = !ultimo || +ahora - +ultimo.agregadoEl > 20 * HORA ? await actualizarLista({ ahora }) : null
   return { lista, ...(await leerPendientes({ ahora })) }
 }
