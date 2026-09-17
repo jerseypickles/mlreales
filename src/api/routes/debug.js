@@ -171,7 +171,7 @@ router.get(
     const url = String(req.query.url ?? '')
     if (!/^https:\/\/[a-z.]*mercadolibre\.cl\//.test(url)) return res.status(400).json({ error: 'falta ?url= de mercadolibre.cl' })
     const { config } = await import('../../config/env.js')
-    const { pedirUna } = await import('../../services/detalleMl.js')
+    const { pedirUna, stockDesdeHtml } = await import('../../services/detalleMl.js')
     const r = await pedirUna(url, { geolocation: 'CL', apiKey: config.zyteApiKey })
     const html = r?.browserHtml ?? ''
     const contextos = (patron, max = 6) => {
@@ -184,6 +184,8 @@ router.get(
     }
     res.json({
       chars: html.length,
+      stockLeido: stockDesdeHtml(html),
+      textoDisponibles: [...new Set([...html.matchAll(/\(?\+?\d+ disponibles?\)?|[ÚUúu]ltima disponible|Puedes comprar hasta \d+ unidades?/g)].map((m) => m[0]))].slice(0, 8),
       producto: r?.product ? Object.fromEntries(Object.entries(r.product).filter(([k]) => !['description', 'descriptionHtml', 'images', 'breadcrumbs', 'additionalProperties', 'features'].includes(k))) : null,
       available_quantity: contextos(/available_quantity/g),
       stock: contextos(/"stock[a-z_]*"|stock disponible|Stock disponible/gi),

@@ -123,11 +123,26 @@ export function vendedorDesdeHtml(html) {
 // importador. No cuesta nada: la ficha ya se paga para leer las reseñas.
 export function stockDesdeHtml(html) {
   const texto = String(html ?? '')
-  const m = texto.match(/"stock_type":"[a-z_]*","quantity":(\d+),"sold_quantity":(\d+)/)
-    ?? texto.match(/"quantity":(\d+),"sold_quantity":(\d+)/)
-  if (!m) return null
+  // CORRECCIÓN DEL MISMO DÍA. El primer scan con esto guardó tres vendedores
+  // distintos con "26" y tres con "6": demasiada coincidencia. Cruzado contra la
+  // sonda, `quantity` es el MÍNIMO entre el stock y el tope de compra por pedido
+  // —una ficha decía "(4 disponibles)" y "Puedes comprar hasta 3 unidades", y
+  // `quantity` valía 3—. El stock de verdad es el texto que ve el comprador:
+  //   "(4 disponibles)"  ·  "(+50 disponibles)"  ·  "¡Última disponible!"
+  // Se lee ese; `quantity` queda solo como respaldo, marcado como tal, y no
+  // sirve para calcular ventas.
+  const vendidos = texto.match(/"sold_quantity":(\d+)/)
+  const vendidosFicha = vendidos ? Number(vendidos[1]) : null
+  const visible = texto.match(/\((\+?)(\d+) disponibles?\)/) ?? texto.match(/"text":"(\+?)(\d+) disponibles?"/)
+  if (visible) {
+    const n = Number(visible[2])
+    return { stock: visible[1] ? n + 1 : n, stockTopado: Boolean(visible[1]), stockFuente: 'texto', vendidosFicha }
+  }
+  if (/[¡"(]\s*[ÚUúu]ltima disponible/.test(texto)) return { stock: 1, stockTopado: false, stockFuente: 'texto', vendidosFicha }
+  const m = texto.match(/"stock_type":"[a-z_]*","quantity":(\d+)/) ?? texto.match(/"quantity":(\d+),"sold_quantity"/)
+  if (!m) return vendidosFicha != null ? { stock: null, stockTopado: null, stockFuente: null, vendidosFicha } : null
   const cantidad = Number(m[1])
-  return { stock: cantidad, stockTopado: cantidad >= 51, vendidosFicha: Number(m[2]) }
+  return { stock: cantidad, stockTopado: cantidad >= 51, stockFuente: 'telemetria', vendidosFicha }
 }
 
 // Pura. ¿La extracción reconoció una ficha, o devolvió el cascarón?
@@ -200,6 +215,7 @@ export function aItemDetalle(respuesta, { precioListado = null } = {}) {
     // stock visible del vendedor (exacto hasta 50, topado en 51) — ver stockDesdeHtml
     stockQuantity: st?.stock ?? null,
     stockTopado: st?.stockTopado ?? null,
+    stockFuente: st?.stockFuente ?? null,
     soldQuantityFicha: st?.vendidosFicha ?? null,
     brand: p.brand?.name ?? null,
     // bloque del vendedor, con los nombres que espera normalizarItemSourabh

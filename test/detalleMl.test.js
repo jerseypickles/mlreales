@@ -141,13 +141,17 @@ test('la ficha con cuota no reporta precio anterior inventado', () => {
   assert.equal(aItemDetalle(conCuota).originalPrice, null)
 })
 
-test('el stock del competidor sale del mismo evento de telemetría: exacto hasta 50, topado en 51', async () => {
+test('el stock es el que ve el comprador; el campo de telemetría puede ser el tope de compra', async () => {
   const { stockDesdeHtml, aItemDetalle } = await import('../src/services/detalleMl.js')
-  const chico = '…"family_id":"475","stock_type":"normal","quantity":3,"sold_quantity":5,"has_stock":true…'
-  const grande = '…"stock_type":"normal","quantity":51,"sold_quantity":5000,"has_stock":true…'
-  assert.deepEqual(stockDesdeHtml(chico), { stock: 3, stockTopado: false, vendidosFicha: 5 })
-  assert.deepEqual(stockDesdeHtml(grande), { stock: 51, stockTopado: true, vendidosFicha: 5000 })
-  assert.equal(stockDesdeHtml('<html>sin telemetría</html>'), null)
+  // caso real del 17-sep: 4 disponibles, tope de compra 3 → `quantity` decía 3
+  const chico = '…"stock_type":"normal","quantity":3,"sold_quantity":5,"has_stock":true… "description":"(4 disponibles)","messages":[{"text":"Puedes comprar hasta 3 unidades"…'
+  const grande = '…"stock_type":"normal","quantity":51,"sold_quantity":5000… "description":"(+50 disponibles)"…'
+  assert.deepEqual(stockDesdeHtml(chico), { stock: 4, stockTopado: false, stockFuente: 'texto', vendidosFicha: 5 })
+  assert.deepEqual(stockDesdeHtml(grande), { stock: 51, stockTopado: true, stockFuente: 'texto', vendidosFicha: 5000 })
+  assert.deepEqual(stockDesdeHtml('…"title":{"text":"¡Última disponible!"}…'), { stock: 1, stockTopado: false, stockFuente: 'texto', vendidosFicha: null })
+  // sin texto visible queda el respaldo, marcado: no sirve para calcular ventas
+  assert.deepEqual(stockDesdeHtml('…"stock_type":"normal","quantity":26,"sold_quantity":1000…'), { stock: 26, stockTopado: false, stockFuente: 'telemetria', vendidosFicha: 1000 })
+  assert.equal(stockDesdeHtml('<html>sin nada</html>'), null)
   const item = aItemDetalle({ product: { price: '2930', sku: 'MLCU1' }, browserHtml: chico })
-  assert.deepEqual([item.stockQuantity, item.stockTopado, item.soldQuantityFicha], [3, false, 5])
+  assert.deepEqual([item.stockQuantity, item.stockTopado, item.stockFuente, item.soldQuantityFicha], [4, false, 'texto', 5])
 })

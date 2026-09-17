@@ -39,6 +39,7 @@ const snapshotSchema = new mongoose.Schema({
   // topado en 51. Su baja entre scans es venta real de ese competidor.
   stock: Number,
   stockTopado: Boolean,
+  stockFuente: String, // 'texto' (stock real visible) | 'telemetria' (puede ser tope de compra)
   vendidosFicha: Number, // el balde "+N vendidos" que muestra la ficha
   posicion: Number,
   // la posición es pagada (anuncio) u orgánica; null = proveedor que no lo dice

@@ -835,6 +835,8 @@ export function calcularMetricas({
 // Pura. Dos lecturas de stock de la misma publicación → unidades vendidas.
 export function ventaEntreLecturas(antes, ahora) {
   if (!antes || !ahora || antes.topado || ahora.topado) return null
+  // solo el stock que ve el comprador: el de telemetría puede ser el tope de compra
+  if (antes.fuente !== 'texto' || ahora.fuente !== 'texto') return null
   if (!Number.isFinite(antes.stock) || !Number.isFinite(ahora.stock)) return null
   const dias = (new Date(ahora.fecha) - new Date(antes.fecha)) / 86_400_000
   if (!(dias >= 0.5)) return null
@@ -921,7 +923,7 @@ export async function obtenerProductosUltimoScan(nicho) {
   const lecturasStock = await Snapshot.aggregate([
     { $match: { sku: { $in: snapshots.map((s) => s.sku) }, stock: { $ne: null } } },
     { $sort: { fecha: -1 } },
-    { $group: { _id: '$sku', l: { $push: { fecha: '$fecha', stock: '$stock', topado: '$stockTopado' } } } },
+    { $group: { _id: '$sku', l: { $push: { fecha: '$fecha', stock: '$stock', topado: '$stockTopado', fuente: '$stockFuente' } } } },
     { $project: { l: { $slice: ['$l', 2] } } },
   ])
   const ventaPorStock = new Map()
@@ -949,6 +951,7 @@ export async function obtenerProductosUltimoScan(nicho) {
         // scans es venta real de ese competidor. Solo lo trae la ficha por Zyte.
         stock: s.stock ?? null,
         stockTopado: s.stockTopado ?? null,
+        stockFuente: s.stockFuente ?? null,
         ventaStock: ventaPorStock.get(s.sku) ?? null,
         // badge público acumulado de ML, en baldes (25/50/100/500/...): dice
         // trayectoria del listing, NO ritmo. Ver senalVendidos().

@@ -92,6 +92,7 @@ export async function aplicarDetalleScan({ porSku, fecha }) {
     if (Number.isFinite(det.stock)) {
       setSnap.stock = det.stock
       setSnap.stockTopado = det.stockTopado === true
+      setSnap.stockFuente = det.stockFuente ?? null
     }
     if (Number.isFinite(det.vendidosFicha)) setSnap.vendidosFicha = det.vendidosFicha
     if (Object.keys(setSnap).length) {

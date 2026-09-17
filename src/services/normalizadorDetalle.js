@@ -106,6 +106,8 @@ function normalizarItemSourabh(raw) {
     // stock del competidor leído de la ficha (solo Zyte lo entrega)
     stock: Number.isFinite(raw.stockQuantity) ? raw.stockQuantity : null,
     stockTopado: typeof raw.stockTopado === 'boolean' ? raw.stockTopado : null,
+    // 'texto' = lo que ve el comprador (stock real); 'telemetria' = puede ser el tope de compra
+    stockFuente: raw.stockFuente ?? null,
     vendidosFicha: Number.isFinite(raw.soldQuantityFicha) ? raw.soldQuantityFicha : null,
     condicion: raw.condition ?? null,
     imagen: raw.thumbnail ?? (Array.isArray(raw.images) ? raw.images[0] : null) ?? null,
