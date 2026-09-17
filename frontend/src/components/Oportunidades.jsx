@@ -5,7 +5,7 @@ import { Cargando, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
 import { compararOportunidades } from '../lib/sidebar.js'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
-import { GraficoTemporada, GraficoPrecio, GraficoPronostico, MasVendidosCategoria } from './PanelOportunidad.jsx'
+import { GraficoTemporada, GraficoPrecio, GraficoPronostico, MasVendidosCategoria, VendedoresSeguidos } from './PanelOportunidad.jsx'
 
 // LA MESA DE COMPRA. El orden es el mensaje: primero si la gente BUSCA eso
 // (una keyword que nadie escribe mide un escaparate que no se abre), después
@@ -932,7 +932,7 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronos
           <GraficoPrecio precios={o.precios} precioVenta={o.precioVentaClp} />
           <GraficoPronostico pronostico={pronostico} modeloGana={modeloGana} />
         </div>
-        <div onClick={(e) => e.stopPropagation()}><MasVendidosCategoria nicho={o.keyword} /></div>
+        <div onClick={(e) => e.stopPropagation()}><VendedoresSeguidos nicho={o.keyword} /><MasVendidosCategoria nicho={o.keyword} /></div>
 
         {/* la estimación existe pero no manda: plegada y con su aritmética a la
             vista, para que nadie la confunda con una medición */}

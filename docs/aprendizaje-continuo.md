@@ -110,6 +110,26 @@ Pedido del importador: "llevar el scraper a otro nivel", y que lo que funcione
   cada oportunidad muestra el top 10 con lo que se movió. La posición diaria es
   además una serie de demanda relativa por producto, disponible para entrenar.
 
+### Seguimiento de stock de vendedores chicos (17-sep-2026, noche)
+
+El stock de ML también viene en baldes ("+5", "+10", "+25", "+50"; exacto solo
+con pocas unidades), así que una lectura es un rango y dos lecturas dan un PISO
+de unidades vendidas (`ventaEntreLecturas`). Con el nicho leído cada ~6,5 días,
+un vendedor puede vaciarse y reponer sin que se note. `seguimientoStock.js`
+mantiene una lista corta —hasta 6 por nicho en cotización o con ventana abierta:
+no oficiales, con stock visible, uno por vendedor— y lee solo esas fichas, cada
+2 horas lo que toque: "+50" semanal, baldes medios diario, "+5" o exacto cada 12
+h. **Tope duro de US$30 al mes** (`SEGUIMIENTO_USD_MES`), con freno diario de
+tope÷30; la lectura que falla se paga y se cuenta igual. Cuatro semanas en "+50"
+o tres fallos sacan a la publicación de la lista.
+
+Las publicaciones propias entran a la misma lista: se leen desde afuera como un
+competidor y, como su venta real está en `VentaMl`, dan la **calibración** —qué
+porcentaje de las unidades reales ve el método—. Sin ese número el piso no se
+debería usar para decidir un contenedor. `LecturaStock` guarda cada lectura con
+su fecha: es la serie que el aprendizaje puede usar como etiqueta de ventas
+ajenas cuando la calibración diga cuánto vale.
+
 ### Auditoría de huecos de captura (17-sep-2026)
 
 Qué se estaba dejando pasar que después no se recupera, y qué se hizo:

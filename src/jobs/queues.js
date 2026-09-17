@@ -102,6 +102,13 @@ export async function registrarProgramados() {
     { pattern: config.refrescoCurvasCron, tz: 'America/Santiago' },
     { name: 'refresco-curvas', data: {} },
   )
+  // seguimiento de stock de vendedores chicos: cada 2 horas lee lo que toca,
+  // con tope de gasto mensual (SEGUIMIENTO_USD_MES, US$30)
+  await colas.tendencias.upsertJobScheduler(
+    'seguimiento-stock',
+    { pattern: process.env.SEGUIMIENTO_CRON || '15 */2 * * *', tz: 'America/Santiago' },
+    { name: 'seguimiento-stock', data: {} },
+  )
   // el ranking oficial de más vendidos, una vez al día (gratis: API de ML).
   // 07:40, antes del radar de las 08:00, que lee lo que entró al top.
   await colas.tendencias.upsertJobScheduler(

@@ -13,6 +13,7 @@ import rutasEstratega from './routes/estratega.js'
 import rutasSii from './routes/sii.js'
 import rutasAprendizaje from './routes/aprendizaje.js'
 import rutasMasVendidos from './routes/masVendidos.js'
+import rutasSeguimiento from './routes/seguimiento.js'
 import { obtenerColas } from '../jobs/queues.js'
 import { gastoDelMes, mesActual } from '../services/gastos.js'
 import { config } from '../config/env.js'
@@ -95,6 +96,7 @@ export function crearApp() {
   app.use('/api/sii', rutasSii)
   app.use('/api/aprendizaje', rutasAprendizaje)
   app.use('/api/mas-vendidos', rutasMasVendidos)
+  app.use('/api/seguimiento', rutasSeguimiento)
 
   app.use((_req, res) => res.status(404).json({ error: 'ruta no encontrada' }))
 

@@ -166,3 +166,44 @@ export function MasVendidosCategoria({ nicho }) {
     </div>
   )
 }
+
+const stockTexto = (f) => (f.stockAhora == null ? '—' : f.topadoAhora ? `+${f.stockAhora - 1}` : f.stockAhora === 0 ? 'agotado' : `${f.stockAhora} exactas`)
+
+// VENDEDORES COMO TÚ, SEGUIDOS POR STOCK. ML muestra el stock en baldes ("+25",
+// "+10", "+5") y exacto solo al final; la baja entre dos lecturas es venta REAL
+// de ese vendedor, como mínimo. No es un contador: es la prueba de si un
+// entrante chico vende o no en este nicho.
+export function VendedoresSeguidos({ nicho }) {
+  const [datos, setDatos] = useState(null)
+  useEffect(() => {
+    let vivo = true
+    api.seguimiento(nicho).then((d) => vivo && setDatos(d)).catch(() => vivo && setDatos(false))
+    return () => { vivo = false }
+  }, [nicho])
+  if (datos === null) return null
+  const n = datos ? datos.nichos?.[0] : null
+  if (!n) return <div className="og og-mv"><div className="og-cab"><h4>Vendedores como tú, seguidos por stock</h4></div>
+    <p className="og-lectura">Todavía no se sigue a nadie acá. Se siguen solos los nichos en cotización o con la ventana de compra abierta, después de su próximo scan.</p></div>
+  const cal = datos.calibracion
+  return (
+    <div className="og og-mv">
+      <div className="og-cab"><h4>Vendedores como tú, seguidos por stock</h4>
+        <span className="og-cifra">{n.vendiendo} de {n.publicaciones.length} vendiendo{n.unidadesPisoSemana ? ` · ≥${fmtNum(n.unidadesPisoSemana)} u/semana` : ''}</span></div>
+      <ol className="mv-lista">{n.publicaciones.map((f) => (
+        <li key={f.sku} className="mv-fila">
+          {f.imagen ? <img src={f.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" width="40" height="40" /> : <span className="mv-sinfoto" aria-hidden="true" />}
+          <span className="mv-titulo"><a href={f.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{f.vendedor ?? 'vendedor'}</a>
+            <small>{f.titulo}</small></span>
+          <span className="mv-chips">
+            <em className="mv-chip" title="Stock que muestra hoy Mercado Libre">{stockTexto(f)}</em>
+            {f.unidadesPiso > 0 ? <em className="mv-chip mv-sube" title={`${f.unidadesExactas} contadas exactas; el resto es el mínimo que implica el cambio de balde`}>≥{f.unidadesPiso} u en {f.dias} d</em>
+              : <em className="mv-chip" title="Entre las lecturas no se vio bajar el stock">{f.lecturas < 2 ? '1ª lectura' : 'sin baja visible'}</em>}
+            {f.reposiciones ? <em className="mv-chip mv-nuevo">repuso ×{f.reposiciones}</em> : null}
+          </span>
+        </li>
+      ))}</ol>
+      <p className="og-lectura">Es un mínimo, no un conteo: ML muestra el stock en rangos y solo se ve lo que cruza de rango o baja en las últimas unidades.
+        {cal?.pctVisto != null ? <> En tus propias publicaciones, donde la venta real se conoce, este método ve el <strong>{cal.pctVisto}%</strong> de las unidades ({fmtNum(cal.unidadesVistas)} de {fmtNum(cal.unidadesReales)}).</> : ' La calibración contra tus propias publicaciones aparece con unos días de lecturas.'}</p>
+    </div>
+  )
+}
