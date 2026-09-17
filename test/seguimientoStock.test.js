@@ -2,11 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie } from '../src/services/seguimientoStock.js'
 
-test('se lee más seguido donde más se ve: "+50" semanal, baldes medios diario, exacto cada 12 h', () => {
+test('se lee más seguido donde más se ve: "+50" semanal, rangos diario, número exacto cada 12 h', () => {
   assert.equal(horasHastaLaProxima({ stock: 51, topado: true }), 168)
   assert.equal(horasHastaLaProxima({ stock: 26, topado: true }), 24)
   assert.equal(horasHastaLaProxima({ stock: 11, topado: true }), 24)
-  assert.equal(horasHastaLaProxima({ stock: 6, topado: true }), 12)
+  assert.equal(horasHastaLaProxima({ stock: 6, topado: true }), 24)
   assert.equal(horasHastaLaProxima({ stock: 3, topado: false }), 12)
   assert.equal(horasHastaLaProxima({ stock: 0, topado: false }), 24)
   assert.equal(horasHastaLaProxima(null), 24)

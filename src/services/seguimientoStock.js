@@ -25,7 +25,8 @@ export function horasHastaLaProxima(ultima) {
   if (ultima.topado && ultima.stock >= 51) return 168 // "+50": una vez por semana
   if (ultima.topado && ultima.stock >= 11) return 24 // "+10" y "+25"
   if (ultima.stock === 0) return 24 // agotado: esperar la reposición
-  return 12 // "+5" o número exacto
+  if (ultima.topado) return 24 // "+5": todavía es un rango
+  return 12 // número exacto: cada lectura es una venta contada
 }
 
 // Pura. De los productos del último scan de un nicho, a quién vale la pena
@@ -114,9 +115,21 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
   const costo = config.zyteCostoFichaUsd
   const porPlata = Math.floor(Math.min(TOPE_USD_MES - gasto.mesUsd, TOPE_USD_MES / 30 - gasto.ultimas24hUsd) / costo)
   if (porPlata <= 0) return { leidas: 0, motivo: 'tope de gasto alcanzado', gasto }
-  const pendientes = await SeguimientoStock.find({ activo: true, proximaLecturaEl: { $lte: ahora } })
-    // lo propio primero (calibra), después lo más atrasado
-    .sort({ esPropio: -1, proximaLecturaEl: 1 }).limit(Math.min(porPlata, MAX_POR_PASADA)).lean()
+  // A QUIÉN SE LEE PRIMERO. Ordenar solo por atraso dejaba a los 300 que nunca se
+  // habían leído por delante de la SEGUNDA lectura de los que ya se leyeron —y la
+  // segunda lectura es la única que dice si alguien vendió—. Con el tope de
+  // US$30 eso la postergaba días. Reparto de cada pasada: lo propio siempre (es
+  // la calibración); después, hasta la mitad para releer a quien deja ver su
+  // stock, y el resto para conocer a los nuevos; lo que sobre de un lado pasa al otro.
+  const cupo = Math.min(porPlata, MAX_POR_PASADA)
+  const vencidos = await SeguimientoStock.find({ activo: true, proximaLecturaEl: { $lte: ahora } }).sort({ proximaLecturaEl: 1 }).lean()
+  const propios = vencidos.filter((p) => p.esPropio)
+  const dejaVer = (p) => p.ultima && Number.isFinite(p.ultima.stock) && !(p.ultima.topado && p.ultima.stock >= 51)
+  const relecturas = vencidos.filter((p) => !p.esPropio && dejaVer(p))
+  const resto = vencidos.filter((p) => !p.esPropio && !dejaVer(p)).sort((a, b) => Number(Boolean(a.ultima)) - Number(Boolean(b.ultima)))
+  const libre = Math.max(0, cupo - propios.length)
+  const paraReleer = relecturas.slice(0, Math.max(Math.ceil(libre / 2), libre - resto.length))
+  const pendientes = [...propios, ...paraReleer, ...resto.slice(0, libre - paraReleer.length)].slice(0, cupo)
   if (!pendientes.length) return { leidas: 0, motivo: 'nada pendiente', gasto }
   const { items, costoUsd } = await leer(pendientes.map((p) => p.url))
   await registrarGasto(null, costoUsd, 'zyte')
