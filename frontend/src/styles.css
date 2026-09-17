@@ -7085,3 +7085,17 @@ em.mg-agotado { color: var(--peligro); }
    alto reservado evita que salte la barra de desplazamiento. */
 .sn { content-visibility: auto; contain-intrinsic-size: auto 200px; }
 .sn.sn-abierto { content-visibility: visible; }
+
+/* FUERZA: vendió y repuso. Color propio (ámbar) para que no se confunda con el
+   verde de "vendiendo": esto es un escalón más arriba. */
+.apr-fuentes-auto { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.apr-fuente-fuerte .apr-icono { color: var(--avisa-tinta); background: var(--avisa-tenue); }
+.apr-chip-fuerte { color: var(--avisa-tinta); background: var(--avisa-tenue); border-color: transparent; font-weight: 700; }
+.sv-fuerte, .sv-fuerte.sv-vendio { border-color: var(--avisa-tinta); box-shadow: 0 0 0 3px var(--avisa-tenue); }
+.sn-fuerte, .sn-fuerte.sn-vende { border-color: var(--avisa-tinta); }
+.sv-fuerza { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 8px 0 0; padding: 6px 10px; border-radius: 9px; background: var(--avisa-tenue); color: var(--avisa-tinta); font-size: 0.82rem; line-height: 1.35; }
+.sv-fuerza svg { flex-shrink: 0; }
+.sv-fuerza span { color: var(--tinta-2); }
+.sv-full { margin-left: 6px; padding: 1px 6px; border-radius: 5px; background: var(--exito-tenue); color: var(--exito-tinta); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; vertical-align: 1px; }
+.sn-mini-fuerte img, .sn-mini-fuerte .mv-sinfoto { border-color: var(--avisa-tinta); box-shadow: 0 0 0 2px var(--avisa-tenue); }
+.mv-chip.mv-fuerte { color: var(--avisa-tinta); background: var(--avisa-tenue); border-color: transparent; font-weight: 700; }

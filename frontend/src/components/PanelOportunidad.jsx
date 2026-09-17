@@ -189,7 +189,7 @@ export function VendedoresSeguidos({ nicho }) {
   return (
     <div className="og og-mv">
       <div className="og-cab"><h4>Vendedores como tú, seguidos por stock</h4>
-        <span className="og-cifra">{n.vendiendo} de {n.publicaciones.length} vendiendo{n.unidadesPisoSemana ? ` · ≥${fmtNum(n.unidadesPisoSemana)} u/semana` : ''}</span></div>
+        <span className="og-cifra">{n.fuertes ? `${n.fuertes} ${n.fuertes === 1 ? 'vende y repone' : 'venden y reponen'} · ` : ''}{n.vendiendo} de {n.publicaciones.length} vendiendo{n.unidadesPisoSemana ? ` · ≥${fmtNum(n.unidadesPisoSemana)} u/semana` : ''}</span></div>
       <ol className="mv-lista">{n.publicaciones.map((f) => (
         <li key={f.sku} className="mv-fila">
           {f.imagen ? <Miniatura src={f.imagen} lado={40} /> : <span className="mv-sinfoto" aria-hidden="true" />}
@@ -199,7 +199,7 @@ export function VendedoresSeguidos({ nicho }) {
             <em className="mv-chip" title="Stock que muestra hoy Mercado Libre">{stockTexto(f)}</em>
             {f.unidadesPiso > 0 ? <em className="mv-chip mv-sube" title={`${f.unidadesExactas} contadas exactas; el resto es el mínimo que implica el cambio de balde`}>≥{f.unidadesPiso} u en {f.dias} d</em>
               : <em className="mv-chip" title="Entre las lecturas no se vio bajar el stock">{f.lecturas < 2 ? '1ª lectura' : 'sin baja visible'}</em>}
-            {f.reposiciones ? <em className="mv-chip mv-nuevo">repuso ×{f.reposiciones}</em> : null}
+            {f.fuerza === 'ciclo' || f.fuerza === 'repone' ? <em className="mv-chip mv-fuerte" title="Stock que baja y después sube: volvió a meter plata en este producto. Nadie repone lo que no se vende.">{f.fuerza === 'ciclo' ? 'vendió y repuso' : 'repone'} ≥{fmtNum(f.unidadesRepuestasPiso)} u{f.esFull ? ' a Full' : ''}</em> : null}
           </span>
         </li>
       ))}</ol>

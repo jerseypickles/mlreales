@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, CircleDashed, Clock, PackageX, RefreshCw, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, CircleDashed, Clock, Flame, PackageX, RefreshCw, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura } from './ui.jsx'
 import { fmtFecha, fmtNum, fmtPrecio } from '../lib/formato.js'
@@ -66,20 +66,25 @@ const dejaVer = (f) => { const e = ultimas(f).escalon; return e >= 1 && e <= 4 }
 const TarjetaVendedor = memo(function TarjetaVendedor({ f }) {
   const { ahora, antes, cuantas } = ultimas(f)
   const vendio = f.unidadesPiso > 0
+  // vendió y repuso: volvió a meter plata en este producto. La señal más limpia que hay.
+  const fuerte = f.fuerza === 'ciclo' || f.fuerza === 'repone'
   return (
-    <article className={`sv${vendio ? ' sv-vendio' : ''}${f.activo === false ? ' sv-fuera' : ''}`}>
+    <article className={`sv${vendio ? ' sv-vendio' : ''}${fuerte ? ' sv-fuerte' : ''}${f.activo === false ? ' sv-fuera' : ''}`}>
       <a className="sv-foto" href={f.url} target="_blank" rel="noreferrer" aria-label={`Abrir la publicación de ${f.vendedor ?? 'este vendedor'} en Mercado Libre`}>
         {f.imagen ? <Miniatura src={f.imagen} lado={76} /> : <PackageX size={22} aria-hidden="true" />}
       </a>
       <div className="sv-cuerpo">
-        <strong className="sv-nombre">{f.esPropio ? 'Tu publicación' : (f.vendedor ?? 'vendedor')}</strong>
+        <strong className="sv-nombre">{f.esPropio ? 'Tu publicación' : (f.vendedor ?? 'vendedor')}{f.esFull ? <span className="sv-full">Full</span> : null}</strong>
         <span className="sv-titulo">{f.titulo}</span>
         <Medidor ahora={ahora} antes={antes} />
+        {fuerte ? <p className="sv-fuerza" title={f.fuerza === 'ciclo' ? 'Su stock bajó y después subió: vendió y volvió a comprar.' : 'Su stock subió sin que se viera la baja: la venta ocurrió dentro de un rango.'}>
+          <Flame size={14} aria-hidden="true" /><b>{f.fuerza === 'ciclo' ? 'Fuerte: vendió y repuso' : 'Repone stock'}</b>
+          <span>metió al menos {fmtNum(f.unidadesRepuestasPiso)} u{f.esFull ? ' a Full' : ''}{f.reposiciones > 1 ? ` en ${f.reposiciones} reposiciones` : ''}{f.ultimaReposicionEl ? ` · ${hace(f.ultimaReposicionEl)}` : ''}</span></p> : null}
         <div className="sv-pie">
           {vendio ? <span className="sv-venta"><TrendingDown size={14} aria-hidden="true" />vendió al menos <b>{fmtNum(f.unidadesPiso)}</b> en {f.dias} d</span>
             : cuantas >= 2 ? <span className="sv-quieto">sin baja visible en {f.dias} d</span>
               : cuantas === 1 ? <span className="sv-quieto">1ª lectura · falta la 2ª para saber si vende</span> : <span className="sv-quieto">todavía sin leer</span>}
-          {f.reposiciones ? <span className="apr-chip apr-chip-mini">repuso ×{f.reposiciones}</span> : null}
+          {f.ajustes ? <span className="apr-chip apr-chip-mini" title="Subidas de 1-2 unidades: devoluciones u órdenes anuladas, no reposición">{f.ajustes} {f.ajustes === 1 ? 'devolución' : 'devoluciones'}</span> : null}
           {f.activo === false ? <span className="apr-chip apr-chip-aviso apr-chip-mini">{f.motivoBaja}</span> : <span className="sv-cuando"><Clock size={12} aria-hidden="true" />{dentroDe(f.proximaLecturaEl)}</span>}
         </div>
       </div>
@@ -103,6 +108,7 @@ function Visibilidad({ publicaciones, alto = 12 }) {
 
 const FILTROS_STOCK = [
   ['todos', 'Todos', () => true],
+  ['fuertes', 'Venden y reponen', (n) => n.fuertes > 0],
   ['ventas', 'Con ventas vistas', (n) => n.vendiendo > 0],
   ['visibles', 'Dejan ver su stock', (n) => n.publicaciones.some(dejaVer)],
   ['sinleer', 'Aún sin leer', (n) => n.publicaciones.every((f) => ultimas(f).escalon === -1)],
@@ -114,16 +120,17 @@ const TarjetaNicho = memo(function TarjetaNicho({ n, abierto, alAlternar }) {
   const visiblesN = n.publicaciones.filter(dejaVer).length
   const leidas = n.publicaciones.filter((f) => ultimas(f).escalon !== -1).length
   return (
-    <div className={`sn${abierto ? ' sn-abierto' : ''}${n.vendiendo ? ' sn-vende' : ''}`}>
+    <div className={`sn${abierto ? ' sn-abierto' : ''}${n.vendiendo ? ' sn-vende' : ''}${n.fuertes ? ' sn-fuerte' : ''}`}>
       <button type="button" className="sn-cab" aria-expanded={abierto} onClick={() => alAlternar(n.keyword)}>
         <span className="sn-titulo"><strong>{n.keyword}</strong>
-          {n.vendiendo ? <span className="apr-chip apr-chip-bien"><TrendingDown size={13} aria-hidden="true" />{n.vendiendo} vendiendo · ≥{fmtNum(n.unidadesPisoSemana)} u/sem</span>
+          {n.fuertes ? <span className="apr-chip apr-chip-fuerte"><Flame size={13} aria-hidden="true" />{n.fuertes} {n.fuertes === 1 ? 'vende y repone' : 'venden y reponen'} · ≥{fmtNum(n.unidadesRepuestasPiso)} u repuestas</span>
+            : n.vendiendo ? <span className="apr-chip apr-chip-bien"><TrendingDown size={13} aria-hidden="true" />{n.vendiendo} vendiendo · ≥{fmtNum(n.unidadesPisoSemana)} u/sem</span>
             : !leidas ? <span className="apr-chip"><CircleDashed size={13} aria-hidden="true" />en fila para leer</span>
               : visiblesN ? <span className="apr-chip apr-chip-mini-azul">{visiblesN} de {n.publicaciones.length} dejan ver stock</span>
                 : <span className="apr-chip">todos en “+50”: no se ve</span>}</span>
         <Visibilidad publicaciones={n.publicaciones} alto={8} />
         <span className="sn-fotos">{n.publicaciones.map((f) => (
-          <span key={f.sku} className="sn-mini">{f.imagen ? <Miniatura src={f.imagen} lado={44} /> : <span className="mv-sinfoto" />}<Medidor ahora={ultimas(f).ahora} antes={ultimas(f).antes} compacto /></span>
+          <span key={f.sku} className={`sn-mini${f.fuerza === 'ciclo' || f.fuerza === 'repone' ? ' sn-mini-fuerte' : ''}`}>{f.imagen ? <Miniatura src={f.imagen} lado={44} /> : <span className="mv-sinfoto" />}<Medidor ahora={ultimas(f).ahora} antes={ultimas(f).antes} compacto /></span>
         ))}</span>
       </button>
       {abierto ? <div className="sv-grilla sn-detalle">{n.publicaciones.map((f) => <TarjetaVendedor key={f.sku} f={f} />)}</div> : null}
@@ -147,7 +154,7 @@ export function StockCompetidores() {
   }).catch((e) => setError(e.message)), [])
   const alAlternar = useCallback((k) => setAbierto((a) => (a === k ? null : k)), [])
   const ordenados = useMemo(() => {
-    const valor = (n) => n.unidadesPisoSemana * 1000 + n.vendiendo * 100 + n.publicaciones.filter(dejaVer).length
+    const valor = (n) => (n.fuertes ?? 0) * 1e6 + n.unidadesPisoSemana * 1000 + n.vendiendo * 100 + n.publicaciones.filter(dejaVer).length
     return (d?.nichos ?? []).map((n) => [valor(n), n]).sort((a, b) => b[0] - a[0]).map(([, n]) => n)
   }, [d])
   const conteos = useMemo(() => Object.fromEntries(FILTROS_STOCK.map(([id, , f]) => [id, (d?.nichos ?? []).filter(f).length])), [d])
@@ -168,14 +175,14 @@ export function StockCompetidores() {
     <>
       <section className="apr-seccion">
         <div className="apr-seccion-cabeza"><h3>Cómo leer el stock de un competidor</h3>
-          <p>Mercado Libre no muestra el número: muestra un escalón. Cuando un vendedor vende, su marcador se corre hacia la derecha; cuando repone, salta a la izquierda. De “+50” no se ve nada; en “1-5” cada baja es una venta contada.</p></div>
+          <p>Mercado Libre no muestra el número: muestra un escalón. Cuando un vendedor vende, su marcador se corre hacia la derecha; cuando repone, salta a la izquierda. De “+50” no se ve nada; en “1-5” cada baja es una venta contada. <strong>Bajar y después subir es la señal fuerte:</strong> ese vendedor volvió a meter plata en el producto.</p></div>
         <div className="mg-leyenda">{ESCALONES.map((e, i) => (
           <div key={e.id} className="mg-leyenda-paso"><span className={`mg-leyenda-barra mg-${e.id}`} /><strong>{e.etiqueta === '0' ? 'agotado' : e.etiqueta}</strong><small>{e.ayuda}</small>{i < 5 ? <i aria-hidden="true">→</i> : null}</div>
         ))}</div>
       </section>
 
       <section className="apr-seccion">
-        <div className="apr-fuentes">
+        <div className="apr-fuentes apr-fuentes-auto">
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><Wallet size={17} aria-hidden="true" /></span><h3>Gasto del mes</h3></div>
             <p className="apr-cifra">US${d.gasto.mesUsd.toFixed(2)}<small> de US${d.topeUsdMes}</small></p>
             <div className="apr-medidor"><span style={{ width: `${Math.max(2, pct)}%` }} /></div>
@@ -186,7 +193,10 @@ export function StockCompetidores() {
             <p className="apr-fuente-detalle">verde = número exacto · azul = rango visible · gris = “+50” · rayado = sin leer</p></article>
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><TrendingDown size={17} aria-hidden="true" /></span><h3>Ventas vistas</h3></div>
             <p className="apr-cifra">{fmtNum(d.nichos.reduce((a, n) => a + n.vendiendo, 0))}<small> vendedores con baja de stock</small></p>
-            <p className="apr-fuente-detalle">{fmtNum(d.nichos.reduce((a, n) => a + n.reposiciones, 0))} reposiciones · {fmtNum(d.pendientesAhora ?? 0)} esperando lectura. Las ventas aparecen desde la 2ª lectura de cada vendedor.</p></article>
+            <p className="apr-fuente-detalle">{fmtNum(d.pendientesAhora ?? 0)} esperando lectura. Las ventas aparecen desde la 2ª lectura de cada vendedor.</p></article>
+          <article className="apr-fuente apr-fuente-fuerte"><div className="apr-cabeza"><span className="apr-icono"><Flame size={17} aria-hidden="true" /></span><h3>Venden y reponen</h3></div>
+            <p className="apr-cifra">{fmtNum(d.nichos.reduce((a, n) => a + (n.fuertes ?? 0), 0))}<small> vendedores fuertes</small></p>
+            <p className="apr-fuente-detalle">{d.nichos.some((n) => n.fuertes) ? `Repusieron al menos ${fmtNum(d.nichos.reduce((a, n) => a + (n.unidadesRepuestasPiso ?? 0), 0))} unidades en ${fmtNum(d.nichos.filter((n) => n.fuertes).length)} nichos.` : 'Stock que baja y después sube: nadie repone lo que no se vende. Aparece desde la 3ª lectura.'}</p></article>
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><CheckCircle2 size={17} aria-hidden="true" /></span><h3>Cuánto ve el método</h3></div>
             <p className="apr-cifra">{cal?.pctVisto != null ? `${cal.pctVisto}%` : '—'}<small>{cal?.pctVisto != null ? ' de tus ventas reales' : ''}</small></p>
             <p className="apr-fuente-detalle">{cal ? `En ${cal.productos} publicaciones tuyas vio ${fmtNum(cal.unidadesVistas)} de ${fmtNum(cal.unidadesReales)} unidades` : 'Se mide leyendo tus publicaciones desde afuera. Necesita unos días.'}</p></article>

@@ -34,3 +34,33 @@ test('una serie de lecturas da el mínimo vendido, cuenta reposiciones y no suma
   assert.equal(r.porSemana, 9.3)
   assert.equal(resumenDeSerie([l('01', 51, true), l('08', 51, true)]).unidadesPiso, 0)
 })
+
+// El importador, 17-sep: "si detecta que está bajando el stock y después que
+// aumentó, es porque están enviando a Full: ese producto es fuerte".
+test('fuerza: vender y después reponer es un CICLO, con el mínimo que repuso', () => {
+  const l = (dia, stock, topado = false) => ({ fecha: new Date(`2026-09-${dia}T12:00:00Z`), stock, topado, fuente: 'texto' })
+  const r = resumenDeSerie([l('01', 26, true), l('03', 11, true), l('05', 4), l('06', 1), l('08', 26, true), l('10', 11, true)])
+  // de "1 disponible" a "+25": metió al menos 25 unidades
+  assert.deepEqual([r.fuerza, r.ciclos, r.reposiciones, r.unidadesRepuestasPiso, r.ajustes], ['ciclo', 1, 1, 25, 0])
+  assert.equal(+new Date(r.ultimaReposicionEl), +new Date('2026-09-08T12:00:00Z'))
+  // agotarse y volver también es un ciclo, aunque la baja previa no se haya visto
+  assert.equal(resumenDeSerie([l('01', 0), l('03', 11, true)]).fuerza, 'ciclo')
+  // subió sin baja visible: la venta ocurrió dentro de un rango. Repone, pero no es ciclo
+  assert.equal(resumenDeSerie([l('01', 6, true), l('03', 26, true)]).fuerza, 'repone')
+  assert.equal(resumenDeSerie([l('01', 26, true), l('03', 4)]).fuerza, 'vende')
+  assert.equal(resumenDeSerie([l('01', 4), l('03', 4)]).fuerza, 'quieto')
+  assert.equal(resumenDeSerie([l('01', 4)]).fuerza, null)
+})
+
+test('fuerza: una devolución que sube el stock 1-2 unidades NO es reponer', () => {
+  const l = (dia, stock, topado = false) => ({ fecha: new Date(`2026-09-${dia}T12:00:00Z`), stock, topado, fuente: 'texto' })
+  // de 2 a 3: una orden anulada devolvió la unidad
+  const dev = resumenDeSerie([l('01', 3), l('02', 2), l('03', 3)])
+  assert.deepEqual([dev.fuerza, dev.reposiciones, dev.ajustes, dev.ciclos], ['vende', 0, 1, 0])
+  // parado en el borde de un rango: 26 → 25 → 26 se ve "+25" → "+10" → "+25"
+  const borde = resumenDeSerie([l('01', 26, true), l('02', 11, true), l('03', 26, true)])
+  assert.deepEqual([borde.fuerza, borde.reposiciones, borde.ajustes], ['vende', 0, 1])
+  // pero si antes vendió de verdad (≥3), la misma subida chica SÍ cuenta
+  const real = resumenDeSerie([l('01', 5), l('02', 1), l('03', 3)])
+  assert.deepEqual([real.fuerza, real.ciclos, real.unidadesRepuestasPiso], ['ciclo', 1, 2])
+})

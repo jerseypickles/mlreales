@@ -26,6 +26,9 @@ const schema = new mongoose.Schema({
   // lecturas seguidas en "+50": ahí no se ve nada y la plata rinde más en otro lado
   sinInfoSeguidas: { type: Number, default: 0 },
   fallosSeguidos: { type: Number, default: 0 },
+  // reposiciones reales vistas: un vendedor que ya demostró que vende y repone NO
+  // se da de baja por volver a "+50" — es justo después de reponer, y va a bajar
+  reposicionesVistas: { type: Number, default: 0 },
 }, { versionKey: false })
 schema.index({ activo: 1, proximaLecturaEl: 1 })
 schema.index({ nichoId: 1 })

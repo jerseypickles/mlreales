@@ -854,7 +854,10 @@ export function ventaEntreLecturas(antes, ahora) {
   if (!(dias >= 0.5)) return null
   const a = rangoStock(antes), b = rangoStock(ahora)
   const base = { dias: redondear(dias, 1), stockAntes: antes.stock, stockAhora: ahora.stock, baldeAntes: antes.topado === true, baldeAhora: ahora.topado === true }
-  if (b.min > a.max) return { ...base, repuso: true }
+  // REPUSO: el stock subió más de lo que el rango anterior permitía. Cuánto metió
+  // como MÍNIMO es el piso del nuevo rango menos el techo del anterior: de
+  // "3 disponibles" a "+25" son ≥23 unidades — el tamaño de su apuesta.
+  if (b.min > a.max) return { ...base, repuso: true, repuestasPiso: b.min - a.max, desdeAgotado: antes.topado !== true && antes.stock === 0 }
   if (!Number.isFinite(b.max)) return null // sigue en "+50": no se ve nada
   const unidades = Math.max(0, a.min - b.max)
   const exacta = !antes.topado && !ahora.topado

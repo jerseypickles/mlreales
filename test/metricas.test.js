@@ -576,6 +576,9 @@ test('la baja de stock entre dos lecturas es venta: exacta si ambas lo son, un p
   assert.equal(ventaEntreLecturas(l('2026-09-10', 51, true), l('2026-09-17', 51, true)), null)
   // de "2 disponibles" a "+25": repuso
   assert.equal(ventaEntreLecturas(l('2026-09-10', 2), l('2026-09-17', 26, true)).repuso, true)
+  // y cuánto metió como mínimo: de 2 a "+25" (26 o más) son ≥24
+  assert.equal(ventaEntreLecturas(l('2026-09-10', 2), l('2026-09-17', 26, true)).repuestasPiso, 24)
+  assert.equal(ventaEntreLecturas(l('2026-09-10', 0), l('2026-09-17', 6, true)).desdeAgotado, true)
   assert.equal(ventaEntreLecturas(l('2026-09-17T10:00', 10), l('2026-09-17T12:00', 9)), null, 'dos horas no son una ventana')
   assert.equal(ventaEntreLecturas(l('2026-09-10', 26, false, 'telemetria'), l('2026-09-17', 20)), null, 'el campo de telemetría puede ser el tope de compra: no mide ventas')
 })

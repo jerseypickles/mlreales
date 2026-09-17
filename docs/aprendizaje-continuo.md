@@ -589,3 +589,28 @@ salir de datos medidos, no de una frase predefinida.
   comparar pronósticos avanzando la fecha de origen y evaluando horizontes futuros.
 - [Forecasting: Principles and Practice — intervalos](https://otexts.com/fpp3/prediction-intervals.html):
   expresar la incertidumbre junto al pronóstico.
+
+## Fuerza de un vendedor: vender y reponer (17-sep-2026)
+
+Observación del importador: si el stock de un competidor baja y después sube, es
+que volvió a comprar o a enviar a Full — ese producto es fuerte. Es la señal más
+limpia del seguimiento de stock: una baja sola puede ser venta o el vendedor
+corrigiendo su stock a mano; una reposición es plata vuelta a meter. Nadie repone
+lo que no se vende.
+
+- `ventaEntreLecturas` devuelve, cuando `repuso`, `repuestasPiso` = piso del rango
+  nuevo − techo del anterior (de "3 disponibles" a "+25" son ≥23 u: el tamaño de la
+  apuesta) y `desdeAgotado`.
+- `resumenDeSerie` clasifica `fuerza`: `ciclo` (vendió y después repuso, o se agotó
+  y volvió) · `repone` (subió sin baja visible: la venta ocurrió dentro de un
+  rango) · `vende` · `quieto`. Entrega `ciclos`, `reposiciones`,
+  `unidadesRepuestasPiso`, `ultimaReposicionEl`, `ajustes`.
+- Filtro de falsos positivos (`REPOSICION_MIN = 3`): una subida de 1-2 unidades sin
+  ≥3 vendidas antes es una devolución u orden anulada (de "2" a "3"), o un vendedor
+  parado en el borde de un rango (26→25→26 se ve "+25"→"+10"→"+25"). Cuenta como
+  `ajustes`, no como reposición.
+- Un vendedor con `reposicionesVistas > 0` no se da de baja por pasar cuatro
+  lecturas en "+50": está ahí justamente porque repuso, y va a volver a bajar.
+- Para el modelo de vendedores chicos (pendiente, tras la calibración): las lecturas
+  crudas quedan en `LecturaStock`, así que la fuerza se deriva al entrenar. Hoy solo
+  se informa en "Guardado, pero todavía no lo usa ningún modelo".

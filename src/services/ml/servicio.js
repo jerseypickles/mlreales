@@ -176,12 +176,14 @@ function coeficientesLegibles(resultado) {
 async function fuentesEnEspera() {
   const { RankingMasVendidos } = await import('../../models/RankingMasVendidos.js')
   const { SeguimientoStock, LecturaStock } = await import('../../models/SeguimientoStock.js')
-  const [diasRanking, categorias, seguidos, lecturas, conDosLecturas] = await Promise.all([
+  const [diasRanking, categorias, seguidos, lecturas, conDosLecturas, queReponen] = await Promise.all([
     RankingMasVendidos.distinct('dia').then((d) => d.length), RankingMasVendidos.distinct('categoriaId').then((d) => d.length),
     SeguimientoStock.countDocuments({ activo: true, esPropio: false }), LecturaStock.countDocuments({ ok: { $ne: false } }),
     LecturaStock.aggregate([{ $match: { ok: { $ne: false } } }, { $group: { _id: '$sku', n: { $sum: 1 } } }, { $match: { n: { $gte: 2 } } }, { $count: 'n' }]).then((r) => r[0]?.n ?? 0),
+    // vendió y repuso: la variable más fuerte que va a tener el modelo de vendedores chicos
+    SeguimientoStock.countDocuments({ esPropio: false, reposicionesVistas: { $gt: 0 } }),
   ])
-  return { ranking: { diasGuardados: diasRanking, categorias }, stock: { competidoresSeguidos: seguidos, lecturas, publicacionesConDosLecturas: conDosLecturas } }
+  return { ranking: { diasGuardados: diasRanking, categorias }, stock: { competidoresSeguidos: seguidos, lecturas, publicacionesConDosLecturas: conDosLecturas, vendedoresQueReponen: queReponen } }
 }
 
 export async function estadoMl({ ahora = new Date() } = {}) {

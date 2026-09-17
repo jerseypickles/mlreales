@@ -357,7 +357,7 @@ export function Aprendizaje() {
         <Seccion titulo="Guardado, pero todavía no lo usa ningún modelo" bajada="Se captura con fecha desde hoy para no perder tiempo. Entra a un modelo cuando haya serie suficiente y se haya medido contra tus ventas reales cuánto vale.">
           <div className="apr-fuentes apr-fuentes-3">
             <Fuente Icono={PackageX} titulo="Stock de competidores" valor={fmtNum(e.fuentes.enEspera?.stock?.lecturas)} unidad=" lecturas" estado={e.fuentes.enEspera?.stock?.lecturas ? 'bien' : 'espera'}
-              detalle={`${fmtNum(e.fuentes.enEspera?.stock?.competidoresSeguidos)} vendedores chicos seguidos · ${fmtNum(e.fuentes.enEspera?.stock?.publicacionesConDosLecturas)} ya con dos lecturas (desde ahí se ve si venden)`} />
+              detalle={`${fmtNum(e.fuentes.enEspera?.stock?.competidoresSeguidos)} vendedores chicos seguidos · ${fmtNum(e.fuentes.enEspera?.stock?.publicacionesConDosLecturas)} ya con dos lecturas (desde ahí se ve si venden) · ${fmtNum(e.fuentes.enEspera?.stock?.vendedoresQueReponen ?? 0)} que venden y reponen (la señal fuerte)`} />
             <Fuente Icono={TrendingUp} titulo="Ranking de más vendidos de ML" valor={fmtNum(e.fuentes.enEspera?.ranking?.diasGuardados)} unidad={e.fuentes.enEspera?.ranking?.diasGuardados === 1 ? ' día guardado' : ' días guardados'} estado={e.fuentes.enEspera?.ranking?.diasGuardados ? 'bien' : 'espera'}
               detalle={`${fmtNum(e.fuentes.enEspera?.ranking?.categorias)} categorías · la posición diaria de cada producto es una serie de demanda`} />
             <Fuente Icono={Megaphone} titulo="Publicidad por producto" valor={fmtNum(com.publicidad?.dias)} unidad=" días" estado={com.publicidad?.dias ? 'bien' : 'espera'}
