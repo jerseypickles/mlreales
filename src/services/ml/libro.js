@@ -186,15 +186,27 @@ export async function actualizarLibroPropios(sincronizacion, { ahora = new Date(
   return { productos, dias: escritos, semanas: nuevas, errores }
 }
 
-export async function resumenLibro() {
+export async function resumenLibro({ ahora = new Date(), diasSerie = 42 } = {}) {
   const filas = await DiaProductoMl.aggregate([
     { $group: { _id: '$itemId', titulo: { $last: '$titulo' }, dias: { $sum: 1 }, desde: { $min: '$dia' }, hasta: { $max: '$dia' },
       visitas: { $sum: '$visitas' }, unidades: { $sum: '$unidades' },
       diasConStockMedido: { $sum: { $cond: [{ $ne: ['$stockFraccion', null] }, 1, 0] } } } },
     { $sort: { unidades: -1 } },
   ])
+  // la serie reciente, para dibujarla: un punto por día, con los ceros
+  const desdeSerie = diaUtc(+ahora - diasSerie * DIA)
+  const recientes = await DiaProductoMl.find({ dia: { $gte: desdeSerie } }).select('itemId dia visitas unidades stockFraccion promo').sort({ dia: 1 }).lean()
+  const porItem = new Map(), total = new Map()
+  for (const d of recientes) {
+    porItem.set(d.itemId, [...(porItem.get(d.itemId) ?? []), { dia: d.dia, visitas: d.visitas, unidades: d.unidades, sinStock: d.stockFraccion !== null && d.stockFraccion < 1, promo: !!d.promo }])
+    const t = total.get(d.dia) ?? { dia: d.dia, visitas: 0, unidades: 0 }
+    t.visitas += d.visitas
+    t.unidades += d.unidades
+    total.set(d.dia, t)
+  }
   return { productos: filas.length, dias: filas.reduce((a, f) => a + f.dias, 0),
     unidades: filas.reduce((a, f) => a + f.unidades, 0), visitas: filas.reduce((a, f) => a + f.visitas, 0),
-    desde: filas.map((f) => f.desde).sort()[0] ?? null,
-    porProducto: filas.map(({ _id, ...f }) => ({ itemId: _id, ...f })) }
+    desde: filas.map((f) => f.desde).sort()[0] ?? null, hasta: filas.map((f) => f.hasta).sort().at(-1) ?? null,
+    serie: [...total.values()].sort((a, b) => a.dia.localeCompare(b.dia)),
+    porProducto: filas.map(({ _id, ...f }) => ({ itemId: _id, ...f, serie: porItem.get(_id) ?? [] })) }
 }

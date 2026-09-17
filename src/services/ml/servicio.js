@@ -3,7 +3,7 @@ import { ObservacionProductoMl } from '../../models/ObservacionProductoMl.js'
 import { ModeloMl } from '../../models/ModeloMl.js'
 import { PrediccionMl } from '../../models/PrediccionMl.js'
 import { pronosticarDemanda, VERSION_DEMANDA } from './demanda.js'
-import { ventanasIndependientes, VERSION_COMERCIAL } from './comercial.js'
+import { ventanasIndependientes, VERSION_COMERCIAL, MINIMOS_COMERCIAL } from './comercial.js'
 import { ejecutarEntrenamiento } from './ejecutar.js'
 import { huellaDe, diagnosticoObservacionesPropias } from './registro.js'
 import { indiceMes, normalizarMeses, variablesDemanda } from './series.js'
@@ -124,7 +124,7 @@ export async function estadoMl({ ahora = new Date() } = {}) {
     seriesActuales(), ObservacionProductoMl.find({ hasta: { $gte: new Date(+ahora - 730 * 86400e3), $lte: ahora } }).lean(),
     ModeloMl.aggregate([{ $sort: { creadoEl: -1 } }, { $group: { _id: '$objetivo', modelo: { $first: '$$ROOT' } } }]),
     PrediccionMl.countDocuments(), PrediccionMl.countDocuments({ evaluacion: { $ne: null } }),
-    estadoIntegracion({ ahora }), diagnosticoObservacionesPropias({ ahora }), resumenLibro(), resumenAdsDiario(),
+    estadoIntegracion({ ahora }), diagnosticoObservacionesPropias({ ahora }), resumenLibro({ ahora }), resumenAdsDiario({ ahora }),
   ])
   const ventanas = ventanasIndependientes(observaciones)
   const mesActual = indiceMes(ahora.toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }).slice(0, 7))
@@ -138,7 +138,7 @@ export async function estadoMl({ ahora = new Date() } = {}) {
   })
   const ultimaCaptura = series.reduce((ultima, s) => Math.max(ultima, +new Date(s.capturadoEl)), 0)
   return { modo: 'sombra', usaParaDecidir: false, consultadoEl: ahora,
-    alcance: { usaCostoCompra: false, estimaRentabilidad: false }, integracion,
+    alcance: { usaCostoCompra: false, estimaRentabilidad: false }, integracion, minimos: MINIMOS_COMERCIAL,
     fuentes: { demanda: { ultimaCapturaEl: ultimaCaptura ? new Date(ultimaCaptura) : null },
       comercial: { ultimaVentanaEl: ventanas.at(-1)?.hasta ?? null, historialDias: 730, perfilDias: 90,
         semanasGuardadas: observaciones.length, diagnostico, libro, publicidad } },

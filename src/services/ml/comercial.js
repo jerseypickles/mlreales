@@ -7,6 +7,8 @@ const DIA = 86400e3
 // Una promo de ML mueve el precio 5-15%; más que eso ya son dos precios
 // distintos y el promedio de la semana no describe ninguno.
 export const VARIACION_PRECIO_MAX = 1.15
+// lo mínimo para que un entrenamiento comercial signifique algo
+export const MINIMOS_COMERCIAL = { productos: 12, ventanas: 72, nichos: 3, visitasSemana: 30 }
 const grupoPrueba = (id) => createHash('sha256').update(String(id)).digest()[0] % 4 === 0
 
 // Muestreo determinista sin ventanas solapadas dentro de un mismo producto.
@@ -17,7 +19,7 @@ export function ventanasIndependientes(observaciones) {
     .filter((o) => {
       const desde = +new Date(o.desde), hasta = +new Date(o.hasta)
       if (!o.itemId || !o.categoria || !Number.isFinite(desde) || !Number.isFinite(hasta) ||
-        Math.abs(hasta - desde - 7 * DIA) > 1000 || !Number.isFinite(o.visitas) || o.visitas < 30 ||
+        Math.abs(hasta - desde - 7 * DIA) > 1000 || !Number.isFinite(o.visitas) || o.visitas < MINIMOS_COMERCIAL.visitasSemana ||
         !Number.isFinite(o.unidades) || o.unidades < 0 || !Number.isFinite(o.precio) || o.precio <= 0 || typeof o.full !== 'boolean') return false
       if (o.precioMin > 0 && o.precioMax / o.precioMin > VARIACION_PRECIO_MAX) return false
       if (desde < (ultima.get(o.itemId) ?? -Infinity)) return false
@@ -48,7 +50,7 @@ export function entrenarComercial(observaciones, { conContexto = false } = {}) {
   const cobertura = { productos: productos.size, ventanas: datos.length,
     ...(conContexto ? { nichos: new Set(datos.map((o) => o.contexto.nichoId)).size } : {}) }
   const insuficiente = () => ({ estado: 'datos-insuficientes', version, cobertura })
-  if (productos.size < 12 || datos.length < 72 || conContexto && cobertura.nichos < 3) return insuficiente()
+  if (productos.size < MINIMOS_COMERCIAL.productos || datos.length < MINIMOS_COMERCIAL.ventanas || conContexto && cobertura.nichos < MINIMOS_COMERCIAL.nichos) return insuficiente()
   // Holdout de productos completos Y de fechas posteriores. Un SKU nunca
   // aparece en ambos lados de la prueba final de transferencia.
   const hasta = Math.max(...datos.map((o) => +new Date(o.hasta)))

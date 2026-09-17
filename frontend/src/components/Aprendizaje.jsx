@@ -1,182 +1,235 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Eye, RefreshCw, Search, ShoppingBag, Info, Link2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Activity, AlertTriangle, CheckCircle2, ChevronDown, CircleDashed, Eye, Link2, Megaphone, PackageX,
+  RefreshCw, Search, ShoppingBag, Store, TrendingDown, TrendingUp,
+} from 'lucide-react'
 import { api } from '../api.js'
-import { Cargando, StatTile } from './ui.jsx'
+import { Cargando } from './ui.jsx'
 import { fmtFecha, fmtNum, fmtPrecio } from '../lib/formato.js'
 
-const decimal = (valor, digitos = 2) => Number.isFinite(valor)
+const decimal = (valor, digitos = 1) => Number.isFinite(valor)
   ? valor.toLocaleString('es-CL', { maximumFractionDigits: digitos }) : '—'
 const mes = (periodo) => /^\d{4}-(0[1-9]|1[0-2])$/.test(periodo ?? '')
-  ? new Date(`${periodo}-15T12:00:00Z`).toLocaleDateString('es-CL', { month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—'
-const fecha = (valor) => valor ? new Date(valor).toLocaleDateString('es-CL', {
-  day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Santiago',
+  ? new Date(`${periodo}-15T12:00:00Z`).toLocaleDateString('es-CL', { month: 'short', timeZone: 'UTC' }).replace('.', '') : '—'
+const fecha = (valor) => valor ? new Date(valor.length === 10 ? `${valor}T12:00:00Z` : valor).toLocaleDateString('es-CL', {
+  day: 'numeric', month: 'short', timeZone: 'America/Santiago',
 }) : '—'
 
-function EstadoModelo({ modelo, titulo, descripcion, Icono, children }) {
-  const entrenado = modelo?.estado === 'sombra'
-  const estado = !modelo ? 'Sin entrenamiento registrado'
-    : !entrenado ? 'Datos insuficientes'
-      : !modelo.vigente ? 'Entrenamiento vencido' : 'Entrenado · en observación'
-  const e = modelo?.evaluacion
-  const demanda = modelo?.objetivo === 'busquedas-google'
-  const combinado = modelo?.objetivo === 'unidades-por-visita-contexto'
-  const referencias = [e?.referenciaEstacional, e?.referenciaPersistencia].filter(Number.isFinite)
-  const referencia = demanda ? (referencias.length ? Math.min(...referencias) : null) : e?.referencia
-  const mejora = Number.isFinite(e?.maeLog) && Number.isFinite(referencia) && referencia > 0
-    ? (1 - e.maeLog / referencia) * 100 : null
+// Barras de una serie diaria. Rectángulos y no un path: con el alto estirado un
+// path con vector-effect no se dibuja en todos los motores (ver graficos.jsx).
+function Chispa({ puntos, campo, alto = 36, etiqueta, clase = '' }) {
+  if (!puntos?.length) return <div className="apr-chispa-vacia" style={{ height: alto }}>sin datos todavía</div>
+  const max = Math.max(1, ...puntos.map((p) => p[campo] ?? 0))
+  const ancho = 100 / puntos.length
   return (
-    <article className="ml-modelo">
-      <div className="ml-modelo-titulo"><Icono size={20} aria-hidden="true" /><h3>{titulo}</h3></div>
-      <p className="ml-descripcion">{descripcion}</p>
-      <span className={`ml-etiqueta ${entrenado && modelo.vigente ? 'ml-azul' : ''}`}>{estado}</span>
-      <div className="ml-modelo-datos">{children}</div>
-      {modelo && <p className="ml-meta">Registro de entrenamiento: {fmtFecha(modelo.creadoEl)}</p>}
-      {!entrenado && <p className="ml-aclaracion">Se necesita suficiente historial para separar los datos de entrenamiento de los de prueba. Todavía no hay una evaluación disponible.</p>}
-      {entrenado && !modelo.vigente && <p className="ml-aclaracion">Esta versión tiene más de 90 días o una fecha inválida. Necesita un entrenamiento vigente para emitir nuevas estimaciones.</p>}
-      {e && <details className="ml-detalle">
-        <summary>Evaluación del modelo</summary>
-        <p>{demanda ? 'Prueba histórica con meses posteriores a los usados para entrenar.'
-          : 'Prueba con productos reservados y fechas posteriores al entrenamiento.'}</p>
-        <dl className="ml-metricas">
-          <div><dt>Error del modelo</dt><dd>{decimal(e.maeLog, 4)}</dd></div>
-          <div><dt>Error de referencia</dt><dd>{decimal(referencia, 4)}</dd></div>
-        </dl>
-        {mejora !== null && <p>{decimal(Math.abs(mejora), 1)}% {mejora >= 0 ? 'menos' : 'más'} error que la referencia en esta prueba.</p>}
-        <p className="ml-meta">Error absoluto medio en escala logarítmica; menor es mejor. No es un porcentaje de acierto. La referencia {demanda
-          ? 'es la mejor entre repetir el año anterior y mantener el último valor.' : combinado
-            ? 'es la mejor entre el promedio y el modelo de ventas sin datos del nicho, evaluados con los mismos productos y fechas.'
-            : 'es el promedio del entrenamiento, equilibrado por producto.'}</p>
-        {combinado && <p className="ml-meta">Error sin contexto del nicho: {decimal(e.referenciaSinContexto, 4)}. Así se mide si añadir Zyte y DataForSEO aporta información. La prueba reserva productos, no nichos completos.</p>}
-        <p className="ml-meta">Estos resultados no activan cambios en las recomendaciones.</p>
-      </details>}
+    <svg className={`apr-chispa ${clase}`} viewBox={`0 0 100 ${alto}`} preserveAspectRatio="none" style={{ height: alto }} role="img" aria-label={etiqueta}>
+      {puntos.map((p, i) => {
+        const h = Math.max(p[campo] > 0 ? 1.5 : 0, ((p[campo] ?? 0) / max) * (alto - 2))
+        return <g key={p.dia}>
+          {p.sinStock && <rect className="apr-chispa-quiebre" x={i * ancho} y="0" width={ancho} height={alto} />}
+          <rect className="apr-chispa-barra" x={i * ancho + ancho * 0.14} y={alto - h} width={ancho * 0.72} height={h} rx="0.6">
+            <title>{`${fecha(p.dia)}: ${fmtNum(p[campo] ?? 0)}`}</title>
+          </rect>
+        </g>
+      })}
+    </svg>
+  )
+}
+
+function Fuente({ Icono, titulo, valor, unidad, detalle, estado = 'bien', children }) {
+  return (
+    <article className={`apr-fuente apr-fuente-${estado}`}>
+      <header><span className="apr-icono"><Icono size={17} aria-hidden="true" /></span><h3>{titulo}</h3>
+        <span className={`apr-punto apr-punto-${estado}`} title={estado === 'bien' ? 'Capturando' : estado === 'espera' ? 'Esperando la primera pasada' : 'Revisar'} />
+      </header>
+      <p className="apr-cifra">{valor}<small>{unidad}</small></p>
+      {children}
+      <p className="apr-fuente-detalle">{detalle}</p>
     </article>
   )
 }
 
-const MOTIVOS_UNION = {
-  'producto-sin-nicho-vinculado': 'Producto sin un nicho vinculado al registrar sus ventas',
-  'sin-captura-zyte-anterior': 'Falta una captura de Zyte anterior a la semana',
-  'captura-zyte-fuera-de-fecha': 'La captura de Zyte no cumple las fechas o tiene más de 14 días',
-  'sin-serie-demanda-anterior': 'Falta historial de búsquedas disponible antes de la semana',
-  'serie-demanda-posterior': 'Las búsquedas se recuperaron después de comenzar la semana',
-  'demanda-sin-meses-recientes': 'El historial de búsquedas no llega a meses recientes',
-  'demanda-con-huecos': 'Faltan meses continuos en el historial de búsquedas',
-  'pocos-productos-zyte': 'Menos de 10 productos comparables con precio en Zyte',
-  'atributos-invalidos': 'Fecha o precio de venta incompleto',
-  'contexto-incompleto': 'Datos del nicho incompletos',
-}
-
-function IntegracionFuentes({ datos }) {
-  if (!datos) return null
-  return <section className="ml-seccion" aria-labelledby="ml-union">
-    <div className="ml-seccion-titulo"><h3 id="ml-union">Tres fuentes, un mismo nicho</h3><span className="ml-etiqueta">Zyte + DataForSEO + tu cuenta de ML</span></div>
-    <p className="ml-descripcion">Cada semana de ventas se cruza con las búsquedas y la competencia que ya se habían medido antes de comenzar esa semana. Los listados y las fichas de Zyte conservan su propia fecha.</p>
-    <div className="tiles">
-      <StatTile label="Nichos capturados con Zyte" value={fmtNum(datos.nichosCapturados)} detalle="Listado y detalle del mismo scan no se cuentan dos veces" />
-      <StatTile label="Semanas con las tres fuentes" value={fmtNum(datos.ventanasUnidas)} detalle={`De ${fmtNum(datos.ventanasCandidatas)} semanas comerciales válidas`} />
-      <StatTile label="Productos con contexto" value={fmtNum(datos.productosUnidos)} detalle={`En ${fmtNum(datos.nichosUnidos)} nichos vinculados`} />
-    </div>
-    {!datos.nichos.length ? <p className="ml-vacio">Todavía no hay capturas de Zyte guardadas para esta integración. Se conservarán en las próximas pasadas del scraper.</p> : <div className="tabla-envoltura ml-tabla"><table>
-      <thead><tr><th scope="col">Nicho</th><th scope="col">Búsqueda vinculada</th><th scope="col">Última captura Zyte</th><th scope="col" className="num">Productos capturados</th><th scope="col" className="num">Semanas unidas</th></tr></thead>
-      <tbody>{datos.nichos.map((n) => <tr key={n.nichoId}>
-        <td className="celda-titulo">{n.keyword}</td><td>{n.keywordDemanda}</td>
-        <td>{fmtFecha(n.capturadoEl)}<small className="ml-subdato">{n.fase === 'detalle' ? 'Con detalle de fichas' : 'Listado'}{!n.reciente ? ' · necesita un scan reciente' : ''}</small></td>
-        <td className="num">{fmtNum(n.productos)}</td><td className="num">{fmtNum(n.ventanasUnidas)}</td>
-      </tr>)}</tbody>
-    </table></div>}
-    {!!Object.keys(datos.omitidas).length && <details className="ml-detalle" open>
-      <summary>Semanas que todavía no se pueden unir</summary>
-      <ul>{Object.entries(datos.omitidas).map(([motivo, cantidad]) => <li key={motivo}>{MOTIVOS_UNION[motivo] ?? 'Evidencia incompleta'}: <strong>{fmtNum(cantidad)}</strong></li>)}</ul>
-    </details>}
-    <p className="ml-meta">Hasta 100 nichos. El modelo utiliza hasta 30 productos únicos con precio por captura y excluye la publicación propia cuando se identifica. Full y reseñas se acompañan de su cobertura: un campo ausente no se interpreta como cero.</p>
-    <p className="ml-meta">Las reseñas son contadores públicos de publicación o catálogo; los avisos de vendidos se conservan para auditoría y no entrenan como ventas exactas. Recuperar datos hoy no los convierte en información disponible en una fecha pasada.</p>
-  </section>
-}
-
-function HistorialNichos({ series, total }) {
+function Avance({ etiqueta, valor, meta, ayuda }) {
+  const pct = Math.min(100, Math.round(((valor ?? 0) / meta) * 100))
   return (
-    <details className="ml-detalle ml-historial">
-      <summary>Ver historial de nichos · {fmtNum(total)} búsquedas</summary>
-      {!series.length ? <p className="ml-vacio">Todavía no hay capturas de búsquedas para el aprendizaje.</p> : <>
-        <p className="ml-meta">Hasta 100 búsquedas de Google en Chile. Tener 24 meses continuos permite calcular variables; no garantiza que alcance para entrenar.</p>
-        <div className="tabla-envoltura"><table>
-          <thead><tr><th scope="col">Búsqueda</th><th scope="col">Historial guardado</th><th scope="col">Continuidad reciente</th><th scope="col">Última captura</th></tr></thead>
-          <tbody>{series.map((s) => <tr key={s.keyword}>
-            <td className="celda-titulo">{s.keyword}</td>
-            <td>{mes(s.desde)} – {mes(s.hasta)}<small className="ml-subdato">{fmtNum(s.meses)} meses disponibles</small></td>
-            <td>{s.continua24Meses ? '24 meses continuos' : 'Historial corto o con huecos'}
-              {!s.reciente && <small className="ml-subdato ml-aviso">Falta una medición reciente</small>}</td>
-            <td>{fecha(s.capturadoEl)}</td>
-          </tr>)}</tbody>
-        </table></div>
-      </>}
+    <div className="apr-avance">
+      <div className="apr-avance-cabeza"><span>{etiqueta}</span><strong>{fmtNum(valor ?? 0)}<small> de {fmtNum(meta)}</small></strong></div>
+      <div className="apr-barra" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={etiqueta}>
+        <span style={{ width: `${pct}%` }} className={pct >= 100 ? 'apr-barra-lista' : ''} />
+      </div>
+      {ayuda && <p className="apr-avance-ayuda">{ayuda}</p>}
+    </div>
+  )
+}
+
+const VARIABLES = {
+  crecimiento12m: 'Crecimiento del último año', crecimiento6m: 'Crecimiento de 6 meses', impulso3m: 'Impulso de 3 meses',
+  estacionObjetivo: 'Estacionalidad del mes', horizonte: 'Meses hacia adelante',
+}
+
+function Comparacion({ filas }) {
+  const max = Math.max(...filas.map((f) => f.valor))
+  return (
+    <div className="apr-comparacion">
+      {filas.map((f) => (
+        <div key={f.nombre} className={`apr-comp-fila${f.propio ? ' apr-comp-propio' : ''}${f.mejor ? ' apr-comp-mejor' : ''}`}>
+          <span className="apr-comp-nombre">{f.nombre}</span>
+          <span className="apr-comp-pista"><span style={{ width: `${(f.valor / max) * 100}%` }} /></span>
+          <span className="apr-comp-valor">{decimal(f.valor, 3)}</span>
+        </div>
+      ))}
+      <p className="apr-nota">Error promedio de la prueba. Barra más corta = se equivoca menos.</p>
+    </div>
+  )
+}
+
+function Pesos({ coeficientes }) {
+  const filas = Object.entries(coeficientes ?? {}).filter(([, v]) => Number.isFinite(v))
+  if (!filas.length) return null
+  const max = Math.max(...filas.map(([, v]) => Math.abs(v))) || 1
+  return (
+    <details className="apr-plegable">
+      <summary><ChevronDown size={15} aria-hidden="true" />En qué se fija el modelo</summary>
+      <div className="apr-pesos">
+        {filas.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).map(([nombre, v]) => (
+          <div key={nombre} className="apr-peso">
+            <span>{VARIABLES[nombre] ?? nombre}</span>
+            <span className="apr-peso-eje"><span className={v < 0 ? 'apr-peso-neg' : 'apr-peso-pos'} style={{ width: `${(Math.abs(v) / max) * 50}%` }} /></span>
+            <strong>{v > 0 ? '+' : ''}{decimal(v, 2)}</strong>
+          </div>
+        ))}
+        <p className="apr-nota">A la derecha empuja el pronóstico hacia arriba; a la izquierda, hacia abajo.</p>
+      </div>
     </details>
   )
 }
 
-function ProductosObservados({ perfiles, diagnostico }) {
+function Modelo({ modelo, Icono, titulo, pregunta, children }) {
+  const e = modelo?.evaluacion
+  const entrenado = modelo?.estado === 'sombra'
+  const demanda = modelo?.objetivo === 'busquedas-google'
+  const referencias = demanda
+    ? [{ nombre: 'Repetir el año pasado', valor: e?.referenciaEstacional }, { nombre: 'Mantener el último mes', valor: e?.referenciaPersistencia }]
+    : [{ nombre: 'Promedio simple', valor: e?.referencia }, ...(Number.isFinite(e?.referenciaSinContexto) ? [{ nombre: 'Sin datos del nicho', valor: e.referenciaSinContexto }] : [])]
+  const validas = referencias.filter((r) => Number.isFinite(r.valor))
+  const mejorRef = validas.length ? Math.min(...validas.map((r) => r.valor)) : null
+  const mejora = Number.isFinite(e?.maeLog) && mejorRef > 0 ? (1 - e.maeLog / mejorRef) * 100 : null
+  const gana = mejora !== null && mejora >= 5
+  const estado = !modelo || !entrenado ? 'espera' : !modelo.vigente ? 'mal' : gana ? 'bien' : 'aviso'
+  const Chip = { espera: CircleDashed, mal: AlertTriangle, bien: CheckCircle2, aviso: Eye }[estado]
+  const textoChip = !modelo ? 'Sin entrenar' : !entrenado ? 'Juntando datos' : !modelo.vigente ? 'Vencido' : gana ? 'Le gana a la regla simple' : 'En observación'
+  const filas = entrenado && Number.isFinite(e?.maeLog)
+    ? [{ nombre: 'Este modelo', valor: e.maeLog, propio: true }, ...validas].map((f) => ({ ...f, mejor: f.valor === Math.min(e.maeLog, ...validas.map((r) => r.valor)) }))
+    : null
   return (
-    <section className="ml-seccion" aria-labelledby="ml-productos">
-      <div className="ml-seccion-titulo"><h3 id="ml-productos">Productos con datos observados</h3><span className="ml-etiqueta">Semanas cerradas en 90 días</span></div>
-      <p className="ml-descripcion">Hasta 20 productos, ordenados por unidades vendidas en semanas válidas. Incluye stock anterior aunque su costo de compra sea desconocido.</p>
-      {!perfiles.length ? <p className="ml-vacio">Todavía no hay semanas completas que cumplan los criterios. Esto no significa que tus productos no estén vendiendo.</p> : <div className="tabla-envoltura ml-tabla">
-        <table><thead><tr>
-          <th scope="col">Producto</th><th scope="col">Período observado</th><th scope="col" className="num">Semanas</th>
-          <th scope="col" className="num">Visitas</th><th scope="col" className="num">Unidades</th><th scope="col" className="num">Unid. / 100 visitas</th>
-        </tr></thead><tbody>{perfiles.map((p) => <tr key={p.itemId}>
-          <td className="celda-titulo ml-producto-nombre">{p.titulo || p.itemId}<small className="ml-subdato">{p.itemId} · último precio de venta {fmtPrecio(p.precio)}</small></td>
-          <td>{fecha(p.desde)}<small className="ml-subdato">a {fecha(p.hasta)}</small></td>
-          <td className="num">{fmtNum(p.ventanasSinSolapar)}</td><td className="num">{fmtNum(p.visitas)}</td>
-          <td className="num">{fmtNum(p.unidades)}</td><td className="num">{decimal(p.unidadesPor100Visitas)}</td>
-        </tr>)}</tbody></table>
-      </div>}
-      {diagnostico?.length > 0 && <details className="ml-detalle" open={!perfiles.length}>
-        <summary>Qué le falta hoy a cada producto</summary>
-        <ul>{diagnostico.map((d) => <li key={d.itemId}><strong>{d.titulo || d.itemId}</strong>: {d.admisible
-          ? (d.visitas >= 30 ? 'semana admisible' : `semana guardada, con ${fmtNum(d.visitas)} visitas (se entrena desde 30)`)
-          : d.motivo}</li>)}</ul>
-      </details>}
-      <p className="ml-meta">Se suman semanas de siete días sin solaparlas; puede haber huecos entre ellas. Unidades por 100 visitas describe lo observado, no la probabilidad de compra ni la ganancia.</p>
-      <details className="ml-detalle">
-        <summary>Criterios para admitir una semana</summary>
-        <ul>
-          <li>Órdenes pagadas sincronizadas y visitas con las mismas fechas de inicio y fin.</li>
-          <li>Al menos 30 visitas y registros de stock disponible cada día de la ventana.</li>
-          <li>Sin cambio de logística dentro de la ventana. El precio es el promedio de la semana; si varió más de 15% (una promoción grande) la semana se guarda pero no se usa para entrenar.</li>
-          <li>Cero ventas es un resultado válido cuando existen visitas y mediciones completas.</li>
-        </ul>
-        <p className="ml-meta">El stock se comprueba en las mediciones disponibles; no es una garantía de disponibilidad entre mediciones.</p>
-      </details>
-    </section>
+    <article className="apr-modelo">
+      <header><span className="apr-icono"><Icono size={18} aria-hidden="true" /></span>
+        <div><h3>{titulo}</h3><p>{pregunta}</p></div>
+      </header>
+      <span className={`apr-chip apr-chip-${estado}`}><Chip size={13} aria-hidden="true" />{textoChip}</span>
+      {filas && <>
+        <p className={`apr-veredicto apr-veredicto-${gana ? 'bien' : 'aviso'}`}>
+          {gana ? <TrendingUp size={16} aria-hidden="true" /> : <TrendingDown size={16} aria-hidden="true" />}
+          {mejora >= 0 ? `${decimal(mejora, 0)}% mejor` : `${decimal(Math.abs(mejora), 0)}% peor`} que {demanda ? 'repetir el año pasado' : 'la regla simple'}
+        </p>
+        <Comparacion filas={filas} />
+        <p className="apr-nota">{gana ? 'Sigue en observación hasta confirmarlo con meses nuevos.' : 'Mientras no le gane a la regla simple, no se usa para decidir.'}</p>
+        <Pesos coeficientes={modelo.coeficientes} />
+      </>}
+      {!filas && children}
+      {modelo && <p className="apr-pie">Último entrenamiento: {fmtFecha(modelo.creadoEl)}</p>}
+    </article>
+  )
+}
+
+function estadoSemana(d, minimoVisitas) {
+  if (!d) return { clase: 'espera', Icono: CircleDashed, texto: 'Sin medir' }
+  if (d.admisible && d.visitas >= minimoVisitas) return { clase: 'bien', Icono: CheckCircle2, texto: 'Semana válida' }
+  if (d.admisible) return { clase: 'aviso', Icono: Eye, texto: `Pocas visitas · ${fmtNum(d.visitas)} de ${minimoVisitas}` }
+  if (/stock/i.test(d.motivo ?? '')) return { clase: 'mal', Icono: PackageX, texto: 'Sin stock esta semana' }
+  if (/sin visitas/i.test(d.motivo ?? '')) return { clase: 'espera', Icono: CircleDashed, texto: 'Sin visitas' }
+  return { clase: 'aviso', Icono: AlertTriangle, texto: d.motivo ?? 'Sin dato' }
+}
+
+function Productos({ libro, diagnostico, minimoVisitas }) {
+  const porItem = new Map((diagnostico ?? []).map((d) => [d.itemId, d]))
+  if (!libro?.porProducto?.length) return <p className="apr-vacio">El libro de ventas se llena con el próximo scan de tus productos.</p>
+  return (
+    <div className="tabla-envoltura apr-tabla">
+      <table>
+        <thead><tr>
+          <th scope="col">Producto</th><th scope="col">Unidades por día · últimas 6 semanas</th>
+          <th scope="col" className="num">Unidades</th><th scope="col" className="num">Visitas</th>
+          <th scope="col" className="num">Ventas cada 100 visitas</th><th scope="col">Esta semana</th>
+        </tr></thead>
+        <tbody>{libro.porProducto.map((p) => {
+          const s = estadoSemana(porItem.get(p.itemId), minimoVisitas)
+          return <tr key={p.itemId}>
+            <td className="celda-titulo apr-producto">{p.titulo || p.itemId}<small>{fmtNum(p.dias)} días guardados · desde {fecha(p.desde)}</small></td>
+            <td className="apr-celda-chispa"><Chispa puntos={p.serie} campo="unidades" alto={30} etiqueta={`Unidades por día de ${p.titulo}`} /></td>
+            <td className="num"><strong>{fmtNum(p.unidades)}</strong></td><td className="num">{fmtNum(p.visitas)}</td>
+            <td className="num">{p.visitas ? decimal((p.unidades / p.visitas) * 100) : '—'}</td>
+            <td><span className={`apr-chip apr-chip-${s.clase}`}><s.Icono size={13} aria-hidden="true" />{s.texto}</span></td>
+          </tr>
+        })}</tbody>
+      </table>
+      <p className="apr-leyenda"><span className="apr-leyenda-barra" /> unidades vendidas <span className="apr-leyenda-quiebre" /> día con quiebre de stock</p>
+    </div>
   )
 }
 
 function Pronosticos({ pronosticos }) {
-  return (
-    <section className="ml-seccion" aria-labelledby="ml-pronosticos">
-      <div className="ml-seccion-titulo"><h3 id="ml-pronosticos">Predicciones y resultados</h3><span className="ml-etiqueta">Búsquedas de Google · Chile</span></div>
-      <p className="ml-descripcion">Últimos 100 pronósticos guardados antes del mes previsto. El resultado se añade cuando llega una medición posterior.</p>
-      {!pronosticos.length ? <p className="ml-vacio">Aún no hay predicciones registradas. Aparecerán al disponer de un modelo entrenado y series recientes con suficiente historial.</p> : <div className="tabla-envoltura ml-tabla">
-        <table><thead><tr>
-          <th scope="col">Nicho y emisión</th><th scope="col">Mes previsto</th><th scope="col" className="num">Predicción</th>
-          <th scope="col" className="num">Año anterior</th><th scope="col" className="num">Observado</th><th scope="col">Resultado</th>
-        </tr></thead><tbody>{pronosticos.map((p) => {
-          const evaluada = Number.isFinite(p.evaluacion?.real)
-          const e = p.evaluacion
-          const comparables = evaluada && Number.isFinite(e.errorAbsoluto) && Number.isFinite(e.errorReferencia)
-          const resultado = !comparables ? 'Pendiente de medición' : e.errorAbsoluto < e.errorReferencia
-            ? 'Menor error que año anterior' : e.errorAbsoluto > e.errorReferencia ? 'Mayor error que año anterior' : 'Mismo error que año anterior'
-          return <tr key={p._id}>
-            <td className="celda-titulo">{p.keyword}<small className="ml-subdato">Emitido {fecha(p.emitidoEl)}</small></td>
-            <td>{mes(p.periodo)}</td><td className="num">{fmtNum(p.datos?.estimado)}</td>
-            <td className="num">{fmtNum(p.datos?.referencia)}</td><td className="num">{evaluada ? fmtNum(e.real) : '—'}</td>
-            <td><span className="ml-resultado">{resultado}</span>{evaluada && <small className="ml-subdato">Medido {fecha(e.medidoEl)}</small>}</td>
-          </tr>
-        })}</tbody></table>
-      </div>}
-      <p className="ml-meta">Son búsquedas estimadas, no ventas de Mercado Libre. Una predicción aislada no demuestra que el modelo mejore. Varias versiones pueden pronosticar el mismo mes.</p>
-    </section>
-  )
+  const grupos = useMemo(() => {
+    const porClave = new Map()
+    for (const p of pronosticos) {
+      const clave = `${p.keyword}|${p.periodo}`
+      if (!porClave.has(clave) || new Date(p.emitidoEl) > new Date(porClave.get(clave).emitidoEl)) porClave.set(clave, p)
+    }
+    const porKeyword = new Map()
+    for (const p of porClave.values()) porKeyword.set(p.keyword, [...(porKeyword.get(p.keyword) ?? []), p])
+    return [...porKeyword].map(([keyword, ps]) => ({ keyword, meses: ps.sort((a, b) => a.periodo.localeCompare(b.periodo)),
+      volumen: Math.max(...ps.map((p) => p.datos?.referencia ?? 0)) })).sort((a, b) => b.volumen - a.volumen)
+  }, [pronosticos])
+  const [todos, setTodos] = useState(false)
+  if (!grupos.length) return <p className="apr-vacio">Todavía no hay pronósticos guardados.</p>
+  return <>
+    <div className="apr-pronosticos">
+      {(todos ? grupos : grupos.slice(0, 9)).map((g) => (
+        <article key={g.keyword} className="apr-pronostico">
+          <h4>{g.keyword}</h4>
+          <div className="apr-pron-meses">{g.meses.map((p) => {
+            const d = p.datos ?? {}
+            const delta = d.referencia > 0 ? (d.estimado / d.referencia - 1) * 100 : null
+            const real = p.evaluacion?.real
+            return <div key={p.periodo} className="apr-pron-mes">
+              <span className="apr-pron-cuando">{mes(p.periodo)}</span>
+              <strong>{fmtNum(d.estimado)}</strong>
+              {delta !== null && <span className={`apr-delta ${delta >= 3 ? 'apr-delta-sube' : delta <= -3 ? 'apr-delta-baja' : ''}`}>{delta > 0 ? '+' : ''}{decimal(delta, 0)}%</span>}
+              <small>{Number.isFinite(real) ? `real ${fmtNum(real)}` : `año pasado ${fmtNum(d.referencia)}`}</small>
+            </div>
+          })}</div>
+        </article>
+      ))}
+    </div>
+    {grupos.length > 9 && <button type="button" className="boton-secundario apr-mas" onClick={() => setTodos((v) => !v)}>{todos ? 'Ver menos' : `Ver las ${fmtNum(grupos.length)} búsquedas`}</button>}
+  </>
+}
+
+const MOTIVOS_UNION = {
+  'producto-sin-nicho-vinculado': 'Producto sin nicho vinculado',
+  'sin-captura-zyte-anterior': 'Falta una captura de la competencia anterior a la semana',
+  'captura-zyte-fuera-de-fecha': 'La captura de la competencia tiene más de 14 días',
+  'sin-serie-demanda-anterior': 'Falta historial de búsquedas anterior a la semana',
+  'serie-demanda-posterior': 'Las búsquedas se recuperaron después de la semana',
+  'demanda-sin-meses-recientes': 'El historial de búsquedas no llega a meses recientes',
+  'demanda-con-huecos': 'Faltan meses en el historial de búsquedas',
+  'pocos-productos-zyte': 'Menos de 10 productos comparables en el nicho',
+  'atributos-invalidos': 'Fecha o precio incompleto',
+  'contexto-incompleto': 'Datos del nicho incompletos',
+}
+
+function Seccion({ titulo, bajada, children }) {
+  return <section className="apr-seccion"><div className="apr-seccion-cabeza"><h3>{titulo}</h3>{bajada && <p>{bajada}</p>}</div>{children}</section>
 }
 
 export function Aprendizaje() {
@@ -191,16 +244,14 @@ export function Aprendizaje() {
     setCargando(true)
     try {
       const opciones = { signal: controlador.signal }
-      const [estado, productos, predicciones] = await Promise.all([
-        api.aprendizaje(opciones), api.aprendizajePerfiles(opciones), api.aprendizajePronosticos(opciones),
-      ])
+      const [estado, predicciones] = await Promise.all([api.aprendizaje(opciones), api.aprendizajePronosticos(opciones)])
       if (!controlador.signal.aborted) {
-        setDatos({ estado, perfiles: productos.perfiles, pronosticos: predicciones.pronosticos })
+        setDatos({ estado, pronosticos: predicciones.pronosticos })
         setError(null)
       }
     } catch (err) {
       if (!controlador.signal.aborted) setError(err.message === 'HTTP 404'
-        ? 'El servidor todavía no tiene disponible la pantalla de aprendizaje. Falta desplegar la versión del backend que la acompaña.' : err.message)
+        ? 'El servidor todavía no tiene disponible la pantalla de aprendizaje.' : err.message)
     } finally {
       if (!controlador.signal.aborted) setCargando(false)
     }
@@ -214,69 +265,99 @@ export function Aprendizaje() {
 
   const e = datos?.estado
   const c = e?.cobertura
+  const com = e?.fuentes?.comercial
+  const min = e?.minimos ?? { productos: 12, ventanas: 72, nichos: 3, visitasSemana: 30 }
+  const modelo = (objetivo) => e?.modelos.find((m) => m.objetivo === objetivo)
   return (
-    <main className="ml-pagina">
-      <div className="reporte-encabezado ml-encabezado">
-        <div><div className="ml-kicker"><Eye size={16} aria-hidden="true" /> Seguimiento del aprendizaje</div>
-          <h2>Lo que el sistema está aprendiendo</h2>
-          <p className="reporte-fecha">Datos observados, historial y resultados de los modelos.</p>
+    <main className="apr-pagina">
+      <div className="apr-hero">
+        <div>
+          <span className={`apr-chip ${e?.activo === false ? 'apr-chip-mal' : 'apr-chip-bien'}`}><Activity size={13} aria-hidden="true" />{e?.activo === false ? 'Captura detenida' : 'Capturando datos'}</span>
+          <h2>Aprendizaje</h2>
+          <p>El sistema guarda cada día de ventas, visitas y publicidad de tus productos, y prueba sus modelos sin tocar las recomendaciones.</p>
         </div>
-        <button type="button" className="boton-secundario ml-refrescar" onClick={cargar} disabled={cargando}>
-          <RefreshCw size={15} aria-hidden="true" />{cargando ? 'Consultando…' : 'Actualizar vista'}
-        </button>
+        <div className="apr-hero-accion">
+          <button type="button" className="boton-secundario apr-refrescar" onClick={cargar} disabled={cargando}>
+            <RefreshCw size={15} aria-hidden="true" className={cargando ? 'apr-girando' : ''} />{cargando ? 'Actualizando…' : 'Actualizar'}
+          </button>
+          {e && <small>Actualizado {fmtFecha(e.consultadoEl)}</small>}
+        </div>
       </div>
-      {error && <p className="error-bloque" role="alert">No se pudo actualizar: {error}{datos ? ' Se conserva la última consulta; estos datos pueden estar desactualizados.' : ''}</p>}
+      {error && <p className="error-bloque" role="alert">No se pudo actualizar: {error}{datos ? ' Se muestra la última consulta.' : ''}</p>}
       {!datos && !error && <Cargando texto="Consultando los datos del aprendizaje…" />}
       {e && <>
-        <div className="ml-observacion" role="status">
-          <Eye size={22} aria-hidden="true" /><div><strong>{e.activo ? 'Modo observación habilitado' : 'Captura y entrenamiento desactivados'}</strong>
-            <p>{e.activo ? 'Los modelos reúnen evidencia y se evalúan en paralelo. Las recomendaciones siguen con su funcionamiento actual.'
-              : 'Puedes consultar el historial guardado. No se están programando nuevos entrenamientos de ML.'}</p>
+        <Seccion titulo="Lo que se está guardando" bajada="Cuatro fuentes, todos los días. Lo que no se guarda hoy no se recupera después.">
+          <div className="apr-fuentes">
+            <Fuente Icono={ShoppingBag} titulo="Ventas y visitas" valor={fmtNum(com.libro?.unidades)} unidad=" unidades" estado={com.libro?.dias ? 'bien' : 'espera'}
+              detalle={com.libro?.dias ? `${fmtNum(com.libro.productos)} productos · ${fmtNum(com.libro.dias)} días desde ${fecha(com.libro.desde)} · ${fmtNum(com.libro.visitas)} visitas` : 'Se llena con el próximo scan de tus productos'}>
+              <Chispa puntos={com.libro?.serie} campo="unidades" etiqueta="Unidades vendidas por día" />
+            </Fuente>
+            <Fuente Icono={Megaphone} titulo="Publicidad" valor={com.publicidad?.dias ? fmtPrecio(com.publicidad.costo) : '—'} unidad={com.publicidad?.dias ? ' de gasto' : ''} estado={com.publicidad?.dias ? 'bien' : 'espera'}
+              detalle={com.publicidad?.dias ? `${fmtNum(com.publicidad.dias)} días desde ${fecha(com.publicidad.desde)} · ${fmtNum(com.publicidad.clicks)} clics · ${fmtNum(com.publicidad.unidadesAds)} ventas por anuncio` : 'Mercado Libre la borra a los 90 días: se empieza a guardar en el próximo scan'}>
+              <Chispa puntos={com.publicidad?.serie} campo="costo" clase="apr-chispa-ads" etiqueta="Gasto en publicidad por día" />
+            </Fuente>
+            <Fuente Icono={Search} titulo="Búsquedas en Google" valor={fmtNum(c.keywords)} unidad=" búsquedas" estado={c.keywords ? 'bien' : 'espera'}
+              detalle={`${fmtNum(c.con24Meses)} con dos años completos de historia · última lectura ${fecha(e.fuentes.demanda.ultimaCapturaEl)}`}>
+              <div className="apr-medidor"><span style={{ width: `${c.keywords ? (c.con24Meses / c.keywords) * 100 : 0}%` }} /></div>
+            </Fuente>
+            <Fuente Icono={Store} titulo="Competencia por nicho" valor={fmtNum(e.integracion?.nichosCapturados)} unidad=" nichos" estado={e.integracion?.nichosCapturados ? 'bien' : 'espera'}
+              detalle={`Precios, Full y reseñas del top de cada nicho · ${fmtNum((e.integracion?.nichos ?? []).filter((n) => n.reciente).length)} con lectura de los últimos 14 días`}>
+              <div className="apr-medidor"><span style={{ width: `${e.integracion?.nichos?.length ? ((e.integracion.nichos.filter((n) => n.reciente).length) / e.integracion.nichos.length) * 100 : 0}%` }} /></div>
+            </Fuente>
           </div>
-        </div>
-        <p className="ml-meta ml-consulta">Consultado {fmtFecha(e.consultadoEl)} · La vista se actualiza cada minuto mientras está abierta.</p>
-        <div className="tiles ml-resumen">
-          <StatTile label="Búsquedas con historial" value={fmtNum(c.keywords)} detalle={`${fmtNum(c.con24Meses)} con 24 meses continuos al final de la serie`} />
-          <StatTile label="Productos con datos válidos" value={fmtNum(c.productos)} detalle={`${fmtNum(c.ventanasIndependientes)} semanas sin solapar, cerradas en los últimos 2 años`} />
-          <StatTile label="Días de venta en el libro" value={fmtNum(e.fuentes.comercial.libro?.dias)} detalle={e.fuentes.comercial.libro?.dias
-            ? `${fmtNum(e.fuentes.comercial.libro.productos)} productos desde ${fecha(e.fuentes.comercial.libro.desde)} · ${fmtNum(e.fuentes.comercial.libro.unidades)} unidades y ${fmtNum(e.fuentes.comercial.libro.visitas)} visitas`
-            : 'Se llena con el próximo scan de tus productos'} />
-          <StatTile label="Días de publicidad guardados" value={fmtNum(e.fuentes.comercial.publicidad?.dias)} detalle={e.fuentes.comercial.publicidad?.dias
-            ? `Desde ${fecha(e.fuentes.comercial.publicidad.desde)} · ${fmtPrecio(e.fuentes.comercial.publicidad.costo)} de gasto y ${fmtNum(e.fuentes.comercial.publicidad.clicks)} clics, por producto`
-            : 'Se llena con el próximo scan de tus productos'} />
-          <StatTile label="Predicciones guardadas" value={fmtNum(c.predicciones)} detalle="Estimaciones de búsquedas para meses futuros" />
-          <StatTile label="Predicciones contrastadas" value={fmtNum(c.evaluadas)} detalle="Con una medición posterior; no equivale a aciertos" />
-        </div>
-        <section className="ml-alcance" aria-label="Cómo se utiliza el stock">
-          <Info size={20} aria-hidden="true" /><div><strong>Ventas observadas, con el costo de compra fuera del aprendizaje</strong>
-            <p>El stock antiguo aporta ventas, visitas y precio de venta cuando hay mediciones completas. No se deducen márgenes ni rentabilidad de un costo desconocido.</p>
-            <p>Los productos en camino aportarán resultados comerciales cuando estén a la venta y reúnan mediciones válidas.</p>
+        </Seccion>
+
+        <Seccion titulo="Cuánto falta para que aprenda de tus ventas" bajada={`Una semana cuenta cuando el producto tuvo stock los siete días y al menos ${min.visitasSemana} visitas. Cada producto nuevo suma.`}>
+          <div className="apr-avances">
+            <Avance etiqueta="Productos con semanas válidas" valor={c.productos} meta={min.productos} ayuda={`Tienes ${fmtNum(com.libro?.productos ?? 0)} publicados; hoy califican ${fmtNum(c.productos)}.`} />
+            <Avance etiqueta="Semanas válidas sin repetir" valor={c.ventanasIndependientes} meta={min.ventanas} ayuda={`${fmtNum(com.semanasGuardadas)} semanas guardadas en total, contando las que se solapan.`} />
+            <Avance etiqueta="Nichos con las tres fuentes unidas" valor={e.integracion?.nichosUnidos} meta={min.nichos} ayuda="Ventas propias + búsquedas + competencia del mismo nicho y la misma fecha." />
           </div>
-        </section>
-        <div className="ml-modelos">
-          <EstadoModelo modelo={e.modelos.find((m) => m.objetivo === 'busquedas-google')} titulo="Demanda por temporada" Icono={Search}
-            descripcion="Aprende cómo cambian las búsquedas entre años y anticipa los próximos meses.">
-            <p><strong>Fuente:</strong> historial de Google Ads, obtenido con DataForSEO.</p>
-            <p><strong>Última captura:</strong> {e.fuentes.demanda.ultimaCapturaEl ? fmtFecha(e.fuentes.demanda.ultimaCapturaEl) : 'Aún sin capturas'}</p>
-            <p><strong>Variables:</strong> crecimiento reciente, comparación anual y estacionalidad.</p>
-          </EstadoModelo>
-          <EstadoModelo modelo={e.modelos.find((m) => m.objetivo === 'unidades-por-visita')} titulo="Ventas y visitas" Icono={ShoppingBag}
-            descripcion="Aprende la relación entre unidades vendidas y visitas según categoría, precio de venta y logística.">
-            <p><strong>Fuente:</strong> órdenes pagadas y visitas de tu cuenta de Mercado Libre.</p>
-            <p><strong>Última semana válida:</strong> {e.fuentes.comercial.ultimaVentanaEl ? fecha(e.fuentes.comercial.ultimaVentanaEl) : 'Aún sin semanas válidas'}</p>
-            <p><strong>Alcance:</strong> comportamiento comercial observado, sin costos de compra.</p>
-          </EstadoModelo>
-          <EstadoModelo modelo={e.modelos.find((m) => m.objetivo === 'unidades-por-visita-contexto')} titulo="Ventas con contexto del nicho" Icono={Link2}
-            descripcion="Aprende de tus ventas junto con las búsquedas de DataForSEO y los productos que Zyte observa en ese nicho.">
-            <p><strong>Fuentes:</strong> las tres, vinculadas por nicho y fecha.</p>
-            <p><strong>Variables añadidas:</strong> demanda, temporada, precio relativo, Full, catálogo y reseñas públicas.</p>
-            <p><strong>Evaluación:</strong> compara con el modelo de ventas sin contexto del nicho.</p>
-          </EstadoModelo>
-        </div>
-        <IntegracionFuentes datos={e.integracion} />
-        <HistorialNichos series={e.series} total={c.keywords} />
-        <ProductosObservados perfiles={datos.perfiles} diagnostico={e.fuentes.comercial.diagnostico} />
-        <Pronosticos pronosticos={datos.pronosticos} />
+        </Seccion>
+
+        <Seccion titulo="Los modelos" bajada="Cada uno se prueba contra una regla simple. Si no le gana, no se usa.">
+          <div className="apr-modelos">
+            <Modelo modelo={modelo('busquedas-google')} Icono={Search} titulo="Demanda por temporada" pregunta="¿Cuánto se va a buscar este producto en 3 a 5 meses?">
+              <p className="apr-nota">Necesita al menos tres búsquedas con dos años de historia.</p>
+            </Modelo>
+            <Modelo modelo={modelo('unidades-por-visita')} Icono={ShoppingBag} titulo="Ventas por visita" pregunta="¿Cuánto vende un producto según su categoría, precio y envío?">
+              <Avance etiqueta="Productos" valor={c.productos} meta={min.productos} />
+              <Avance etiqueta="Semanas" valor={c.ventanasIndependientes} meta={min.ventanas} />
+            </Modelo>
+            <Modelo modelo={modelo('unidades-por-visita-contexto')} Icono={Link2} titulo="Ventas con contexto del nicho" pregunta="¿Y si además sabe cuánto se busca y quién compite?">
+              <Avance etiqueta="Semanas con las tres fuentes" valor={e.integracion?.ventanasUnidas} meta={min.ventanas} />
+              <Avance etiqueta="Nichos" valor={e.integracion?.nichosUnidos} meta={min.nichos} />
+            </Modelo>
+          </div>
+        </Seccion>
+
+        <Seccion titulo="Tus productos, día por día" bajada="Todo lo que cada publicación vendió y recibió de visitas desde que existe, y si su semana actual sirve para aprender.">
+          <Productos libro={com.libro} diagnostico={com.diagnostico} minimoVisitas={min.visitasSemana} />
+        </Seccion>
+
+        <Seccion titulo="Lo que el modelo espera de las búsquedas" bajada={`Pronóstico de los próximos meses contra el mismo mes del año pasado. ${fmtNum(c.predicciones)} guardados, ${fmtNum(c.evaluadas)} ya contrastados con el dato real.`}>
+          <Pronosticos pronosticos={datos.pronosticos} />
+        </Seccion>
+
+        <details className="apr-plegable apr-tecnico">
+          <summary><ChevronDown size={15} aria-hidden="true" />Detalle técnico: nichos capturados y reglas</summary>
+          {!!Object.keys(e.integracion?.omitidas ?? {}).length && <ul className="apr-lista">{Object.entries(e.integracion.omitidas).map(([motivo, n]) =>
+            <li key={motivo}><strong>{fmtNum(n)}</strong> semanas sin unir — {MOTIVOS_UNION[motivo] ?? 'evidencia incompleta'}</li>)}</ul>}
+          {!!e.integracion?.nichos?.length && <div className="tabla-envoltura apr-tabla apr-tabla-corta"><table>
+            <thead><tr><th scope="col">Nicho</th><th scope="col">Búsqueda medida</th><th scope="col">Última lectura</th><th scope="col" className="num">Productos</th></tr></thead>
+            <tbody>{e.integracion.nichos.map((n) => <tr key={n.nichoId}>
+              <td className="celda-titulo">{n.keyword}</td><td>{n.keywordDemanda}</td>
+              <td>{fmtFecha(n.capturadoEl)}{!n.reciente && <span className="apr-chip apr-chip-aviso apr-chip-mini">antigua</span>}</td>
+              <td className="num">{fmtNum(n.productos)}</td>
+            </tr>)}</tbody>
+          </table></div>}
+          <ul className="apr-lista">
+            <li>Una semana vale si hubo stock los siete días, no cambió el tipo de envío y el precio no varió más de 15%.</li>
+            <li>Cero ventas con visitas es un dato válido. Sin medición no es cero.</li>
+            <li>No usa tu costo de compra ni calcula ganancia: aprende de ventas, visitas y precio de venta.</li>
+            <li>Los modelos con más de 90 días dejan de pronosticar hasta reentrenarse (lunes 10:30).</li>
+          </ul>
+        </details>
       </>}
     </main>
   )

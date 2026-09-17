@@ -57,9 +57,12 @@ export async function actualizarAdsDiario({ ahora = new Date(), pedir = meliGet,
   return { dias, filas: filasEscritas, faltan: Math.max(0, RETENCION_DIAS - leidos.size - dias) }
 }
 
-export async function resumenAdsDiario() {
+export async function resumenAdsDiario({ ahora = new Date(), diasSerie = 42 } = {}) {
   const [t] = await AdsDiaMl.aggregate([{ $match: { itemId: '*' } },
     { $group: { _id: null, dias: { $sum: 1 }, desde: { $min: '$dia' }, hasta: { $max: '$dia' }, costo: { $sum: '$costo' }, clicks: { $sum: '$clicks' },
       unidadesAds: { $sum: '$unidadesAds' }, diasConGasto: { $sum: { $cond: [{ $gt: ['$costo', 0] }, 1, 0] } } } }])
-  return t ? { dias: t.dias, diasConGasto: t.diasConGasto, desde: t.desde, hasta: t.hasta, costo: Math.round(t.costo), clicks: t.clicks, unidadesAds: t.unidadesAds } : { dias: 0 }
+  if (!t) return { dias: 0, serie: [] }
+  const serie = await AdsDiaMl.find({ itemId: '*', dia: { $gte: diaChile(+ahora - diasSerie * DIA) } }).select('dia costo clicks unidadesAds').sort({ dia: 1 }).lean()
+  return { dias: t.dias, diasConGasto: t.diasConGasto, desde: t.desde, hasta: t.hasta, costo: Math.round(t.costo), clicks: t.clicks, unidadesAds: t.unidadesAds,
+    serie: serie.map((d) => ({ dia: d.dia, costo: Math.round(d.costo), clicks: d.clicks, unidadesAds: d.unidadesAds })) }
 }
