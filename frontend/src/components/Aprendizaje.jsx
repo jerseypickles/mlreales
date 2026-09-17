@@ -332,9 +332,10 @@ export function Aprendizaje() {
               detalle={com.publicidad?.dias ? `${fmtNum(com.publicidad.dias)} días desde ${fecha(com.publicidad.desde)} · ${fmtNum(com.publicidad.clicks)} clics · ${fmtNum(com.publicidad.unidadesAds)} ventas por anuncio` : 'Mercado Libre la borra a los 90 días: se empieza a guardar en el próximo scan'}>
               <Chispa puntos={com.publicidad?.serie} campo="costo" clase="apr-chispa-ads" etiqueta="Gasto en publicidad por día" />
             </Fuente>
-            <Fuente Icono={Search} titulo="Búsquedas en Google" valor={fmtNum(c.keywords)} unidad=" búsquedas" estado={c.keywords ? 'bien' : 'espera'}
-              detalle={`${fmtNum(c.con24Meses)} con dos años completos de historia · última lectura ${fecha(e.fuentes.demanda.ultimaCapturaEl)}`}>
-              <div className="apr-medidor"><span style={{ width: `${c.keywords ? (c.con24Meses / c.keywords) * 100 : 0}%` }} /></div>
+            <Fuente Icono={Search} titulo="Búsquedas en Google" valor={c.nichos ? `${fmtNum(c.nichos.conSerie)}` : fmtNum(c.keywords)} unidad={c.nichos ? ` de ${fmtNum(c.nichos.activos)} nichos` : ' búsquedas'}
+              estado={!c.nichos ? 'bien' : c.nichos.conSerie >= c.nichos.activos * 0.9 ? 'bien' : 'espera'}
+              detalle={`Cuatro años de historia mes a mes por nicho · ${fmtNum(c.keywords)} palabras contando variantes · última lectura ${fecha(e.fuentes.demanda.ultimaCapturaEl)}${c.nichos && c.nichos.conSerie < c.nichos.activos ? ' · los que faltan se piden en el próximo entrenamiento' : ''}`}>
+              <div className="apr-medidor"><span style={{ width: `${c.nichos?.activos ? (c.nichos.conSerie / c.nichos.activos) * 100 : 100}%` }} /></div>
             </Fuente>
             <Fuente Icono={Store} titulo="Competencia por nicho" valor={fmtNum(e.integracion?.nichosCapturados)} unidad=" nichos" estado={e.integracion?.nichosCapturados ? 'bien' : 'espera'}
               detalle={`Precios, Full y reseñas del top de cada nicho · ${fmtNum((e.integracion?.nichos ?? []).filter((n) => n.reciente).length)} con lectura de los últimos 14 días`}>
