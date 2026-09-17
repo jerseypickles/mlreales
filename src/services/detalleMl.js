@@ -107,6 +107,29 @@ export function vendedorDesdeHtml(html) {
   }
 }
 
+// EL STOCK DEL COMPETIDOR, QUE YA VENÍA EN LA FICHA Y NO SE LEÍA.
+//
+// Sondeado el 17-sep-2026 (GET /api/debug/ficha-senales) sobre tres fichas: el
+// mismo evento de telemetría que trae al vendedor trae
+//   "stock_type":"normal","quantity":51,"sold_quantity":5000
+// `quantity` es el stock disponible: EXACTO hasta 50 —una publicación chica
+// mostró 3 y la página decía "4 disponibles"— y TOPADO en 51 para quien tiene
+// más (los dos vendedores grandes medidos daban 51). `sold_quantity` es el mismo
+// balde del listado (5, 1.000, 5.000).
+//
+// Para qué sirve: la baja del stock entre dos lecturas es venta REAL de ese
+// vendedor, sin factor ni reseñas de por medio. Solo se puede leer en quien
+// tiene 50 o menos, que es justo el vendedor chico que entra como entraría el
+// importador. No cuesta nada: la ficha ya se paga para leer las reseñas.
+export function stockDesdeHtml(html) {
+  const texto = String(html ?? '')
+  const m = texto.match(/"stock_type":"[a-z_]*","quantity":(\d+),"sold_quantity":(\d+)/)
+    ?? texto.match(/"quantity":(\d+),"sold_quantity":(\d+)/)
+  if (!m) return null
+  const cantidad = Number(m[1])
+  return { stock: cantidad, stockTopado: cantidad >= 51, vendidosFicha: Number(m[2]) }
+}
+
 // Pura. ¿La extracción reconoció una ficha, o devolvió el cascarón?
 export function confiable(respuesta) {
   const p = respuesta?.product?.metadata?.probability
@@ -159,6 +182,7 @@ export function precioAnteriorReal(precio, regular) {
 export function aItemDetalle(respuesta, { precioListado = null } = {}) {
   const p = respuesta?.product ?? {}
   const v = vendedorDesdeHtml(respuesta?.browserHtml) ?? {}
+  const st = stockDesdeHtml(respuesta?.browserHtml)
   const precio = numero(p.price)
   const anterior = precioAnteriorReal(precio, numero(p.regularPrice))
   const coherente = precioCoherente(precio, { precioAnterior: anterior, precioListado })
@@ -173,6 +197,10 @@ export function aItemDetalle(respuesta, { precioListado = null } = {}) {
     reviewCount: numero(p.aggregateRating?.reviewCount),
     rating: numero(p.aggregateRating?.ratingValue),
     availability: p.availability ?? null,
+    // stock visible del vendedor (exacto hasta 50, topado en 51) — ver stockDesdeHtml
+    stockQuantity: st?.stock ?? null,
+    stockTopado: st?.stockTopado ?? null,
+    soldQuantityFicha: st?.vendidosFicha ?? null,
     brand: p.brand?.name ?? null,
     // bloque del vendedor, con los nombres que espera normalizarItemSourabh
     sellerId: v.sellerId ?? null,

@@ -89,6 +89,11 @@ export async function aplicarDetalleScan({ porSku, fecha }) {
     if (det.rating !== null) setSnap.rating = det.rating
     if (det.precio !== null) setSnap.precio = det.precio
     if (det.preguntasIds?.length) setSnap.preguntasIds = det.preguntasIds
+    if (Number.isFinite(det.stock)) {
+      setSnap.stock = det.stock
+      setSnap.stockTopado = det.stockTopado === true
+    }
+    if (Number.isFinite(det.vendidosFicha)) setSnap.vendidosFicha = det.vendidosFicha
     if (Object.keys(setSnap).length) {
       opsSnapshot.push({ updateOne: { filter: { sku, fecha }, update: { $set: setSnap } } })
     }

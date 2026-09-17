@@ -103,6 +103,10 @@ function normalizarItemSourabh(raw) {
     preguntasIds: Array.isArray(raw.questions)
       ? raw.questions.map((q) => (q?.id != null ? String(q.id) : null)).filter(Boolean)
       : null,
+    // stock del competidor leído de la ficha (solo Zyte lo entrega)
+    stock: Number.isFinite(raw.stockQuantity) ? raw.stockQuantity : null,
+    stockTopado: typeof raw.stockTopado === 'boolean' ? raw.stockTopado : null,
+    vendidosFicha: Number.isFinite(raw.soldQuantityFicha) ? raw.soldQuantityFicha : null,
     condicion: raw.condition ?? null,
     imagen: raw.thumbnail ?? (Array.isArray(raw.images) ? raw.images[0] : null) ?? null,
     // para la auditoría de listing: el texto y las fotos reales de la publicación

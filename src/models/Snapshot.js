@@ -35,7 +35,11 @@ const snapshotSchema = new mongoose.Schema({
   // declararlo acá Mongoose lo descarta en silencio, como pasó con promoMl.
   unidadesRestantes: Number,
   selloMl: String, // "MÁS VENDIDO", "OFERTA IMPERDIBLE", "OFERTA RELÁMPAGO"
-  stock: Number, // Fase 2 (nivel 2)
+  // stock visible del vendedor, leído de la ficha por Zyte: exacto hasta 50 y
+  // topado en 51. Su baja entre scans es venta real de ese competidor.
+  stock: Number,
+  stockTopado: Boolean,
+  vendidosFicha: Number, // el balde "+N vendidos" que muestra la ficha
   posicion: Number,
   // la posición es pagada (anuncio) u orgánica; null = proveedor que no lo dice
   esAnuncio: Boolean,

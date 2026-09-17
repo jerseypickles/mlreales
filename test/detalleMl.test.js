@@ -140,3 +140,14 @@ test('la ficha con cuota no reporta precio anterior inventado', () => {
   }
   assert.equal(aItemDetalle(conCuota).originalPrice, null)
 })
+
+test('el stock del competidor sale del mismo evento de telemetría: exacto hasta 50, topado en 51', async () => {
+  const { stockDesdeHtml, aItemDetalle } = await import('../src/services/detalleMl.js')
+  const chico = '…"family_id":"475","stock_type":"normal","quantity":3,"sold_quantity":5,"has_stock":true…'
+  const grande = '…"stock_type":"normal","quantity":51,"sold_quantity":5000,"has_stock":true…'
+  assert.deepEqual(stockDesdeHtml(chico), { stock: 3, stockTopado: false, vendidosFicha: 5 })
+  assert.deepEqual(stockDesdeHtml(grande), { stock: 51, stockTopado: true, vendidosFicha: 5000 })
+  assert.equal(stockDesdeHtml('<html>sin telemetría</html>'), null)
+  const item = aItemDetalle({ product: { price: '2930', sku: 'MLCU1' }, browserHtml: chico })
+  assert.deepEqual([item.stockQuantity, item.stockTopado, item.soldQuantityFicha], [3, false, 5])
+})
