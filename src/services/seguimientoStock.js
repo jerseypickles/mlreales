@@ -29,14 +29,19 @@ export function horasHastaLaProxima(ultima) {
 }
 
 // Pura. De los productos del último scan de un nicho, a quién vale la pena
-// seguir: vendedor que no es tienda oficial, con stock VISIBLE (no "+50") y lo
-// más arriba posible en el listado. Uno por vendedor: interesa ver a varios
-// entrantes distintos, no tres publicaciones de la misma tienda.
+// seguir: vendedor que no es tienda oficial ni anuncio, lo más arriba posible
+// en el listado, uno por vendedor —interesa ver a varios entrantes distintos, no
+// tres publicaciones de la misma tienda—. Si el stock ya se conoce, primero los
+// que lo dejan ver y nunca los que están en "+50"; si no se conoce, entra igual:
+// la primera lectura lo descubre (US$0,006) y cuatro semanas en "+50" lo sacan.
+// La primera versión exigía stock conocido y dejó la lista vacía: ese dato solo
+// existe en los nichos escaneados desde el 17-sep.
 export function elegirParaSeguir(productos, { max = POR_NICHO } = {}) {
+  const visible = (p) => p.stockFuente === 'texto' && Number.isFinite(p.stock)
   const vistos = new Set()
   return (productos ?? [])
-    .filter((p) => p.url && p.stockFuente === 'texto' && Number.isFinite(p.stock) && !(p.stockTopado && p.stock >= 51) && p.esTiendaOficial !== true && p.esAnuncio !== true)
-    .sort((a, b) => (a.posicion ?? 999) - (b.posicion ?? 999))
+    .filter((p) => p.url && p.esTiendaOficial !== true && p.esAnuncio !== true && !(visible(p) && p.stockTopado && p.stock >= 51))
+    .sort((a, b) => Number(visible(b)) - Number(visible(a)) || (a.posicion ?? 999) - (b.posicion ?? 999))
     .filter((p) => {
       const v = p.vendedor ?? p.sku
       if (vistos.has(v)) return false
@@ -68,20 +73,22 @@ export async function actualizarLista({ ahora = new Date() } = {}) {
   for (const n of await nichosQueImportan()) {
     const yaSeguidos = await SeguimientoStock.countDocuments({ nichoId: n._id, activo: true, esPropio: false })
     if (yaSeguidos >= POR_NICHO) continue
-    const ultimo = await Snapshot.findOne({ keyword: n.keyword, stock: { $ne: null } }).sort({ fecha: -1 }).select('fecha').lean()
+    const ultimo = await Snapshot.findOne({ keyword: n.keyword }).sort({ fecha: -1 }).select('fecha').lean()
     if (!ultimo) continue
-    const snaps = await Snapshot.find({ keyword: n.keyword, fecha: ultimo.fecha, stock: { $ne: null } }).select('sku posicion stock stockTopado stockFuente esAnuncio').lean()
+    // solo lo de arriba del listado: es donde un entrante compite de verdad
+    const snaps = await Snapshot.find({ keyword: n.keyword, fecha: ultimo.fecha, posicion: { $lte: 60 } }).select('sku posicion stock stockTopado stockFuente esAnuncio').lean()
     const prods = new Map((await Producto.find({ sku: { $in: snaps.map((s) => s.sku) } }).select('sku url titulo imagen vendedor esTiendaOficial').lean()).map((p) => [p.sku, p]))
-    const candidatos = elegirParaSeguir(snaps.map((s) => ({ ...s, ...(prods.get(s.sku) ?? {}) })), { max: POR_NICHO - yaSeguidos })
+    const candidatos = elegirParaSeguir(snaps.map((s) => ({ ...s, ...(prods.get(s.sku) ?? {}) })).filter((p) => p.vendedor), { max: POR_NICHO - yaSeguidos })
     for (const c of candidatos) {
+      const conocido = c.stockFuente === 'texto' && Number.isFinite(c.stock)
       const r = await SeguimientoStock.updateOne({ sku: c.sku }, { $setOnInsert: { sku: c.sku, url: c.url, nichoId: n._id, keyword: n.keyword,
         titulo: c.titulo ?? null, imagen: c.imagen ?? null, vendedor: c.vendedor ?? null, agregadoEl: ahora,
-        // la lectura del scan cuenta como la primera: ya se pagó
-        ultima: { fecha: ultimo.fecha, stock: c.stock, topado: c.stockTopado === true, fuente: c.stockFuente },
-        proximaLecturaEl: new Date(+ultimo.fecha + horasHastaLaProxima({ stock: c.stock, topado: c.stockTopado }) * HORA) } }, { upsert: true })
+        // si el scan ya leyó su stock, esa cuenta como la primera lectura: ya se pagó
+        ...(conocido ? { ultima: { fecha: ultimo.fecha, stock: c.stock, topado: c.stockTopado === true, fuente: c.stockFuente } } : {}),
+        proximaLecturaEl: conocido ? new Date(+ultimo.fecha + horasHastaLaProxima({ stock: c.stock, topado: c.stockTopado }) * HORA) : ahora } }, { upsert: true })
       if (r.upsertedCount) {
         agregados++
-        await LecturaStock.create({ sku: c.sku, fecha: ultimo.fecha, stock: c.stock, topado: c.stockTopado === true, fuente: c.stockFuente, costoUsd: 0 })
+        if (conocido) await LecturaStock.create({ sku: c.sku, fecha: ultimo.fecha, stock: c.stock, topado: c.stockTopado === true, fuente: c.stockFuente, costoUsd: 0 })
       }
     }
   }
@@ -163,7 +170,10 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
   const porSku = new Map()
   for (const l of lecturas) porSku.set(l.sku, [...(porSku.get(l.sku) ?? []), { ...l, fuente: l.fuente }])
   const filas = seguidos.map((s) => ({ sku: s.sku, url: s.url, titulo: s.titulo, imagen: s.imagen, vendedor: s.vendedor, keyword: s.keyword, esPropio: s.esPropio,
-    activo: s.activo, motivoBaja: s.motivoBaja, proximaLecturaEl: s.proximaLecturaEl, itemIdPropio: s.itemIdPropio, ...resumenDeSerie(porSku.get(s.sku)) }))
+    activo: s.activo, motivoBaja: s.motivoBaja, proximaLecturaEl: s.proximaLecturaEl, agregadoEl: s.agregadoEl, itemIdPropio: s.itemIdPropio,
+    // las lecturas tal como llegaron, para poder VER qué está obteniendo el sistema
+    serie: (porSku.get(s.sku) ?? []).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio })),
+    ...resumenDeSerie(porSku.get(s.sku)) }))
   // CALIBRACIÓN: en lo propio la venta real se conoce. Cuánto del total ve el piso.
   let calibracion = null
   const propios = filas.filter((f) => f.esPropio && f.dias >= 3)
@@ -179,7 +189,12 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
   }
   const porNicho = new Map()
   for (const f of filas.filter((x) => !x.esPropio && x.keyword)) porNicho.set(f.keyword, [...(porNicho.get(f.keyword) ?? []), f])
-  return { topeUsdMes: TOPE_USD_MES, gasto: await gastoDelMes({ ahora }), seguidos: filas.filter((f) => f.activo).length, calibracion,
+  // el registro crudo de lo último que se leyó, con a quién pertenece
+  const deQuien = new Map(seguidos.map((s) => [s.sku, s]))
+  const ultimasLecturas = [...lecturas].reverse().slice(0, 40).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, costoUsd: l.costoUsd,
+    sku: l.sku, vendedor: deQuien.get(l.sku)?.vendedor ?? null, keyword: deQuien.get(l.sku)?.keyword ?? null, esPropio: deQuien.get(l.sku)?.esPropio ?? false, titulo: deQuien.get(l.sku)?.titulo ?? null }))
+  return { topeUsdMes: TOPE_USD_MES, gasto: await gastoDelMes({ ahora }), seguidos: filas.filter((f) => f.activo).length, calibracion, ultimasLecturas,
+    pendientesAhora: seguidos.filter((s) => s.activo && +new Date(s.proximaLecturaEl) <= +ahora).length,
     nichos: [...porNicho].map(([k, fs]) => ({ keyword: k, seguidos: fs.filter((f) => f.activo).length, vendiendo: fs.filter((f) => f.unidadesPiso > 0).length,
       unidadesPisoSemana: Math.round(fs.reduce((a, f) => a + (f.porSemana ?? 0), 0) * 10) / 10, reposiciones: fs.reduce((a, f) => a + f.reposiciones, 0), publicaciones: fs })),
     propios: filas.filter((f) => f.esPropio) }

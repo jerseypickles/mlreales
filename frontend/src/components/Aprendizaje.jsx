@@ -6,6 +6,7 @@ import {
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
 import { fmtFecha, fmtNum, fmtPrecio } from '../lib/formato.js'
+import { StockCompetidores, MasVendidosMl } from './AprendizajeFuentes.jsx'
 
 const decimal = (valor, digitos = 1) => Number.isFinite(valor)
   ? valor.toLocaleString('es-CL', { maximumFractionDigits: digitos }) : '—'
@@ -272,6 +273,8 @@ export function Aprendizaje() {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [cargando, setCargando] = useState(true)
+  // sub-menú de la pestaña: el resumen, y las fuentes que se pueden mirar por dentro
+  const [vista, setVista] = useState('resumen')
   const peticion = useRef(null)
   const cargar = useCallback(async () => {
     peticion.current?.abort()
@@ -319,9 +322,16 @@ export function Aprendizaje() {
           {e && <small>Actualizado {fmtFecha(e.consultadoEl)}</small>}
         </div>
       </div>
-      {error && <p className="error-bloque" role="alert">No se pudo actualizar: {error}{datos ? ' Se muestra la última consulta.' : ''}</p>}
-      {!datos && !error && <Cargando texto="Consultando los datos del aprendizaje…" />}
-      {e && <>
+      <nav className="apr-submenu" aria-label="Secciones de aprendizaje">
+        {[['resumen', 'Resumen', Activity], ['stock', 'Stock de competidores', PackageX], ['ranking', 'Más vendidos de ML', TrendingUp]].map(([id, nombre, Icono]) => (
+          <button key={id} type="button" className={vista === id ? 'activo' : ''} aria-pressed={vista === id} onClick={() => setVista(id)}><Icono size={15} aria-hidden="true" />{nombre}</button>
+        ))}
+      </nav>
+      {vista === 'stock' && <StockCompetidores />}
+      {vista === 'ranking' && <MasVendidosMl />}
+      {vista === 'resumen' && error && <p className="error-bloque" role="alert">No se pudo actualizar: {error}{datos ? ' Se muestra la última consulta.' : ''}</p>}
+      {vista === 'resumen' && !datos && !error && <Cargando texto="Consultando los datos del aprendizaje…" />}
+      {vista === 'resumen' && e && <>
         <Seccion titulo="Lo que se está guardando" bajada="Cuatro fuentes, todos los días. Lo que no se guarda hoy no se recupera después.">
           <div className="apr-fuentes">
             <Fuente Icono={ShoppingBag} titulo="Ventas y visitas" valor={fmtNum(com.libro?.unidades)} unidad=" unidades" estado={com.libro?.dias ? 'bien' : 'espera'}
