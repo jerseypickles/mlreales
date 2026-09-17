@@ -191,7 +191,7 @@ export function aItemDetalle(respuesta, { precioListado = null } = {}) {
   }
 }
 
-async function pedirUna(url, { geolocation, apiKey }) {
+export async function pedirUna(url, { geolocation, apiKey }) {
   const control = new AbortController()
   const t = setTimeout(() => control.abort(), TIMEOUT_MS)
   try {

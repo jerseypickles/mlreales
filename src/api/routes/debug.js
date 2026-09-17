@@ -159,6 +159,44 @@ router.get(
   }),
 )
 
+// ¿QUÉ MÁS TRAE UNA FICHA QUE HOY NO LEEMOS? Sonda del 17-sep-2026 para decidir
+// si se puede medir la venta REAL de un competidor por cómo le baja el stock.
+// Pide una ficha a Zyte (US$0,006) y devuelve, sin interpretar, cada mención de
+// stock / cantidad / vendidos / preguntas con su contexto, más las llaves del
+// evento de telemetría de ML. Solo lee.
+router.get(
+  '/ficha-senales',
+  autorizado,
+  manejar(async (req, res) => {
+    const url = String(req.query.url ?? '')
+    if (!/^https:\/\/[a-z.]*mercadolibre\.cl\//.test(url)) return res.status(400).json({ error: 'falta ?url= de mercadolibre.cl' })
+    const { config } = await import('../../config/env.js')
+    const { pedirUna } = await import('../../services/detalleMl.js')
+    const r = await pedirUna(url, { geolocation: 'CL', apiKey: config.zyteApiKey })
+    const html = r?.browserHtml ?? ''
+    const contextos = (patron, max = 6) => {
+      const out = []
+      for (const m of html.matchAll(patron)) {
+        out.push(html.slice(Math.max(0, m.index - 70), m.index + 130).replace(/\s+/g, ' '))
+        if (out.length >= max) break
+      }
+      return out
+    }
+    res.json({
+      chars: html.length,
+      producto: r?.product ? Object.fromEntries(Object.entries(r.product).filter(([k]) => !['description', 'descriptionHtml', 'images', 'breadcrumbs', 'additionalProperties', 'features'].includes(k))) : null,
+      available_quantity: contextos(/available_quantity/g),
+      stock: contextos(/"stock[a-z_]*"|stock disponible|Stock disponible/gi),
+      disponibles: contextos(/disponibles?\b/gi, 8),
+      cantidad: contextos(/"quantity[a-z_]*"|max_quantity|"maximum[a-z_]*"/gi),
+      vendidos: contextos(/sold_quantity|vendidos/gi, 5),
+      ultima: contextos(/[uú]ltim[ao]s? (disponible|unidad)/gi, 4),
+      preguntas: contextos(/"questions?[a-z_]*"\s*:/gi, 4),
+      variaciones: contextos(/"variations?"\s*:/gi, 2),
+    })
+  }),
+)
+
 // El HTML que ML sirvió en el último scan de un nicho, para diagnosticar un
 // cambio de forma sin volver a scrapear. Con ?resumen=1 devuelve solo lo que el
 // parser sacó ese día, que es la primera pregunta: ¿cambió ML o cambiamos
