@@ -832,17 +832,33 @@ export function calcularMetricas({
 }
 
 // Vista producto+snapshot del último scan (tabla del dashboard y análisis IA).
-// Pura. Dos lecturas de stock de la misma publicación → unidades vendidas.
+// EL STOCK DE ML VIENE EN BALDES, IGUAL QUE LOS VENDIDOS. Validado el 17-sep-2026
+// contra siete fichas: "(+5 disponibles)", "(+10…)", "(+25…)", "(+50…)", y exacto
+// solo cuando quedan pocas ("2 disponibles", "4 disponibles"). Una lectura es
+// entonces un RANGO: "+25" = entre 26 y 50. Se guarda como stock = piso del
+// balde (26) con stockTopado = true.
+const TECHO_BALDE = { 6: 10, 11: 25, 26: 50, 51: Infinity }
+const rangoStock = (l) => (l.topado ? { min: l.stock, max: TECHO_BALDE[l.stock] ?? Infinity } : { min: l.stock, max: l.stock })
+
+// Pura. Dos lecturas de stock de la misma publicación → unidades vendidas COMO
+// MÍNIMO. De "+25" (≥26) a "2 disponibles" se vendieron al menos 24; de "+25" a
+// "+10" (11-25), al menos 1. Si el rango de ahora supera al de antes, repuso, y
+// no se inventa cuánto vendió en el medio. Con las dos lecturas exactas el piso
+// es la venta exacta.
 export function ventaEntreLecturas(antes, ahora) {
-  if (!antes || !ahora || antes.topado || ahora.topado) return null
+  if (!antes || !ahora) return null
   // solo el stock que ve el comprador: el de telemetría puede ser el tope de compra
   if (antes.fuente !== 'texto' || ahora.fuente !== 'texto') return null
   if (!Number.isFinite(antes.stock) || !Number.isFinite(ahora.stock)) return null
   const dias = (new Date(ahora.fecha) - new Date(antes.fecha)) / 86_400_000
   if (!(dias >= 0.5)) return null
-  if (ahora.stock > antes.stock) return { repuso: true, dias: redondear(dias, 1), stockAntes: antes.stock, stockAhora: ahora.stock }
-  const unidades = antes.stock - ahora.stock
-  return { unidades, dias: redondear(dias, 1), porDia: redondear(unidades / dias, 2), stockAntes: antes.stock, stockAhora: ahora.stock }
+  const a = rangoStock(antes), b = rangoStock(ahora)
+  const base = { dias: redondear(dias, 1), stockAntes: antes.stock, stockAhora: ahora.stock, baldeAntes: antes.topado === true, baldeAhora: ahora.topado === true }
+  if (b.min > a.max) return { ...base, repuso: true }
+  if (!Number.isFinite(b.max)) return null // sigue en "+50": no se ve nada
+  const unidades = Math.max(0, a.min - b.max)
+  const exacta = !antes.topado && !ahora.topado
+  return { ...base, unidades, esPiso: !exacta, porDia: redondear(unidades / dias, 2) }
 }
 
 export async function obtenerProductosUltimoScan(nicho) {

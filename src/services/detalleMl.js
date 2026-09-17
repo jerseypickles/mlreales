@@ -130,7 +130,9 @@ export function stockDesdeHtml(html) {
   // `quantity` valía 3—. El stock de verdad es el texto que ve el comprador:
   //   "(4 disponibles)"  ·  "(+50 disponibles)"  ·  "¡Última disponible!"
   // Se lee ese; `quantity` queda solo como respaldo, marcado como tal, y no
-  // sirve para calcular ventas.
+  // sirve para calcular ventas. Y ojo: el texto también viene EN BALDES —"+5",
+  // "+10", "+25", "+50"— y es exacto solo con pocas unidades. Con "+" se guarda
+  // el piso del balde más uno (26 = "más de 25") y stockTopado = true.
   const vendidos = texto.match(/"sold_quantity":(\d+)/)
   const vendidosFicha = vendidos ? Number(vendidos[1]) : null
   const visible = texto.match(/\((\+?)(\d+) disponibles?\)/) ?? texto.match(/"text":"(\+?)(\d+) disponibles?"/)

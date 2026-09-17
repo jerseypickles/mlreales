@@ -560,13 +560,22 @@ test('la demanda se cuenta con las reseñas de la API cuando cubren bastante má
   assert.equal(calcularDemanda(pocaApi.slice(0, 20), previos, { listado: pocaApi }).fuenteResenas, 'ficha')
 })
 
-test('la baja de stock entre dos lecturas es venta real; topado o repuesto no se inventa', async () => {
+test('la baja de stock entre dos lecturas es venta: exacta si ambas lo son, un piso si hay baldes', async () => {
   const { ventaEntreLecturas } = await import('../src/services/metricas.js')
   const l = (fecha, stock, topado = false, fuente = 'texto') => ({ fecha: new Date(fecha), stock, topado, fuente })
-  assert.deepEqual(ventaEntreLecturas(l('2026-09-10', 40), l('2026-09-17', 26)), { unidades: 14, dias: 7, porDia: 2, stockAntes: 40, stockAhora: 26 })
-  assert.equal(ventaEntreLecturas(l('2026-09-10', 51, true), l('2026-09-17', 30)), null, 'desde "más de 50" no se sabe de cuánto bajó')
-  assert.equal(ventaEntreLecturas(l('2026-09-10', 10), l('2026-09-17', 35)).repuso, true)
+  const v = ventaEntreLecturas(l('2026-09-10', 5), l('2026-09-17', 2))
+  assert.deepEqual([v.unidades, v.esPiso, v.porDia], [3, false, 0.43])
+  // "+25" (26-50) → "2 disponibles": al menos 24
+  const piso = ventaEntreLecturas(l('2026-09-10', 26, true), l('2026-09-17', 2))
+  assert.deepEqual([piso.unidades, piso.esPiso], [24, true])
+  // "+25" → "+10" (11-25): al menos 1
+  assert.equal(ventaEntreLecturas(l('2026-09-10', 26, true), l('2026-09-17', 11, true)).unidades, 1)
+  // mismo balde: no se vio nada, piso 0
+  assert.equal(ventaEntreLecturas(l('2026-09-10', 26, true), l('2026-09-17', 26, true)).unidades, 0)
+  // sigue en "+50": no se ve nada
+  assert.equal(ventaEntreLecturas(l('2026-09-10', 51, true), l('2026-09-17', 51, true)), null)
+  // de "2 disponibles" a "+25": repuso
+  assert.equal(ventaEntreLecturas(l('2026-09-10', 2), l('2026-09-17', 26, true)).repuso, true)
   assert.equal(ventaEntreLecturas(l('2026-09-17T10:00', 10), l('2026-09-17T12:00', 9)), null, 'dos horas no son una ventana')
-  assert.equal(ventaEntreLecturas(l('2026-09-10', 8), l('2026-09-17', 8)).unidades, 0)
   assert.equal(ventaEntreLecturas(l('2026-09-10', 26, false, 'telemetria'), l('2026-09-17', 20)), null, 'el campo de telemetría puede ser el tope de compra: no mide ventas')
 })
