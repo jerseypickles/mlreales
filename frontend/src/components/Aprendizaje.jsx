@@ -174,7 +174,11 @@ function Productos({ libro, diagnostico, minimoVisitas }) {
         <tbody>{libro.porProducto.map((p) => {
           const s = estadoSemana(porItem.get(p.itemId), minimoVisitas)
           return <tr key={p.itemId}>
-            <td className="celda-titulo apr-producto">{p.titulo || p.itemId}<small>{fmtNum(p.dias)} días guardados · desde {fecha(p.desde)}</small></td>
+            <td className="celda-titulo apr-producto"><div className="apr-producto-fila">
+              {p.imagen ? <img src={p.imagen.replace(/^http:/, 'https:')} alt="" loading="lazy" width="48" height="48" /> : <span className="apr-foto-vacia" aria-hidden="true"><ShoppingBag size={18} /></span>}
+              <div>{p.url ? <a href={p.url} target="_blank" rel="noreferrer">{p.titulo || p.itemId}</a> : (p.titulo || p.itemId)}
+                <small>{fmtNum(p.dias)} días guardados · desde {fecha(p.desde)}{p.estadoMl === 'paused' ? ' · pausada en ML' : ''}</small></div>
+            </div></td>
             <td className="apr-celda-chispa"><Chispa puntos={alinear(p.serie)} campo="unidades" alto={30} etiqueta={`Unidades por día de ${p.titulo}`} /></td>
             <td className="num"><strong>{fmtNum(p.unidades)}</strong></td><td className="num">{fmtNum(p.visitas)}</td>
             <td className="num">{p.visitas ? decimal((p.unidades / p.visitas) * 100) : '—'}</td>
@@ -187,40 +191,63 @@ function Productos({ libro, diagnostico, minimoVisitas }) {
   )
 }
 
-function Pronosticos({ pronosticos }) {
-  const grupos = useMemo(() => {
-    const porClave = new Map()
-    for (const p of pronosticos) {
-      const clave = `${p.keyword}|${p.periodo}`
-      if (!porClave.has(clave) || new Date(p.emitidoEl) > new Date(porClave.get(clave).emitidoEl)) porClave.set(clave, p)
-    }
-    const porKeyword = new Map()
-    for (const p of porClave.values()) porKeyword.set(p.keyword, [...(porKeyword.get(p.keyword) ?? []), p])
-    return [...porKeyword].map(([keyword, ps]) => ({ keyword, meses: ps.sort((a, b) => a.periodo.localeCompare(b.periodo)),
-      volumen: Math.max(...ps.map((p) => p.datos?.referencia ?? 0)) })).sort((a, b) => b.volumen - a.volumen)
-  }, [pronosticos])
+const ORDENES = { volumen: 'Más buscados', sube: 'Los que más suben', baja: 'Los que más bajan' }
+
+function Pronosticos({ nichos, modeloGana }) {
+  const [orden, setOrden] = useState('volumen')
+  const [texto, setTexto] = useState('')
   const [todos, setTodos] = useState(false)
-  if (!grupos.length) return <p className="apr-vacio">Todavía no hay pronósticos guardados.</p>
+  // los tres meses que más nichos comparten: son las columnas
+  const periodos = useMemo(() => {
+    const cuenta = new Map()
+    for (const n of nichos) for (const m of n.meses) cuenta.set(m.periodo, (cuenta.get(m.periodo) ?? 0) + 1)
+    return [...cuenta].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([p]) => p).sort()
+  }, [nichos])
+  const filas = useMemo(() => {
+    const conCambio = nichos.map((n) => {
+      const meses = n.meses.filter((m) => periodos.includes(m.periodo) && m.referencia > 0)
+      const esperado = meses.reduce((a, m) => a + m.estimado, 0), pasado = meses.reduce((a, m) => a + m.referencia, 0)
+      return { ...n, cambio: pasado > 0 ? (esperado / pasado - 1) * 100 : null, volumen: Math.max(n.busquedasMes ?? 0, ...meses.map((m) => m.referencia)) }
+    }).filter((n) => !texto.trim() || n.nicho.includes(texto.trim().toLowerCase()))
+    const por = { volumen: (a, b) => b.volumen - a.volumen, sube: (a, b) => (b.cambio ?? -1e9) - (a.cambio ?? -1e9), baja: (a, b) => (a.cambio ?? 1e9) - (b.cambio ?? 1e9) }
+    return conCambio.sort(por[orden])
+  }, [nichos, periodos, orden, texto])
+  if (!nichos.length) return <p className="apr-vacio">Todavía no hay pronósticos para los nichos del tablero.</p>
+  const visibles = todos || texto.trim() ? filas : filas.slice(0, 12)
   return <>
-    <div className="apr-pronosticos">
-      {(todos ? grupos : grupos.slice(0, 9)).map((g) => (
-        <article key={g.keyword} className="apr-pronostico">
-          <h4>{g.keyword}</h4>
-          <div className="apr-pron-meses">{g.meses.map((p) => {
-            const d = p.datos ?? {}
-            const delta = d.referencia > 0 ? (d.estimado / d.referencia - 1) * 100 : null
-            const real = p.evaluacion?.real
-            return <div key={p.periodo} className="apr-pron-mes">
-              <span className="apr-pron-cuando">{mes(p.periodo)}</span>
-              <strong>{fmtNum(d.estimado)}</strong>
-              {delta !== null && <span className={`apr-delta ${delta >= 3 ? 'apr-delta-sube' : delta <= -3 ? 'apr-delta-baja' : ''}`}>{delta > 0 ? '+' : ''}{decimal(delta, 0)}%</span>}
-              <small>{Number.isFinite(real) ? `real ${fmtNum(real)}` : `año pasado ${fmtNum(d.referencia)}`}</small>
-            </div>
-          })}</div>
-        </article>
-      ))}
+    {!modeloGana && <p className="apr-aviso-linea"><AlertTriangle size={15} aria-hidden="true" />Este modelo todavía se equivoca más que repetir el año pasado. Para decidir una compra, hoy la mejor guía es la barra gris (lo que se buscó ese mes el año pasado); la azul es lo que el modelo espera.</p>}
+    <div className="apr-controles">
+      <label className="apr-buscar"><Search size={14} aria-hidden="true" /><span className="apr-solo-lector">Buscar nicho</span>
+        <input type="search" placeholder="Buscar nicho…" value={texto} onChange={(ev) => setTexto(ev.target.value)} /></label>
+      <div className="apr-segmentos" role="group" aria-label="Ordenar">{Object.entries(ORDENES).map(([k, nombre]) =>
+        <button key={k} type="button" className={orden === k ? 'activo' : ''} aria-pressed={orden === k} onClick={() => setOrden(k)}>{nombre}</button>)}</div>
     </div>
-    {grupos.length > 9 && <button type="button" className="boton-secundario apr-mas" onClick={() => setTodos((v) => !v)}>{todos ? 'Ver menos' : `Ver las ${fmtNum(grupos.length)} búsquedas`}</button>}
+    <div className="tabla-envoltura apr-tabla">
+      <table className="apr-tabla-pron">
+        <thead><tr><th scope="col">Nicho</th>{periodos.map((p) => <th key={p} scope="col">{mes(p)}</th>)}<th scope="col" className="num">Los 3 meses vs año pasado</th></tr></thead>
+        <tbody>{visibles.map((n) => {
+          const tope = Math.max(1, ...n.meses.filter((m) => periodos.includes(m.periodo)).flatMap((m) => [m.estimado ?? 0, m.referencia ?? 0]))
+          return <tr key={n.nichoId}>
+            <td className="celda-titulo apr-producto">{n.nicho}
+              <small>{n.keywordMedida !== n.nicho ? `medido como "${n.keywordMedida}" · ` : ''}{n.mesPico ? `pico en ${n.mesPico}` : 'sin pico marcado'}</small></td>
+            {periodos.map((p) => {
+              const m = n.meses.find((x) => x.periodo === p)
+              if (!m) return <td key={p} className="apr-pron-celda apr-pron-sin">—</td>
+              const delta = m.referencia > 0 ? (m.estimado / m.referencia - 1) * 100 : null
+              return <td key={p} className="apr-pron-celda" title={`Año pasado: ${fmtNum(m.referencia)} · Modelo: ${fmtNum(m.estimado)}${m.inferior != null ? ` (entre ${fmtNum(m.inferior)} y ${fmtNum(m.superior)})` : ''}${m.real != null ? ` · Real: ${fmtNum(m.real)}` : ''}`}>
+                <div className="apr-par"><span className="apr-par-pasado" style={{ width: `${(m.referencia / tope) * 100}%` }} /><span className="apr-par-modelo" style={{ width: `${(m.estimado / tope) * 100}%` }} /></div>
+                <div className="apr-par-cifras"><span>{fmtNum(m.referencia)}</span><strong>{fmtNum(m.estimado)}</strong>
+                  {delta !== null && <em className={`apr-delta ${delta >= 3 ? 'apr-delta-sube' : delta <= -3 ? 'apr-delta-baja' : ''}`}>{delta > 0 ? '+' : ''}{decimal(delta, 0)}%</em>}</div>
+              </td>
+            })}
+            <td className="num">{n.cambio === null ? '—' : <span className={`apr-chip ${n.cambio >= 3 ? 'apr-chip-bien' : n.cambio <= -3 ? 'apr-chip-mal' : ''}`}>
+              {n.cambio >= 3 ? <TrendingUp size={13} aria-hidden="true" /> : n.cambio <= -3 ? <TrendingDown size={13} aria-hidden="true" /> : null}{n.cambio > 0 ? '+' : ''}{decimal(n.cambio, 0)}%</span>}</td>
+          </tr>
+        })}</tbody>
+      </table>
+      <p className="apr-leyenda"><span className="apr-leyenda-pasado" /> búsquedas del año pasado <span className="apr-leyenda-barra apr-leyenda-sep" /> lo que espera el modelo</p>
+    </div>
+    {!texto.trim() && filas.length > 12 && <button type="button" className="boton-secundario apr-mas" onClick={() => setTodos((v) => !v)}>{todos ? 'Ver menos' : `Ver los ${fmtNum(filas.length)} nichos`}</button>}
   </>
 }
 
@@ -253,9 +280,9 @@ export function Aprendizaje() {
     setCargando(true)
     try {
       const opciones = { signal: controlador.signal }
-      const [estado, predicciones] = await Promise.all([api.aprendizaje(opciones), api.aprendizajePronosticos(opciones)])
+      const [estado, predicciones] = await Promise.all([api.aprendizaje(opciones), api.aprendizajePronosticosNichos(opciones)])
       if (!controlador.signal.aborted) {
-        setDatos({ estado, pronosticos: predicciones.pronosticos })
+        setDatos({ estado, nichos: predicciones.nichos ?? [] })
         setError(null)
       }
     } catch (err) {
@@ -344,8 +371,8 @@ export function Aprendizaje() {
           <Productos libro={com.libro} diagnostico={com.diagnostico} minimoVisitas={min.visitasSemana} />
         </Seccion>
 
-        <Seccion titulo="Lo que el modelo espera de las búsquedas" bajada={`Pronóstico de los próximos meses contra el mismo mes del año pasado. ${fmtNum(c.predicciones)} guardados, ${fmtNum(c.evaluadas)} ya contrastados con el dato real.`}>
-          <Pronosticos pronosticos={datos.pronosticos} />
+        <Seccion titulo="Búsquedas esperadas por nicho" bajada="Un renglón por cada nicho del tablero, con la palabra que de verdad se le mide. Los próximos tres meses, comparados con los mismos meses del año pasado.">
+          <Pronosticos nichos={datos.nichos} modeloGana={(() => { const ev = modelo('busquedas-google')?.evaluacion; return !!ev?.superaReferencias })()} />
         </Seccion>
 
         <details className="apr-plegable apr-tecnico">

@@ -40,6 +40,39 @@ router.get('/pronosticos', async (req, res) => {
   const pronosticos = await PrediccionMl.find(filtro).sort({ emitidoEl: -1 }).limit(100).lean()
   res.json({ modo: 'sombra', objetivo: 'busquedas-google', pronosticos })
 })
+// UN PRONÓSTICO POR NICHO, NO POR PALABRA. El historial se mide para cada
+// variante ("brochas", "brochas de maquillaje", "brochas de maquillajes") y la
+// lista cruda mostraba las tres como si fueran tres mercados. Acá cada nicho
+// activo aparece una vez, con la palabra que de verdad se le mide.
+router.get('/pronosticos-nichos', async (_req, res) => {
+  const { Nicho } = await import('../../models/Nicho.js')
+  const { CurvaEstacional } = await import('../../models/CurvaEstacional.js')
+  const nichos = await Nicho.find({ estado: 'activo' }).select('keyword veredicto etapaCompra').lean()
+  const curvas = new Map((await CurvaEstacional.find({ keyword: { $in: nichos.map((n) => n.keyword) } })
+    .select('keyword keywordMedida busquedasMes nombreMesPico clasificacion').lean()).map((c) => [c.keyword, c]))
+  const candidatas = new Map()
+  for (const n of nichos) candidatas.set(n.keyword, [curvas.get(n.keyword)?.keywordMedida, n.keyword].filter(Boolean))
+  const todas = [...new Set([...candidatas.values()].flat())]
+  // la emisión más reciente de cada palabra y mes
+  const filas = await PrediccionMl.aggregate([
+    { $match: { keyword: { $in: todas } } }, { $sort: { emitidoEl: -1 } },
+    { $group: { _id: { keyword: '$keyword', periodo: '$periodo' }, p: { $first: '$$ROOT' } } },
+  ])
+  const porKeyword = new Map()
+  for (const { p } of filas) porKeyword.set(p.keyword, [...(porKeyword.get(p.keyword) ?? []), p])
+  const salida = []
+  for (const n of nichos) {
+    const medida = candidatas.get(n.keyword).find((k) => porKeyword.has(k))
+    if (!medida) continue
+    const c = curvas.get(n.keyword)
+    salida.push({ nichoId: n._id, nicho: n.keyword, keywordMedida: medida, veredicto: n.veredicto ?? null, etapaCompra: n.etapaCompra ?? null,
+      busquedasMes: c?.busquedasMes ?? null, mesPico: c?.nombreMesPico ?? null, clasificacion: c?.clasificacion ?? null,
+      meses: porKeyword.get(medida).sort((a, b) => a.periodo.localeCompare(b.periodo)).map((p) => ({ periodo: p.periodo,
+        estimado: p.datos?.estimado ?? null, referencia: p.datos?.referencia ?? null, inferior: p.datos?.inferior ?? null, superior: p.datos?.superior ?? null,
+        real: p.evaluacion?.real ?? null, emitidoEl: p.emitidoEl })) })
+  }
+  res.json({ modo: 'sombra', nichos: salida })
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {

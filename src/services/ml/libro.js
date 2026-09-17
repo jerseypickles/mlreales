@@ -204,6 +204,15 @@ export async function resumenLibro({ ahora = new Date(), diasSerie = 42 } = {}) 
     t.unidades += d.unidades
     total.set(d.dia, t)
   }
+  // foto y estado de la publicación: con el puro título no se reconoce el producto
+  const propios = await ProductoPropio.find({}).select('sku itemIdMl imagen url estadoMl').lean()
+  const ficha = new Map(propios.map((p) => [p.itemIdMl ?? p.sku, p]))
+  for (const f of filas) {
+    const p = ficha.get(f._id)
+    f.imagen = p?.imagen ?? null
+    f.url = p?.url ?? null
+    f.estadoMl = p?.estadoMl ?? null
+  }
   return { productos: filas.length, dias: filas.reduce((a, f) => a + f.dias, 0),
     unidades: filas.reduce((a, f) => a + f.unidades, 0), visitas: filas.reduce((a, f) => a + f.visitas, 0),
     desde: filas.map((f) => f.desde).sort()[0] ?? null, hasta: filas.map((f) => f.hasta).sort().at(-1) ?? null,
