@@ -10,7 +10,7 @@ router.get('/', async (req, res) => {
   res.json({ categorias: await rankingsConMovimiento({ nicho }), entradas: nicho ? undefined : await entradasAlTop() })
 })
 router.post('/capturar', async (_req, res) => {
-  const job = await obtenerColas().tendencias.add('ranking-mas-vendidos', {}, { jobId: `ranking-manual-${Math.floor(Date.now() / 300000)}` } // una por ventana de 5 min)
+  const job = await obtenerColas().tendencias.add('ranking-mas-vendidos', {}, { jobId: `ranking-manual-${Math.floor(Date.now() / 300000)}` }) // una por ventana de 5 min
   res.status(202).json({ jobId: job.id })
 })
 export default router
