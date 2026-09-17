@@ -48,6 +48,7 @@ export const api = {
   contabilidad: (periodo) => pedir(`/api/contabilidad${periodo ? `?periodo=${periodo}` : ''}`),
   generarListing: (id) => pedir(`/api/nichos/${id}/listing`, { method: 'POST' }),
   listarPropios: () => pedir('/api/propios'),
+  alertasStock: () => pedir('/api/propios/alertas-stock'),
   aprendizaje: (opciones) => pedir('/api/aprendizaje', opciones),
   aprendizajePerfiles: (opciones) => pedir('/api/aprendizaje/perfiles', opciones),
   aprendizajePronosticos: (opciones) => pedir('/api/aprendizaje/pronosticos', opciones),

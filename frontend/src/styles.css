@@ -7099,3 +7099,41 @@ em.mg-agotado { color: var(--peligro); }
 .sv-full { margin-left: 6px; padding: 1px 6px; border-radius: 5px; background: var(--exito-tenue); color: var(--exito-tinta); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; vertical-align: 1px; }
 .sn-mini-fuerte img, .sn-mini-fuerte .mv-sinfoto { border-color: var(--avisa-tinta); box-shadow: 0 0 0 2px var(--avisa-tenue); }
 .mv-chip.mv-fuerte { color: var(--avisa-tinta); background: var(--avisa-tenue); border-color: transparent; font-weight: 700; }
+
+/* ALERTA TEMPRANA DE STOCK EN FULL: franja global bajo la barra superior. */
+.as { margin: 12px 20px 0; border: 1px solid var(--borde); border-left-width: 4px; border-radius: 12px; background: var(--superficie); box-shadow: var(--sombra-1); }
+.as.as-rojo { border-left-color: var(--peligro); }
+.as.as-ambar { border-left-color: var(--avisa-tinta); }
+.as.as-azul { border-left-color: var(--acento); }
+.as-cab { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+.as-icono { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; }
+.as-rojo > .as-cab .as-icono { color: var(--peligro); background: var(--peligro-tenue); }
+.as-ambar > .as-cab .as-icono { color: var(--avisa-tinta); background: var(--avisa-tenue); }
+.as-azul > .as-cab .as-icono { color: var(--acento); background: var(--acento-tenue); }
+.as-titular { flex: 1; min-width: 0; margin: 0; font-size: 0.92rem; line-height: 1.4; color: var(--tinta-2); }
+.as-titular b { color: var(--tinta); }
+.as-ir { flex-shrink: 0; padding: 6px 12px; border: 1px solid var(--borde); border-radius: 8px; background: var(--superficie); color: var(--tinta); font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease; }
+.as-ir:hover { background: var(--acento-tenue); border-color: var(--acento); }
+.as-plegar { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border: 0; border-radius: 8px; background: transparent; color: var(--tinta-3); cursor: pointer; transition: transform 0.18s ease, background 0.15s ease; }
+.as-plegar:hover { background: var(--acento-tenue); }
+.as-plegar[aria-expanded="true"] { transform: rotate(180deg); }
+.as-ir:focus-visible, .as-plegar:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.as-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; margin: 0; padding: 0 14px 14px; list-style: none; }
+.as-tarjeta { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--borde); border-radius: 10px; background: var(--fondo, transparent); }
+.as-tarjeta.as-rojo { border-color: var(--peligro); background: var(--peligro-tenue); }
+.as-tarjeta.as-ambar { border-color: var(--avisa-tinta); background: var(--avisa-tenue); }
+.as-tarjeta img, .as-tarjeta .mv-sinfoto { width: 44px; height: 44px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--borde); background: #fff; object-fit: contain; }
+.as-cuerpo { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.as-cuerpo strong { overflow: hidden; font-size: 0.86rem; color: var(--tinta); text-overflow: ellipsis; white-space: nowrap; }
+.as-dato { font-size: 0.82rem; color: var(--tinta-2); }
+.as-dato b { color: var(--tinta); }
+.as-sub { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 0.78rem; color: var(--tinta-2); }
+.as-sub b { color: var(--tinta); }
+.as-cobertura { position: relative; display: block; height: 6px; margin: 3px 0 2px; border-radius: 3px; background: var(--borde); }
+.as-cobertura i { display: block; height: 100%; border-radius: 3px; background: var(--acento); }
+.as-ambar .as-cobertura i { background: var(--avisa-tinta); }
+.as-cobertura b { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--tinta); border-radius: 1px; }
+.as-contador { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--peligro); color: #fff; font-size: 0.7rem; font-weight: 700; vertical-align: 1px; }
+@media (max-width: 720px) { .as { margin: 10px 12px 0; } .as-cab { flex-wrap: wrap; } .as-titular { flex-basis: calc(100% - 50px); } }
+.apr-chips-columna { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+.apr-chips-columna .apr-chip-mini { margin-left: 0; }

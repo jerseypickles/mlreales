@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity, AlertTriangle, CheckCircle2, ChevronDown, CircleDashed, Eye, Link2, Megaphone, PackageX,
-  RefreshCw, Search, ShoppingBag, Store, TrendingDown, TrendingUp,
+  RefreshCw, Search, ShoppingBag, Store, TrendingDown, TrendingUp, Truck,
 } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura } from './ui.jsx'
@@ -154,8 +154,19 @@ function estadoSemana(d, minimoVisitas) {
   return { clase: 'aviso', Icono: AlertTriangle, texto: d.motivo ?? 'Sin dato' }
 }
 
+// El quiebre que ya pasó se ve en la columna; esto avisa el que VIENE, con la
+// fecha límite para despachar a Full (misma fuente que la franja global).
+function AvisoStock({ a }) {
+  if (!a) return null
+  if (a.nivel === 'quebrado') return <span className="apr-chip apr-chip-mal apr-chip-mini"><PackageX size={12} aria-hidden="true" />{a.diasQuebrado ? `${a.diasQuebrado} d sin stock` : 'sin stock'}{a.perdidaDiaClp ? ` · se van ${fmtPrecio(a.perdidaDiaClp)}/día` : ''}</span>
+  if (a.nivel === 'enviar_ya' || a.nivel === 'preparar') return <span className={`apr-chip apr-chip-mini ${a.nivel === 'enviar_ya' ? 'apr-chip-aviso' : ''}`}><Truck size={12} aria-hidden="true" />se quiebra el {fecha(a.fechaQuiebre)} · despacha antes del {fecha(a.despacharAntesDel)}</span>
+  return null
+}
+
 function Productos({ libro, diagnostico, minimoVisitas }) {
   const porItem = new Map((diagnostico ?? []).map((d) => [d.itemId, d]))
+  const [alertas, setAlertas] = useState(null)
+  useEffect(() => { api.alertasStock().then((r) => setAlertas(new Map(r.productos.map((x) => [x.itemId, x])))).catch(() => {}) }, [])
   if (!libro?.porProducto?.length) return <p className="apr-vacio">El libro de ventas se llena con el próximo scan de tus productos.</p>
   // todas las filas comparten el mismo eje de días: un producto más nuevo
   // empieza más a la derecha, no se estira
@@ -183,7 +194,7 @@ function Productos({ libro, diagnostico, minimoVisitas }) {
             <td className="apr-celda-chispa"><Chispa puntos={alinear(p.serie)} campo="unidades" alto={30} etiqueta={`Unidades por día de ${p.titulo}`} /></td>
             <td className="num"><strong>{fmtNum(p.unidades)}</strong></td><td className="num">{fmtNum(p.visitas)}</td>
             <td className="num">{p.visitas ? decimal((p.unidades / p.visitas) * 100) : '—'}</td>
-            <td><span className={`apr-chip apr-chip-${s.clase}`}><s.Icono size={13} aria-hidden="true" />{s.texto}</span></td>
+            <td><div className="apr-chips-columna"><span className={`apr-chip apr-chip-${s.clase}`}><s.Icono size={13} aria-hidden="true" />{s.texto}</span><AvisoStock a={alertas?.get(p.itemId)} /></div></td>
           </tr>
         })}</tbody>
       </table>

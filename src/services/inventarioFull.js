@@ -290,3 +290,43 @@ export function urgencia(diasCobertura) {
   if (diasCobertura <= 45) return 'reponer'
   return 'holgado'
 }
+
+// ALERTA TEMPRANA DE STOCK. El importador, 17-sep-2026, mirando tres productos
+// quebrados hace más de una semana: "no representa mucho si no está detectando
+// temprano mis productos". El forecast existía, pero escondido dentro de cada
+// producto: nadie avisaba ANTES. Un quiebre cuesta dos veces — la venta que no
+// ocurre y la semana que la máquina de aprendizaje ya no puede usar.
+//
+// Lo que importa no es "quedan N días" sino la FECHA LÍMITE para despachar: un
+// envío a Full tarda en quedar disponible (preparar, colecta, recepción), así
+// que el último día útil es la fecha de quiebre menos ese plazo.
+export const PLAZO_ENVIO_FULL_DIAS = 7
+const MARGEN_DIAS = 3
+
+export function alertaDeStock({ reposicion, stockPorDia = new Map(), precioClp = null, hoy = new Date() } = {}) {
+  if (!reposicion) return null
+  const { stock, enCamino, velocidadDia, diasCobertura, aEnviar } = reposicion
+  const dias = [...stockPorDia].sort(([a], [b]) => (a < b ? -1 : 1))
+  const ultimoConStock = dias.filter(([, v]) => v.conStock > 0).at(-1)?.[0] ?? null
+  const tuvoStock = ultimoConStock !== null
+  let nivel = 'ok'
+  if (stock <= 0) nivel = tuvoStock || velocidadDia > 0 ? 'quebrado' : 'sin_ventas'
+  else if (diasCobertura == null) nivel = 'sin_ventas'
+  else if (diasCobertura <= PLAZO_ENVIO_FULL_DIAS + MARGEN_DIAS) nivel = 'enviar_ya'
+  else if (diasCobertura <= 21) nivel = 'preparar'
+  const masDias = (n) => new Date(+hoy + n * 86_400_000)
+  const fechaQuiebre = stock > 0 && diasCobertura != null ? masDias(diasCobertura) : null
+  const diasQuebrado = nivel === 'quebrado' && ultimoConStock
+    ? Math.max(1, Math.round((+new Date(`${diaChile(hoy)}T12:00:00Z`) - +new Date(`${ultimoConStock}T12:00:00Z`)) / 86_400_000)) : null
+  const perdidaDiaClp = nivel === 'quebrado' && velocidadDia > 0 && Number.isFinite(precioClp) ? Math.round(velocidadDia * precioClp) : null
+  return {
+    nivel, stock, enCamino, velocidadDia, diasCobertura, aEnviar,
+    fechaQuiebre,
+    // pasado este día, lo que se despache llega con la bodega ya vacía
+    despacharAntesDel: fechaQuiebre ? masDias(Math.max(0, diasCobertura - PLAZO_ENVIO_FULL_DIAS)) : null,
+    sinStockDesde: nivel === 'quebrado' ? ultimoConStock : null,
+    diasQuebrado,
+    perdidaDiaClp,
+    perdidaAcumuladaClp: perdidaDiaClp != null && diasQuebrado != null ? perdidaDiaClp * diasQuebrado : null,
+  }
+}

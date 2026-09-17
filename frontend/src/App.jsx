@@ -12,6 +12,7 @@ import { Radar } from './components/Sugerencias.jsx'
 import { Busqueda } from './components/Busqueda.jsx'
 import { Contabilidad } from './components/Contabilidad.jsx'
 import { Aprendizaje } from './components/Aprendizaje.jsx'
+import { AlertaStock } from './components/AlertaStock.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
 import { Radar as RadarIcono, Landmark } from 'lucide-react'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
@@ -737,6 +738,16 @@ export default function App() {
   const [errorLista, setErrorLista] = useState(null)
   const [bloqueada, setBloqueada] = useState(false)
   const [vista, setVista] = useState('oportunidades')
+  // alerta temprana de stock en Full: liviana (solo Mongo), cada 10 minutos
+  const [alertasStock, setAlertasStock] = useState(null)
+  useEffect(() => {
+    if (bloqueada) return undefined
+    const leer = () => { if (document.visibilityState === 'visible') api.alertasStock().then(setAlertasStock).catch(() => {}) }
+    leer()
+    const t = setInterval(leer, 600_000)
+    return () => clearInterval(t)
+  }, [bloqueada])
+  const urgentesStock = (alertasStock?.resumen?.quebrados ?? 0) + (alertasStock?.resumen?.enviarYa ?? 0)
   // Los dos mundos del sistema. Son trabajos distintos: uno decide QUÉ traer,
   // el otro lleva la plata de lo ya traído. Se cambian con el riel de la
   // derecha, no con las pestañas de arriba, justamente para que no se mezclen.
@@ -805,7 +816,7 @@ export default function App() {
             className={vista === 'propios' ? 'seccion activa' : 'seccion'}
             onClick={() => setVista('propios')}
           >
-            Mis productos
+            Mis productos{urgentesStock ? <span className="as-contador" title="Productos sin stock en Full o por quebrarse">{urgentesStock}</span> : null}
           </button>
           <button
             className={vista === 'publicidad' ? 'seccion activa' : 'seccion'}
@@ -822,6 +833,7 @@ export default function App() {
         </nav>
         <VentasChip />
       </header>
+      {mundo !== 'contabilidad' ? <AlertaStock datos={alertasStock} alAbrir={() => setVista('propios')} /> : null}
       {mundo === 'contabilidad' ? (
         <Contabilidad />
       ) : vista === 'oportunidades' ? (

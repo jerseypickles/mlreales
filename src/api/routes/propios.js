@@ -13,6 +13,8 @@ import {
   stockPorDiaDe,
   primerDiaConStock,
   diasSinStockEnVentana,
+  alertaDeStock,
+  PLAZO_ENVIO_FULL_DIAS,
 } from '../../services/inventarioFull.js'
 import { llmDisponible } from '../../services/llm.js'
 import { presupuesto } from '../../services/gastos.js'
@@ -339,6 +341,35 @@ router.get(
 // Sale de VentaMl, que son las órdenes PAGADAS de la cuenta —no estimaciones—.
 // Un pedido puede traer varias unidades del mismo item, así que se suma
 // `cantidad` y no órdenes.
+// ALERTA TEMPRANA DE STOCK EN FULL: liviana (solo Mongo, sin llamar a ML) para
+// que el aviso pueda vivir en toda la app y no escondido dentro de un producto.
+router.get(
+  '/alertas-stock',
+  manejar(async (_req, res) => {
+    const hoy = new Date()
+    const propios = await ProductoPropio.find({ estado: 'activo' }).select('sku itemIdMl titulo imagen url estadoMl inventarioFull mediciones stockDiario enCamino').lean()
+    const [ventas, ventas7, primeras] = await Promise.all([
+      ventasPorItem({ dias: 30 }).catch(() => new Map()), ventasPorItem({ dias: 7 }).catch(() => new Map()), primeraVentaPorItem().catch(() => new Map()),
+    ])
+    const productos = []
+    for (const p of propios) {
+      const id = p.itemIdMl ?? p.sku
+      const v30 = ventas.get(id) ?? null
+      const reposicion = reposicionSegura(p, v30, ventas7.get(id) ?? null, { primeraVenta: primeras.get(id) ?? null, hoy })
+      const ultima = (p.mediciones ?? []).at(-1) ?? null
+      const precioClp = v30?.unidades > 0 ? v30.ingresosClp / v30.unidades : (ultima?.precioEfectivo ?? ultima?.precio ?? null)
+      const alerta = alertaDeStock({ reposicion, stockPorDia: stockPorDiaDe({ stockDiario: p.stockDiario, mediciones: p.mediciones }), precioClp, hoy })
+      if (alerta) productos.push({ id: String(p._id), sku: p.sku, itemId: id, titulo: p.titulo, imagen: p.imagen, url: p.url, estadoMl: p.estadoMl ?? null, ...alerta })
+    }
+    const orden = { quebrado: 0, enviar_ya: 1, preparar: 2, ok: 3, sin_ventas: 4 }
+    productos.sort((a, b) => orden[a.nivel] - orden[b.nivel] || (b.perdidaDiaClp ?? 0) - (a.perdidaDiaClp ?? 0) || (a.diasCobertura ?? 999) - (b.diasCobertura ?? 999))
+    const de = (n) => productos.filter((x) => x.nivel === n)
+    res.json({ plazoEnvioFullDias: PLAZO_ENVIO_FULL_DIAS, productos,
+      resumen: { quebrados: de('quebrado').length, enviarYa: de('enviar_ya').length, preparar: de('preparar').length,
+        perdidaDiaClp: de('quebrado').reduce((a, x) => a + (x.perdidaDiaClp ?? 0), 0), perdidaAcumuladaClp: de('quebrado').reduce((a, x) => a + (x.perdidaAcumuladaClp ?? 0), 0) } })
+  }),
+)
+
 router.get(
   '/ventas-totales',
   manejar(async (_req, res) => {
