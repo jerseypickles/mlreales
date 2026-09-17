@@ -55,9 +55,9 @@ export function GraficoTemporada({ curva, ventana, hoy = new Date() }) {
       {pedir.size ? <div className="og-tira" aria-hidden="true">{MESES.map((m, i) => <span key={m} className={pedir.has(i) ? 'og-t-pedir' : ''} />)}</div> : null}
       <div className="og-tira" aria-hidden="true">{MESES.map((m, i) => <span key={m} className={llega.has(i) ? 'og-t-llega' : ''} />)}</div>
       <p className="og-leyenda">
-        <i className="og-l og-l-pico" /> meses fuertes
-        {pedir.size ? <><i className="og-l og-l-pedir" /> ventana para pedir</> : null}
-        <i className="og-l og-l-llega" /> pidiendo hoy, tu stock vende aquí
+        <span><i className="og-l og-l-pico" />meses fuertes</span>
+        {pedir.size ? <span><i className="og-l og-l-pedir" />ventana para pedir</span> : null}
+        <span><i className="og-l og-l-llega" />pidiendo hoy, tu stock vende aquí</span>
       </p>
       <p className="og-lectura">
         {curva.clasificacion === 'estacional'
@@ -90,7 +90,7 @@ export function GraficoPrecio({ precios, precioVenta }) {
         {precioVenta ? <span className="og-p-tuyo" style={{ left: x(precioVenta) }}><b>{fmtPrecio(precioVenta)}</b></span> : null}
       </div>
       <div className="og-p-eje"><span>$0</span><span>{fmtPrecio(Math.round(tope / 2 / 1000) * 1000)}</span><span>{fmtPrecio(Math.round(tope / 1000) * 1000)}</span></div>
-      <p className="og-leyenda"><i className="og-l og-l-caja" /> la mitad del listado <i className="og-l og-l-tramo" /> tramo de envío barato <i className="og-l og-l-tuyo" /> precio sugerido</p>
+      <p className="og-leyenda"><span><i className="og-l og-l-caja" />la mitad del listado</span><span><i className="og-l og-l-tramo" />tramo de envío barato</span><span><i className="og-l og-l-tuyo" />precio sugerido</span></p>
       <p className="og-lectura">
         {precioVenta
           ? <>Vendiendo a <strong>{fmtPrecio(precioVenta)}</strong> quedas {dif === 0 ? 'en la mediana' : <>{Math.abs(dif)}% {dif < 0 ? 'bajo' : 'sobre'} la mediana</>}
@@ -123,7 +123,7 @@ export function GraficoPronostico({ pronostico, modeloGana }) {
           </div>
         ))}
       </div>
-      <p className="og-leyenda"><i className="og-l og-l-pasado" /> año pasado <i className="og-l og-l-modelo" /> lo que espera el modelo</p>
+      <p className="og-leyenda"><span><i className="og-l og-l-pasado" />año pasado</span><span><i className="og-l og-l-modelo" />lo que espera el modelo</span></p>
       <p className="og-lectura">{modeloGana ? 'El modelo le gana a repetir el año pasado en la prueba.' : 'El modelo todavía se equivoca más que repetir el año pasado: para decidir cantidad, guíate por la barra gris.'}
         {pronostico.keywordMedida && pronostico.keywordMedida !== pronostico.nicho ? <> Medido como «{pronostico.keywordMedida}».</> : null}</p>
     </div>
