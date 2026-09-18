@@ -42,12 +42,30 @@ export function horasHastaLaProxima(ultima) {
 // sí es suya, y su stock se puede seguir. Se prefieren esas.
 export const esUrlDeCatalogo = (url) => /\/p\/MLC/i.test(String(url ?? ''))
 
+// A QUIÉN CONVIENE SEGUIR. La primera versión de esta regla elegía al revés, y se
+// vio en los datos del 18-sep: de 351 seguidos solo 13 (4%) eran Full con
+// publicación propia, y de los 22 medibles la mitad eran tiendas cross-border
+// ("Hongkong Store", "Loja Meicai", "CNCHONGQING…") clavadas en 1-5 unidades.
+// Dos errores opuestos:
+//   · DESCARTABA a quien está en "+50". Pero "+50" con Full es inventario real en
+//     la bodega de ML, y el día que cae a "+25" son ≥25 unidades vendidas: el
+//     número más grande y más limpio que da este método.
+//   · PREFERÍA a quien muestra poco stock. Eso selecciona justo al dropshipper que
+//     pone 3 unidades nominales, nunca las mueve y nunca repone.
+// El importador lo dijo antes que los datos: "si la publicación es Full es porque
+// están enviando a los almacenes de Mercado Libre". Full = hay caja de por medio.
+const nominal = (p) => p.stockFuente === 'texto' && Number.isFinite(p.stock) && !p.stockTopado && p.stock <= 5
+
 export function elegirParaSeguir(productos, { max = POR_NICHO } = {}) {
   const visible = (p) => p.stockFuente === 'texto' && Number.isFinite(p.stock)
+  // cuánto vale seguirlo, de menor (mejor) a mayor
+  const valor = (p) => (p.esFull ? 0 : 4) + (esUrlDeCatalogo(p.url) ? 2 : 0) + (nominal(p) ? 1 : 0)
   const vistos = new Set()
   return (productos ?? [])
-    .filter((p) => p.url && p.esTiendaOficial !== true && p.esAnuncio !== true && !(visible(p) && p.stockTopado && p.stock >= 51))
-    .sort((a, b) => Number(esUrlDeCatalogo(a.url)) - Number(esUrlDeCatalogo(b.url)) || Number(visible(b)) - Number(visible(a)) || (a.posicion ?? 999) - (b.posicion ?? 999))
+    .filter((p) => p.url && p.esTiendaOficial !== true && p.esAnuncio !== true
+      // "+50" sin Full no se puede leer: ni se mueve ni hay bodega detrás
+      && !(visible(p) && p.stockTopado && p.stock >= 51 && !p.esFull))
+    .sort((a, b) => valor(a) - valor(b) || Number(visible(b)) - Number(visible(a)) || (a.posicion ?? 999) - (b.posicion ?? 999))
     .filter((p) => {
       const v = p.vendedor ?? p.sku
       if (vistos.has(v)) return false
@@ -56,6 +74,9 @@ export function elegirParaSeguir(productos, { max = POR_NICHO } = {}) {
     })
     .slice(0, max)
 }
+
+// Quién ocupa un cupo sin poder dar señal: se cede a un candidato mejor.
+export const seguidoFlojo = (p) => p.esCatalogo === true || esUrlDeCatalogo(p.url)
 
 // Qué nichos se siguen: los que están en cotización o pedido, y los de
 // temporada con la ventana de compra abierta. Es donde una decisión de compra
@@ -75,20 +96,43 @@ async function nichosQueImportan() {
 // y las publicaciones propias (para calibrar). No saca a nadie: eso lo decide
 // la lectura, cuando una publicación pasa semanas en "+50" o desaparece.
 export async function actualizarLista({ ahora = new Date() } = {}) {
-  let agregados = 0
+  let agregados = 0, cedidos = 0
   for (const n of await nichosQueImportan()) {
-    const yaSeguidos = await SeguimientoStock.countDocuments({ nichoId: n._id, activo: true, esPropio: false })
-    if (yaSeguidos >= POR_NICHO) continue
+    const seguidos = await SeguimientoStock.find({ nichoId: n._id, activo: true, esPropio: false }).select('sku url esCatalogo esFull lecturas reposicionesVistas').lean()
     const ultimo = await Snapshot.findOne({ keyword: n.keyword }).sort({ fecha: -1 }).select('fecha').lean()
     if (!ultimo) continue
     // solo lo de arriba del listado: es donde un entrante compite de verdad
     const snaps = await Snapshot.find({ keyword: n.keyword, fecha: ultimo.fecha, posicion: { $lte: 60 } }).select('sku posicion stock stockTopado stockFuente esAnuncio').lean()
-    const prods = new Map((await Producto.find({ sku: { $in: snaps.map((s) => s.sku) } }).select('sku url titulo imagen vendedor esTiendaOficial').lean()).map((p) => [p.sku, p]))
-    const candidatos = elegirParaSeguir(snaps.map((s) => ({ ...s, ...(prods.get(s.sku) ?? {}) })).filter((p) => p.vendedor), { max: POR_NICHO - yaSeguidos })
+    const prods = new Map((await Producto.find({ sku: { $in: [...snaps.map((s) => s.sku), ...seguidos.map((p) => p.sku)] } }).select('sku url titulo imagen vendedor esTiendaOficial esFull').lean()).map((p) => [p.sku, p]))
+    // los seguidos de antes del 18-sep no traen Full ni la marca de catálogo: se
+    // rellenan desde el listado, que ya lo sabe y no cuesta nada
+    for (const p of seguidos) {
+      const esFull = prods.get(p.sku)?.esFull ?? null
+      if (p.esFull === esFull && p.esCatalogo === esUrlDeCatalogo(p.url)) continue
+      p.esFull = esFull
+      await SeguimientoStock.updateOne({ sku: p.sku }, { $set: { esFull, esCatalogo: esUrlDeCatalogo(p.url) } })
+    }
+    // CUPO CEDIDO. Los 6 lugares del nicho se llenaron antes de saber que una
+    // ficha de catálogo no se puede atribuir a un vendedor: quedaron ocupados por
+    // quien no puede dar señal. El que todavía no mostró nada le cede el lugar a
+    // un candidato Full con publicación propia.
+    const flojos = seguidos.filter((p) => seguidoFlojo(p) && !p.reposicionesVistas)
+    const firmes = seguidos.length - flojos.length
+    const yaEstan = new Set(seguidos.map((p) => p.sku))
+    const todos = elegirParaSeguir(snaps.map((s) => ({ ...s, ...(prods.get(s.sku) ?? {}) })).filter((p) => p.vendedor), { max: POR_NICHO })
+    const mejores = todos.filter((c) => !yaEstan.has(c.sku) && c.esFull && !esUrlDeCatalogo(c.url))
+    const ceder = Math.max(0, Math.min(flojos.length, mejores.length - Math.max(0, POR_NICHO - seguidos.length)))
+    for (const f of flojos.slice(0, ceder)) {
+      await SeguimientoStock.updateOne({ sku: f.sku }, { $set: { activo: false, motivoBaja: 'ficha de catálogo: el stock puede ser de otro vendedor' } })
+      cedidos++
+    }
+    const libres = POR_NICHO - (firmes + flojos.length - ceder)
+    if (libres <= 0) continue
+    const candidatos = [...mejores, ...todos.filter((c) => !yaEstan.has(c.sku) && !mejores.includes(c))].slice(0, libres)
     for (const c of candidatos) {
       const conocido = c.stockFuente === 'texto' && Number.isFinite(c.stock)
       const r = await SeguimientoStock.updateOne({ sku: c.sku }, { $setOnInsert: { sku: c.sku, url: c.url, nichoId: n._id, keyword: n.keyword,
-        titulo: c.titulo ?? null, imagen: c.imagen ?? null, vendedor: c.vendedor ?? null, agregadoEl: ahora, esCatalogo: esUrlDeCatalogo(c.url),
+        titulo: c.titulo ?? null, imagen: c.imagen ?? null, vendedor: c.vendedor ?? null, agregadoEl: ahora, esCatalogo: esUrlDeCatalogo(c.url), esFull: c.esFull ?? null,
         // si el scan ya leyó su stock, esa cuenta como la primera lectura: ya se pagó
         ...(conocido ? { ultima: { fecha: ultimo.fecha, stock: c.stock, topado: c.stockTopado === true, fuente: c.stockFuente } } : {}),
         proximaLecturaEl: conocido ? new Date(+ultimo.fecha + horasHastaLaProxima({ stock: c.stock, topado: c.stockTopado }) * HORA) : ahora } }, { upsert: true })
@@ -103,7 +147,7 @@ export async function actualizarLista({ ahora = new Date() } = {}) {
       imagen: p.imagen ?? null, vendedor: 'propio', esPropio: true, itemIdPropio: p.itemIdMl ?? p.sku, agregadoEl: ahora, proximaLecturaEl: ahora } }, { upsert: true })
     agregados += r.upsertedCount ?? 0
   }
-  return { agregados, activos: await SeguimientoStock.countDocuments({ activo: true }) }
+  return { agregados, cedidos, activos: await SeguimientoStock.countDocuments({ activo: true }) }
 }
 
 export async function gastoDelMes({ ahora = new Date() } = {}) {
@@ -139,8 +183,11 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
   const vencidos = await SeguimientoStock.find({ activo: true, proximaLecturaEl: { $lte: ahora } }).sort({ proximaLecturaEl: 1 }).lean()
   const propios = vencidos.filter((p) => p.esPropio)
   const dejaVer = (p) => p.ultima && Number.isFinite(p.ultima.stock) && !(p.ultima.topado && p.ultima.stock >= 51)
-  const relecturas = vencidos.filter((p) => !p.esPropio && dejaVer(p))
-  const resto = vencidos.filter((p) => !p.esPropio && !dejaVer(p)).sort((a, b) => Number(Boolean(a.ultima)) - Number(Boolean(b.ultima)))
+  // dentro de cada grupo, primero quien puede dar señal: Full con publicación
+  // propia antes que un catálogo que quizá no se pueda atribuir
+  const utilidad = (p) => (p.esFull ? 0 : 2) + (seguidoFlojo(p) ? 1 : 0)
+  const relecturas = vencidos.filter((p) => !p.esPropio && dejaVer(p)).sort((a, b) => utilidad(a) - utilidad(b))
+  const resto = vencidos.filter((p) => !p.esPropio && !dejaVer(p)).sort((a, b) => Number(Boolean(a.ultima)) - Number(Boolean(b.ultima)) || utilidad(a) - utilidad(b))
   const libre = Math.max(0, cupo - propios.length)
   const paraReleer = relecturas.slice(0, Math.max(Math.ceil(libre / 2), libre - resto.length))
   const pendientes = [...propios, ...paraReleer, ...resto.slice(0, libre - paraReleer.length)].slice(0, cupo)
@@ -171,10 +218,13 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
     const cambio = ventaEntreLecturas({ ...(p.ultima ?? {}), esCatalogo: deCatalogo }, { ...ultima, esCatalogo: deCatalogo })
     const repuso = cambio?.repuso === true && cambio.repuestasPiso >= REPOSICION_MIN
     const roto = cambio?.otroVendedor === true
-    const baja = sinInfo >= 4 && !p.esPropio && !(p.reposicionesVistas > 0) && !repuso
+    // "+50" con Full es bodega real: se lee semanal y se espera la caída a "+25"
+    const baja = sinInfo >= 4 && !p.esPropio && !p.esFull && !(p.reposicionesVistas > 0) && !repuso
+    // un catálogo que rotó de vendedor dos veces no se va a poder atribuir nunca
+    const rota = roto && !p.esPropio && (p.cambiosDeVendedor ?? 0) + 1 >= 2
     await SeguimientoStock.updateOne({ _id: p._id }, { $set: { ultima, sinInfoSeguidas: sinInfo, fallosSeguidos: 0, ...(it.sellerId ? { sellerId: String(it.sellerId) } : {}), esCatalogo: deCatalogo,
-      proximaLecturaEl: new Date(+ahora + horasHastaLaProxima(ultima) * HORA), ...(baja ? { activo: false, motivoBaja: 'siempre en "+50": no deja ver ventas' } : {}) }, $inc: { lecturas: 1, ...(repuso ? { reposicionesVistas: 1 } : {}), ...(roto ? { cambiosDeVendedor: 1 } : {}) } })
-    if (baja) bajas++
+      proximaLecturaEl: new Date(+ahora + horasHastaLaProxima(ultima) * HORA), ...(baja ? { activo: false, motivoBaja: 'siempre en "+50": no deja ver ventas' } : rota ? { activo: false, motivoBaja: 'la caja de compra rota entre vendedores: no se puede atribuir' } : {}) }, $inc: { lecturas: 1, ...(repuso ? { reposicionesVistas: 1 } : {}), ...(roto ? { cambiosDeVendedor: 1 } : {}) } })
+    if (baja || rota) bajas++
     leidas++
   }
   return { leidas, pedidas: pendientes.length, bajas, costoUsd, gasto: await gastoDelMes({ ahora }) }
@@ -234,7 +284,7 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
   // el listado ya dice si la publicación despacha desde Full (no cuesta nada):
   // ahí una reposición es un envío a la bodega de ML
   const full = new Map((await Producto.find({ sku: { $in: seguidos.map((s) => s.sku) } }).select('sku esFull').lean()).map((p) => [p.sku, p.esFull ?? null]))
-  const filas = seguidos.map((s) => ({ esFull: full.get(s.sku) ?? null, sku: s.sku, url: s.url, titulo: s.titulo, imagen: s.imagen, vendedor: s.vendedor, keyword: s.keyword, esPropio: s.esPropio,
+  const filas = seguidos.map((s) => ({ esFull: s.esFull ?? full.get(s.sku) ?? null, sku: s.sku, url: s.url, titulo: s.titulo, imagen: s.imagen, vendedor: s.vendedor, keyword: s.keyword, esPropio: s.esPropio,
     activo: s.activo, motivoBaja: s.motivoBaja, proximaLecturaEl: s.proximaLecturaEl, agregadoEl: s.agregadoEl, itemIdPropio: s.itemIdPropio,
     // las lecturas tal como llegaron, para poder VER qué está obteniendo el sistema
     serie: (porSku.get(s.sku) ?? []).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio, sellerId: l.sellerId ?? null, vendedorLeido: l.vendedorLeido ?? null })),
@@ -259,12 +309,20 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
   const ultimasLecturas = [...lecturas].reverse().slice(0, 40).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, costoUsd: l.costoUsd,
     sku: l.sku, vendedor: deQuien.get(l.sku)?.vendedor ?? null, keyword: deQuien.get(l.sku)?.keyword ?? null, esPropio: deQuien.get(l.sku)?.esPropio ?? false, titulo: deQuien.get(l.sku)?.titulo ?? null }))
   return { topeUsdMes: TOPE_USD_MES, gasto: await gastoDelMes({ ahora }), seguidos: filas.filter((f) => f.activo).length, calibracion, ultimasLecturas,
+    // de qué calidad es la lista: solo Full con publicación propia da un número
+    // que se mueve con las ventas y se puede atribuir a un vendedor
+    calidad: {
+      medibles: filas.filter((f) => !f.esPropio && f.esFull && !f.esCatalogo).length,
+      catalogo: filas.filter((f) => !f.esPropio && f.esCatalogo).length,
+      sinFull: filas.filter((f) => !f.esPropio && !f.esFull && !f.esCatalogo).length,
+      cambiosDeVendedor: filas.reduce((a, f) => a + (f.cambiosDeVendedor ?? 0), 0),
+    },
     catalogo: { seguidos: filas.filter((f) => !f.esPropio && f.esCatalogo).length, cambiosDeVendedor: filas.reduce((a, f) => a + (f.cambiosDeVendedor ?? 0), 0) },
     pendientesAhora: seguidos.filter((s) => s.activo && +new Date(s.proximaLecturaEl) <= +ahora).length,
     nichos: [...porNicho].map(([k, fs]) => ({ keyword: k, seguidos: fs.filter((f) => f.activo).length, vendiendo: fs.filter((f) => f.unidadesPiso > 0).length, fuertes: fs.filter((f) => f.fuerza === 'ciclo' || f.fuerza === 'repone').length,
       unidadesRepuestasPiso: fs.reduce((a, f) => a + (f.unidadesRepuestasPiso ?? 0), 0),
       unidadesPisoSemana: Math.round(fs.reduce((a, f) => a + (f.porSemana ?? 0), 0) * 10) / 10, reposiciones: fs.reduce((a, f) => a + f.reposiciones, 0),
-      enCatalogo: fs.filter((f) => f.esCatalogo).length, publicaciones: fs })),
+      enCatalogo: fs.filter((f) => f.esCatalogo).length, medibles: fs.filter((f) => f.esFull && !f.esCatalogo).length, publicaciones: fs })),
     propios: filas.filter((f) => f.esPropio) }
 }
 

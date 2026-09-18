@@ -77,6 +77,7 @@ const TarjetaVendedor = memo(function TarjetaVendedor({ f }) {
         <strong className="sv-nombre">{f.esPropio ? 'Tu publicación' : (f.vendedor ?? 'vendedor')}{f.esFull ? <span className="sv-full">Full</span> : null}</strong>
         <span className="sv-titulo">{f.titulo}</span>
         <Medidor ahora={ahora} antes={antes} />
+        {!f.esPropio && f.esFull && !f.esCatalogo ? <p className="sv-medible" title="Full: el número es inventario real en la bodega de Mercado Libre, así que se mueve con cada venta."><Flame size={13} aria-hidden="true" />stock real en bodega de ML</p> : null}
         {f.esCatalogo ? <p className="sv-catalogo" title="La ficha de catálogo muestra al ganador de la caja de compra, que rota entre vendedores. Solo se comparan lecturas del mismo vendedor.">
           <Users size={13} aria-hidden="true" />ficha de catálogo{f.cambiosDeVendedor ? <b>· cambió de vendedor {f.cambiosDeVendedor} {f.cambiosDeVendedor === 1 ? 'vez' : 'veces'}</b> : ': el stock puede ser de otro vendedor'}</p> : null}
         {fuerte ? <p className="sv-fuerza" title={f.fuerza === 'ciclo' ? 'Su stock bajó y después subió: vendió y volvió a comprar.' : 'Su stock subió sin que se viera la baja: la venta ocurrió dentro de un rango.'}>
@@ -193,7 +194,8 @@ export function StockCompetidores() {
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><PackageX size={17} aria-hidden="true" /></span><h3>Cuánto se deja ver</h3></div>
             <p className="apr-cifra">{fmtNum(visibles)}<small> de {fmtNum(todas.length)} vendedores</small></p>
             <Visibilidad publicaciones={todas} />
-            <p className="apr-fuente-detalle">verde = número exacto · azul = rango visible · gris = “+50” · rayado = sin leer</p></article>
+            <p className="apr-fuente-detalle">verde = número exacto · azul = rango visible · gris = “+50” · rayado = sin leer
+              {d.calidad ? <><br /><span className="apr-ojo"><b>{fmtNum(d.calidad.medibles)}</b> son Full con publicación propia: los únicos cuyo número es bodega real y se puede atribuir. {fmtNum(d.calidad.catalogo)} son fichas de catálogo y {fmtNum(d.calidad.sinFull)} no tienen Full.</span></> : null}</p></article>
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><TrendingDown size={17} aria-hidden="true" /></span><h3>Ventas vistas</h3></div>
             <p className="apr-cifra">{fmtNum(d.nichos.reduce((a, n) => a + n.vendiendo, 0))}<small> vendedores con baja de stock</small></p>
             <p className="apr-fuente-detalle">{fmtNum(d.pendientesAhora ?? 0)} esperando lectura. Las ventas aparecen desde la 2ª lectura de cada vendedor.</p></article>

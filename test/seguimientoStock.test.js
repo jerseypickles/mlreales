@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo } from '../src/services/seguimientoStock.js'
+import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo, seguidoFlojo } from '../src/services/seguimientoStock.js'
 
 test('se lee más seguido donde más se ve: "+50" semanal, rangos diario, número exacto cada 12 h', () => {
   assert.equal(horasHastaLaProxima({ stock: 51, topado: true }), 168)
@@ -12,7 +12,7 @@ test('se lee más seguido donde más se ve: "+50" semanal, rangos diario, númer
   assert.equal(horasHastaLaProxima(null), 24)
 })
 
-test('se sigue al vendedor chico: ni tiendas oficiales, ni anuncios, ni "+50" conocido; uno por vendedor y primero el que deja ver stock', () => {
+test('se sigue al vendedor chico: ni tiendas oficiales, ni anuncios, ni "+50" sin Full; uno por vendedor', () => {
   const p = (o) => ({ url: 'https://x', esTiendaOficial: false, ...o })
   const elegidos = elegirParaSeguir([
     p({ sku: 'A', posicion: 1, vendedor: 'Grande', stockFuente: 'texto', stock: 51, stockTopado: true }),
@@ -22,7 +22,11 @@ test('se sigue al vendedor chico: ni tiendas oficiales, ni anuncios, ni "+50" co
     p({ sku: 'E', posicion: 5, vendedor: 'Visible', stockFuente: 'texto', stock: 4, stockTopado: false }),
     p({ sku: 'G', posicion: 6, vendedor: 'Pagado', esAnuncio: true }),
   ], { max: 6 })
-  assert.deepEqual(elegidos.map((x) => x.sku), ['E', 'C'])
+  // 'E' muestra 4 unidades exactas y durante un día pareció el mejor candidato.
+  // Con los datos del 18-sep se dio vuelta: un stock de 1-5 sin Full es nominal
+  // (el dropshipper lo deja fijo y no lo mueve nunca), así que vale menos que
+  // 'C', del que todavía no se sabe nada y la primera lectura lo dirá.
+  assert.deepEqual(elegidos.map((x) => x.sku), ['C', 'E'])
 })
 
 test('una serie de lecturas da el mínimo vendido, cuenta reposiciones y no suma lo que no se ve', () => {
@@ -103,4 +107,30 @@ test('se prefiere la publicación propia del vendedor antes que la página de ca
   assert.deepEqual(elegidos.map((x) => x.sku), ['OWN', 'CAT'])
   assert.equal(esUrlDeCatalogo('https://www.mercadolibre.cl/p/MLC14082874'), true)
   assert.equal(esUrlDeCatalogo('https://articulo.mercadolibre.cl/MLC-4212659314-set-8'), false)
+})
+
+// Medido el 18-sep contra producción: de 351 seguidos solo 13 (4%) eran Full con
+// publicación propia, y la mitad de los medibles eran tiendas cross-border
+// clavadas en 1-5 unidades. La regla elegía justo al revés.
+test('se sigue a quien tiene bodega: Full antes que nadie, aunque esté en "+50"', () => {
+  const p = (o) => ({ esTiendaOficial: false, url: 'https://articulo.mercadolibre.cl/MLC-1-x', ...o })
+  const elegidos = elegirParaSeguir([
+    p({ sku: 'DROP', posicion: 1, vendedor: 'Hongkong Store', stockFuente: 'texto', stock: 3, stockTopado: false }),
+    p({ sku: 'FULL50', posicion: 30, vendedor: 'CASAESTILO1', esFull: true, stockFuente: 'texto', stock: 51, stockTopado: true }),
+    p({ sku: 'FULLCAT', posicion: 2, vendedor: 'BAYGE', esFull: true, url: 'https://www.mercadolibre.cl/x/p/MLC999', stockFuente: 'texto', stock: 11, stockTopado: true }),
+  ], { max: 3 })
+  // Full con publicación propia primero, aunque venga en la posición 30 y en "+50":
+  // su "+50" es bodega real y el día que caiga a "+25" son ≥25 unidades vendidas
+  assert.deepEqual(elegidos.map((x) => x.sku), ['FULL50', 'FULLCAT', 'DROP'])
+})
+
+test('sin Full, un "+50" no se sigue: no se mueve y no hay bodega detrás', () => {
+  const p = (o) => ({ esTiendaOficial: false, url: 'https://articulo.mercadolibre.cl/MLC-1-x', ...o })
+  const elegidos = elegirParaSeguir([
+    p({ sku: 'GRANDE', posicion: 1, vendedor: 'Uno', stockFuente: 'texto', stock: 51, stockTopado: true }),
+    p({ sku: 'MEDIO', posicion: 8, vendedor: 'Dos', stockFuente: 'texto', stock: 26, stockTopado: true }),
+  ], { max: 3 })
+  assert.deepEqual(elegidos.map((x) => x.sku), ['MEDIO'])
+  assert.equal(seguidoFlojo({ url: 'https://www.mercadolibre.cl/p/MLC1' }), true)
+  assert.equal(seguidoFlojo({ url: 'https://articulo.mercadolibre.cl/MLC-1-x' }), false)
 })

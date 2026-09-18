@@ -25,6 +25,9 @@ const schema = new mongoose.Schema({
   // ganador de la caja de compra, que rota. Guardar de quién era cada lectura es
   // lo único que permite comparar dos lecturas sin inventar reposiciones.
   esCatalogo: { type: Boolean, default: false },
+  // Full = inventario real en bodega de ML: ahí el número se mueve con las ventas
+  // y un "+50" que cae a "+25" son ≥25 unidades. Sin Full puede ser nominal.
+  esFull: { type: Boolean, default: null },
   sellerId: { type: String, default: null },
   cambiosDeVendedor: { type: Number, default: 0 },
   ultima: { type: { _id: false, fecha: Date, stock: Number, topado: Boolean, fuente: String, sellerId: String }, default: null },
