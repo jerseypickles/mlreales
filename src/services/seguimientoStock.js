@@ -6,7 +6,7 @@ import { ProductoPropio } from '../models/ProductoPropio.js'
 import { VentaMl } from '../models/VentaMl.js'
 import { buscarDetalle } from './scraper.js'
 import { registrarGasto } from './gastos.js'
-import { ventaEntreLecturas } from './metricas.js'
+import { ventaEntreLecturas, pisoDelTramo } from './metricas.js'
 import { ventanaDeCompra } from './ventana.js'
 import { ofertasDeCatalogo, catalogoDeUrl } from './ofertasCatalogo.js'
 import { meliGet } from './meli.js'
@@ -22,14 +22,27 @@ const MAX_POR_PASADA = 40
 // CADA CUÁNTO SE LEE, SEGÚN CUÁNTO SE PUEDE VER. La plata va donde hay
 // información: en "+50" no se ve nada; cerca de un cambio de balde, un día
 // importa; con el número exacto a la vista, cada lectura es una venta contada.
-export function horasHastaLaProxima(ultima) {
+// CADA CUÁNTO LEER. Idea del importador el 18-sep: leer más seguido a los pocos
+// que sí se pueden medir. No mejora el piso de un tramo —ese se mide de punta a
+// punta y no depende de la cadencia—, mejora otras dos cosas que importan igual:
+//   · ve los CICLOS cortos. Un vendedor que baja a 2 y repone a "+25" dentro del
+//     mismo día, leído cada 36 h parece que nunca se movió.
+//   · fecha el cruce de balde, y con eso la velocidad por día deja de ser un
+//     promedio grueso de una semana.
+// `medible` = Full con publicación atribuible: ahí el número es bodega real de ML
+// y se mueve con cada venta, así que la lectura rinde. En los demás se mantiene la
+// cadencia vieja para no gastar la plata donde no dice nada.
+export function horasHastaLaProxima(ultima, { medible = false } = {}) {
   if (!ultima || !Number.isFinite(ultima.stock)) return 24
-  if (ultima.topado && ultima.stock >= 51) return 168 // "+50": una vez por semana
-  if (ultima.topado && ultima.stock >= 11) return 24 // "+10" y "+25"
-  if (ultima.stock === 0) return 24 // agotado: esperar la reposición
-  if (ultima.topado) return 24 // "+5": todavía es un rango
-  return 12 // número exacto: cada lectura es una venta contada
+  if (ultima.topado && ultima.stock >= 51) return medible ? 48 : 168 // "+50"
+  if (ultima.topado && ultima.stock >= 11) return medible ? 12 : 24 // "+10" y "+25"
+  if (ultima.stock === 0) return medible ? 12 : 24 // agotado: esperar la reposición
+  if (ultima.topado) return medible ? 8 : 24 // "+5": todavía es un rango
+  return medible ? 8 : 12 // número exacto: cada lectura es una venta contada
 }
+
+// Full y atribuible: su stock es bodega de ML y sabemos de quién es.
+export const esMedible = (p) => Boolean(p?.esFull) && (Boolean(p?.itemIdReal) || !(p?.esCatalogo === true || esUrlDeCatalogo(p?.url)))
 
 // Pura. De los productos del último scan de un nicho, a quién vale la pena
 // seguir: vendedor que no es tienda oficial ni anuncio, lo más arriba posible
@@ -132,6 +145,10 @@ export async function resolverCatalogos({ max = 25 } = {}) {
     await SeguimientoStock.updateOne({ sku: p.sku }, { $set: {
       itemIdReal: mia.itemId, urlLectura: mia.url, sellerId: mia.sellerId, esFull: mia.esFull,
       logisticType: mia.logisticType, esCatalogo: true, ...(apodo ? { vendedor: apodo } : {}),
+      // la página que se va a leer es OTRA —la del vendedor, no la del catálogo—,
+      // así que su stock es una base nueva: conviene tomarla cuanto antes
+      proximaLecturaEl: new Date(),
+      ultima: null,
     } })
     resueltos++
   }
@@ -232,7 +249,7 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
   const dejaVer = (p) => p.ultima && Number.isFinite(p.ultima.stock) && !(p.ultima.topado && p.ultima.stock >= 51)
   // dentro de cada grupo, primero quien puede dar señal: Full con publicación
   // propia antes que un catálogo que quizá no se pueda atribuir
-  const utilidad = (p) => (p.esFull ? 0 : 2) + (seguidoFlojo(p) ? 1 : 0)
+  const utilidad = (p) => (esMedible(p) ? 0 : 2) + (seguidoFlojo(p) ? 1 : 0)
   const relecturas = vencidos.filter((p) => !p.esPropio && dejaVer(p)).sort((a, b) => utilidad(a) - utilidad(b))
   const resto = vencidos.filter((p) => !p.esPropio && !dejaVer(p)).sort((a, b) => Number(Boolean(a.ultima)) - Number(Boolean(b.ultima)) || utilidad(a) - utilidad(b))
   const libre = Math.max(0, cupo - propios.length)
@@ -279,7 +296,7 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
     // se daría de baja a toda la lista por no haber guardado el dato antes.
     const rota = rotoDeVerdad && !p.esPropio && (p.cambiosDeVendedor ?? 0) + 1 >= 2
     await SeguimientoStock.updateOne({ _id: p._id }, { $set: { ultima, sinInfoSeguidas: sinInfo, fallosSeguidos: 0, ...(it.sellerId ? { sellerId: String(it.sellerId) } : {}), esCatalogo: deCatalogo,
-      proximaLecturaEl: new Date(+ahora + horasHastaLaProxima(ultima) * HORA), ...(baja ? { activo: false, motivoBaja: 'siempre en "+50": no deja ver ventas' } : rota ? { activo: false, motivoBaja: 'la caja de compra rota entre vendedores: no se puede atribuir' } : {}) }, $inc: { lecturas: 1, ...(repuso ? { reposicionesVistas: 1 } : {}), ...(rotoDeVerdad ? { cambiosDeVendedor: 1 } : {}) } })
+      proximaLecturaEl: new Date(+ahora + horasHastaLaProxima(ultima, { medible: esMedible({ ...p, esFull: it.isFull ?? p.esFull }) }) * HORA), ...(baja ? { activo: false, motivoBaja: 'siempre en "+50": no deja ver ventas' } : rota ? { activo: false, motivoBaja: 'la caja de compra rota entre vendedores: no se puede atribuir' } : {}) }, $inc: { lecturas: 1, ...(repuso ? { reposicionesVistas: 1 } : {}), ...(rotoDeVerdad ? { cambiosDeVendedor: 1 } : {}) } })
     if (baja || rota) bajas++
     leidas++
   }
@@ -299,35 +316,54 @@ const REPOSICION_MIN = 3
 // no se vende. Niveles: 'ciclo' (vendió y repuso, en ese orden) · 'repone' (subió
 // sin baja visible: la venta ocurrió dentro de un rango) · 'vende' · 'quieto'.
 export function resumenDeSerie(lecturas, { esCatalogo = false, vendedorEsperado = null } = {}) {
-  const serie = (lecturas ?? []).filter((l) => l.ok !== false && Number.isFinite(l.stock)).sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha))
-  let unidades = 0, reposiciones = 0, exactas = 0, tramos = 0, ajustes = 0, ciclos = 0, repuestas = 0, desdeLaUltima = 0, seAgoto = false, ultimaReposicionEl = null
+  // solo el stock que ve el comprador: la telemetría es el tope de compra por
+  // pedido, no el inventario
+  const serie = (lecturas ?? []).filter((l) => l.ok !== false && Number.isFinite(l.stock) && l.fuente === 'texto')
+    .sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha))
+  let unidades = 0, exactas = 0, reposiciones = 0, ciclos = 0, repuestas = 0, ajustes = 0, tramos = 0
   let cambiosDeVendedor = 0, sinAtribuir = 0, probables = 0, confirmados = 0
+  let ultimaReposicionEl = null, seAgoto = false
+  // Un TRAMO es todo lo que va entre dos reposiciones: ahí el stock solo baja, y
+  // el piso honesto se mide de su primera a su última lectura, no sumando saltos.
+  let inicioTramo = serie[0] ?? null
+  let anterior = serie[0] ?? null
+  const cerrarTramo = () => {
+    const p = pisoDelTramo(inicioTramo, anterior)
+    if (!p) return 0
+    unidades += p.unidades
+    return p.unidades
+  }
   for (let i = 1; i < serie.length; i++) {
-    const v = ventaEntreLecturas({ ...serie[i - 1], esCatalogo, vendedorEsperado }, { ...serie[i], esCatalogo, vendedorEsperado })
+    const l = serie[i]
+    const v = ventaEntreLecturas({ ...anterior, esCatalogo, vendedorEsperado }, { ...l, esCatalogo, vendedorEsperado })
     if (v?.otroVendedor) {
-      // el stock leído puede ser de otro vendedor: el tramo no se compara, y lo
-      // acumulado antes tampoco encadena con lo que venga después
+      // el stock leído puede ser de otro vendedor: se corta acá y se empieza de
+      // nuevo, porque lo de antes no encadena con lo que venga después
+      cerrarTramo()
       if (v.motivo === 'cambio') cambiosDeVendedor++
       else sinAtribuir++
-      desdeLaUltima = 0; seAgoto = false
+      inicioTramo = l; anterior = l; seAgoto = false
       continue
     }
-    if (!v) continue
+    if (!v) { anterior = l; continue }
     tramos++
     if (v.atribucion === 'confirmada') confirmados++
     else if (v.atribucion === 'probable') probables++
     if (v.repuso) {
-      if (v.repuestasPiso >= REPOSICION_MIN || desdeLaUltima >= REPOSICION_MIN) {
-        reposiciones++; repuestas += v.repuestasPiso; ultimaReposicionEl = serie[i].fecha
-        if (desdeLaUltima > 0 || v.desdeAgotado || seAgoto) ciclos++
+      const vendidoEnElTramo = cerrarTramo()
+      if (v.repuestasPiso >= REPOSICION_MIN || vendidoEnElTramo >= REPOSICION_MIN) {
+        reposiciones++; repuestas += v.repuestasPiso; ultimaReposicionEl = l.fecha
+        if (vendidoEnElTramo > 0 || v.desdeAgotado || seAgoto) ciclos++
       } else ajustes++
-      desdeLaUltima = 0; seAgoto = false
+      inicioTramo = l; seAgoto = false
     } else {
-      unidades += v.unidades; desdeLaUltima += v.unidades
+      // de las unidades del tramo, cuántas son conteo exacto y no un piso
       if (!v.esPiso) exactas += v.unidades
-      if (serie[i].stock === 0 && serie[i].topado !== true) seAgoto = true
+      if (l.stock === 0 && l.topado !== true) seAgoto = true
     }
+    anterior = l
   }
+  cerrarTramo()
   const dias = serie.length > 1 ? (+new Date(serie.at(-1).fecha) - +new Date(serie[0].fecha)) / DIA : 0
   const fuerza = ciclos ? 'ciclo' : reposiciones ? 'repone' : unidades > 0 ? 'vende' : tramos ? 'quieto' : null
   return { lecturas: serie.length, dias: Math.round(dias * 10) / 10, unidadesPiso: unidades, unidadesExactas: exactas, reposiciones, tramosMedidos: tramos,

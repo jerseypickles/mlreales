@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo, seguidoFlojo } from '../src/services/seguimientoStock.js'
+import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo, seguidoFlojo, esMedible } from '../src/services/seguimientoStock.js'
 
 test('se lee más seguido donde más se ve: "+50" semanal, rangos diario, número exacto cada 12 h', () => {
   assert.equal(horasHastaLaProxima({ stock: 51, topado: true }), 168)
@@ -33,9 +33,12 @@ test('una serie de lecturas da el mínimo vendido, cuenta reposiciones y no suma
   const l = (dia, stock, topado = false) => ({ fecha: new Date(`2026-09-${dia}T12:00:00Z`), stock, topado, fuente: 'texto' })
   // "+25" → "+10" → 4 → 1 → repone a "+25" → "+10"
   const r = resumenDeSerie([l('01', 26, true), l('03', 11, true), l('05', 4), l('06', 1), l('08', 26, true), l('10', 11, true), { fecha: new Date('2026-09-11'), ok: false }])
-  // ≥1 (26→25) + ≥7 (11→4) + 3 exactas + repuso + ≥1
-  assert.deepEqual([r.unidadesPiso, r.unidadesExactas, r.reposiciones, r.lecturas], [12, 3, 1, 6])
-  assert.equal(r.porSemana, 9.3)
+  // DE PUNTA A PUNTA DEL TRAMO, no sumando saltos de balde. Del "+25" inicial
+  // (≥26) a la última unidad antes de reponer: al menos 25. Después del reabaste-
+  // cimiento, de "+25" a "+10" (≤25): al menos 1 más. Total 26, de las cuales 3
+  // son conteo exacto (4 → 1). Sumando tramo a tramo daban 12: menos de la mitad.
+  assert.deepEqual([r.unidadesPiso, r.unidadesExactas, r.reposiciones, r.lecturas], [26, 3, 1, 6])
+  assert.equal(r.porSemana, 20.2)
   assert.equal(resumenDeSerie([l('01', 51, true), l('08', 51, true)]).unidadesPiso, 0)
 })
 
@@ -163,4 +166,36 @@ test('atribución: una sola lectura identificada basta si es el vendedor que ano
   const firme = resumenDeSerie([l('17', 11, true, { sellerId: '9', vendedorLeido: 'Feiman' }), l('18', 51, true, { sellerId: '9', vendedorLeido: 'Feiman' })],
     { esCatalogo: true, vendedorEsperado: 'Feiman' })
   assert.equal(firme.atribucion, 'confirmada')
+})
+
+// El importador, 18-sep: leer más seguido para que el piso se acerque al número
+// real. Leer más seguido SUMANDO SALTOS daba lo contrario —cada tramo más corto
+// mide menos—, así que primero hubo que medir de punta a punta.
+test('el piso mejora al leer más seguido, no empeora', () => {
+  const h = (n, stock, topado = false) => ({ fecha: new Date(2026, 8, 18, n), stock, topado, fuente: 'texto' })
+  // el mismo vendedor, de "+25" a "+5", visto con dos lecturas o con cuatro
+  const pocas = resumenDeSerie([h(0, 26, true), h(36, 6, true)])
+  const muchas = resumenDeSerie([h(0, 26, true), h(12, 26, true), h(24, 11, true), h(36, 6, true)])
+  assert.equal(pocas.unidadesPiso, 16) // 26 − 10
+  assert.equal(muchas.unidadesPiso, 16) // mismo piso, pero se sabe CUÁNDO cruzó
+  // y leer seguido es lo único que ve un ciclo que de otro modo es invisible:
+  // vende hasta quedar en 2 y repone a "+25" dentro del mismo día
+  const ciego = resumenDeSerie([h(0, 26, true), h(36, 26, true)])
+  const ojo = resumenDeSerie([h(0, 26, true), h(12, 2), h(24, 26, true), h(36, 26, true)])
+  assert.deepEqual([ciego.fuerza, ciego.unidadesPiso], ['quieto', 0])
+  assert.deepEqual([ojo.fuerza, ojo.unidadesPiso, ojo.unidadesRepuestasPiso], ['ciclo', 24, 24])
+})
+
+test('cadencia: al medible se le lee seguido, al que no dice nada no se le gasta', () => {
+  const medible = { medible: true }
+  assert.deepEqual([horasHastaLaProxima({ stock: 51, topado: true }), horasHastaLaProxima({ stock: 51, topado: true }, medible)], [168, 48])
+  assert.deepEqual([horasHastaLaProxima({ stock: 26, topado: true }), horasHastaLaProxima({ stock: 26, topado: true }, medible)], [24, 12])
+  assert.deepEqual([horasHastaLaProxima({ stock: 6, topado: true }), horasHastaLaProxima({ stock: 6, topado: true }, medible)], [24, 8])
+  assert.deepEqual([horasHastaLaProxima({ stock: 3 }), horasHastaLaProxima({ stock: 3 }, medible)], [12, 8])
+  // Full con su publicación propia resuelta, o Full que nunca fue catálogo
+  assert.equal(esMedible({ esFull: true, esCatalogo: true, itemIdReal: 'MLC1' }), true)
+  assert.equal(esMedible({ esFull: true, url: 'https://articulo.mercadolibre.cl/MLC-1-x' }), true)
+  // Full pero todavía leyendo la ficha de catálogo: no se sabe de quién es
+  assert.equal(esMedible({ esFull: true, esCatalogo: true }), false)
+  assert.equal(esMedible({ esFull: false, itemIdReal: 'MLC1' }), false)
 })

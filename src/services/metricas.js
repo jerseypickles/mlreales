@@ -838,6 +838,10 @@ export function calcularMetricas({
 // entonces un RANGO: "+25" = entre 26 y 50. Se guarda como stock = piso del
 // balde (26) con stockTopado = true.
 const TECHO_BALDE = { 6: 10, 11: 25, 26: 50, 51: Infinity }
+// Dos lecturas más juntas que esto son la misma foto. Era medio día cuando se
+// leía una vez al día; al subir la cadencia de los medibles a 8 h haría que
+// ninguna lectura contara.
+const MINIMO_ENTRE_LECTURAS_DIAS = 0.1
 const rangoStock = (l) => (l.topado ? { min: l.stock, max: TECHO_BALDE[l.stock] ?? Infinity } : { min: l.stock, max: l.stock })
 
 // Pura. Dos lecturas de stock de la misma publicación → unidades vendidas COMO
@@ -845,6 +849,20 @@ const rangoStock = (l) => (l.topado ? { min: l.stock, max: TECHO_BALDE[l.stock] 
 // "+10" (11-25), al menos 1. Si el rango de ahora supera al de antes, repuso, y
 // no se inventa cuánto vendió en el medio. Con las dos lecturas exactas el piso
 // es la venta exacta.
+// EL PISO SE MIDE DE PUNTA A PUNTA DEL TRAMO, NO LECTURA A LECTURA. Un vendedor
+// que baja "+25" → "+10" → "+5" da, sumando tramo a tramo, 1 + 1 = 2 unidades;
+// pero de "entre 26 y 50" a "entre 6 y 10" se vendieron al menos 26 − 10 = 16.
+// Sumar los saltos de balde uno por uno descarta casi toda la señal, y empeora
+// justo cuando se lee MÁS seguido, que es al revés de lo que uno esperaría.
+export function pisoDelTramo(inicio, fin) {
+  if (!inicio || !fin || inicio === fin) return null
+  if (inicio.fuente !== 'texto' || fin.fuente !== 'texto') return null
+  if (!Number.isFinite(inicio.stock) || !Number.isFinite(fin.stock)) return null
+  const a = rangoStock(inicio), b = rangoStock(fin)
+  if (!Number.isFinite(b.max)) return null // sigue en "+50": no se ve el suelo
+  return { unidades: Math.max(0, a.min - b.max), exacto: !inicio.topado && !fin.topado }
+}
+
 export function ventaEntreLecturas(antes, ahora) {
   if (!antes || !ahora) return null
   // EL STOCK ES DE UN VENDEDOR, NO DE UNA PÁGINA. En una página de catálogo
@@ -882,7 +900,7 @@ export function ventaEntreLecturas(antes, ahora) {
   if (antes.fuente !== 'texto' || ahora.fuente !== 'texto') return null
   if (!Number.isFinite(antes.stock) || !Number.isFinite(ahora.stock)) return null
   const dias = (new Date(ahora.fecha) - new Date(antes.fecha)) / 86_400_000
-  if (!(dias >= 0.5)) return null
+  if (!(dias >= MINIMO_ENTRE_LECTURAS_DIAS)) return null
   const a = rangoStock(antes), b = rangoStock(ahora)
   const base = { dias: redondear(dias, 1), stockAntes: antes.stock, stockAhora: ahora.stock, baldeAntes: antes.topado === true, baldeAhora: ahora.topado === true, atribucion }
   // REPUSO: el stock subió más de lo que el rango anterior permitía. Cuánto metió
