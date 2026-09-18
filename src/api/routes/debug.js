@@ -62,10 +62,15 @@ router.get(
     // `highlights` y `trends` entran el 29-ago-2026 para responder si la API
     // oficial puede dar señal de demanda gratis —más vendidos por categoría—
     // en vez de scrapearla. Siguen siendo solo lectura.
-    if (!/^\/(items|users|user-products|reviews|categories|sites|billing|orders|seller-promotions|inventories|stock|shipments|highlights|trends)\//.test(ruta)) {
+    // `products` entra el 18-sep-2026: en una página de catálogo la ficha muestra
+    // al ganador de la caja de compra, así que el stock leído puede ser de otro
+    // vendedor. `/products/{id}/items` lista las ofertas de cada vendedor por
+    // separado; si sirve, el seguimiento deja de depender del scraping para saber
+    // de quién es el stock. Se permite también `?` (multiget: /items?ids=…).
+    if (!/^\/(items|products|users|user-products|reviews|categories|sites|billing|orders|seller-promotions|inventories|stock|shipments|highlights|trends)[/?]/.test(ruta)) {
       return res.status(400).json({
         error:
-          'ruta inválida: solo /items/…, /users/…, /user-products/…, /reviews/…, /categories/…, /sites/…, /billing/…, /orders/…, /seller-promotions/…, /inventories/…, /stock/…, /shipments/…, /highlights/…, /trends/…',
+          'ruta inválida: solo /items/…, /products/…, /users/…, /user-products/…, /reviews/…, /categories/…, /sites/…, /billing/…, /orders/…, /seller-promotions/…, /inventories/…, /stock/…, /shipments/…, /highlights/…, /trends/…',
       })
     }
     const { meliGet } = await import('../../services/meli.js')
