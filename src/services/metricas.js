@@ -854,19 +854,37 @@ export function ventaEntreLecturas(antes, ahora) {
   // 18-sep-2026: de los seguidos con dos lecturas, cambió de escalón el 29% de
   // los de catálogo contra el 4,5% de los que tienen publicación propia, y las
   // cinco "reposiciones" del primer día eran catálogo, todas de menos a más.
-  // 'cambio' = probado: dos lecturas atribuidas y el vendedor no es el mismo.
-  // 'sinAtribuir' = todavía no se sabe de quién era (lecturas viejas, de antes de
-  // guardar el vendedor). Distinguirlos importa: lo primero condena a esa ficha,
-  // lo segundo solo dice que hay que esperar la próxima lectura.
-  if (antes.sellerId && ahora.sellerId && String(antes.sellerId) !== String(ahora.sellerId)) return { otroVendedor: true, motivo: 'cambio' }
-  if (ahora.esCatalogo && !(antes.sellerId && ahora.sellerId)) return { otroVendedor: true, motivo: 'sinAtribuir' }
+  // DE QUIÉN ES ESTE STOCK. Tres situaciones, y confundirlas cuesta caro en los
+  // dos sentidos: dar por buena la rotación de la caja de compra inventa
+  // reposiciones, y descartar de más tira a la basura el envío a Full de un
+  // vendedor que sí mandó carga —que es justo lo que se quiere detectar—.
+  //   · las dos lecturas identificadas → se sabe, y se compara o se descarta.
+  //   · una sola identificada → se contrasta contra el vendedor que anotamos al
+  //     agregar la publicación: si es él, lo más probable es que la otra lectura
+  //     también fuera suya (se compara, marcado 'probable'); si no es él, la caja
+  //     está en otras manos y eso sí es un cambio probado.
+  //   · ninguna identificada → en catálogo no se puede decir nada.
+  const norm = (x) => String(x ?? '').trim().toUpperCase()
+  const idA = antes.sellerId, idB = ahora.sellerId
+  const esperado = norm(ahora.vendedorEsperado ?? antes.vendedorEsperado)
+  let atribucion = 'supuesta'
+  if (idA && idB) {
+    if (String(idA) !== String(idB)) return { otroVendedor: true, motivo: 'cambio' }
+    atribucion = 'confirmada'
+  } else if (idA || idB) {
+    const visto = norm(antes.vendedorLeido || ahora.vendedorLeido)
+    if (esperado && visto && visto !== esperado) return { otroVendedor: true, motivo: 'cambio' }
+    atribucion = 'probable'
+  } else if (ahora.esCatalogo) {
+    return { otroVendedor: true, motivo: 'sinAtribuir' }
+  }
   // solo el stock que ve el comprador: el de telemetría puede ser el tope de compra
   if (antes.fuente !== 'texto' || ahora.fuente !== 'texto') return null
   if (!Number.isFinite(antes.stock) || !Number.isFinite(ahora.stock)) return null
   const dias = (new Date(ahora.fecha) - new Date(antes.fecha)) / 86_400_000
   if (!(dias >= 0.5)) return null
   const a = rangoStock(antes), b = rangoStock(ahora)
-  const base = { dias: redondear(dias, 1), stockAntes: antes.stock, stockAhora: ahora.stock, baldeAntes: antes.topado === true, baldeAhora: ahora.topado === true }
+  const base = { dias: redondear(dias, 1), stockAntes: antes.stock, stockAhora: ahora.stock, baldeAntes: antes.topado === true, baldeAhora: ahora.topado === true, atribucion }
   // REPUSO: el stock subió más de lo que el rango anterior permitía. Cuánto metió
   // como MÍNIMO es el piso del nuevo rango menos el techo del anterior: de
   // "3 disponibles" a "+25" son ≥23 unidades — el tamaño de su apuesta.

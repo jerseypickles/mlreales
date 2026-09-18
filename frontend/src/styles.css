@@ -7177,3 +7177,4 @@ em.mg-agotado { color: var(--peligro); }
 .sv-catalogo b { color: var(--avisa-tinta); font-weight: 600; }
 .apr-ojo { display: inline-block; margin-top: 4px; color: var(--tinta-3); }
 .sv-medible { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; padding: 5px 9px; border-radius: 8px; background: var(--exito-tenue); color: var(--exito-tinta); font-size: 0.78rem; font-weight: 600; }
+.sv-fuerza-tibia { background: transparent; border: 1px dashed var(--avisa-tinta); }

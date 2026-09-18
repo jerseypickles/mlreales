@@ -212,7 +212,7 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
       if (fallos >= 3 && !p.esPropio) bajas++
       continue
     }
-    const ultima = { fecha: ahora, stock: it.stockQuantity, topado: it.stockTopado === true, fuente: it.stockFuente ?? null, sellerId: it.sellerId ?? null }
+    const ultima = { fecha: ahora, stock: it.stockQuantity, topado: it.stockTopado === true, fuente: it.stockFuente ?? null, sellerId: it.sellerId ?? null, vendedorLeido: it.sellerName ?? null }
     await LecturaStock.create({ sku: p.sku, fecha: ahora, stock: ultima.stock, topado: ultima.topado, fuente: ultima.fuente,
       precio: it.price ?? null, vendidosFicha: it.soldQuantityFicha ?? null, numReviews: it.ratingCount ?? null, costoUsd: cadaUna,
       sellerId: it.sellerId ?? null, vendedorLeido: it.sellerName ?? null })
@@ -220,7 +220,8 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
     // cuatro semanas en "+50": ese vendedor es grande y no deja ver nada
     // los seguidos de antes del 18-sep no tienen la marca: se deduce de la URL
     const deCatalogo = p.esCatalogo === true || esUrlDeCatalogo(p.url)
-    const cambio = ventaEntreLecturas({ ...(p.ultima ?? {}), esCatalogo: deCatalogo }, { ...ultima, esCatalogo: deCatalogo })
+    const cambio = ventaEntreLecturas({ ...(p.ultima ?? {}), esCatalogo: deCatalogo, vendedorEsperado: p.vendedor },
+      { ...ultima, esCatalogo: deCatalogo, vendedorEsperado: p.vendedor })
     const repuso = cambio?.repuso === true && cambio.repuestasPiso >= REPOSICION_MIN
     const rotoDeVerdad = cambio?.motivo === 'cambio'
     // "+50" con Full es bodega real: se lee semanal y se espera la caída a "+25"
@@ -250,12 +251,12 @@ const REPOSICION_MIN = 3
 // baja + reposición es plata vuelta a meter en ese producto: nadie repone lo que
 // no se vende. Niveles: 'ciclo' (vendió y repuso, en ese orden) · 'repone' (subió
 // sin baja visible: la venta ocurrió dentro de un rango) · 'vende' · 'quieto'.
-export function resumenDeSerie(lecturas, { esCatalogo = false } = {}) {
+export function resumenDeSerie(lecturas, { esCatalogo = false, vendedorEsperado = null } = {}) {
   const serie = (lecturas ?? []).filter((l) => l.ok !== false && Number.isFinite(l.stock)).sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha))
   let unidades = 0, reposiciones = 0, exactas = 0, tramos = 0, ajustes = 0, ciclos = 0, repuestas = 0, desdeLaUltima = 0, seAgoto = false, ultimaReposicionEl = null
-  let cambiosDeVendedor = 0, sinAtribuir = 0
+  let cambiosDeVendedor = 0, sinAtribuir = 0, probables = 0, confirmados = 0
   for (let i = 1; i < serie.length; i++) {
-    const v = ventaEntreLecturas({ ...serie[i - 1], esCatalogo }, { ...serie[i], esCatalogo })
+    const v = ventaEntreLecturas({ ...serie[i - 1], esCatalogo, vendedorEsperado }, { ...serie[i], esCatalogo, vendedorEsperado })
     if (v?.otroVendedor) {
       // el stock leído puede ser de otro vendedor: el tramo no se compara, y lo
       // acumulado antes tampoco encadena con lo que venga después
@@ -266,6 +267,8 @@ export function resumenDeSerie(lecturas, { esCatalogo = false } = {}) {
     }
     if (!v) continue
     tramos++
+    if (v.atribucion === 'confirmada') confirmados++
+    else if (v.atribucion === 'probable') probables++
     if (v.repuso) {
       if (v.repuestasPiso >= REPOSICION_MIN || desdeLaUltima >= REPOSICION_MIN) {
         reposiciones++; repuestas += v.repuestasPiso; ultimaReposicionEl = serie[i].fecha
@@ -282,6 +285,11 @@ export function resumenDeSerie(lecturas, { esCatalogo = false } = {}) {
   const fuerza = ciclos ? 'ciclo' : reposiciones ? 'repone' : unidades > 0 ? 'vende' : tramos ? 'quieto' : null
   return { lecturas: serie.length, dias: Math.round(dias * 10) / 10, unidadesPiso: unidades, unidadesExactas: exactas, reposiciones, tramosMedidos: tramos,
     ajustes, ciclos, unidadesRepuestasPiso: repuestas, ultimaReposicionEl, fuerza, cambiosDeVendedor, sinAtribuir, esCatalogo,
+    // 'confirmada' = las dos lecturas dijeron de quién era el stock. 'probable' =
+    // solo una, y coincide con el vendedor que anotamos al agregar la publicación.
+    // Lo probable se muestra, pero no cuenta como vendedor fuerte hasta que la
+    // próxima lectura lo confirme.
+    atribucion: confirmados ? 'confirmada' : probables ? 'probable' : esCatalogo ? 'sin atribuir' : 'supuesta',
     porSemana: dias >= 2 ? Math.round((unidades / dias) * 7 * 10) / 10 : null, stockAhora: serie.at(-1)?.stock ?? null, topadoAhora: serie.at(-1)?.topado ?? null }
 }
 
@@ -298,7 +306,7 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
     activo: s.activo, motivoBaja: s.motivoBaja, proximaLecturaEl: s.proximaLecturaEl, agregadoEl: s.agregadoEl, itemIdPropio: s.itemIdPropio,
     // las lecturas tal como llegaron, para poder VER qué está obteniendo el sistema
     serie: (porSku.get(s.sku) ?? []).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio, fuente: l.fuente ?? null, sellerId: l.sellerId ?? null, vendedorLeido: l.vendedorLeido ?? null })),
-    ...resumenDeSerie(porSku.get(s.sku), { esCatalogo: s.esCatalogo === true || esUrlDeCatalogo(s.url) }) }))
+    ...resumenDeSerie(porSku.get(s.sku), { esCatalogo: s.esCatalogo === true || esUrlDeCatalogo(s.url), vendedorEsperado: s.vendedor }) }))
   // CALIBRACIÓN: en lo propio la venta real se conoce. Cuánto del total ve el piso.
   let calibracion = null
   const propios = filas.filter((f) => f.esPropio && f.dias >= 3)
@@ -327,11 +335,13 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
       sinFull: filas.filter((f) => !f.esPropio && !f.esFull && !f.esCatalogo).length,
       cambiosDeVendedor: filas.reduce((a, f) => a + (f.cambiosDeVendedor ?? 0), 0),
       sinAtribuir: filas.reduce((a, f) => a + (f.sinAtribuir ?? 0), 0),
+      probables: filas.filter((f) => !f.esPropio && f.atribucion === 'probable').length,
       atribuidas: filas.reduce((a, f) => a + (f.serie ?? []).filter((l) => l.sellerId).length, 0),
     },
     catalogo: { seguidos: filas.filter((f) => !f.esPropio && f.esCatalogo).length, cambiosDeVendedor: filas.reduce((a, f) => a + (f.cambiosDeVendedor ?? 0), 0) },
     pendientesAhora: seguidos.filter((s) => s.activo && +new Date(s.proximaLecturaEl) <= +ahora).length,
-    nichos: [...porNicho].map(([k, fs]) => ({ keyword: k, seguidos: fs.filter((f) => f.activo).length, vendiendo: fs.filter((f) => f.unidadesPiso > 0).length, fuertes: fs.filter((f) => f.fuerza === 'ciclo' || f.fuerza === 'repone').length,
+    nichos: [...porNicho].map(([k, fs]) => ({ keyword: k, seguidos: fs.filter((f) => f.activo).length, vendiendo: fs.filter((f) => f.unidadesPiso > 0).length, fuertes: fs.filter((f) => (f.fuerza === 'ciclo' || f.fuerza === 'repone') && f.atribucion !== 'probable').length,
+      probables: fs.filter((f) => (f.fuerza === 'ciclo' || f.fuerza === 'repone' || f.unidadesPiso > 0) && f.atribucion === 'probable').length,
       unidadesRepuestasPiso: fs.reduce((a, f) => a + (f.unidadesRepuestasPiso ?? 0), 0),
       unidadesPisoSemana: Math.round(fs.reduce((a, f) => a + (f.porSemana ?? 0), 0) * 10) / 10, reposiciones: fs.reduce((a, f) => a + f.reposiciones, 0),
       enCatalogo: fs.filter((f) => f.esCatalogo).length, medibles: fs.filter((f) => f.esFull && !f.esCatalogo).length, publicaciones: fs })),

@@ -73,8 +73,11 @@ const TarjetaVendedor = memo(function TarjetaVendedor({ f }) {
   const vendio = f.unidadesPiso > 0
   // vendió y repuso: volvió a meter plata en este producto. La señal más limpia que hay.
   const fuerte = f.fuerza === 'ciclo' || f.fuerza === 'repone'
+  // 'probable' = una sola de las dos lecturas dijo de quién era el stock, y era
+  // el vendedor que seguimos. Se muestra, pero se dice que falta confirmarlo.
+  const porConfirmar = f.atribucion === 'probable'
   return (
-    <article className={`sv${vendio ? ' sv-vendio' : ''}${fuerte ? ' sv-fuerte' : ''}${f.activo === false ? ' sv-fuera' : ''}`}>
+    <article className={`sv${vendio ? ' sv-vendio' : ''}${fuerte && !porConfirmar ? ' sv-fuerte' : ''}${f.activo === false ? ' sv-fuera' : ''}`}>
       <a className="sv-foto" href={f.url} target="_blank" rel="noreferrer" aria-label={`Abrir la publicación de ${f.vendedor ?? 'este vendedor'} en Mercado Libre`}>
         {f.imagen ? <Miniatura src={f.imagen} lado={76} /> : <PackageX size={22} aria-hidden="true" />}
       </a>
@@ -85,9 +88,11 @@ const TarjetaVendedor = memo(function TarjetaVendedor({ f }) {
         {!f.esPropio && f.esFull && !f.esCatalogo ? <p className="sv-medible" title="Full: el número es inventario real en la bodega de Mercado Libre, así que se mueve con cada venta."><Flame size={13} aria-hidden="true" />stock real en bodega de ML</p> : null}
         {f.esCatalogo ? <p className="sv-catalogo" title="La ficha de catálogo muestra al ganador de la caja de compra, que rota entre vendedores. Solo se comparan lecturas del mismo vendedor.">
           <Users size={13} aria-hidden="true" />ficha de catálogo{f.cambiosDeVendedor ? <b>· cambió de vendedor {f.cambiosDeVendedor} {f.cambiosDeVendedor === 1 ? 'vez' : 'veces'}</b>
-            : f.sinAtribuir ? <>· esperando identificar al vendedor</> : ': el stock puede ser de otro vendedor'}</p> : null}
-        {fuerte ? <p className="sv-fuerza" title={f.fuerza === 'ciclo' ? 'Su stock bajó y después subió: vendió y volvió a comprar.' : 'Su stock subió sin que se viera la baja: la venta ocurrió dentro de un rango.'}>
-          <Flame size={14} aria-hidden="true" /><b>{f.fuerza === 'ciclo' ? 'Fuerte: vendió y repuso' : 'Repone stock'}</b>
+            : f.atribucion === 'confirmada' ? <>· vendedor confirmado en las dos lecturas</>
+            : f.atribucion === 'probable' ? <>· vendedor confirmado en una de las dos lecturas</>
+              : f.sinAtribuir ? <>· esperando identificar al vendedor</> : ': el stock puede ser de otro vendedor'}</p> : null}
+        {fuerte ? <p className={`sv-fuerza${porConfirmar ? ' sv-fuerza-tibia' : ''}`} title={porConfirmar ? 'Solo una de las dos lecturas identificó al vendedor, y coincide con el que seguimos. La próxima lectura lo confirma o lo descarta.' : f.fuerza === 'ciclo' ? 'Su stock bajó y después subió: vendió y volvió a comprar.' : 'Su stock subió sin que se viera la baja: la venta ocurrió dentro de un rango.'}>
+          <Flame size={14} aria-hidden="true" /><b>{f.fuerza === 'ciclo' ? 'Fuerte: vendió y repuso' : 'Repone stock'}{porConfirmar ? ' (por confirmar)' : ''}</b>
           <span>metió al menos {fmtNum(f.unidadesRepuestasPiso)} u{f.esFull ? ' a Full' : ''}{f.reposiciones > 1 ? ` en ${f.reposiciones} reposiciones` : ''}{f.ultimaReposicionEl ? ` · ${hace(f.ultimaReposicionEl)}` : ''}</span></p> : null}
         <div className="sv-pie">
           {vendio ? <span className="sv-venta"><TrendingDown size={14} aria-hidden="true" />vendió al menos <b>{fmtNum(f.unidadesPiso)}</b> en {f.dias} d</span>
@@ -118,7 +123,7 @@ function Visibilidad({ publicaciones, alto = 12 }) {
 
 const FILTROS_STOCK = [
   ['todos', 'Todos', () => true],
-  ['fuertes', 'Venden y reponen', (n) => n.fuertes > 0],
+  ['fuertes', 'Venden y reponen', (n) => n.fuertes > 0 || n.probables > 0],
   ['ventas', 'Con ventas vistas', (n) => n.vendiendo > 0],
   ['visibles', 'Dejan ver su stock', (n) => n.publicaciones.some(dejaVer)],
   ['sinleer', 'Aún sin leer', (n) => n.publicaciones.every((f) => ultimas(f).escalon === -1)],
@@ -134,6 +139,7 @@ const TarjetaNicho = memo(function TarjetaNicho({ n, abierto, alAlternar }) {
       <button type="button" className="sn-cab" aria-expanded={abierto} onClick={() => alAlternar(n.keyword)}>
         <span className="sn-titulo"><strong>{n.keyword}</strong>
           {n.fuertes ? <span className="apr-chip apr-chip-fuerte"><Flame size={13} aria-hidden="true" />{n.fuertes} {n.fuertes === 1 ? 'vende y repone' : 'venden y reponen'} · ≥{fmtNum(n.unidadesRepuestasPiso)} u repuestas</span>
+            : n.probables ? <span className="apr-chip apr-chip-mini" title="Movimiento del mismo vendedor, pero solo una de las dos lecturas lo identificó"><Flame size={13} aria-hidden="true" />{n.probables} por confirmar</span>
             : n.vendiendo ? <span className="apr-chip apr-chip-bien"><TrendingDown size={13} aria-hidden="true" />{n.vendiendo} vendiendo · ≥{fmtNum(n.unidadesPisoSemana)} u/sem</span>
             : !leidas ? <span className="apr-chip"><CircleDashed size={13} aria-hidden="true" />en fila para leer</span>
               : visiblesN ? <span className="apr-chip apr-chip-mini-azul">{visiblesN} de {n.publicaciones.length} dejan ver stock</span>
@@ -165,7 +171,7 @@ export function StockCompetidores() {
   }).catch((e) => setError(e.message)), [])
   const alAlternar = useCallback((k) => setAbierto((a) => (a === k ? null : k)), [])
   const ordenados = useMemo(() => {
-    const valor = (n) => (n.fuertes ?? 0) * 1e6 + n.unidadesPisoSemana * 1000 + n.vendiendo * 100 + n.publicaciones.filter(dejaVer).length
+    const valor = (n) => (n.fuertes ?? 0) * 1e6 + (n.probables ?? 0) * 1e5 + n.unidadesPisoSemana * 1000 + n.vendiendo * 100 + n.publicaciones.filter(dejaVer).length
     return (d?.nichos ?? []).map((n) => [valor(n), n]).sort((a, b) => b[0] - a[0]).map(([, n]) => n)
   }, [d])
   const conteos = useMemo(() => Object.fromEntries(FILTROS_STOCK.map(([id, , f]) => [id, (d?.nichos ?? []).filter(f).length])), [d])

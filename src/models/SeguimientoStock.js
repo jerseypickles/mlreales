@@ -30,7 +30,7 @@ const schema = new mongoose.Schema({
   esFull: { type: Boolean, default: null },
   sellerId: { type: String, default: null },
   cambiosDeVendedor: { type: Number, default: 0 },
-  ultima: { type: { _id: false, fecha: Date, stock: Number, topado: Boolean, fuente: String, sellerId: String }, default: null },
+  ultima: { type: { _id: false, fecha: Date, stock: Number, topado: Boolean, fuente: String, sellerId: String, vendedorLeido: String }, default: null },
   lecturas: { type: Number, default: 0 },
   // lecturas seguidas en "+50": ahí no se ve nada y la plata rinde más en otro lado
   sinInfoSeguidas: { type: Number, default: 0 },

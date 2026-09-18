@@ -142,3 +142,25 @@ test('sin Full, un "+50" no se sigue: no se mueve y no hay bodega detrás', () =
   assert.equal(seguidoFlojo({ url: 'https://www.mercadolibre.cl/p/MLC1', lecturas: 4, sellerId: '99' }), false)
   assert.equal(seguidoFlojo({ url: 'https://articulo.mercadolibre.cl/MLC-1-x', cambiosDeVendedor: 9 }), false)
 })
+
+// El importador, 18-sep: "¿pero cómo sabes que se está descartando bien, si
+// pueden ser Full y haber enviado carga al almacén?". Tenía razón: de 18
+// movimientos, 7 eran otro vendedor (bien descartados) pero 5 eran el MISMO
+// vendedor —dos de ellos Full— y se estaban botando por no tener el dato en la
+// primera lectura.
+test('atribución: una sola lectura identificada basta si es el vendedor que anotamos', () => {
+  const l = (dia, stock, topado, extra = {}) => ({ fecha: new Date(`2026-09-${dia}T12:00:00Z`), stock, topado, fuente: 'texto', ...extra })
+  // lectura vieja sin dato + lectura nueva que dice "Tienda Feiman", que es a
+  // quien seguimos: el envío a Full cuenta, marcado como probable
+  const r = resumenDeSerie([l('17', 11, true), l('18', 51, true, { sellerId: '9', vendedorLeido: 'Tienda Feiman' })],
+    { esCatalogo: true, vendedorEsperado: 'Tienda Feiman' })
+  assert.deepEqual([r.fuerza, r.reposiciones, r.atribucion, r.cambiosDeVendedor], ['repone', 1, 'probable', 0])
+  // la misma forma, pero la ficha dice que la caja la tiene OTRO: cambio probado
+  const otro = resumenDeSerie([l('17', 11, true), l('18', 51, true, { sellerId: '9', vendedorLeido: 'Oster' })],
+    { esCatalogo: true, vendedorEsperado: 'DAGASPACHILE' })
+  assert.deepEqual([otro.fuerza, otro.cambiosDeVendedor, otro.sinAtribuir], [null, 1, 0])
+  // con las dos lecturas identificadas y coincidentes, la atribución es confirmada
+  const firme = resumenDeSerie([l('17', 11, true, { sellerId: '9', vendedorLeido: 'Feiman' }), l('18', 51, true, { sellerId: '9', vendedorLeido: 'Feiman' })],
+    { esCatalogo: true, vendedorEsperado: 'Feiman' })
+  assert.equal(firme.atribucion, 'confirmada')
+})
