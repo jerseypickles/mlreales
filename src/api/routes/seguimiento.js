@@ -10,7 +10,7 @@ router.get('/', async (req, res) => {
   res.json(await resumenSeguimiento({ keyword }))
 })
 router.post('/pasada', async (_req, res) => {
-  const job = await obtenerColas().tendencias.add('seguimiento-stock', {}, { jobId: `seguimiento-manual-${Math.floor(Date.now() / 300000)}` })
+  const job = await obtenerColas().tendencias.add('seguimiento-stock', {}, { jobId: `seguimiento-manual-${Math.floor(Date.now() / 60000)}` })
   res.status(202).json({ jobId: job.id })
 })
 export default router
