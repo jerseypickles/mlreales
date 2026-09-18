@@ -8,7 +8,8 @@ import { buscarDetalle } from './scraper.js'
 import { registrarGasto } from './gastos.js'
 import { ventaEntreLecturas } from './metricas.js'
 import { ventanaDeCompra } from './ventana.js'
-import { ofertasDeCatalogo, catalogoDeUrl, urlDeItem } from './ofertasCatalogo.js'
+import { ofertasDeCatalogo, catalogoDeUrl } from './ofertasCatalogo.js'
+import { meliGet } from './meli.js'
 import { config } from '../config/env.js'
 
 const HORA = 3600e3
@@ -98,11 +99,50 @@ async function nichosQueImportan() {
   })
 }
 
+// DEJAR DE LEER LA PÁGINA DE CATÁLOGO. Una ficha /p/MLC… muestra al ganador de la
+// caja de compra, que rota; el 18-sep-2026 el 38% de esas lecturas eran de otro
+// vendedor. La API oficial lo resuelve gratis: `/products/{id}/items` lista todas
+// las ofertas con su `item_id`, su `seller_id` y su logística, y con el item_id se
+// lee la publicación PROPIA del vendedor, que siempre muestra SU stock.
+//
+// Cuando ya sabemos a quién seguimos (una lectura nos dio su seller_id) se toma su
+// oferta. Cuando no, se toma la MEJOR de la lista —Full primero, después la más
+// barata sin tienda oficial— y se sigue a ese: el "vendedor" que traía el listado
+// era de todos modos el que tenía la caja en ese momento, así que no se pierde
+// nada y se gana una medición atribuible. El apodo real llega de `/users/{id}`, que
+// de paso corrige los casos en que el listado había guardado la MARCA.
+export async function resolverCatalogos({ max = 25 } = {}) {
+  const pendientes = await SeguimientoStock.find({
+    activo: true, esPropio: false, itemIdReal: null, url: { $regex: '/p/MLC', $options: 'i' },
+  }).sort({ lecturas: -1 }).limit(max).lean()
+  if (!pendientes.length) return { resueltos: 0, sinOfertas: 0 }
+  const tomados = new Set((await SeguimientoStock.find({ itemIdReal: { $ne: null } }).select('itemIdReal').lean()).map((p) => p.itemIdReal))
+  let resueltos = 0, sinOfertas = 0
+  for (const p of pendientes) {
+    const ofertas = await ofertasDeCatalogo(catalogoDeUrl(p.url)).catch(() => [])
+    if (!ofertas.length) { sinOfertas++; continue }
+    const libres = ofertas.filter((o) => !tomados.has(o.itemId))
+    const mia = ofertas.find((o) => p.sellerId && o.sellerId === String(p.sellerId))
+      ?? libres.find((o) => o.esFull && !o.esTiendaOficial)
+      ?? libres.find((o) => !o.esTiendaOficial)
+      ?? libres[0]
+    if (!mia) { sinOfertas++; continue }
+    tomados.add(mia.itemId)
+    const apodo = mia.sellerId ? await meliGet(`/users/${mia.sellerId}`).then((u) => u?.nickname ?? null).catch(() => null) : null
+    await SeguimientoStock.updateOne({ sku: p.sku }, { $set: {
+      itemIdReal: mia.itemId, urlLectura: mia.url, sellerId: mia.sellerId, esFull: mia.esFull,
+      logisticType: mia.logisticType, esCatalogo: true, ...(apodo ? { vendedor: apodo } : {}),
+    } })
+    resueltos++
+  }
+  return { resueltos, sinOfertas, pendientes: await SeguimientoStock.countDocuments({ activo: true, esPropio: false, itemIdReal: null, url: { $regex: '/p/MLC', $options: 'i' } }) }
+}
+
 // Una vez al día: suma a la lista lo que el último scan de cada nicho dejó ver,
 // y las publicaciones propias (para calibrar). No saca a nadie: eso lo decide
 // la lectura, cuando una publicación pasa semanas en "+50" o desaparece.
 export async function actualizarLista({ ahora = new Date() } = {}) {
-  let agregados = 0, cedidos = 0, resueltos = 0
+  let agregados = 0, cedidos = 0
   for (const n of await nichosQueImportan()) {
     const seguidos = await SeguimientoStock.find({ nichoId: n._id, activo: true, esPropio: false }).select('sku url esCatalogo esFull lecturas reposicionesVistas cambiosDeVendedor sellerId itemIdReal urlLectura').lean()
     const ultimo = await Snapshot.findOne({ keyword: n.keyword }).sort({ fecha: -1 }).select('fecha').lean()
@@ -110,29 +150,6 @@ export async function actualizarLista({ ahora = new Date() } = {}) {
     // solo lo de arriba del listado: es donde un entrante compite de verdad
     const snaps = await Snapshot.find({ keyword: n.keyword, fecha: ultimo.fecha, posicion: { $lte: 60 } }).select('sku posicion stock stockTopado stockFuente esAnuncio').lean()
     const prods = new Map((await Producto.find({ sku: { $in: [...snaps.map((s) => s.sku), ...seguidos.map((p) => p.sku)] } }).select('sku url titulo imagen vendedor esTiendaOficial esFull').lean()).map((p) => [p.sku, p]))
-    // DEJAR DE LEER LA PÁGINA DE CATÁLOGO. Con `/products/{id}/items` (gratis) se
-    // sabe qué publicación es de cada vendedor; se lee esa, que siempre muestra SU
-    // stock. De paso llega el Full oficial y el precio, sin pagar scraping.
-    for (const p of seguidos) {
-      if (p.urlLectura && p.esFull != null) continue
-      const catalogo = catalogoDeUrl(p.url)
-      if (catalogo) {
-        const ofertas = await ofertasDeCatalogo(catalogo)
-        const mia = ofertas.find((o) => o.sellerId && String(o.sellerId) === String(p.sellerId))
-          ?? (ofertas.length === 1 ? ofertas[0] : null)
-        if (mia) {
-          p.esFull = mia.esFull; p.urlLectura = mia.url
-          await SeguimientoStock.updateOne({ sku: p.sku }, { $set: { esFull: mia.esFull, logisticType: mia.logisticType,
-            itemIdReal: mia.itemId, urlLectura: mia.url, esCatalogo: true, sellerId: String(mia.sellerId ?? p.sellerId ?? '') || null } })
-          resueltos++
-          continue
-        }
-      }
-      const esFull = prods.get(p.sku)?.esFull ?? null
-      if (p.esFull === esFull && p.esCatalogo === esUrlDeCatalogo(p.url)) continue
-      p.esFull = esFull
-      await SeguimientoStock.updateOne({ sku: p.sku }, { $set: { esFull, esCatalogo: esUrlDeCatalogo(p.url) } })
-    }
     // CUPO CEDIDO. Los 6 lugares del nicho se llenaron antes de saber que una
     // ficha de catálogo no se puede atribuir a un vendedor: quedaron ocupados por
     // quien no puede dar señal. El que todavía no mostró nada le cede el lugar a
@@ -177,7 +194,7 @@ export async function actualizarLista({ ahora = new Date() } = {}) {
       imagen: p.imagen ?? null, vendedor: 'propio', esPropio: true, itemIdPropio: p.itemIdMl ?? p.sku, agregadoEl: ahora, proximaLecturaEl: ahora } }, { upsert: true })
     agregados += r.upsertedCount ?? 0
   }
-  return { agregados, cedidos, resueltos, activos: await SeguimientoStock.countDocuments({ activo: true }) }
+  return { agregados, cedidos, activos: await SeguimientoStock.countDocuments({ activo: true }) }
 }
 
 export async function gastoDelMes({ ahora = new Date() } = {}) {
@@ -389,5 +406,8 @@ export async function pasadaDeSeguimiento({ ahora = new Date() } = {}) {
   // competidor adentro.
   const ultimo = await SeguimientoStock.findOne({ esPropio: false }).sort({ agregadoEl: -1 }).select('agregadoEl').lean()
   const lista = !ultimo || +ahora - +ultimo.agregadoEl > 20 * HORA ? await actualizarLista({ ahora }) : null
-  return { lista, ...(await leerPendientes({ ahora })) }
+  // esto no cuesta nada (API oficial) y es lo que vuelve medible al catálogo:
+  // se hace en cada pasada, no una vez al día
+  const catalogos = await resolverCatalogos().catch((e) => ({ error: e.message }))
+  return { lista, catalogos, ...(await leerPendientes({ ahora })) }
 }
