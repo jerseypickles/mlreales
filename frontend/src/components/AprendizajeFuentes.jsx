@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, CircleDashed, Clock, Flame, PackageX, RefreshCw, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, CircleDashed, Clock, Flame, PackageX, RefreshCw, TrendingDown, TrendingUp, Users, Wallet } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura } from './ui.jsx'
 import { fmtFecha, fmtNum, fmtPrecio } from '../lib/formato.js'
@@ -77,6 +77,8 @@ const TarjetaVendedor = memo(function TarjetaVendedor({ f }) {
         <strong className="sv-nombre">{f.esPropio ? 'Tu publicación' : (f.vendedor ?? 'vendedor')}{f.esFull ? <span className="sv-full">Full</span> : null}</strong>
         <span className="sv-titulo">{f.titulo}</span>
         <Medidor ahora={ahora} antes={antes} />
+        {f.esCatalogo ? <p className="sv-catalogo" title="La ficha de catálogo muestra al ganador de la caja de compra, que rota entre vendedores. Solo se comparan lecturas del mismo vendedor.">
+          <Users size={13} aria-hidden="true" />ficha de catálogo{f.cambiosDeVendedor ? <b>· cambió de vendedor {f.cambiosDeVendedor} {f.cambiosDeVendedor === 1 ? 'vez' : 'veces'}</b> : ': el stock puede ser de otro vendedor'}</p> : null}
         {fuerte ? <p className="sv-fuerza" title={f.fuerza === 'ciclo' ? 'Su stock bajó y después subió: vendió y volvió a comprar.' : 'Su stock subió sin que se viera la baja: la venta ocurrió dentro de un rango.'}>
           <Flame size={14} aria-hidden="true" /><b>{f.fuerza === 'ciclo' ? 'Fuerte: vendió y repuso' : 'Repone stock'}</b>
           <span>metió al menos {fmtNum(f.unidadesRepuestasPiso)} u{f.esFull ? ' a Full' : ''}{f.reposiciones > 1 ? ` en ${f.reposiciones} reposiciones` : ''}{f.ultimaReposicionEl ? ` · ${hace(f.ultimaReposicionEl)}` : ''}</span></p> : null}
@@ -127,7 +129,8 @@ const TarjetaNicho = memo(function TarjetaNicho({ n, abierto, alAlternar }) {
             : n.vendiendo ? <span className="apr-chip apr-chip-bien"><TrendingDown size={13} aria-hidden="true" />{n.vendiendo} vendiendo · ≥{fmtNum(n.unidadesPisoSemana)} u/sem</span>
             : !leidas ? <span className="apr-chip"><CircleDashed size={13} aria-hidden="true" />en fila para leer</span>
               : visiblesN ? <span className="apr-chip apr-chip-mini-azul">{visiblesN} de {n.publicaciones.length} dejan ver stock</span>
-                : <span className="apr-chip">todos en “+50”: no se ve</span>}</span>
+                : <span className="apr-chip">todos en “+50”: no se ve</span>}
+          {n.enCatalogo === n.publicaciones.length && n.enCatalogo ? <span className="apr-chip apr-chip-mini" title="Todas las fichas de este nicho son de catálogo: el stock leído puede ser de otro vendedor"><Users size={12} aria-hidden="true" />solo catálogo</span> : null}</span>
         <Visibilidad publicaciones={n.publicaciones} alto={8} />
         <span className="sn-fotos">{n.publicaciones.map((f) => (
           <span key={f.sku} className={`sn-mini${f.fuerza === 'ciclo' || f.fuerza === 'repone' ? ' sn-mini-fuerte' : ''}`}>{f.imagen ? <Miniatura src={f.imagen} lado={44} /> : <span className="mv-sinfoto" />}<Medidor ahora={ultimas(f).ahora} antes={ultimas(f).antes} compacto /></span>
@@ -196,7 +199,8 @@ export function StockCompetidores() {
             <p className="apr-fuente-detalle">{fmtNum(d.pendientesAhora ?? 0)} esperando lectura. Las ventas aparecen desde la 2ª lectura de cada vendedor.</p></article>
           <article className="apr-fuente apr-fuente-fuerte"><div className="apr-cabeza"><span className="apr-icono"><Flame size={17} aria-hidden="true" /></span><h3>Venden y reponen</h3></div>
             <p className="apr-cifra">{fmtNum(d.nichos.reduce((a, n) => a + (n.fuertes ?? 0), 0))}<small> vendedores fuertes</small></p>
-            <p className="apr-fuente-detalle">{d.nichos.some((n) => n.fuertes) ? `Repusieron al menos ${fmtNum(d.nichos.reduce((a, n) => a + (n.unidadesRepuestasPiso ?? 0), 0))} unidades en ${fmtNum(d.nichos.filter((n) => n.fuertes).length)} nichos.` : 'Stock que baja y después sube: nadie repone lo que no se vende. Aparece desde la 3ª lectura.'}</p></article>
+            <p className="apr-fuente-detalle">{d.nichos.some((n) => n.fuertes) ? `Repusieron al menos ${fmtNum(d.nichos.reduce((a, n) => a + (n.unidadesRepuestasPiso ?? 0), 0))} unidades en ${fmtNum(d.nichos.filter((n) => n.fuertes).length)} nichos.` : 'Stock que baja y después sube: nadie repone lo que no se vende. Aparece desde la 3ª lectura.'}
+              {d.catalogo?.seguidos ? <><br /><span className="apr-ojo">{fmtNum(d.catalogo.seguidos)} de los seguidos son fichas de catálogo: ahí ML muestra al ganador de la caja de compra, así que solo se comparan lecturas del mismo vendedor{d.catalogo.cambiosDeVendedor ? ` (${fmtNum(d.catalogo.cambiosDeVendedor)} cambios descartados)` : ''}.</span></> : null}</p></article>
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><CheckCircle2 size={17} aria-hidden="true" /></span><h3>Cuánto ve el método</h3></div>
             <p className="apr-cifra">{cal?.pctVisto != null ? `${cal.pctVisto}%` : '—'}<small>{cal?.pctVisto != null ? ' de tus ventas reales' : ''}</small></p>
             <p className="apr-fuente-detalle">{cal ? `En ${cal.productos} publicaciones tuyas vio ${fmtNum(cal.unidadesVistas)} de ${fmtNum(cal.unidadesReales)} unidades` : 'Se mide leyendo tus publicaciones desde afuera. Necesita unos días.'}</p></article>

@@ -847,6 +847,16 @@ const rangoStock = (l) => (l.topado ? { min: l.stock, max: TECHO_BALDE[l.stock] 
 // es la venta exacta.
 export function ventaEntreLecturas(antes, ahora) {
   if (!antes || !ahora) return null
+  // EL STOCK ES DE UN VENDEDOR, NO DE UNA PÁGINA. En una página de catálogo
+  // (/p/MLC…) Mercado Libre muestra al ganador de la caja de compra, y ese rota:
+  // cuando a uno se le acaba el stock, la caja pasa a otro que tiene de sobra, y
+  // sin esta guarda el cambio de vendedor se leía como "repuso". Medido el
+  // 18-sep-2026: de los seguidos con dos lecturas, cambió de escalón el 29% de
+  // los de catálogo contra el 4,5% de los que tienen publicación propia, y las
+  // cinco "reposiciones" del primer día eran catálogo, todas de menos a más.
+  if (antes.sellerId && ahora.sellerId && String(antes.sellerId) !== String(ahora.sellerId)) return { otroVendedor: true }
+  // sin poder atribuir la lectura a un vendedor, una página de catálogo no dice nada
+  if (ahora.esCatalogo && !(antes.sellerId && ahora.sellerId)) return { otroVendedor: true }
   // solo el stock que ve el comprador: el de telemetría puede ser el tope de compra
   if (antes.fuente !== 'texto' || ahora.fuente !== 'texto') return null
   if (!Number.isFinite(antes.stock) || !Number.isFinite(ahora.stock)) return null

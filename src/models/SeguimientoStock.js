@@ -21,7 +21,13 @@ const schema = new mongoose.Schema({
   motivoBaja: { type: String, default: null },
   agregadoEl: { type: Date, required: true },
   proximaLecturaEl: { type: Date, required: true },
-  ultima: { type: { _id: false, fecha: Date, stock: Number, topado: Boolean, fuente: String }, default: null },
+  // el stock pertenece a un vendedor: en catálogo (/p/MLC…) la ficha muestra al
+  // ganador de la caja de compra, que rota. Guardar de quién era cada lectura es
+  // lo único que permite comparar dos lecturas sin inventar reposiciones.
+  esCatalogo: { type: Boolean, default: false },
+  sellerId: { type: String, default: null },
+  cambiosDeVendedor: { type: Number, default: 0 },
+  ultima: { type: { _id: false, fecha: Date, stock: Number, topado: Boolean, fuente: String, sellerId: String }, default: null },
   lecturas: { type: Number, default: 0 },
   // lecturas seguidas en "+50": ahí no se ve nada y la plata rinde más en otro lado
   sinInfoSeguidas: { type: Number, default: 0 },
@@ -45,6 +51,9 @@ const lecturaSchema = new mongoose.Schema({
   precio: { type: Number, default: null },
   vendidosFicha: { type: Number, default: null },
   numReviews: { type: Number, default: null },
+  // de quién era el stock leído (ganador de la caja de compra en catálogo)
+  sellerId: { type: String, default: null },
+  vendedorLeido: { type: String, default: null },
   costoUsd: { type: Number, default: 0 },
 }, { versionKey: false })
 lecturaSchema.index({ sku: 1, fecha: -1 })

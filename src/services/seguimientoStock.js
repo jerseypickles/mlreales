@@ -37,12 +37,17 @@ export function horasHastaLaProxima(ultima) {
 // la primera lectura lo descubre (US$0,006) y cuatro semanas en "+50" lo sacan.
 // La primera versión exigía stock conocido y dejó la lista vacía: ese dato solo
 // existe en los nichos escaneados desde el 17-sep.
+// Una URL de catálogo (/p/MLC…) no es de nadie: muestra al ganador de la caja de
+// compra, que rota. La publicación propia del vendedor (articulo.mercadolibre.cl)
+// sí es suya, y su stock se puede seguir. Se prefieren esas.
+export const esUrlDeCatalogo = (url) => /\/p\/MLC/i.test(String(url ?? ''))
+
 export function elegirParaSeguir(productos, { max = POR_NICHO } = {}) {
   const visible = (p) => p.stockFuente === 'texto' && Number.isFinite(p.stock)
   const vistos = new Set()
   return (productos ?? [])
     .filter((p) => p.url && p.esTiendaOficial !== true && p.esAnuncio !== true && !(visible(p) && p.stockTopado && p.stock >= 51))
-    .sort((a, b) => Number(visible(b)) - Number(visible(a)) || (a.posicion ?? 999) - (b.posicion ?? 999))
+    .sort((a, b) => Number(esUrlDeCatalogo(a.url)) - Number(esUrlDeCatalogo(b.url)) || Number(visible(b)) - Number(visible(a)) || (a.posicion ?? 999) - (b.posicion ?? 999))
     .filter((p) => {
       const v = p.vendedor ?? p.sku
       if (vistos.has(v)) return false
@@ -83,7 +88,7 @@ export async function actualizarLista({ ahora = new Date() } = {}) {
     for (const c of candidatos) {
       const conocido = c.stockFuente === 'texto' && Number.isFinite(c.stock)
       const r = await SeguimientoStock.updateOne({ sku: c.sku }, { $setOnInsert: { sku: c.sku, url: c.url, nichoId: n._id, keyword: n.keyword,
-        titulo: c.titulo ?? null, imagen: c.imagen ?? null, vendedor: c.vendedor ?? null, agregadoEl: ahora,
+        titulo: c.titulo ?? null, imagen: c.imagen ?? null, vendedor: c.vendedor ?? null, agregadoEl: ahora, esCatalogo: esUrlDeCatalogo(c.url),
         // si el scan ya leyó su stock, esa cuenta como la primera lectura: ya se pagó
         ...(conocido ? { ultima: { fecha: ultimo.fecha, stock: c.stock, topado: c.stockTopado === true, fuente: c.stockFuente } } : {}),
         proximaLecturaEl: conocido ? new Date(+ultimo.fecha + horasHastaLaProxima({ stock: c.stock, topado: c.stockTopado }) * HORA) : ahora } }, { upsert: true })
@@ -155,16 +160,20 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
       if (fallos >= 3 && !p.esPropio) bajas++
       continue
     }
-    const ultima = { fecha: ahora, stock: it.stockQuantity, topado: it.stockTopado === true, fuente: it.stockFuente ?? null }
+    const ultima = { fecha: ahora, stock: it.stockQuantity, topado: it.stockTopado === true, fuente: it.stockFuente ?? null, sellerId: it.sellerId ?? null }
     await LecturaStock.create({ sku: p.sku, fecha: ahora, stock: ultima.stock, topado: ultima.topado, fuente: ultima.fuente,
-      precio: it.price ?? null, vendidosFicha: it.soldQuantityFicha ?? null, numReviews: it.ratingCount ?? null, costoUsd: cadaUna })
+      precio: it.price ?? null, vendidosFicha: it.soldQuantityFicha ?? null, numReviews: it.ratingCount ?? null, costoUsd: cadaUna,
+      sellerId: it.sellerId ?? null, vendedorLeido: it.sellerName ?? null })
     const sinInfo = ultima.topado && ultima.stock >= 51 ? (p.sinInfoSeguidas ?? 0) + 1 : 0
     // cuatro semanas en "+50": ese vendedor es grande y no deja ver nada
-    const cambio = ventaEntreLecturas(p.ultima, ultima)
+    // los seguidos de antes del 18-sep no tienen la marca: se deduce de la URL
+    const deCatalogo = p.esCatalogo === true || esUrlDeCatalogo(p.url)
+    const cambio = ventaEntreLecturas({ ...(p.ultima ?? {}), esCatalogo: deCatalogo }, { ...ultima, esCatalogo: deCatalogo })
     const repuso = cambio?.repuso === true && cambio.repuestasPiso >= REPOSICION_MIN
+    const roto = cambio?.otroVendedor === true
     const baja = sinInfo >= 4 && !p.esPropio && !(p.reposicionesVistas > 0) && !repuso
-    await SeguimientoStock.updateOne({ _id: p._id }, { $set: { ultima, sinInfoSeguidas: sinInfo, fallosSeguidos: 0,
-      proximaLecturaEl: new Date(+ahora + horasHastaLaProxima(ultima) * HORA), ...(baja ? { activo: false, motivoBaja: 'siempre en "+50": no deja ver ventas' } : {}) }, $inc: { lecturas: 1, ...(repuso ? { reposicionesVistas: 1 } : {}) } })
+    await SeguimientoStock.updateOne({ _id: p._id }, { $set: { ultima, sinInfoSeguidas: sinInfo, fallosSeguidos: 0, ...(it.sellerId ? { sellerId: String(it.sellerId) } : {}), esCatalogo: deCatalogo,
+      proximaLecturaEl: new Date(+ahora + horasHastaLaProxima(ultima) * HORA), ...(baja ? { activo: false, motivoBaja: 'siempre en "+50": no deja ver ventas' } : {}) }, $inc: { lecturas: 1, ...(repuso ? { reposicionesVistas: 1 } : {}), ...(roto ? { cambiosDeVendedor: 1 } : {}) } })
     if (baja) bajas++
     leidas++
   }
@@ -183,11 +192,18 @@ const REPOSICION_MIN = 3
 // baja + reposición es plata vuelta a meter en ese producto: nadie repone lo que
 // no se vende. Niveles: 'ciclo' (vendió y repuso, en ese orden) · 'repone' (subió
 // sin baja visible: la venta ocurrió dentro de un rango) · 'vende' · 'quieto'.
-export function resumenDeSerie(lecturas) {
+export function resumenDeSerie(lecturas, { esCatalogo = false } = {}) {
   const serie = (lecturas ?? []).filter((l) => l.ok !== false && Number.isFinite(l.stock)).sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha))
   let unidades = 0, reposiciones = 0, exactas = 0, tramos = 0, ajustes = 0, ciclos = 0, repuestas = 0, desdeLaUltima = 0, seAgoto = false, ultimaReposicionEl = null
+  let cambiosDeVendedor = 0
   for (let i = 1; i < serie.length; i++) {
-    const v = ventaEntreLecturas({ ...serie[i - 1], topado: serie[i - 1].topado }, { ...serie[i], topado: serie[i].topado })
+    const v = ventaEntreLecturas({ ...serie[i - 1], esCatalogo }, { ...serie[i], esCatalogo })
+    if (v?.otroVendedor) {
+      // el stock leído era de otro vendedor: el tramo no se puede comparar, y lo
+      // acumulado antes tampoco encadena con lo que venga después
+      cambiosDeVendedor++; desdeLaUltima = 0; seAgoto = false
+      continue
+    }
     if (!v) continue
     tramos++
     if (v.repuso) {
@@ -205,7 +221,7 @@ export function resumenDeSerie(lecturas) {
   const dias = serie.length > 1 ? (+new Date(serie.at(-1).fecha) - +new Date(serie[0].fecha)) / DIA : 0
   const fuerza = ciclos ? 'ciclo' : reposiciones ? 'repone' : unidades > 0 ? 'vende' : tramos ? 'quieto' : null
   return { lecturas: serie.length, dias: Math.round(dias * 10) / 10, unidadesPiso: unidades, unidadesExactas: exactas, reposiciones, tramosMedidos: tramos,
-    ajustes, ciclos, unidadesRepuestasPiso: repuestas, ultimaReposicionEl, fuerza,
+    ajustes, ciclos, unidadesRepuestasPiso: repuestas, ultimaReposicionEl, fuerza, cambiosDeVendedor, esCatalogo,
     porSemana: dias >= 2 ? Math.round((unidades / dias) * 7 * 10) / 10 : null, stockAhora: serie.at(-1)?.stock ?? null, topadoAhora: serie.at(-1)?.topado ?? null }
 }
 
@@ -221,8 +237,8 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
   const filas = seguidos.map((s) => ({ esFull: full.get(s.sku) ?? null, sku: s.sku, url: s.url, titulo: s.titulo, imagen: s.imagen, vendedor: s.vendedor, keyword: s.keyword, esPropio: s.esPropio,
     activo: s.activo, motivoBaja: s.motivoBaja, proximaLecturaEl: s.proximaLecturaEl, agregadoEl: s.agregadoEl, itemIdPropio: s.itemIdPropio,
     // las lecturas tal como llegaron, para poder VER qué está obteniendo el sistema
-    serie: (porSku.get(s.sku) ?? []).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio })),
-    ...resumenDeSerie(porSku.get(s.sku)) }))
+    serie: (porSku.get(s.sku) ?? []).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio, sellerId: l.sellerId ?? null, vendedorLeido: l.vendedorLeido ?? null })),
+    ...resumenDeSerie(porSku.get(s.sku), { esCatalogo: s.esCatalogo === true || esUrlDeCatalogo(s.url) }) }))
   // CALIBRACIÓN: en lo propio la venta real se conoce. Cuánto del total ve el piso.
   let calibracion = null
   const propios = filas.filter((f) => f.esPropio && f.dias >= 3)
@@ -243,10 +259,12 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
   const ultimasLecturas = [...lecturas].reverse().slice(0, 40).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, costoUsd: l.costoUsd,
     sku: l.sku, vendedor: deQuien.get(l.sku)?.vendedor ?? null, keyword: deQuien.get(l.sku)?.keyword ?? null, esPropio: deQuien.get(l.sku)?.esPropio ?? false, titulo: deQuien.get(l.sku)?.titulo ?? null }))
   return { topeUsdMes: TOPE_USD_MES, gasto: await gastoDelMes({ ahora }), seguidos: filas.filter((f) => f.activo).length, calibracion, ultimasLecturas,
+    catalogo: { seguidos: filas.filter((f) => !f.esPropio && f.esCatalogo).length, cambiosDeVendedor: filas.reduce((a, f) => a + (f.cambiosDeVendedor ?? 0), 0) },
     pendientesAhora: seguidos.filter((s) => s.activo && +new Date(s.proximaLecturaEl) <= +ahora).length,
     nichos: [...porNicho].map(([k, fs]) => ({ keyword: k, seguidos: fs.filter((f) => f.activo).length, vendiendo: fs.filter((f) => f.unidadesPiso > 0).length, fuertes: fs.filter((f) => f.fuerza === 'ciclo' || f.fuerza === 'repone').length,
       unidadesRepuestasPiso: fs.reduce((a, f) => a + (f.unidadesRepuestasPiso ?? 0), 0),
-      unidadesPisoSemana: Math.round(fs.reduce((a, f) => a + (f.porSemana ?? 0), 0) * 10) / 10, reposiciones: fs.reduce((a, f) => a + f.reposiciones, 0), publicaciones: fs })),
+      unidadesPisoSemana: Math.round(fs.reduce((a, f) => a + (f.porSemana ?? 0), 0) * 10) / 10, reposiciones: fs.reduce((a, f) => a + f.reposiciones, 0),
+      enCatalogo: fs.filter((f) => f.esCatalogo).length, publicaciones: fs })),
     propios: filas.filter((f) => f.esPropio) }
 }
 

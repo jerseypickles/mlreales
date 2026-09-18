@@ -7173,3 +7173,6 @@ em.mg-agotado { color: var(--peligro); }
 }
 .apr-chips-columna { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
 .apr-chips-columna .apr-chip-mini { margin-left: 0; }
+.sv-catalogo { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 8px 0 0; padding: 5px 9px; border-radius: 8px; border: 1px dashed var(--borde); font-size: 0.78rem; line-height: 1.35; color: var(--tinta-3); }
+.sv-catalogo b { color: var(--avisa-tinta); font-weight: 600; }
+.apr-ojo { display: inline-block; margin-top: 4px; color: var(--tinta-3); }

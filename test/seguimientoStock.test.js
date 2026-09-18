@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie } from '../src/services/seguimientoStock.js'
+import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo } from '../src/services/seguimientoStock.js'
 
 test('se lee más seguido donde más se ve: "+50" semanal, rangos diario, número exacto cada 12 h', () => {
   assert.equal(horasHastaLaProxima({ stock: 51, topado: true }), 168)
@@ -63,4 +63,44 @@ test('fuerza: una devolución que sube el stock 1-2 unidades NO es reponer', () 
   // pero si antes vendió de verdad (≥3), la misma subida chica SÍ cuenta
   const real = resumenDeSerie([l('01', 5), l('02', 1), l('03', 3)])
   assert.deepEqual([real.fuerza, real.ciclos, real.unidadesRepuestasPiso], ['ciclo', 1, 2])
+})
+
+// Medido en producción el 18-sep: las cinco primeras "reposiciones" eran páginas
+// de catálogo, todas de menos a más y ninguna a menos. En /p/MLC… ML muestra al
+// ganador de la caja de compra, y ese rota: cuando a uno se le acaba el stock, la
+// caja pasa a otro que tiene de sobra, y eso se leía como "repuso".
+test('catálogo: sin saber de quién es el stock, el tramo no se compara', () => {
+  const l = (dia, stock, topado = false, sellerId = null) => ({ fecha: new Date(`2026-09-${dia}T12:00:00Z`), stock, topado, fuente: 'texto', sellerId })
+  // 3 → "+25" en una página de catálogo, sin vendedor identificado: no dice nada
+  const ciego = resumenDeSerie([l('17', 3), l('18', 26, true)], { esCatalogo: true })
+  assert.deepEqual([ciego.fuerza, ciego.reposiciones, ciego.cambiosDeVendedor], [null, 0, 1])
+  // el mismo cambio en la publicación propia del vendedor sí cuenta
+  const propia = resumenDeSerie([l('17', 3), l('18', 26, true)], { esCatalogo: false })
+  assert.deepEqual([propia.fuerza, propia.reposiciones], ['repone', 1])
+  // en catálogo, con el MISMO vendedor en las dos lecturas, vuelve a contar
+  const mismo = resumenDeSerie([l('17', 3, false, '204808902'), l('18', 26, true, '204808902')], { esCatalogo: true })
+  assert.deepEqual([mismo.fuerza, mismo.reposiciones, mismo.cambiosDeVendedor], ['repone', 1, 0])
+  // y si cambió el vendedor, no: aunque sea una publicación normal
+  const otro = resumenDeSerie([l('17', 3, false, '204808902'), l('18', 26, true, '777')], { esCatalogo: false })
+  assert.deepEqual([otro.fuerza, otro.reposiciones, otro.cambiosDeVendedor], [null, 0, 1])
+})
+
+test('catálogo: el cambio de vendedor corta la cadena, no la atraviesa', () => {
+  const l = (dia, stock, topado, sellerId) => ({ fecha: new Date(`2026-09-${dia}T12:00:00Z`), stock, topado, fuente: 'texto', sellerId })
+  // A vende 5→2; entra B con +50; B baja a 3. Son dos historias, no un ciclo.
+  const r = resumenDeSerie([l('14', 5, false, 'A'), l('15', 2, false, 'A'), l('16', 51, true, 'B'), l('17', 3, false, 'B')], { esCatalogo: true })
+  assert.equal(r.cambiosDeVendedor, 1)
+  assert.equal(r.reposiciones, 0)
+  assert.equal(r.fuerza, 'vende') // 3 de A + 48 de B, sin reposición inventada
+})
+
+test('se prefiere la publicación propia del vendedor antes que la página de catálogo', () => {
+  const p = (o) => ({ esTiendaOficial: false, ...o })
+  const elegidos = elegirParaSeguir([
+    p({ sku: 'CAT', posicion: 1, vendedor: 'Uno', url: 'https://www.mercadolibre.cl/algo/p/MLC27221799', stockFuente: 'texto', stock: 3 }),
+    p({ sku: 'OWN', posicion: 9, vendedor: 'Dos', url: 'https://articulo.mercadolibre.cl/MLC-123-algo' }),
+  ], { max: 2 })
+  assert.deepEqual(elegidos.map((x) => x.sku), ['OWN', 'CAT'])
+  assert.equal(esUrlDeCatalogo('https://www.mercadolibre.cl/p/MLC14082874'), true)
+  assert.equal(esUrlDeCatalogo('https://articulo.mercadolibre.cl/MLC-4212659314-set-8'), false)
 })
