@@ -128,7 +128,10 @@ export async function resolverCatalogos({ max = 25 } = {}) {
   const pendientes = await SeguimientoStock.find({
     activo: true, esPropio: false, itemIdReal: null, url: { $regex: '/p/MLC', $options: 'i' },
   }).sort({ lecturas: -1 }).limit(max).lean()
-  if (!pendientes.length) return { resueltos: 0, sinOfertas: 0 }
+  // los resueltos antes de que existiera la marca: su historia sigue mezclando la
+  // ficha de catálogo con la del vendedor, así que se corta desde ya
+  const sinMarca = await SeguimientoStock.updateMany({ itemIdReal: { $ne: null }, resueltoEl: null }, { $set: { resueltoEl: new Date(), ultima: null } })
+  if (!pendientes.length) return { resueltos: 0, sinOfertas: 0, marcados: sinMarca.modifiedCount ?? 0 }
   const tomados = new Set((await SeguimientoStock.find({ itemIdReal: { $ne: null } }).select('itemIdReal').lean()).map((p) => p.itemIdReal))
   let resueltos = 0, sinOfertas = 0
   for (const p of pendientes) {
@@ -148,11 +151,11 @@ export async function resolverCatalogos({ max = 25 } = {}) {
       // la página que se va a leer es OTRA —la del vendedor, no la del catálogo—,
       // así que su stock es una base nueva: conviene tomarla cuanto antes
       proximaLecturaEl: new Date(),
-      ultima: null,
+      ultima: null, resueltoEl: new Date(),
     } })
     resueltos++
   }
-  return { resueltos, sinOfertas, pendientes: await SeguimientoStock.countDocuments({ activo: true, esPropio: false, itemIdReal: null, url: { $regex: '/p/MLC', $options: 'i' } }) }
+  return { resueltos, sinOfertas, marcados: sinMarca.modifiedCount ?? 0, pendientes: await SeguimientoStock.countDocuments({ activo: true, esPropio: false, itemIdReal: null, url: { $regex: '/p/MLC', $options: 'i' } }) }
 }
 
 // Una vez al día: suma a la lista lo que el último scan de cada nicho dejó ver,
@@ -315,10 +318,13 @@ const REPOSICION_MIN = 3
 // baja + reposición es plata vuelta a meter en ese producto: nadie repone lo que
 // no se vende. Niveles: 'ciclo' (vendió y repuso, en ese orden) · 'repone' (subió
 // sin baja visible: la venta ocurrió dentro de un rango) · 'vende' · 'quieto'.
-export function resumenDeSerie(lecturas, { esCatalogo = false, vendedorEsperado = null } = {}) {
+export function resumenDeSerie(lecturas, { esCatalogo = false, vendedorEsperado = null, desdeEl = null } = {}) {
   // solo el stock que ve el comprador: la telemetría es el tope de compra por
-  // pedido, no el inventario
-  const serie = (lecturas ?? []).filter((l) => l.ok !== false && Number.isFinite(l.stock) && l.fuente === 'texto')
+  // pedido, no el inventario. Y si la publicación pasó de leerse en la ficha de
+  // catálogo a leerse en la del vendedor, lo de antes es de OTRA página: no sirve
+  // para comparar, por más que sea del mismo seguido.
+  const serie = (lecturas ?? []).filter((l) => l.ok !== false && Number.isFinite(l.stock) && l.fuente === 'texto'
+    && (!desdeEl || +new Date(l.fecha) >= +new Date(desdeEl)))
     .sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha))
   let unidades = 0, exactas = 0, reposiciones = 0, ciclos = 0, repuestas = 0, ajustes = 0, tramos = 0
   let cambiosDeVendedor = 0, sinAtribuir = 0, probables = 0, confirmados = 0
@@ -389,8 +395,8 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
     itemIdReal: s.itemIdReal ?? null, sku: s.sku, url: s.url, titulo: s.titulo, imagen: s.imagen, vendedor: s.vendedor, keyword: s.keyword, esPropio: s.esPropio,
     activo: s.activo, motivoBaja: s.motivoBaja, proximaLecturaEl: s.proximaLecturaEl, agregadoEl: s.agregadoEl, itemIdPropio: s.itemIdPropio,
     // las lecturas tal como llegaron, para poder VER qué está obteniendo el sistema
-    serie: (porSku.get(s.sku) ?? []).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio, fuente: l.fuente ?? null, sellerId: l.sellerId ?? null, vendedorLeido: l.vendedorLeido ?? null })),
-    ...resumenDeSerie(porSku.get(s.sku), { esCatalogo: !s.itemIdReal && (s.esCatalogo === true || esUrlDeCatalogo(s.url)), vendedorEsperado: s.vendedor }) }))
+    serie: (porSku.get(s.sku) ?? []).filter((l) => !s.resueltoEl || +new Date(l.fecha) >= +new Date(s.resueltoEl)).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio, fuente: l.fuente ?? null, sellerId: l.sellerId ?? null, vendedorLeido: l.vendedorLeido ?? null })),
+    ...resumenDeSerie(porSku.get(s.sku), { esCatalogo: !s.itemIdReal && (s.esCatalogo === true || esUrlDeCatalogo(s.url)), vendedorEsperado: s.vendedor, desdeEl: s.resueltoEl }) }))
   // CALIBRACIÓN: en lo propio la venta real se conoce. Cuánto del total ve el piso.
   let calibracion = null
   const propios = filas.filter((f) => f.esPropio && f.dias >= 3)

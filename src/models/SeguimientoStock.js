@@ -35,6 +35,9 @@ const schema = new mongoose.Schema({
   // que se lee: siempre muestra SU stock, gane o no la caja de compra.
   itemIdReal: { type: String, default: null },
   urlLectura: { type: String, default: null },
+  // cuándo se dejó de leer la ficha de catálogo y se pasó a la del vendedor. Las
+  // lecturas anteriores son de OTRA página y no encadenan con las nuevas.
+  resueltoEl: { type: Date, default: null },
   sellerId: { type: String, default: null },
   cambiosDeVendedor: { type: Number, default: 0 },
   ultima: { type: { _id: false, fecha: Date, stock: Number, topado: Boolean, fuente: String, sellerId: String, vendedorLeido: String }, default: null },

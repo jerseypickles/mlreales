@@ -199,3 +199,13 @@ test('cadencia: al medible se le lee seguido, al que no dice nada no se le gasta
   assert.equal(esMedible({ esFull: true, esCatalogo: true }), false)
   assert.equal(esMedible({ esFull: false, itemIdReal: 'MLC1' }), false)
 })
+
+test('al pasar de la ficha de catálogo a la del vendedor, lo leído antes no encadena', () => {
+  const l = (dia, stock, topado = false) => ({ fecha: new Date(`2026-09-${dia}T12:00:00Z`), stock, topado, fuente: 'texto' })
+  // "3" se leyó en la ficha de catálogo (podía ser de cualquiera) y "+50" ya en la
+  // publicación del vendedor: encadenarlas inventaría una reposición de 48 u
+  const cortado = resumenDeSerie([l('17', 3), l('18', 51, true)], { desdeEl: new Date('2026-09-18T00:00:00Z') })
+  assert.deepEqual([cortado.lecturas, cortado.fuerza, cortado.reposiciones], [1, null, 0])
+  // sin el corte, se inventaba
+  assert.equal(resumenDeSerie([l('17', 3), l('18', 51, true)]).reposiciones, 1)
+})
