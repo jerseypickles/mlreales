@@ -8,6 +8,7 @@ import { buscarDetalle } from './scraper.js'
 import { registrarGasto } from './gastos.js'
 import { ventaEntreLecturas } from './metricas.js'
 import { ventanaDeCompra } from './ventana.js'
+import { ofertasDeCatalogo, catalogoDeUrl, urlDeItem } from './ofertasCatalogo.js'
 import { config } from '../config/env.js'
 
 const HORA = 3600e3
@@ -81,7 +82,7 @@ export function elegirParaSeguir(productos, { max = POR_NICHO } = {}) {
 // quien ya demostró que rota, o del que lleva varias lecturas sin poder
 // atribuirse a nadie.
 export const seguidoFlojo = (p) =>
-  (p.esCatalogo === true || esUrlDeCatalogo(p.url)) && ((p.cambiosDeVendedor ?? 0) >= 1 || ((p.lecturas ?? 0) >= 4 && !p.sellerId))
+  !p.itemIdReal && (p.esCatalogo === true || esUrlDeCatalogo(p.url)) && ((p.cambiosDeVendedor ?? 0) >= 1 || ((p.lecturas ?? 0) >= 4 && !p.sellerId))
 
 // Qué nichos se siguen: los que están en cotización o pedido, y los de
 // temporada con la ventana de compra abierta. Es donde una decisión de compra
@@ -101,17 +102,32 @@ async function nichosQueImportan() {
 // y las publicaciones propias (para calibrar). No saca a nadie: eso lo decide
 // la lectura, cuando una publicación pasa semanas en "+50" o desaparece.
 export async function actualizarLista({ ahora = new Date() } = {}) {
-  let agregados = 0, cedidos = 0
+  let agregados = 0, cedidos = 0, resueltos = 0
   for (const n of await nichosQueImportan()) {
-    const seguidos = await SeguimientoStock.find({ nichoId: n._id, activo: true, esPropio: false }).select('sku url esCatalogo esFull lecturas reposicionesVistas cambiosDeVendedor sellerId').lean()
+    const seguidos = await SeguimientoStock.find({ nichoId: n._id, activo: true, esPropio: false }).select('sku url esCatalogo esFull lecturas reposicionesVistas cambiosDeVendedor sellerId itemIdReal urlLectura').lean()
     const ultimo = await Snapshot.findOne({ keyword: n.keyword }).sort({ fecha: -1 }).select('fecha').lean()
     if (!ultimo) continue
     // solo lo de arriba del listado: es donde un entrante compite de verdad
     const snaps = await Snapshot.find({ keyword: n.keyword, fecha: ultimo.fecha, posicion: { $lte: 60 } }).select('sku posicion stock stockTopado stockFuente esAnuncio').lean()
     const prods = new Map((await Producto.find({ sku: { $in: [...snaps.map((s) => s.sku), ...seguidos.map((p) => p.sku)] } }).select('sku url titulo imagen vendedor esTiendaOficial esFull').lean()).map((p) => [p.sku, p]))
-    // los seguidos de antes del 18-sep no traen Full ni la marca de catálogo: se
-    // rellenan desde el listado, que ya lo sabe y no cuesta nada
+    // DEJAR DE LEER LA PÁGINA DE CATÁLOGO. Con `/products/{id}/items` (gratis) se
+    // sabe qué publicación es de cada vendedor; se lee esa, que siempre muestra SU
+    // stock. De paso llega el Full oficial y el precio, sin pagar scraping.
     for (const p of seguidos) {
+      if (p.urlLectura && p.esFull != null) continue
+      const catalogo = catalogoDeUrl(p.url)
+      if (catalogo) {
+        const ofertas = await ofertasDeCatalogo(catalogo)
+        const mia = ofertas.find((o) => o.sellerId && String(o.sellerId) === String(p.sellerId))
+          ?? (ofertas.length === 1 ? ofertas[0] : null)
+        if (mia) {
+          p.esFull = mia.esFull; p.urlLectura = mia.url
+          await SeguimientoStock.updateOne({ sku: p.sku }, { $set: { esFull: mia.esFull, logisticType: mia.logisticType,
+            itemIdReal: mia.itemId, urlLectura: mia.url, esCatalogo: true, sellerId: String(mia.sellerId ?? p.sellerId ?? '') || null } })
+          resueltos++
+          continue
+        }
+      }
       const esFull = prods.get(p.sku)?.esFull ?? null
       if (p.esFull === esFull && p.esCatalogo === esUrlDeCatalogo(p.url)) continue
       p.esFull = esFull
@@ -136,8 +152,17 @@ export async function actualizarLista({ ahora = new Date() } = {}) {
     const candidatos = [...mejores, ...todos.filter((c) => !yaEstan.has(c.sku) && !mejores.includes(c))].slice(0, libres)
     for (const c of candidatos) {
       const conocido = c.stockFuente === 'texto' && Number.isFinite(c.stock)
+      // si es catálogo, se guarda ya la publicación propia del vendedor
+      let propia = null
+      const catalogoNuevo = catalogoDeUrl(c.url)
+      if (catalogoNuevo) {
+        const ofertas = await ofertasDeCatalogo(catalogoNuevo)
+        propia = ofertas.find((o) => Number.isFinite(c.precio) && o.precio === c.precio) ?? (ofertas.length === 1 ? ofertas[0] : null)
+      }
       const r = await SeguimientoStock.updateOne({ sku: c.sku }, { $setOnInsert: { sku: c.sku, url: c.url, nichoId: n._id, keyword: n.keyword,
-        titulo: c.titulo ?? null, imagen: c.imagen ?? null, vendedor: c.vendedor ?? null, agregadoEl: ahora, esCatalogo: esUrlDeCatalogo(c.url), esFull: c.esFull ?? null,
+        titulo: c.titulo ?? null, imagen: c.imagen ?? null, vendedor: c.vendedor ?? null, agregadoEl: ahora, esCatalogo: esUrlDeCatalogo(c.url),
+        esFull: propia ? propia.esFull : (c.esFull ?? null), logisticType: propia?.logisticType ?? null,
+        itemIdReal: propia?.itemId ?? null, urlLectura: propia?.url ?? null, sellerId: propia?.sellerId ?? null,
         // si el scan ya leyó su stock, esa cuenta como la primera lectura: ya se pagó
         ...(conocido ? { ultima: { fecha: ultimo.fecha, stock: c.stock, topado: c.stockTopado === true, fuente: c.stockFuente } } : {}),
         proximaLecturaEl: conocido ? new Date(+ultimo.fecha + horasHastaLaProxima({ stock: c.stock, topado: c.stockTopado }) * HORA) : ahora } }, { upsert: true })
@@ -152,7 +177,7 @@ export async function actualizarLista({ ahora = new Date() } = {}) {
       imagen: p.imagen ?? null, vendedor: 'propio', esPropio: true, itemIdPropio: p.itemIdMl ?? p.sku, agregadoEl: ahora, proximaLecturaEl: ahora } }, { upsert: true })
     agregados += r.upsertedCount ?? 0
   }
-  return { agregados, cedidos, activos: await SeguimientoStock.countDocuments({ activo: true }) }
+  return { agregados, cedidos, resueltos, activos: await SeguimientoStock.countDocuments({ activo: true }) }
 }
 
 export async function gastoDelMes({ ahora = new Date() } = {}) {
@@ -197,12 +222,16 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
   const paraReleer = relecturas.slice(0, Math.max(Math.ceil(libre / 2), libre - resto.length))
   const pendientes = [...propios, ...paraReleer, ...resto.slice(0, libre - paraReleer.length)].slice(0, cupo)
   if (!pendientes.length) return { leidas: 0, motivo: 'nada pendiente', gasto }
-  const { items, costoUsd } = await leer(pendientes.map((p) => p.url))
+  const { items, costoUsd } = await leer(pendientes.map((p) => p.urlLectura ?? p.url))
   await registrarGasto(null, costoUsd, 'zyte')
   const cadaUna = costoUsd / pendientes.length
   let leidas = 0, bajas = 0
   for (const p of pendientes) {
-    const it = items.find((i) => i.sku === p.sku) ?? items.find((i) => i.url && (i.url === p.url || i.url.includes(p.sku)))
+    // la ficha devuelve en `sku` el id de la publicación que realmente pintó: si
+    // no es la que pedimos, la lectura no es de este vendedor y no sirve
+    const idEsperado = (p.itemIdReal ?? p.sku ?? '').replace(/^MLC/i, '')
+    const it = items.find((i) => String(i.sku ?? '').replace(/^MLC/i, '') === idEsperado)
+      ?? (p.itemIdReal ? null : items.find((i) => i.url && (i.url === p.url || i.url.includes(p.sku))))
     if (!it || !Number.isFinite(it.stockQuantity)) {
       // pagada igual. Tres fallos seguidos = la publicación ya no existe
       await LecturaStock.create({ sku: p.sku, fecha: ahora, ok: false, costoUsd: cadaUna })
@@ -218,8 +247,9 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
       sellerId: it.sellerId ?? null, vendedorLeido: it.sellerName ?? null })
     const sinInfo = ultima.topado && ultima.stock >= 51 ? (p.sinInfoSeguidas ?? 0) + 1 : 0
     // cuatro semanas en "+50": ese vendedor es grande y no deja ver nada
-    // los seguidos de antes del 18-sep no tienen la marca: se deduce de la URL
-    const deCatalogo = p.esCatalogo === true || esUrlDeCatalogo(p.url)
+    // Resuelto a la publicación propia del vendedor, la ambigüedad desaparece: esa
+    // página muestra SU stock aunque la caja de compra la tenga otro.
+    const deCatalogo = !p.itemIdReal && (p.esCatalogo === true || esUrlDeCatalogo(p.url))
     const cambio = ventaEntreLecturas({ ...(p.ultima ?? {}), esCatalogo: deCatalogo, vendedorEsperado: p.vendedor },
       { ...ultima, esCatalogo: deCatalogo, vendedorEsperado: p.vendedor })
     const repuso = cambio?.repuso === true && cambio.repuestasPiso >= REPOSICION_MIN
@@ -302,11 +332,12 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
   // el listado ya dice si la publicación despacha desde Full (no cuesta nada):
   // ahí una reposición es un envío a la bodega de ML
   const full = new Map((await Producto.find({ sku: { $in: seguidos.map((s) => s.sku) } }).select('sku esFull').lean()).map((p) => [p.sku, p.esFull ?? null]))
-  const filas = seguidos.map((s) => ({ esFull: s.esFull ?? full.get(s.sku) ?? null, sku: s.sku, url: s.url, titulo: s.titulo, imagen: s.imagen, vendedor: s.vendedor, keyword: s.keyword, esPropio: s.esPropio,
+  const filas = seguidos.map((s) => ({ esFull: s.esFull ?? full.get(s.sku) ?? null, logisticType: s.logisticType ?? null,
+    itemIdReal: s.itemIdReal ?? null, sku: s.sku, url: s.url, titulo: s.titulo, imagen: s.imagen, vendedor: s.vendedor, keyword: s.keyword, esPropio: s.esPropio,
     activo: s.activo, motivoBaja: s.motivoBaja, proximaLecturaEl: s.proximaLecturaEl, agregadoEl: s.agregadoEl, itemIdPropio: s.itemIdPropio,
     // las lecturas tal como llegaron, para poder VER qué está obteniendo el sistema
     serie: (porSku.get(s.sku) ?? []).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio, fuente: l.fuente ?? null, sellerId: l.sellerId ?? null, vendedorLeido: l.vendedorLeido ?? null })),
-    ...resumenDeSerie(porSku.get(s.sku), { esCatalogo: s.esCatalogo === true || esUrlDeCatalogo(s.url), vendedorEsperado: s.vendedor }) }))
+    ...resumenDeSerie(porSku.get(s.sku), { esCatalogo: !s.itemIdReal && (s.esCatalogo === true || esUrlDeCatalogo(s.url)), vendedorEsperado: s.vendedor }) }))
   // CALIBRACIÓN: en lo propio la venta real se conoce. Cuánto del total ve el piso.
   let calibracion = null
   const propios = filas.filter((f) => f.esPropio && f.dias >= 3)
@@ -330,8 +361,9 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
     // de qué calidad es la lista: solo Full con publicación propia da un número
     // que se mueve con las ventas y se puede atribuir a un vendedor
     calidad: {
-      medibles: filas.filter((f) => !f.esPropio && f.esFull && !f.esCatalogo).length,
-      catalogo: filas.filter((f) => !f.esPropio && f.esCatalogo).length,
+      medibles: filas.filter((f) => !f.esPropio && f.esFull && (f.itemIdReal || !f.esCatalogo)).length,
+      catalogo: filas.filter((f) => !f.esPropio && f.esCatalogo && !f.itemIdReal).length,
+      resueltos: filas.filter((f) => !f.esPropio && f.itemIdReal).length,
       sinFull: filas.filter((f) => !f.esPropio && !f.esFull && !f.esCatalogo).length,
       cambiosDeVendedor: filas.reduce((a, f) => a + (f.cambiosDeVendedor ?? 0), 0),
       sinAtribuir: filas.reduce((a, f) => a + (f.sinAtribuir ?? 0), 0),

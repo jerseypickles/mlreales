@@ -28,6 +28,13 @@ const schema = new mongoose.Schema({
   // Full = inventario real en bodega de ML: ahí el número se mueve con las ventas
   // y un "+50" que cae a "+25" son ≥25 unidades. Sin Full puede ser nominal.
   esFull: { type: Boolean, default: null },
+  // 'fulfillment' | 'cross_docking' | 'xd_drop_off' | 'drop_off' — de la API
+  // oficial, no del badge de la página
+  logisticType: { type: String, default: null },
+  // La publicación PROPIA del vendedor dentro de un producto de catálogo. Es la
+  // que se lee: siempre muestra SU stock, gane o no la caja de compra.
+  itemIdReal: { type: String, default: null },
+  urlLectura: { type: String, default: null },
   sellerId: { type: String, default: null },
   cambiosDeVendedor: { type: Number, default: 0 },
   ultima: { type: { _id: false, fecha: Date, stock: Number, topado: Boolean, fuente: String, sellerId: String, vendedorLeido: String }, default: null },
