@@ -53,8 +53,13 @@ const cacheUltimas = new WeakMap()
 const ultimas = (f) => {
   let u = cacheUltimas.get(f)
   if (!u) {
-    const buenas = (f.serie ?? []).filter((l) => l.ok && l.stock != null)
-    u = { ahora: buenas.at(-1) ?? null, antes: buenas.at(-2) ?? null, cuantas: buenas.length }
+    // SOLO EL STOCK QUE VE EL COMPRADOR. Cuando la ficha no muestra el texto
+    // "(N disponibles)" se guarda igual el número de la telemetría, pero ese es
+    // el TOPE DE COMPRA por pedido, no el stock: pintarlo como "1 exacta" hacía
+    // creer que a un vendedor le queda una unidad cuando solo limita la compra.
+    const buenas = (f.serie ?? []).filter((l) => l.ok && l.stock != null && l.fuente !== 'telemetria')
+    u = { ahora: buenas.at(-1) ?? null, antes: buenas.at(-2) ?? null, cuantas: buenas.length,
+      topeDeCompra: (f.serie ?? []).filter((l) => l.ok && l.fuente === 'telemetria').length }
     u.escalon = escalonDe(u.ahora)
     cacheUltimas.set(f, u)
   }
@@ -79,14 +84,16 @@ const TarjetaVendedor = memo(function TarjetaVendedor({ f }) {
         <Medidor ahora={ahora} antes={antes} />
         {!f.esPropio && f.esFull && !f.esCatalogo ? <p className="sv-medible" title="Full: el número es inventario real en la bodega de Mercado Libre, así que se mueve con cada venta."><Flame size={13} aria-hidden="true" />stock real en bodega de ML</p> : null}
         {f.esCatalogo ? <p className="sv-catalogo" title="La ficha de catálogo muestra al ganador de la caja de compra, que rota entre vendedores. Solo se comparan lecturas del mismo vendedor.">
-          <Users size={13} aria-hidden="true" />ficha de catálogo{f.cambiosDeVendedor ? <b>· cambió de vendedor {f.cambiosDeVendedor} {f.cambiosDeVendedor === 1 ? 'vez' : 'veces'}</b> : ': el stock puede ser de otro vendedor'}</p> : null}
+          <Users size={13} aria-hidden="true" />ficha de catálogo{f.cambiosDeVendedor ? <b>· cambió de vendedor {f.cambiosDeVendedor} {f.cambiosDeVendedor === 1 ? 'vez' : 'veces'}</b>
+            : f.sinAtribuir ? <>· esperando identificar al vendedor</> : ': el stock puede ser de otro vendedor'}</p> : null}
         {fuerte ? <p className="sv-fuerza" title={f.fuerza === 'ciclo' ? 'Su stock bajó y después subió: vendió y volvió a comprar.' : 'Su stock subió sin que se viera la baja: la venta ocurrió dentro de un rango.'}>
           <Flame size={14} aria-hidden="true" /><b>{f.fuerza === 'ciclo' ? 'Fuerte: vendió y repuso' : 'Repone stock'}</b>
           <span>metió al menos {fmtNum(f.unidadesRepuestasPiso)} u{f.esFull ? ' a Full' : ''}{f.reposiciones > 1 ? ` en ${f.reposiciones} reposiciones` : ''}{f.ultimaReposicionEl ? ` · ${hace(f.ultimaReposicionEl)}` : ''}</span></p> : null}
         <div className="sv-pie">
           {vendio ? <span className="sv-venta"><TrendingDown size={14} aria-hidden="true" />vendió al menos <b>{fmtNum(f.unidadesPiso)}</b> en {f.dias} d</span>
             : cuantas >= 2 ? <span className="sv-quieto">sin baja visible en {f.dias} d</span>
-              : cuantas === 1 ? <span className="sv-quieto">1ª lectura · falta la 2ª para saber si vende</span> : <span className="sv-quieto">todavía sin leer</span>}
+              : cuantas === 1 ? <span className="sv-quieto">1ª lectura · falta la 2ª para saber si vende</span>
+                : ultimas(f).topeDeCompra ? <span className="sv-quieto">su ficha no muestra el stock</span> : <span className="sv-quieto">todavía sin leer</span>}
           {f.ajustes ? <span className="apr-chip apr-chip-mini" title="Subidas de 1-2 unidades: devoluciones u órdenes anuladas, no reposición">{f.ajustes} {f.ajustes === 1 ? 'devolución' : 'devoluciones'}</span> : null}
           {f.activo === false ? <span className="apr-chip apr-chip-aviso apr-chip-mini">{f.motivoBaja}</span> : <span className="sv-cuando"><Clock size={12} aria-hidden="true" />{dentroDe(f.proximaLecturaEl)}</span>}
         </div>

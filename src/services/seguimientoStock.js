@@ -75,8 +75,13 @@ export function elegirParaSeguir(productos, { max = POR_NICHO } = {}) {
     .slice(0, max)
 }
 
-// Quién ocupa un cupo sin poder dar señal: se cede a un candidato mejor.
-export const seguidoFlojo = (p) => p.esCatalogo === true || esUrlDeCatalogo(p.url)
+// Quién ocupa un cupo sin poder dar señal. Una ficha de catálogo TODAVÍA puede
+// servir si el mismo vendedor se queda con la caja de compra, y eso se sabe
+// recién cuando dos lecturas traen su identificación. Se cede el lugar solo de
+// quien ya demostró que rota, o del que lleva varias lecturas sin poder
+// atribuirse a nadie.
+export const seguidoFlojo = (p) =>
+  (p.esCatalogo === true || esUrlDeCatalogo(p.url)) && ((p.cambiosDeVendedor ?? 0) >= 1 || ((p.lecturas ?? 0) >= 4 && !p.sellerId))
 
 // Qué nichos se siguen: los que están en cotización o pedido, y los de
 // temporada con la ventana de compra abierta. Es donde una decisión de compra
@@ -98,7 +103,7 @@ async function nichosQueImportan() {
 export async function actualizarLista({ ahora = new Date() } = {}) {
   let agregados = 0, cedidos = 0
   for (const n of await nichosQueImportan()) {
-    const seguidos = await SeguimientoStock.find({ nichoId: n._id, activo: true, esPropio: false }).select('sku url esCatalogo esFull lecturas reposicionesVistas').lean()
+    const seguidos = await SeguimientoStock.find({ nichoId: n._id, activo: true, esPropio: false }).select('sku url esCatalogo esFull lecturas reposicionesVistas cambiosDeVendedor sellerId').lean()
     const ultimo = await Snapshot.findOne({ keyword: n.keyword }).sort({ fecha: -1 }).select('fecha').lean()
     if (!ultimo) continue
     // solo lo de arriba del listado: es donde un entrante compite de verdad
@@ -217,13 +222,16 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
     const deCatalogo = p.esCatalogo === true || esUrlDeCatalogo(p.url)
     const cambio = ventaEntreLecturas({ ...(p.ultima ?? {}), esCatalogo: deCatalogo }, { ...ultima, esCatalogo: deCatalogo })
     const repuso = cambio?.repuso === true && cambio.repuestasPiso >= REPOSICION_MIN
-    const roto = cambio?.otroVendedor === true
+    const rotoDeVerdad = cambio?.motivo === 'cambio'
     // "+50" con Full es bodega real: se lee semanal y se espera la caída a "+25"
     const baja = sinInfo >= 4 && !p.esPropio && !p.esFull && !(p.reposicionesVistas > 0) && !repuso
-    // un catálogo que rotó de vendedor dos veces no se va a poder atribuir nunca
-    const rota = roto && !p.esPropio && (p.cambiosDeVendedor ?? 0) + 1 >= 2
+    // un catálogo al que se le vio cambiar de vendedor dos veces no se va a poder
+    // atribuir nunca. Ojo: solo cuentan los cambios PROBADOS (dos lecturas con
+    // vendedor distinto), no las lecturas viejas que todavía no lo traen — si no,
+    // se daría de baja a toda la lista por no haber guardado el dato antes.
+    const rota = rotoDeVerdad && !p.esPropio && (p.cambiosDeVendedor ?? 0) + 1 >= 2
     await SeguimientoStock.updateOne({ _id: p._id }, { $set: { ultima, sinInfoSeguidas: sinInfo, fallosSeguidos: 0, ...(it.sellerId ? { sellerId: String(it.sellerId) } : {}), esCatalogo: deCatalogo,
-      proximaLecturaEl: new Date(+ahora + horasHastaLaProxima(ultima) * HORA), ...(baja ? { activo: false, motivoBaja: 'siempre en "+50": no deja ver ventas' } : rota ? { activo: false, motivoBaja: 'la caja de compra rota entre vendedores: no se puede atribuir' } : {}) }, $inc: { lecturas: 1, ...(repuso ? { reposicionesVistas: 1 } : {}), ...(roto ? { cambiosDeVendedor: 1 } : {}) } })
+      proximaLecturaEl: new Date(+ahora + horasHastaLaProxima(ultima) * HORA), ...(baja ? { activo: false, motivoBaja: 'siempre en "+50": no deja ver ventas' } : rota ? { activo: false, motivoBaja: 'la caja de compra rota entre vendedores: no se puede atribuir' } : {}) }, $inc: { lecturas: 1, ...(repuso ? { reposicionesVistas: 1 } : {}), ...(rotoDeVerdad ? { cambiosDeVendedor: 1 } : {}) } })
     if (baja || rota) bajas++
     leidas++
   }
@@ -245,13 +253,15 @@ const REPOSICION_MIN = 3
 export function resumenDeSerie(lecturas, { esCatalogo = false } = {}) {
   const serie = (lecturas ?? []).filter((l) => l.ok !== false && Number.isFinite(l.stock)).sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha))
   let unidades = 0, reposiciones = 0, exactas = 0, tramos = 0, ajustes = 0, ciclos = 0, repuestas = 0, desdeLaUltima = 0, seAgoto = false, ultimaReposicionEl = null
-  let cambiosDeVendedor = 0
+  let cambiosDeVendedor = 0, sinAtribuir = 0
   for (let i = 1; i < serie.length; i++) {
     const v = ventaEntreLecturas({ ...serie[i - 1], esCatalogo }, { ...serie[i], esCatalogo })
     if (v?.otroVendedor) {
-      // el stock leído era de otro vendedor: el tramo no se puede comparar, y lo
+      // el stock leído puede ser de otro vendedor: el tramo no se compara, y lo
       // acumulado antes tampoco encadena con lo que venga después
-      cambiosDeVendedor++; desdeLaUltima = 0; seAgoto = false
+      if (v.motivo === 'cambio') cambiosDeVendedor++
+      else sinAtribuir++
+      desdeLaUltima = 0; seAgoto = false
       continue
     }
     if (!v) continue
@@ -271,7 +281,7 @@ export function resumenDeSerie(lecturas, { esCatalogo = false } = {}) {
   const dias = serie.length > 1 ? (+new Date(serie.at(-1).fecha) - +new Date(serie[0].fecha)) / DIA : 0
   const fuerza = ciclos ? 'ciclo' : reposiciones ? 'repone' : unidades > 0 ? 'vende' : tramos ? 'quieto' : null
   return { lecturas: serie.length, dias: Math.round(dias * 10) / 10, unidadesPiso: unidades, unidadesExactas: exactas, reposiciones, tramosMedidos: tramos,
-    ajustes, ciclos, unidadesRepuestasPiso: repuestas, ultimaReposicionEl, fuerza, cambiosDeVendedor, esCatalogo,
+    ajustes, ciclos, unidadesRepuestasPiso: repuestas, ultimaReposicionEl, fuerza, cambiosDeVendedor, sinAtribuir, esCatalogo,
     porSemana: dias >= 2 ? Math.round((unidades / dias) * 7 * 10) / 10 : null, stockAhora: serie.at(-1)?.stock ?? null, topadoAhora: serie.at(-1)?.topado ?? null }
 }
 
@@ -287,7 +297,7 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
   const filas = seguidos.map((s) => ({ esFull: s.esFull ?? full.get(s.sku) ?? null, sku: s.sku, url: s.url, titulo: s.titulo, imagen: s.imagen, vendedor: s.vendedor, keyword: s.keyword, esPropio: s.esPropio,
     activo: s.activo, motivoBaja: s.motivoBaja, proximaLecturaEl: s.proximaLecturaEl, agregadoEl: s.agregadoEl, itemIdPropio: s.itemIdPropio,
     // las lecturas tal como llegaron, para poder VER qué está obteniendo el sistema
-    serie: (porSku.get(s.sku) ?? []).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio, sellerId: l.sellerId ?? null, vendedorLeido: l.vendedorLeido ?? null })),
+    serie: (porSku.get(s.sku) ?? []).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio, fuente: l.fuente ?? null, sellerId: l.sellerId ?? null, vendedorLeido: l.vendedorLeido ?? null })),
     ...resumenDeSerie(porSku.get(s.sku), { esCatalogo: s.esCatalogo === true || esUrlDeCatalogo(s.url) }) }))
   // CALIBRACIÓN: en lo propio la venta real se conoce. Cuánto del total ve el piso.
   let calibracion = null
@@ -316,6 +326,8 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
       catalogo: filas.filter((f) => !f.esPropio && f.esCatalogo).length,
       sinFull: filas.filter((f) => !f.esPropio && !f.esFull && !f.esCatalogo).length,
       cambiosDeVendedor: filas.reduce((a, f) => a + (f.cambiosDeVendedor ?? 0), 0),
+      sinAtribuir: filas.reduce((a, f) => a + (f.sinAtribuir ?? 0), 0),
+      atribuidas: filas.reduce((a, f) => a + (f.serie ?? []).filter((l) => l.sellerId).length, 0),
     },
     catalogo: { seguidos: filas.filter((f) => !f.esPropio && f.esCatalogo).length, cambiosDeVendedor: filas.reduce((a, f) => a + (f.cambiosDeVendedor ?? 0), 0) },
     pendientesAhora: seguidos.filter((s) => s.activo && +new Date(s.proximaLecturaEl) <= +ahora).length,

@@ -76,8 +76,10 @@ test('fuerza: una devolución que sube el stock 1-2 unidades NO es reponer', () 
 test('catálogo: sin saber de quién es el stock, el tramo no se compara', () => {
   const l = (dia, stock, topado = false, sellerId = null) => ({ fecha: new Date(`2026-09-${dia}T12:00:00Z`), stock, topado, fuente: 'texto', sellerId })
   // 3 → "+25" en una página de catálogo, sin vendedor identificado: no dice nada
+  // no se compara, pero se anota como "todavía sin atribuir", no como cambio de
+  // vendedor probado: lo segundo condena a la ficha, lo primero solo pide esperar
   const ciego = resumenDeSerie([l('17', 3), l('18', 26, true)], { esCatalogo: true })
-  assert.deepEqual([ciego.fuerza, ciego.reposiciones, ciego.cambiosDeVendedor], [null, 0, 1])
+  assert.deepEqual([ciego.fuerza, ciego.reposiciones, ciego.cambiosDeVendedor, ciego.sinAtribuir], [null, 0, 0, 1])
   // el mismo cambio en la publicación propia del vendedor sí cuenta
   const propia = resumenDeSerie([l('17', 3), l('18', 26, true)], { esCatalogo: false })
   assert.deepEqual([propia.fuerza, propia.reposiciones], ['repone', 1])
@@ -86,7 +88,7 @@ test('catálogo: sin saber de quién es el stock, el tramo no se compara', () =>
   assert.deepEqual([mismo.fuerza, mismo.reposiciones, mismo.cambiosDeVendedor], ['repone', 1, 0])
   // y si cambió el vendedor, no: aunque sea una publicación normal
   const otro = resumenDeSerie([l('17', 3, false, '204808902'), l('18', 26, true, '777')], { esCatalogo: false })
-  assert.deepEqual([otro.fuerza, otro.reposiciones, otro.cambiosDeVendedor], [null, 0, 1])
+  assert.deepEqual([otro.fuerza, otro.reposiciones, otro.cambiosDeVendedor, otro.sinAtribuir], [null, 0, 1, 0])
 })
 
 test('catálogo: el cambio de vendedor corta la cadena, no la atraviesa', () => {
@@ -131,6 +133,12 @@ test('sin Full, un "+50" no se sigue: no se mueve y no hay bodega detrás', () =
     p({ sku: 'MEDIO', posicion: 8, vendedor: 'Dos', stockFuente: 'texto', stock: 26, stockTopado: true }),
   ], { max: 3 })
   assert.deepEqual(elegidos.map((x) => x.sku), ['MEDIO'])
-  assert.equal(seguidoFlojo({ url: 'https://www.mercadolibre.cl/p/MLC1' }), true)
-  assert.equal(seguidoFlojo({ url: 'https://articulo.mercadolibre.cl/MLC-1-x' }), false)
+  // un catálogo recién agregado NO cede el cupo: todavía puede servir si el mismo
+  // vendedor se queda con la caja de compra. Cede el que ya demostró que rota, o
+  // el que lleva cuatro lecturas sin que se le pueda poner nombre.
+  assert.equal(seguidoFlojo({ url: 'https://www.mercadolibre.cl/p/MLC1', lecturas: 2 }), false)
+  assert.equal(seguidoFlojo({ url: 'https://www.mercadolibre.cl/p/MLC1', cambiosDeVendedor: 1 }), true)
+  assert.equal(seguidoFlojo({ url: 'https://www.mercadolibre.cl/p/MLC1', lecturas: 4 }), true)
+  assert.equal(seguidoFlojo({ url: 'https://www.mercadolibre.cl/p/MLC1', lecturas: 4, sellerId: '99' }), false)
+  assert.equal(seguidoFlojo({ url: 'https://articulo.mercadolibre.cl/MLC-1-x', cambiosDeVendedor: 9 }), false)
 })
