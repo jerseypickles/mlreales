@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo, seguidoFlojo, esMedible, quienSeQueda, movimientoDelNicho } from '../src/services/seguimientoStock.js'
+import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo, seguidoFlojo, esMedible, quienSeQueda, movimientoDelNicho, fichaDe } from '../src/services/seguimientoStock.js'
 
 test('se lee más seguido donde más se ve: "+50" semanal, rangos diario, número exacto cada 12 h', () => {
   assert.equal(horasHastaLaProxima({ stock: 51, topado: true }), 168)
@@ -242,4 +242,14 @@ test('a igualdad se queda el de más arriba en el listado orgánico, y nunca se 
     { sku: 'top6', url: u, esFull: false, posicion: 6 },
   ], { max: 3 })
   assert.deepEqual(seQuedan.map((p) => p.sku), ['vendio', 'full23', 'full26'])
+})
+
+test('una publicación resuelta se reconoce aunque ML responda desde la ficha de catálogo filtrada por su oferta', () => {
+  // caso real del 19-sep: se pidió articulo…/MLC-1571504417 y volvió esto
+  const ficha = { sku: 'MLC28075426', url: 'https://www.mercadolibre.cl/sombrilla/p/MLC28075426?pdp_filters=item_id:MLC1571504417', stockQuantity: 11 }
+  const p = { sku: 'MLC28075426', itemIdReal: 'MLC1571504417', url: 'https://www.mercadolibre.cl/sombrilla/p/MLC28075426' }
+  assert.equal(fichaDe(p, [ficha]), ficha)
+  // la misma ficha de catálogo filtrada por OTRA oferta no es de este vendedor
+  assert.equal(fichaDe({ ...p, itemIdReal: 'MLC15715044' }, [ficha]), undefined)
+  assert.equal(fichaDe({ ...p, itemIdReal: 'MLC999' }, [{ ...ficha, url: ficha.url.replace('MLC1571504417', 'MLC888') }]), undefined)
 })

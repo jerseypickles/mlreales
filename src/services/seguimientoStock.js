@@ -258,6 +258,25 @@ export async function gastoDelMes({ ahora = new Date() } = {}) {
   return { mesUsd: m?.usd ?? 0, lecturasMes: m?.lecturas ?? 0, ultimas24hUsd: h?.usd ?? 0 }
 }
 
+// Pura. De las fichas que volvieron, cuál es la de esta publicación (o null).
+export function fichaDe(p, items) {
+  // la ficha devuelve en `sku` el id de la publicación que realmente pintó: si
+  // no es la que pedimos, la lectura no es de este vendedor y no sirve
+  const idEsperado = (p.itemIdReal ?? p.sku ?? '').replace(/^MLC/i, '')
+  // Una publicación resuelta puede volver con otro `sku` (ML redirige la URL
+  // del vendedor a la ficha de catálogo). Si es SU ficha de catálogo y el
+  // vendedor que la página muestra es el esperado, el stock a la vista es el
+  // suyo: es la misma pregunta que responde el id, contestada por otro lado.
+  // Confirmado el 19-sep con una ficha real: articulo…/MLC-1571504417 responde
+  // desde …/p/MLC28075426?pdp_filters=item_id:MLC1571504417 con sku MLC28075426.
+  // El filtro de la URL nombra la publicación pedida: esa es la prueba directa.
+  const filtrada = new RegExp(`item_id(:|%3A)MLC${idEsperado}(\\D|$)`, 'i')
+  return items.find((i) => String(i.sku ?? '').replace(/^MLC/i, '') === idEsperado)
+    ?? (p.itemIdReal
+      ? items.find((i) => filtrada.test(String(i.url ?? ''))) ?? items.find((i) => p.sellerId && String(i.sellerId ?? '') === String(p.sellerId) && catalogoDeUrl(i.url) === catalogoDeUrl(p.url))
+      : items.find((i) => i.url && (i.url === p.url || i.url.includes(p.sku))))
+}
+
 // Lee lo que toca, hasta donde alcanza la plata. Dos frenos: el del mes y uno
 // diario, para que un día malo no se coma la semana.
 export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle } = {}) {
@@ -293,22 +312,26 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
   const paraReleer = relecturas.slice(0, Math.max(Math.ceil(libre / 2), libre - resto.length))
   const pendientes = [...propios, ...paraReleer, ...resto.slice(0, libre - paraReleer.length)].slice(0, cupo)
   if (!pendientes.length) return { leidas: 0, motivo: 'nada pendiente', gasto }
-  const { items, costoUsd } = await leer(pendientes.map((p) => p.urlLectura ?? p.url))
+  const { items, costoUsd: costoPedido, fallidos = [] } = await leer(pendientes.map((p) => p.urlLectura ?? p.url))
+  // SI EL PROVEEDOR NO ENTREGÓ LA PÁGINA, EL FALLO NO ES DE LA PUBLICACIÓN. El
+  // 19-sep Zyte quedó sin crédito: `detallesDeMl` se traga el error de cada URL,
+  // así que la pasada "funcionó" con 21 fichas vacías, las cobró y le anotó un
+  // fallo a cada una. Tres pasadas así y la lista entera se daba de baja sola por
+  // "la ficha dejó de responder". Una petición que Zyte no sirvió no se cobra ni
+  // cuenta como fallo; solo cuenta la página que SÍ llegó y no era una ficha.
+  const NO_ES_FICHA = 'la extraccion no reconocio una ficha de producto'
+  const caidas = new Map(fallidos.filter((f) => f.motivo !== NO_ES_FICHA).map((f) => [f.url, f.motivo]))
+  if (caidas.size === pendientes.length) return { leidas: 0, motivo: `el proveedor no respondió: ${[...caidas.values()][0]}`.slice(0, 160), gasto }
+  const costoUsd = costoPedido * (1 - caidas.size / pendientes.length)
   await registrarGasto(null, costoUsd, 'zyte')
-  const cadaUna = costoUsd / pendientes.length
+  const cadaUna = costoUsd / (pendientes.length - caidas.size)
   let leidas = 0, bajas = 0
   for (const p of pendientes) {
-    // la ficha devuelve en `sku` el id de la publicación que realmente pintó: si
-    // no es la que pedimos, la lectura no es de este vendedor y no sirve
-    const idEsperado = (p.itemIdReal ?? p.sku ?? '').replace(/^MLC/i, '')
-    // Una publicación resuelta puede volver con otro `sku` (ML redirige la URL
-    // del vendedor a la ficha de catálogo). Si es SU ficha de catálogo y el
-    // vendedor que la página muestra es el esperado, el stock a la vista es el
-    // suyo: es la misma pregunta que responde el id, contestada por otro lado.
-    const it = items.find((i) => String(i.sku ?? '').replace(/^MLC/i, '') === idEsperado)
-      ?? (p.itemIdReal
-        ? items.find((i) => p.sellerId && String(i.sellerId ?? '') === String(p.sellerId) && catalogoDeUrl(i.url) === catalogoDeUrl(p.url))
-        : items.find((i) => i.url && (i.url === p.url || i.url.includes(p.sku))))
+    if (caidas.has(p.urlLectura ?? p.url)) {
+      await SeguimientoStock.updateOne({ _id: p._id }, { $set: { proximaLecturaEl: new Date(+ahora + 2 * HORA) } })
+      continue
+    }
+    const it = fichaDe(p, items)
     if (!it || !Number.isFinite(it.stockQuantity)) {
       // pagada igual. Tres fallos seguidos = la publicación ya no existe.
       // Se anota POR QUÉ: el 19-sep fallaba el 45% de las resueltas y no había
