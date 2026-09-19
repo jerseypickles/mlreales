@@ -67,6 +67,8 @@ const lecturaSchema = new mongoose.Schema({
   // de quién era el stock leído (ganador de la caja de compra en catálogo)
   sellerId: { type: String, default: null },
   vendedorLeido: { type: String, default: null },
+  // por qué no sirvió una lectura pagada (solo con ok:false)
+  motivoFallo: { type: String, default: null },
   costoUsd: { type: Number, default: 0 },
 }, { versionKey: false })
 lecturaSchema.index({ sku: 1, fecha: -1 })

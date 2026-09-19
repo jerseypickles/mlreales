@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, CircleDashed, Clock, Flame, PackageX, RefreshCw, TrendingDown, TrendingUp, Users, Wallet } from 'lucide-react'
+import { Activity, AlertTriangle, CheckCircle2, CircleDashed, Pause, Clock, Flame, PackageX, RefreshCw, TrendingDown, TrendingUp, Users, Wallet } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura } from './ui.jsx'
 import { fmtFecha, fmtNum, fmtPrecio } from '../lib/formato.js'
@@ -121,36 +121,56 @@ function Visibilidad({ publicaciones, alto = 12 }) {
   )
 }
 
-const FILTROS_STOCK = [
-  ['todos', 'Todos', () => true],
-  ['fuertes', 'Venden y reponen', (n) => n.fuertes > 0 || n.probables > 0],
-  ['ventas', 'Con ventas vistas', (n) => n.vendiendo > 0],
-  ['visibles', 'Dejan ver su stock', (n) => n.publicaciones.some(dejaVer)],
-  ['sinleer', 'Aún sin leer', (n) => n.publicaciones.every((f) => ultimas(f).escalon === -1)],
-]
+// LA PREGUNTA ES DEL NICHO, NO DEL PRODUCTO. El importador, 19-sep: "lo que quiero
+// saber es si el nicho mueve". Las publicaciones son sensores: pocas y bien
+// leídas. Cada nicho responde una de tres cosas, y eso es lo que se ve primero.
+const VEREDICTOS = {
+  mueve: { nombre: 'Se mueve', plural: 'Se mueven', Icono: Activity, ayuda: 'al menos un sensor bajó su stock o repuso' },
+  quieto: { nombre: 'Quieto', plural: 'Quietos', Icono: Pause, ayuda: 'dos sensores con tres días de lecturas y ninguna baja' },
+  'sin-datos': { nombre: 'Midiendo', plural: 'Midiendo', Icono: CircleDashed, ayuda: 'todavía faltan lecturas para poder decir algo' },
+}
+const cacheNicho = new WeakMap()
+const lecturaDelNicho = (n) => {
+  let l = cacheNicho.get(n)
+  if (!l) {
+    const sensores = n.publicaciones.filter((f) => f.activo !== false)
+    l = { mov: n.movimiento ?? (n.vendiendo || n.fuertes ? 'mueve' : 'sin-datos'), sensores,
+      conDos: sensores.filter((f) => ultimas(f).cuantas >= 2).length,
+      unidades: n.publicaciones.reduce((a, f) => a + (f.unidadesPiso ?? 0), 0),
+      dias: Math.max(0, ...n.publicaciones.map((f) => f.dias ?? 0)),
+      vendieron: n.publicaciones.filter((f) => f.unidadesPiso > 0).length,
+      fueraDeLista: n.publicaciones.length - sensores.length }
+    cacheNicho.set(n, l)
+  }
+  return l
+}
+const FILTROS_STOCK = [['todos', 'Todos'], ['mueve', 'Se mueven'], ['quieto', 'Quietos'], ['sin-datos', 'Midiendo']]
+const fmtDias = (d) => `${String(Math.round(d * 10) / 10).replace('.', ',')} ${d === 1 ? 'día' : 'días'}`
 
 // Un nicho de la grilla. Memoizado: escribir en el buscador o abrir OTRO nicho no
-// vuelve a dibujar las 60 tarjetas con sus fotos y medidores.
+// vuelve a dibujar las tarjetas con sus fotos y medidores.
 const TarjetaNicho = memo(function TarjetaNicho({ n, abierto, alAlternar }) {
-  const visiblesN = n.publicaciones.filter(dejaVer).length
-  const leidas = n.publicaciones.filter((f) => ultimas(f).escalon !== -1).length
+  const l = lecturaDelNicho(n)
+  const v = VEREDICTOS[l.mov]
+  const total = l.sensores.length || 1
   return (
-    <div className={`sn${abierto ? ' sn-abierto' : ''}${n.vendiendo ? ' sn-vende' : ''}${n.fuertes ? ' sn-fuerte' : ''}`}>
+    <div className={`sn nv-${l.mov}${abierto ? ' sn-abierto' : ''}${n.fuertes ? ' sn-fuerte' : ''}`}>
       <button type="button" className="sn-cab" aria-expanded={abierto} onClick={() => alAlternar(n.keyword)}>
         <span className="sn-titulo"><strong>{n.keyword}</strong>
-          {n.fuertes ? <span className="apr-chip apr-chip-fuerte"><Flame size={13} aria-hidden="true" />{n.fuertes} {n.fuertes === 1 ? 'vende y repone' : 'venden y reponen'} · ≥{fmtNum(n.unidadesRepuestasPiso)} u repuestas</span>
-            : n.probables ? <span className="apr-chip apr-chip-mini" title="Movimiento del mismo vendedor, pero solo una de las dos lecturas lo identificó"><Flame size={13} aria-hidden="true" />{n.probables} por confirmar</span>
-            : n.vendiendo ? <span className="apr-chip apr-chip-bien"><TrendingDown size={13} aria-hidden="true" />{n.vendiendo} vendiendo · ≥{fmtNum(n.unidadesPisoSemana)} u/sem</span>
-            : !leidas ? <span className="apr-chip"><CircleDashed size={13} aria-hidden="true" />en fila para leer</span>
-              : visiblesN ? <span className="apr-chip apr-chip-mini-azul">{visiblesN} de {n.publicaciones.length} dejan ver stock</span>
-                : <span className="apr-chip">todos en “+50”: no se ve</span>}
-          {n.enCatalogo === n.publicaciones.length && n.enCatalogo ? <span className="apr-chip apr-chip-mini" title="Todas las fichas de este nicho son de catálogo: el stock leído puede ser de otro vendedor"><Users size={12} aria-hidden="true" />solo catálogo</span> : null}</span>
-        <Visibilidad publicaciones={n.publicaciones} alto={8} />
-        <span className="sn-fotos">{n.publicaciones.map((f) => (
-          <span key={f.sku} className={`sn-mini${f.fuerza === 'ciclo' || f.fuerza === 'repone' ? ' sn-mini-fuerte' : ''}`}>{f.imagen ? <Miniatura src={f.imagen} lado={44} /> : <span className="mv-sinfoto" />}<Medidor ahora={ultimas(f).ahora} antes={ultimas(f).antes} compacto /></span>
+          <span className={`nv-sello nv-sello-${l.mov}`} title={v.ayuda}><v.Icono size={14} aria-hidden="true" />{v.nombre}</span></span>
+        {l.mov === 'mueve' ? <span className="nv-dato"><span><b>≥{fmtNum(l.unidades)}</b> {l.unidades === 1 ? 'unidad vendida' : 'unidades vendidas'} en {fmtDias(l.dias)}</span>
+            <small>{l.vendieron} de {n.publicaciones.length} sensores vendieron{n.unidadesPisoSemana ? ` · ritmo ≥${fmtNum(n.unidadesPisoSemana)} u/sem` : ''}</small>
+            {n.fuertes ? <small className="nv-fuerte"><Flame size={12} aria-hidden="true" />{n.fuertes} {n.fuertes === 1 ? 'vendió y repuso' : 'vendieron y repusieron'} · ≥{fmtNum(n.unidadesRepuestasPiso)} u repuestas</small>
+              : n.probables ? <small title="Movimiento del mismo vendedor, pero solo una de las dos lecturas lo identificó">{n.probables} por confirmar de quién es el stock</small> : null}</span>
+          : l.mov === 'quieto' ? <span className="nv-dato"><span><b>0</b> bajas de stock en {fmtDias(l.dias)}</span><small>{l.conDos} sensores leídos más de una vez y ninguno se movió</small></span>
+            : <span className="nv-dato nv-dato-espera"><span className="nv-avance" role="img" aria-label={`${l.conDos} de ${total} sensores con segunda lectura`}><i style={{ width: `${(l.conDos / total) * 100}%` }} /></span>
+              <small>{l.conDos} de {total} sensores con 2ª lectura{l.dias ? ` · ${fmtDias(l.dias)} mirando` : ''}. Hacen falta dos con tres días para decir “quieto”.</small></span>}
+        <span className="sn-fotos nv-sensores">{l.sensores.map((f) => (
+          <span key={f.sku} className={`sn-mini${f.fuerza === 'ciclo' || f.fuerza === 'repone' ? ' sn-mini-fuerte' : ''}${f.unidadesPiso > 0 ? ' sn-mini-vendio' : ''}`}>{f.imagen ? <Miniatura src={f.imagen} lado={56} /> : <span className="mv-sinfoto" />}<Medidor ahora={ultimas(f).ahora} antes={ultimas(f).antes} compacto /></span>
         ))}</span>
+        {l.fueraDeLista ? <small className="nv-fuera">+{l.fueraDeLista} que ya no se {l.fueraDeLista === 1 ? 'lee' : 'leen'} (su historia sigue contando)</small> : null}
       </button>
-      {abierto ? <div className="sv-grilla sn-detalle">{n.publicaciones.map((f) => <TarjetaVendedor key={f.sku} f={f} />)}</div> : null}
+      {abierto ? <div className="sv-grilla sn-detalle">{[...n.publicaciones].sort((a, b) => Number(a.activo === false) - Number(b.activo === false)).map((f) => <TarjetaVendedor key={f.sku} f={f} />)}</div> : null}
     </div>
   )
 })
@@ -171,10 +191,13 @@ export function StockCompetidores() {
   }).catch((e) => setError(e.message)), [])
   const alAlternar = useCallback((k) => setAbierto((a) => (a === k ? null : k)), [])
   const ordenados = useMemo(() => {
-    const valor = (n) => (n.fuertes ?? 0) * 1e6 + (n.probables ?? 0) * 1e5 + n.unidadesPisoSemana * 1000 + n.vendiendo * 100 + n.publicaciones.filter(dejaVer).length
+    // primero lo que se mueve (y dentro, lo más fuerte); después lo medido y
+    // quieto; al final lo que todavía se está midiendo, de más a menos avanzado
+    const rango = { mueve: 2, quieto: 1, 'sin-datos': 0 }
+    const valor = (n) => { const l = lecturaDelNicho(n); return rango[l.mov] * 1e9 + (n.fuertes ?? 0) * 1e7 + l.unidades * 1e4 + l.conDos * 100 + l.sensores.filter(dejaVer).length }
     return (d?.nichos ?? []).map((n) => [valor(n), n]).sort((a, b) => b[0] - a[0]).map(([, n]) => n)
   }, [d])
-  const conteos = useMemo(() => Object.fromEntries(FILTROS_STOCK.map(([id, , f]) => [id, (d?.nichos ?? []).filter(f).length])), [d])
+  const conteos = useMemo(() => Object.fromEntries(FILTROS_STOCK.map(([id]) => [id, (d?.nichos ?? []).filter((n) => id === 'todos' || lecturaDelNicho(n).mov === id).length])), [d])
   useEffect(() => {
     cargar()
     const t = setInterval(() => { if (document.visibilityState === 'visible') cargar() }, 60_000)
@@ -184,41 +207,50 @@ export function StockCompetidores() {
   if (!d) return <Cargando texto="Leyendo el seguimiento de stock…" />
   const pct = Math.min(100, (d.gasto.mesUsd / d.topeUsdMes) * 100)
   const cal = d.calibracion
-  const todas = d.nichos.flatMap((n) => n.publicaciones)
+  // lo que se está leyendo hoy: los que salieron de la lista no cuentan acá
+  const todas = d.nichos.flatMap((n) => n.publicaciones).filter((f) => f.activo !== false)
   const visibles = todas.filter(dejaVer).length
-  const fn = FILTROS_STOCK.find(([id]) => id === filtro)[2]
-  const nichos = ordenados.filter(fn).filter((n) => !busca.trim() || n.keyword.includes(busca.trim().toLowerCase()))
+  const nichos = ordenados.filter((n) => filtro === 'todos' || lecturaDelNicho(n).mov === filtro).filter((n) => !busca.trim() || n.keyword.includes(busca.trim().toLowerCase()))
   return (
     <>
       <section className="apr-seccion">
-        <div className="apr-seccion-cabeza"><h3>Cómo leer el stock de un competidor</h3>
-          <p>Mercado Libre no muestra el número: muestra un escalón. Cuando un vendedor vende, su marcador se corre hacia la derecha; cuando repone, salta a la izquierda. De “+50” no se ve nada; en “1-5” cada baja es una venta contada. <strong>Bajar y después subir es la señal fuerte:</strong> ese vendedor volvió a meter plata en el producto.</p></div>
-        <div className="mg-leyenda">{ESCALONES.map((e, i) => (
-          <div key={e.id} className="mg-leyenda-paso"><span className={`mg-leyenda-barra mg-${e.id}`} /><strong>{e.etiqueta === '0' ? 'agotado' : e.etiqueta}</strong><small>{e.ayuda}</small>{i < 5 ? <i aria-hidden="true">→</i> : null}</div>
-        ))}</div>
+        <div className="apr-seccion-cabeza"><h3>¿Se mueve el nicho?</h3>
+          <p>Cada nicho se mide con pocos sensores —hasta 3 publicaciones, las que mejor dejan ver su stock— leídos seguido. Basta que uno baje para saber que el nicho vende; para decir “quieto” hacen falta dos sensores mirados tres días sin una sola baja.</p></div>
+        <div className="nv-resumen" role="group" aria-label="Filtrar nichos por veredicto">
+          {FILTROS_STOCK.filter(([id]) => id !== 'todos').map(([id]) => { const v = VEREDICTOS[id]; return (
+            <button key={id} type="button" className={`nv-tesela nv-tesela-${id}${filtro === id ? ' activo' : ''}`} aria-pressed={filtro === id} onClick={() => setFiltro(filtro === id ? 'todos' : id)} title={v.ayuda}>
+              <span className="nv-tesela-cab"><v.Icono size={16} aria-hidden="true" />{v.plural}</span>
+              <b>{fmtNum(conteos[id])}</b><small>de {fmtNum(conteos.todos)} nichos · {v.ayuda}</small></button>) })}
+        </div>
+        <span className="nv-barra" role="img" aria-label={`${conteos.mueve} nichos se mueven, ${conteos.quieto} quietos y ${conteos['sin-datos']} midiéndose`}>
+          {['mueve', 'quieto', 'sin-datos'].map((id) => conteos[id] ? <i key={id} className={`nv-barra-${id}`} style={{ width: `${(conteos[id] / (conteos.todos || 1)) * 100}%` }} /> : null)}</span>
+        <div className="apr-controles">
+          <label className="apr-buscar"><PackageX size={14} aria-hidden="true" /><span className="apr-solo-lector">Buscar nicho</span>
+            <input type="search" placeholder="Buscar nicho…" value={busca} onChange={(e) => setBusca(e.target.value)} /></label>
+          {filtro !== 'todos' ? <button type="button" className="nv-quitar" onClick={() => setFiltro('todos')}>Ver los {fmtNum(conteos.todos)}</button> : null}
+        </div>
+        {!nichos.length ? <p className="apr-vacio">Ningún nicho con ese filtro todavía.</p> : <div className="sn-grilla">{nichos.map((n) => <TarjetaNicho key={n.keyword} n={n} abierto={abierto === n.keyword} alAlternar={alAlternar} />)}</div>}
       </section>
 
       <section className="apr-seccion">
+        <div className="apr-seccion-cabeza"><h3>Cuánto cuesta y cuánto alcanza a ver</h3></div>
         <div className="apr-fuentes apr-fuentes-auto">
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><Wallet size={17} aria-hidden="true" /></span><h3>Gasto del mes</h3></div>
             <p className="apr-cifra">US${d.gasto.mesUsd.toFixed(2)}<small> de US${d.topeUsdMes}</small></p>
             <div className="apr-medidor"><span style={{ width: `${Math.max(2, pct)}%` }} /></div>
             <p className="apr-fuente-detalle">{fmtNum(d.gasto.lecturasMes)} lecturas · el tope es fijo</p></article>
-          <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><PackageX size={17} aria-hidden="true" /></span><h3>Cuánto se deja ver</h3></div>
-            <p className="apr-cifra">{fmtNum(visibles)}<small> de {fmtNum(todas.length)} vendedores</small></p>
-            <Visibilidad publicaciones={todas} />
-            <p className="apr-fuente-detalle">verde = número exacto · azul = rango visible · gris = “+50” · rayado = sin leer
-              {d.calidad ? <><br /><span className="apr-ojo"><b>{fmtNum(d.calidad.medibles)}</b> son Full con publicación propia: los únicos cuyo número es bodega real y se puede atribuir. {fmtNum(d.calidad.catalogo)} son fichas de catálogo y {fmtNum(d.calidad.sinFull)} no tienen Full.</span></> : null}</p></article>
-          <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><TrendingDown size={17} aria-hidden="true" /></span><h3>Ventas vistas</h3></div>
-            <p className="apr-cifra">{fmtNum(d.nichos.reduce((a, n) => a + n.vendiendo, 0))}<small> vendedores con baja de stock</small></p>
-            <p className="apr-fuente-detalle">{fmtNum(d.pendientesAhora ?? 0)} esperando lectura. Las ventas aparecen desde la 2ª lectura de cada vendedor.</p></article>
+          <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><CheckCircle2 size={17} aria-hidden="true" /></span><h3>Cuánto ve el método</h3></div>
+            <p className="apr-cifra">{cal?.pctVisto != null ? `${cal.pctVisto}%` : '—'}<small>{cal?.pctVisto != null ? ' de tus ventas reales' : ''}</small></p>
+            <p className="apr-fuente-detalle">{cal ? `En ${cal.productos} publicaciones tuyas vio ${fmtNum(cal.unidadesVistas)} de ${fmtNum(cal.unidadesReales)} unidades` : 'Se mide leyendo tus publicaciones desde afuera. Necesita unos días.'}</p></article>
           <article className="apr-fuente apr-fuente-fuerte"><div className="apr-cabeza"><span className="apr-icono"><Flame size={17} aria-hidden="true" /></span><h3>Venden y reponen</h3></div>
             <p className="apr-cifra">{fmtNum(d.nichos.reduce((a, n) => a + (n.fuertes ?? 0), 0))}<small> vendedores fuertes</small></p>
             <p className="apr-fuente-detalle">{d.nichos.some((n) => n.fuertes) ? `Repusieron al menos ${fmtNum(d.nichos.reduce((a, n) => a + (n.unidadesRepuestasPiso ?? 0), 0))} unidades en ${fmtNum(d.nichos.filter((n) => n.fuertes).length)} nichos.` : 'Stock que baja y después sube: nadie repone lo que no se vende. Aparece desde la 3ª lectura.'}
               {d.catalogo?.seguidos ? <><br /><span className="apr-ojo">{fmtNum(d.catalogo.seguidos)} de los seguidos son fichas de catálogo: ahí ML muestra al ganador de la caja de compra, así que solo se comparan lecturas del mismo vendedor{d.catalogo.cambiosDeVendedor ? ` (${fmtNum(d.catalogo.cambiosDeVendedor)} cambios descartados)` : ''}.</span></> : null}</p></article>
-          <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><CheckCircle2 size={17} aria-hidden="true" /></span><h3>Cuánto ve el método</h3></div>
-            <p className="apr-cifra">{cal?.pctVisto != null ? `${cal.pctVisto}%` : '—'}<small>{cal?.pctVisto != null ? ' de tus ventas reales' : ''}</small></p>
-            <p className="apr-fuente-detalle">{cal ? `En ${cal.productos} publicaciones tuyas vio ${fmtNum(cal.unidadesVistas)} de ${fmtNum(cal.unidadesReales)} unidades` : 'Se mide leyendo tus publicaciones desde afuera. Necesita unos días.'}</p></article>
+          <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><PackageX size={17} aria-hidden="true" /></span><h3>Cuánto se deja ver</h3></div>
+            <p className="apr-cifra">{fmtNum(visibles)}<small> de {fmtNum(todas.length)} sensores</small></p>
+            <Visibilidad publicaciones={todas} />
+            <p className="apr-fuente-detalle">verde = número exacto · azul = rango visible · gris = “+50” · rayado = sin leer
+              {d.calidad ? <><br /><span className="apr-ojo"><b>{fmtNum(d.calidad.medibles)}</b> son Full con publicación propia: los únicos cuyo número es bodega real y se puede atribuir. {fmtNum(d.calidad.catalogo)} son fichas de catálogo y {fmtNum(d.calidad.sinFull)} no tienen Full.</span></> : null}</p></article>
         </div>
       </section>
 
@@ -227,16 +259,13 @@ export function StockCompetidores() {
         <div className="sv-grilla">{d.propios.map((f) => <TarjetaVendedor key={f.sku} f={f} />)}</div>
       </section>
 
-      <section className="apr-seccion">
-        <div className="apr-seccion-cabeza"><h3>Competidores por nicho</h3><p>Nichos en cotización o con la ventana de compra abierta. Hasta 6 vendedores chicos por nicho, uno por tienda.</p></div>
-        <div className="apr-controles">
-          <label className="apr-buscar"><PackageX size={14} aria-hidden="true" /><span className="apr-solo-lector">Buscar nicho</span>
-            <input type="search" placeholder="Buscar nicho…" value={busca} onChange={(e) => setBusca(e.target.value)} /></label>
-          <div className="apr-segmentos" role="group" aria-label="Filtrar nichos">{FILTROS_STOCK.map(([id, nombre]) =>
-            <button key={id} type="button" className={filtro === id ? 'activo' : ''} aria-pressed={filtro === id} onClick={() => setFiltro(id)}>{nombre} <small>{conteos[id]}</small></button>)}</div>
-        </div>
-        {!nichos.length ? <p className="apr-vacio">Ningún nicho con ese filtro todavía.</p> : <div className="sn-grilla">{nichos.map((n) => <TarjetaNicho key={n.keyword} n={n} abierto={abierto === n.keyword} alAlternar={alAlternar} />)}</div>}
-      </section>
+      <details className="apr-plegable">
+        <summary><PackageX size={14} aria-hidden="true" />Cómo leer el medidor de stock</summary>
+        <p className="apr-fuente-detalle">Mercado Libre no muestra el número: muestra un escalón. Cuando un vendedor vende, su marcador se corre hacia la derecha; cuando repone, salta a la izquierda. De “+50” no se ve nada; en “1-5” cada baja es una venta contada. <strong>Bajar y después subir es la señal fuerte:</strong> ese vendedor volvió a meter plata en el producto.</p>
+        <div className="mg-leyenda">{ESCALONES.map((e, i) => (
+          <div key={e.id} className="mg-leyenda-paso"><span className={`mg-leyenda-barra mg-${e.id}`} /><strong>{e.etiqueta === '0' ? 'agotado' : e.etiqueta}</strong><small>{e.ayuda}</small>{i < 5 ? <i aria-hidden="true">→</i> : null}</div>
+        ))}</div>
+      </details>
 
       <details className="apr-plegable apr-tecnico">
         <summary><RefreshCw size={14} aria-hidden="true" />Registro de lo último que se leyó ({fmtNum(d.ultimasLecturas?.length ?? 0)})</summary>

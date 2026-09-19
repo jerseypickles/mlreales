@@ -16,7 +16,13 @@ const HORA = 3600e3
 const DIA = 86400e3
 // el tope es del importador: "¿podría ajustarse a $30 al mes?"
 export const TOPE_USD_MES = Number(process.env.SEGUIMIENTO_USD_MES) || 30
-const POR_NICHO = Number(process.env.SEGUIMIENTO_POR_NICHO) || 6
+// TRES SENSORES POR NICHO, NO SEIS PUBLICACIONES. El importador, 19-sep: "no es
+// necesario leer todos los productos, lo que quiero saber es si el nicho mueve".
+// Con seis por nicho eran 336 seguidos para ~165 lecturas diarias (US$30 al mes):
+// una lectura cada dos días, y al tercer día 143 seguían sin una sola y solo 23
+// de los 119 medibles tenían las dos que hacen falta para ver una venta. La
+// pregunta es del nicho, y a un nicho le basta con pocos sensores bien leídos.
+const POR_NICHO = Number(process.env.SEGUIMIENTO_POR_NICHO) || 3
 const MAX_POR_PASADA = 40
 
 // CADA CUÁNTO SE LEE, SEGÚN CUÁNTO SE PUEDE VER. La plata va donde hay
@@ -98,6 +104,21 @@ export function elegirParaSeguir(productos, { max = POR_NICHO } = {}) {
 export const seguidoFlojo = (p) =>
   !p.itemIdReal && (p.esCatalogo === true || esUrlDeCatalogo(p.url)) && ((p.cambiosDeVendedor ?? 0) >= 1 || ((p.lecturas ?? 0) >= 4 && !p.sellerId))
 
+// Pura. Cuando un nicho tiene más seguidos que cupo, quién se queda: primero el
+// que ya demostró algo (repuso, o se le vio vender: ese sensor ya respondió la
+// pregunta y su serie vale más que cualquier candidato), después el medible (Full
+// atribuible), y a igualdad EL QUE MÁS ARRIBA ESTÁ EN EL LISTADO ORGÁNICO. El
+// importador, 19-sep: "lo más vendible como orgánico". Sin esa regla la poda se
+// quedaba en "maleta de viaje" con los Full de los puestos 23, 26 y 36 y soltaba
+// al 6, al 9 y al único que había vendido. `posicion` ya viene sin anuncios: los
+// pagados puros no tienen puesto en el ranking (listadoMl.js).
+export function quienSeQueda(seguidos, { max = POR_NICHO } = {}) {
+  const dejaVer = (p) => p.ultima && Number.isFinite(p.ultima.stock) && !(p.ultima.topado && p.ultima.stock >= 51)
+  const valor = (p) => (p.reposicionesVistas > 0 ? 0 : 16) + (p.unidadesPiso > 0 ? 0 : 8) + (esMedible(p) ? 0 : 4) + (seguidoFlojo(p) ? 2 : 0) + (dejaVer(p) ? 0 : 1)
+  const orden = [...(seguidos ?? [])].sort((a, b) => valor(a) - valor(b) || (a.posicion ?? 999) - (b.posicion ?? 999) || (b.lecturas ?? 0) - (a.lecturas ?? 0))
+  return { seQuedan: orden.slice(0, max), sobran: orden.slice(max) }
+}
+
 // Qué nichos se siguen: los que están en cotización o pedido, y los de
 // temporada con la ventana de compra abierta. Es donde una decisión de compra
 // está cerca y saber si el chico vende cambia algo.
@@ -159,16 +180,29 @@ export async function resolverCatalogos({ max = 25 } = {}) {
 }
 
 // Una vez al día: suma a la lista lo que el último scan de cada nicho dejó ver,
-// y las publicaciones propias (para calibrar). No saca a nadie: eso lo decide
-// la lectura, cuando una publicación pasa semanas en "+50" o desaparece.
+// y las publicaciones propias (para calibrar). Saca solo a los que sobran del
+// cupo del nicho; el resto de las bajas lo decide la lectura, cuando una
+// publicación pasa semanas en "+50" o desaparece.
 export async function actualizarLista({ ahora = new Date() } = {}) {
-  let agregados = 0, cedidos = 0
+  let agregados = 0, cedidos = 0, podados = 0
   for (const n of await nichosQueImportan()) {
-    const seguidos = await SeguimientoStock.find({ nichoId: n._id, activo: true, esPropio: false }).select('sku url esCatalogo esFull lecturas reposicionesVistas cambiosDeVendedor sellerId itemIdReal urlLectura').lean()
+    let seguidos = await SeguimientoStock.find({ nichoId: n._id, activo: true, esPropio: false }).select('sku url esCatalogo esFull lecturas reposicionesVistas cambiosDeVendedor sellerId itemIdReal urlLectura ultima resueltoEl').lean()
     const ultimo = await Snapshot.findOne({ keyword: n.keyword }).sort({ fecha: -1 }).select('fecha').lean()
     if (!ultimo) continue
-    // solo lo de arriba del listado: es donde un entrante compite de verdad
-    const snaps = await Snapshot.find({ keyword: n.keyword, fecha: ultimo.fecha, posicion: { $lte: 60 } }).select('sku posicion stock stockTopado stockFuente esAnuncio').lean()
+    // Solo lo de arriba del listado ORGÁNICO: con tres sensores por nicho tienen
+    // que ser de los que más venden, no el Full del puesto 56.
+    const snaps = await Snapshot.find({ keyword: n.keyword, fecha: ultimo.fecha, posicion: { $lte: 30 } }).select('sku posicion stock stockTopado stockFuente esAnuncio').lean()
+    // los que sobran del cupo dejan de leerse: su historia queda, la plata no
+    if (seguidos.length > POR_NICHO) {
+      const puesto = new Map((await Snapshot.find({ keyword: n.keyword, fecha: ultimo.fecha, sku: { $in: seguidos.map((p) => p.sku) } }).select('sku posicion').lean()).map((x) => [x.sku, x.posicion]))
+      const series = new Map()
+      for (const l of await LecturaStock.find({ sku: { $in: seguidos.map((p) => p.sku) } }).sort({ fecha: 1 }).lean()) series.set(l.sku, [...(series.get(l.sku) ?? []), l])
+      const { seQuedan, sobran } = quienSeQueda(seguidos.map((p) => ({ ...p, posicion: puesto.get(p.sku) ?? null,
+        unidadesPiso: resumenDeSerie(series.get(p.sku), { esCatalogo: !p.itemIdReal && (p.esCatalogo === true || esUrlDeCatalogo(p.url)), desdeEl: p.resueltoEl }).unidadesPiso })))
+      await SeguimientoStock.updateMany({ sku: { $in: sobran.map((p) => p.sku) } }, { $set: { activo: false, motivoBaja: 'sensor de sobra: el nicho se mide con los que mejor dejan ver' } })
+      podados += sobran.length
+      seguidos = seQuedan
+    }
     const prods = new Map((await Producto.find({ sku: { $in: [...snaps.map((s) => s.sku), ...seguidos.map((p) => p.sku)] } }).select('sku url titulo imagen vendedor esTiendaOficial esFull').lean()).map((p) => [p.sku, p]))
     // CUPO CEDIDO. Los 6 lugares del nicho se llenaron antes de saber que una
     // ficha de catálogo no se puede atribuir a un vendedor: quedaron ocupados por
@@ -214,7 +248,7 @@ export async function actualizarLista({ ahora = new Date() } = {}) {
       imagen: p.imagen ?? null, vendedor: 'propio', esPropio: true, itemIdPropio: p.itemIdMl ?? p.sku, agregadoEl: ahora, proximaLecturaEl: ahora } }, { upsert: true })
     agregados += r.upsertedCount ?? 0
   }
-  return { agregados, cedidos, activos: await SeguimientoStock.countDocuments({ activo: true }) }
+  return { agregados, cedidos, podados, activos: await SeguimientoStock.countDocuments({ activo: true }) }
 }
 
 export async function gastoDelMes({ ahora = new Date() } = {}) {
@@ -267,11 +301,20 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
     // la ficha devuelve en `sku` el id de la publicación que realmente pintó: si
     // no es la que pedimos, la lectura no es de este vendedor y no sirve
     const idEsperado = (p.itemIdReal ?? p.sku ?? '').replace(/^MLC/i, '')
+    // Una publicación resuelta puede volver con otro `sku` (ML redirige la URL
+    // del vendedor a la ficha de catálogo). Si es SU ficha de catálogo y el
+    // vendedor que la página muestra es el esperado, el stock a la vista es el
+    // suyo: es la misma pregunta que responde el id, contestada por otro lado.
     const it = items.find((i) => String(i.sku ?? '').replace(/^MLC/i, '') === idEsperado)
-      ?? (p.itemIdReal ? null : items.find((i) => i.url && (i.url === p.url || i.url.includes(p.sku))))
+      ?? (p.itemIdReal
+        ? items.find((i) => p.sellerId && String(i.sellerId ?? '') === String(p.sellerId) && catalogoDeUrl(i.url) === catalogoDeUrl(p.url))
+        : items.find((i) => i.url && (i.url === p.url || i.url.includes(p.sku))))
     if (!it || !Number.isFinite(it.stockQuantity)) {
-      // pagada igual. Tres fallos seguidos = la publicación ya no existe
-      await LecturaStock.create({ sku: p.sku, fecha: ahora, ok: false, costoUsd: cadaUna })
+      // pagada igual. Tres fallos seguidos = la publicación ya no existe.
+      // Se anota POR QUÉ: el 19-sep fallaba el 45% de las resueltas y no había
+      // cómo saber si era el emparejamiento o una ficha sin stock a la vista.
+      const motivoFallo = it ? 'ficha sin stock a la vista' : items.length ? 'ninguna ficha devuelta calza con la publicación' : 'el proveedor no devolvió fichas'
+      await LecturaStock.create({ sku: p.sku, fecha: ahora, ok: false, costoUsd: cadaUna, motivoFallo })
       const fallos = (p.fallosSeguidos ?? 0) + 1
       await SeguimientoStock.updateOne({ _id: p._id }, { $set: { fallosSeguidos: fallos, proximaLecturaEl: new Date(+ahora + 24 * HORA),
         ...(fallos >= 3 && !p.esPropio ? { activo: false, motivoBaja: 'la ficha dejó de responder' } : {}) } })
@@ -382,6 +425,16 @@ export function resumenDeSerie(lecturas, { esCatalogo = false, vendedorEsperado 
     porSemana: dias >= 2 ? Math.round((unidades / dias) * 7 * 10) / 10 : null, stockAhora: serie.at(-1)?.stock ?? null, topadoAhora: serie.at(-1)?.topado ?? null }
 }
 
+// Pura. LA PREGUNTA DEL IMPORTADOR: ¿el nicho mueve? 'mueve' en cuanto un sensor
+// vendió o repuso. 'quieto' exige haber mirado de verdad —dos sensores con tres
+// días de serie cada uno— porque "no vi nada" con una lectura no es "no se
+// vende". Lo demás es 'sin-datos'.
+export function movimientoDelNicho(publicaciones) {
+  const fs = (publicaciones ?? []).filter((f) => !f.esPropio)
+  if (fs.some((f) => f.unidadesPiso > 0 || f.reposiciones > 0)) return 'mueve'
+  return fs.filter((f) => f.tramosMedidos > 0 && f.dias >= 3).length >= 2 ? 'quieto' : 'sin-datos'
+}
+
 // Lo que se muestra: por nicho, quién vende; y la calibración con lo propio.
 export async function resumenSeguimiento({ ahora = new Date(), keyword = null } = {}) {
   const seguidos = await SeguimientoStock.find(keyword ? { keyword } : {}).lean()
@@ -395,7 +448,7 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
     itemIdReal: s.itemIdReal ?? null, sku: s.sku, url: s.url, titulo: s.titulo, imagen: s.imagen, vendedor: s.vendedor, keyword: s.keyword, esPropio: s.esPropio,
     activo: s.activo, motivoBaja: s.motivoBaja, proximaLecturaEl: s.proximaLecturaEl, agregadoEl: s.agregadoEl, itemIdPropio: s.itemIdPropio,
     // las lecturas tal como llegaron, para poder VER qué está obteniendo el sistema
-    serie: (porSku.get(s.sku) ?? []).filter((l) => !s.resueltoEl || +new Date(l.fecha) >= +new Date(s.resueltoEl)).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio, fuente: l.fuente ?? null, sellerId: l.sellerId ?? null, vendedorLeido: l.vendedorLeido ?? null })),
+    serie: (porSku.get(s.sku) ?? []).filter((l) => !s.resueltoEl || +new Date(l.fecha) >= +new Date(s.resueltoEl)).slice(-24).map((l) => ({ fecha: l.fecha, ok: l.ok !== false, stock: l.stock, topado: l.topado, precio: l.precio, fuente: l.fuente ?? null, sellerId: l.sellerId ?? null, vendedorLeido: l.vendedorLeido ?? null, motivoFallo: l.motivoFallo ?? null })),
     ...resumenDeSerie(porSku.get(s.sku), { esCatalogo: !s.itemIdReal && (s.esCatalogo === true || esUrlDeCatalogo(s.url)), vendedorEsperado: s.vendedor, desdeEl: s.resueltoEl }) }))
   // CALIBRACIÓN: en lo propio la venta real se conoce. Cuánto del total ve el piso.
   let calibracion = null
@@ -431,7 +484,7 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
     },
     catalogo: { seguidos: filas.filter((f) => !f.esPropio && f.esCatalogo).length, cambiosDeVendedor: filas.reduce((a, f) => a + (f.cambiosDeVendedor ?? 0), 0) },
     pendientesAhora: seguidos.filter((s) => s.activo && +new Date(s.proximaLecturaEl) <= +ahora).length,
-    nichos: [...porNicho].map(([k, fs]) => ({ keyword: k, seguidos: fs.filter((f) => f.activo).length, vendiendo: fs.filter((f) => f.unidadesPiso > 0).length, fuertes: fs.filter((f) => (f.fuerza === 'ciclo' || f.fuerza === 'repone') && f.atribucion !== 'probable').length,
+    nichos: [...porNicho].map(([k, fs]) => ({ keyword: k, movimiento: movimientoDelNicho(fs), seguidos: fs.filter((f) => f.activo).length, vendiendo: fs.filter((f) => f.unidadesPiso > 0).length, fuertes: fs.filter((f) => (f.fuerza === 'ciclo' || f.fuerza === 'repone') && f.atribucion !== 'probable').length,
       probables: fs.filter((f) => (f.fuerza === 'ciclo' || f.fuerza === 'repone' || f.unidadesPiso > 0) && f.atribucion === 'probable').length,
       unidadesRepuestasPiso: fs.reduce((a, f) => a + (f.unidadesRepuestasPiso ?? 0), 0),
       unidadesPisoSemana: Math.round(fs.reduce((a, f) => a + (f.porSemana ?? 0), 0) * 10) / 10, reposiciones: fs.reduce((a, f) => a + f.reposiciones, 0),

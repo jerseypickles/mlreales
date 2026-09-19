@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo, seguidoFlojo, esMedible } from '../src/services/seguimientoStock.js'
+import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo, seguidoFlojo, esMedible, quienSeQueda, movimientoDelNicho } from '../src/services/seguimientoStock.js'
 
 test('se lee más seguido donde más se ve: "+50" semanal, rangos diario, número exacto cada 12 h', () => {
   assert.equal(horasHastaLaProxima({ stock: 51, topado: true }), 168)
@@ -208,4 +208,38 @@ test('al pasar de la ficha de catálogo a la del vendedor, lo leído antes no en
   assert.deepEqual([cortado.lecturas, cortado.fuerza, cortado.reposiciones], [1, null, 0])
   // sin el corte, se inventaba
   assert.equal(resumenDeSerie([l('17', 3), l('18', 51, true)]).reposiciones, 1)
+})
+
+test('cuando sobran sensores en un nicho se queda el que repone, después el medible, después el más leído', () => {
+  const u = 'https://articulo.mercadolibre.cl/MLC-1-x'
+  const { seQuedan, sobran } = quienSeQueda([
+    { sku: 'sinFull', url: u, esFull: false, lecturas: 9 },
+    { sku: 'medible', url: u, esFull: true, lecturas: 1 },
+    { sku: 'repone', url: u, esFull: false, lecturas: 2, reposicionesVistas: 1 },
+    { sku: 'medibleLeido', url: u, esFull: true, lecturas: 5 },
+    { sku: 'catalogo', url: 'https://www.mercadolibre.cl/x/p/MLC9', esFull: true, lecturas: 6 },
+  ], { max: 3 })
+  assert.deepEqual(seQuedan.map((p) => p.sku), ['repone', 'medibleLeido', 'medible'])
+  assert.deepEqual(sobran.map((p) => p.sku).sort(), ['catalogo', 'sinFull'])
+})
+
+test('el nicho mueve con una sola venta vista; quieto exige dos sensores con tres días; si no, sin datos', () => {
+  assert.equal(movimientoDelNicho([{ unidadesPiso: 1, reposiciones: 0 }, { unidadesPiso: 0, reposiciones: 0 }]), 'mueve')
+  assert.equal(movimientoDelNicho([{ unidadesPiso: 0, reposiciones: 1 }]), 'mueve')
+  const quieto = { unidadesPiso: 0, reposiciones: 0, tramosMedidos: 3, dias: 3.2 }
+  assert.equal(movimientoDelNicho([quieto, quieto]), 'quieto')
+  assert.equal(movimientoDelNicho([quieto, { ...quieto, dias: 1 }]), 'sin-datos')
+  assert.equal(movimientoDelNicho([]), 'sin-datos')
+})
+
+test('a igualdad se queda el de más arriba en el listado orgánico, y nunca se suelta al que ya se le vio vender', () => {
+  const u = 'https://articulo.mercadolibre.cl/MLC-1-x'
+  const { seQuedan } = quienSeQueda([
+    { sku: 'full36', url: u, esFull: true, posicion: 36, lecturas: 5 },
+    { sku: 'full23', url: u, esFull: true, posicion: 23, lecturas: 1 },
+    { sku: 'full26', url: u, esFull: true, posicion: 26, lecturas: 1 },
+    { sku: 'vendio', url: u, esFull: false, posicion: 22, unidadesPiso: 2 },
+    { sku: 'top6', url: u, esFull: false, posicion: 6 },
+  ], { max: 3 })
+  assert.deepEqual(seQuedan.map((p) => p.sku), ['vendio', 'full23', 'full26'])
 })

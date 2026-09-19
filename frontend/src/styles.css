@@ -7179,3 +7179,44 @@ em.mg-agotado { color: var(--peligro); }
 .sv-medible { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; padding: 5px 9px; border-radius: 8px; background: var(--exito-tenue); color: var(--exito-tinta); font-size: 0.78rem; font-weight: 600; }
 .sv-fuerza-tibia { background: transparent; border: 1px dashed var(--avisa-tinta); }
 .sv-resuelto { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; padding: 5px 9px; border-radius: 8px; background: var(--acento-tenue); color: var(--acento); font-size: 0.78rem; font-weight: 600; }
+
+/* STOCK DE COMPETIDORES · la pregunta es del nicho (19-sep). El veredicto manda:
+   sello grande, una cifra, y los pocos sensores con foto. */
+.nv-resumen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.nv-tesela { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px 16px; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie); color: inherit; font: inherit; text-align: left; cursor: pointer; box-shadow: var(--sombra-1); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.nv-tesela:hover { border-color: var(--borde-fuerte); box-shadow: var(--sombra-2); }
+.nv-tesela:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.nv-tesela-cab { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--tinta-2); }
+.nv-tesela b { font-size: 34px; line-height: 1.1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.nv-tesela small { color: var(--tinta-3); font-size: 11.5px; line-height: 1.35; }
+.nv-tesela-mueve b, .nv-tesela-mueve .nv-tesela-cab { color: var(--exito-tinta); }
+.nv-tesela-mueve.activo { border-color: var(--exito); background: var(--exito-tenue); }
+.nv-tesela-quieto.activo { border-color: var(--tinta-3); background: var(--superficie-2); }
+.nv-tesela-sin-datos b, .nv-tesela-sin-datos .nv-tesela-cab { color: var(--acento); }
+.nv-tesela-sin-datos.activo { border-color: var(--acento); background: var(--acento-tenue); }
+.nv-barra { display: flex; height: 8px; margin: 12px 0 16px; border-radius: 999px; overflow: hidden; background: var(--superficie-2); }
+.nv-barra i { display: block; height: 100%; min-width: 4px; }
+.nv-barra-mueve { background: var(--exito); }
+.nv-barra-quieto { background: var(--tinta-3); }
+.nv-barra-sin-datos { background: repeating-linear-gradient(135deg, var(--acento-tenue) 0 4px, var(--borde) 4px 8px); }
+.nv-quitar { padding: 6px 12px; border: 1px solid var(--borde); border-radius: 8px; background: var(--superficie); color: var(--tinta-2); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.nv-quitar:hover { border-color: var(--borde-fuerte); color: var(--tinta); }
+
+.sn.nv-mueve { border-color: var(--exito); }
+.sn.nv-sin-datos { border-style: dashed; }
+.nv-sello { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.nv-sello-mueve { background: var(--exito-tenue); color: var(--exito-tinta); }
+.nv-sello-quieto { background: var(--superficie-2); color: var(--tinta-2); border: 1px solid var(--borde); }
+.nv-sello-sin-datos { background: var(--acento-tenue); color: var(--acento); }
+.nv-dato { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--tinta-2); }
+.nv-dato b { font-size: 22px; letter-spacing: -0.02em; color: var(--tinta); font-variant-numeric: tabular-nums; margin-right: 2px; }
+.nv-mueve .nv-dato b { color: var(--exito-tinta); }
+.nv-dato small { color: var(--tinta-3); font-size: 11.5px; line-height: 1.4; }
+.nv-dato .nv-fuerte { display: inline-flex; align-items: center; gap: 4px; color: var(--avisa-tinta); font-weight: 600; }
+.nv-avance { display: block; height: 6px; border-radius: 999px; overflow: hidden; background: var(--superficie-2); }
+.nv-avance i { display: block; height: 100%; border-radius: 999px; background: var(--acento); }
+.sn-fotos.nv-sensores { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); justify-items: start; }
+.nv-sensores .sn-mini img, .nv-sensores .sn-mini .mv-sinfoto { width: 56px; height: 56px; }
+.sn-mini-vendio img, .sn-mini-vendio .mv-sinfoto { border-color: var(--exito); box-shadow: 0 0 0 2px var(--exito-tenue); }
+.nv-fuera { color: var(--tinta-3); font-size: 11px; }
+@media (max-width: 720px) { .nv-resumen { grid-template-columns: 1fr; } .nv-tesela b { font-size: 28px; } }
