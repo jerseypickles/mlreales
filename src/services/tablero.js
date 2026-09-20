@@ -46,17 +46,19 @@ function margenPuesto({ costoPuestoClp, rec, comisionPct = null }) {
 // sale igual PERO con `volumenSupuesto` en true para que la pantalla lo diga.
 const VOLUMEN_SUPUESTO_M3 = 0.003
 
-// Pura. El EXW que de verdad se paga: el de fábrica más el recargo de transporte
-// del agente. Sin recargo anotado es el de fábrica tal cual.
+// Pura. El precio que de verdad se paga: el EXW de fábrica más el recargo del
+// agente, que CUBRE EL FLETE DE CHINA A CHILE (lo aclaró el importador el 20-sep).
+// Por eso, cuando hay recargo, el costo internado NO suma además el flete marítimo
+// estimado por cubicaje: sería cobrarlo dos veces. Sin recargo es el de fábrica.
 export function exwConTransporte(exwFabricaUsd, recargoPct) {
   if (!Number.isFinite(exwFabricaUsd)) return null
   return Number.isFinite(recargoPct) && recargoPct > 0 ? Math.round(exwFabricaUsd * (1 + recargoPct / 100) * 100) / 100 : exwFabricaUsd
 }
 
-function margenCotizacion({ exwUsd, rec, unidades, comisionPct = null, volumenM3 = null, tipoCambioUsdClp = null }) {
+function margenCotizacion({ exwUsd, rec, unidades, comisionPct = null, volumenM3 = null, tipoCambioUsdClp = null, fleteIncluido = false }) {
   if (!Number.isFinite(exwUsd) || !Number.isFinite(rec?.precioVentaClp)) return null
   const pctFinal = comisionPct ?? rec.comisionMlPct
-  const volumenSupuesto = !(volumenM3 > 0)
+  const volumenSupuesto = !fleteIncluido && !(volumenM3 > 0)
   const vol = volumenSupuesto ? VOLUMEN_SUPUESTO_M3 : volumenM3
   const parametros = {}
   if (Number.isFinite(pctFinal)) parametros.mercadoLibre = { comisionPct: pctFinal }
@@ -68,6 +70,7 @@ function margenCotizacion({ exwUsd, rec, unidades, comisionPct = null, volumenM3
       unidades: unidades ?? 500,
       volumenM3: vol,
       modoFlete: 'maritimo',
+      fleteIncluido,
       parametros: Object.keys(parametros).length ? parametros : undefined,
     })
     return {
@@ -78,6 +81,7 @@ function margenCotizacion({ exwUsd, rec, unidades, comisionPct = null, volumenM3
       landedClp: sim.porUnidad.landedNetoClp,
       comisionClp: Math.round(sim.porUnidad.comisionMlClp + sim.porUnidad.fullClp),
       fleteClp: sim.porUnidad.fleteClp ?? null,
+      fleteIncluido,
       volumenM3: vol,
       volumenSupuesto,
     }
@@ -392,6 +396,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
             comisionPct,
             volumenM3: n.volumenM3 ?? null,
             tipoCambioUsdClp,
+            fleteIncluido: dosPrecios.recargoTransportePct != null,
           })
           if (!m) return {}
           return precioPropio ? m : { ...m, margenClp: null, margenPct: null, viable: null }

@@ -9,3 +9,13 @@ test('el EXW que se paga es el de fábrica más el recargo de transporte; sin re
   assert.equal(exwConTransporte(8.3, 0), 8.3)
   assert.equal(exwConTransporte(null, 15), null)
 })
+
+test('si el precio ya trae el flete a Chile, el costo internado no suma otro flete ni pide cubicaje', async () => {
+  const { calcularMargen } = await import('../src/services/margen.js')
+  const base = { costoExwUsd: 9.55, unidades: 150, precioVentaClp: 20000 }
+  const con = calcularMargen({ ...base, volumenM3: 0.024 })
+  const sin = calcularMargen({ ...base, fleteIncluido: true })
+  assert.equal(sin.porUnidad.fleteClp, 0)
+  assert.ok(con.porUnidad.fleteClp > 0)
+  assert.ok(sin.porUnidad.landedNetoClp < con.porUnidad.landedNetoClp)
+})

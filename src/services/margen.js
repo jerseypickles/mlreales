@@ -162,6 +162,8 @@ export function calcularMargen(entrada) {
     pesoKg = 0,
     volumenM3 = 0,
     modoFlete = 'maritimo', // 'maritimo' | 'aereo'
+    // el precio ya trae el flete hasta Chile (recargo del agente): no se suma otro
+    fleteIncluido = false,
     parametros: overrides,
   } = entrada
 
@@ -169,8 +171,8 @@ export function calcularMargen(entrada) {
   if (!Number.isFinite(costoUnitarioUsd) || costoUnitarioUsd <= 0) throw new Error('costoExwUsd requerido (> 0)')
   if (!Number.isFinite(unidades) || unidades < 1) throw new Error('unidades requeridas (>= 1)')
   if (!Number.isFinite(precioVentaClp) || precioVentaClp <= 0) throw new Error('precioVentaClp requerido (> 0)')
-  if (modoFlete === 'maritimo' && !(volumenM3 > 0)) throw new Error('volumenM3 requerido para flete marítimo (por unidad)')
-  if (modoFlete === 'aereo' && !(pesoKg > 0)) throw new Error('pesoKg requerido para flete aéreo (por unidad)')
+  if (!fleteIncluido && modoFlete === 'maritimo' && !(volumenM3 > 0)) throw new Error('volumenM3 requerido para flete marítimo (por unidad)')
+  if (!fleteIncluido && modoFlete === 'aereo' && !(pesoKg > 0)) throw new Error('pesoKg requerido para flete aéreo (por unidad)')
 
   const p = parametrosCon(overrides)
   const tc = p.tipoCambioUsdClp
@@ -178,7 +180,7 @@ export function calcularMargen(entrada) {
 
   // --- costos de importación por unidad (CLP, netos de IVA) ---
   const exwClp = costoUnitarioUsd * tc
-  const fleteUsd = modoFlete === 'aereo' ? pesoKg * p.flete.aereoUsdPorKg : volumenM3 * p.flete.maritimoUsdPorM3
+  const fleteUsd = fleteIncluido ? 0 : modoFlete === 'aereo' ? pesoKg * p.flete.aereoUsdPorKg : volumenM3 * p.flete.maritimoUsdPorM3
   const fleteClp = fleteUsd * tc
   const seguroClp = exwClp * (seguroPct(p) / 100)
   const cifClp = exwClp + fleteClp + seguroClp
