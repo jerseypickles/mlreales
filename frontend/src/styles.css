@@ -7223,3 +7223,13 @@ em.mg-agotado { color: var(--peligro); }
 
 /* cotización con dos precios: el de fábrica en chico bajo el que se paga */
 .op-cot-dos { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 500; opacity: 0.8; white-space: normal; line-height: 1.3; }
+
+/* OPORTUNIDADES · filas con EXW de proveedor + transporte (20-sep). El importador:
+   "que cambie de color, para no confundirme". Violeta: no es verde (cierra) ni
+   rojo (no cierra) ni gris (estimado suelto) — es "precio real de proveedor". */
+:root { --transporte: #7c3aed; --transporte-tenue: #f1eafe; }
+@media (prefers-color-scheme: dark) { :root { --transporte: #b79bff; --transporte-tenue: #261c40; } }
+.op-cot-boton.con-transporte { border: 1px solid var(--transporte); background: var(--transporte-tenue); color: var(--transporte); border-radius: 10px; padding: 4px 10px; white-space: normal; text-align: left; }
+.op-cot-boton.con-transporte .op-cot-dos { opacity: 1; color: var(--transporte); }
+.op-cot-dos svg { vertical-align: -1px; }
+.op-fila.op-con-exw { box-shadow: inset 3px 0 0 var(--transporte); }

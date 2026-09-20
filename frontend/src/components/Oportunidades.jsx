@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Search, Sun } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Search, Sun, Truck } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
@@ -429,7 +429,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
     <div
       role="button"
       tabIndex={0}
-      className={`op-fila${abierta ? ' op-fila-abierta' : ''}${cotizando ? ' op-cotizando' : ''} ${claseTramo(o.mediana)}`}
+      className={`op-fila${abierta ? ' op-fila-abierta' : ''}${cotizando ? ' op-cotizando' : ''}${o.cotizacion?.recargoTransportePct ? ' op-con-exw' : ''} ${claseTramo(o.mediana)}`}
       onClick={onAlternar}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAlternar() }
@@ -634,7 +634,7 @@ function Cotizacion({ o, onRecargar }) {
          una estimación contra un precio que no es el tuyo es peor que no pintar */
       className={`op-cotizacion op-cot-boton ${
         !cot ? 'pendiente' : cot.costoPuestoClp == null ? 'estimado' : cot.viable === false || cot.cierra === false ? 'mal' : 'bien'
-      }`}
+      }${cot?.recargoTransportePct && cot.costoPuestoClp == null ? ' con-transporte' : ''}`}
       title={
         cot?.costoPuestoClp
           ? `Te cuesta ${fmtPrecio(cot.costoPuestoClp)} por unidad ya puesto en tu bodega, todo incluido — clic para cambiarlo`
@@ -672,7 +672,7 @@ function Cotizacion({ o, onRecargar }) {
       {/* DOS PRECIOS, SIN CONFUNDIRLOS (20-sep): el que se paga —con el transporte
           del agente— es el que calcula; el de fábrica queda a la vista, en chico. */}
       {cot?.recargoTransportePct && cot.costoPuestoClp == null
-        ? <small className="op-cot-dos">EXW US$ {cot.exwUsd} con transporte · fábrica US$ {cot.exwFabricaUsd} +{cot.recargoTransportePct}%</small>
+        ? <small className="op-cot-dos"><Truck size={11} aria-hidden="true" /> EXW US$ {cot.exwUsd} con transporte · fábrica US$ {cot.exwFabricaUsd} +{cot.recargoTransportePct}%</small>
         : null}
     </button>
   )
