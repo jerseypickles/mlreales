@@ -46,6 +46,13 @@ function margenPuesto({ costoPuestoClp, rec, comisionPct = null }) {
 // sale igual PERO con `volumenSupuesto` en true para que la pantalla lo diga.
 const VOLUMEN_SUPUESTO_M3 = 0.003
 
+// Pura. El EXW que de verdad se paga: el de fábrica más el recargo de transporte
+// del agente. Sin recargo anotado es el de fábrica tal cual.
+export function exwConTransporte(exwFabricaUsd, recargoPct) {
+  if (!Number.isFinite(exwFabricaUsd)) return null
+  return Number.isFinite(recargoPct) && recargoPct > 0 ? Math.round(exwFabricaUsd * (1 + recargoPct / 100) * 100) / 100 : exwFabricaUsd
+}
+
 function margenCotizacion({ exwUsd, rec, unidades, comisionPct = null, volumenM3 = null, tipoCambioUsdClp = null }) {
   if (!Number.isFinite(exwUsd) || !Number.isFinite(rec?.precioVentaClp)) return null
   const pctFinal = comisionPct ?? rec.comisionMlPct
@@ -190,6 +197,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         notaEtapa: 1,
         frecuenciaScan: 1,
         exwCotizadoUsd: 1,
+        recargoTransportePct: 1,
         exwCotizadoEl: 1,
         costoPuestoClp: 1,
         costoPuestoEl: 1,
@@ -352,12 +360,16 @@ export async function tableroOportunidades({ todos = false } = {}) {
     const precioPropio = Number.isFinite(n.precioVentaObjetivoClp) ? n.precioVentaObjetivoClp : null
     const recParaMargen = precioPropio ? { ...rec, precioVentaClp: precioPropio } : rec
 
+    // dos precios, sin confundirlos: el de fábrica se muestra, el ajustado calcula
+    const exwPagado = exwConTransporte(n.exwCotizadoUsd, n.recargoTransportePct)
+    const dosPrecios = { exwFabricaUsd: n.exwCotizadoUsd ?? null, recargoTransportePct: exwPagado !== n.exwCotizadoUsd ? n.recargoTransportePct : null }
     if (Number.isFinite(n.costoPuestoClp)) {
       // el costo puesto en Chile manda: dato real del importador
       const m = precioPropio ? margenPuesto({ costoPuestoClp: n.costoPuestoClp, rec: recParaMargen, comisionPct }) : null
       cotizacion = {
         costoPuestoClp: n.costoPuestoClp,
-        exwUsd: n.exwCotizadoUsd ?? null,
+        exwUsd: exwPagado,
+        ...dosPrecios,
         fecha: n.costoPuestoEl ?? n.exwCotizadoEl ?? null,
         precioObjetivoClp: precioPropio,
         cierra: m ? m.margenClp > 0 : null,
@@ -365,15 +377,16 @@ export async function tableroOportunidades({ todos = false } = {}) {
       }
     } else if (Number.isFinite(n.exwCotizadoUsd)) {
       cotizacion = {
-        exwUsd: n.exwCotizadoUsd,
+        exwUsd: exwPagado,
+        ...dosPrecios,
         fecha: n.exwCotizadoEl ?? null,
         precioObjetivoClp: precioPropio,
-        cierra: exwMax != null ? n.exwCotizadoUsd <= exwMax : null,
+        cierra: exwMax != null ? exwPagado <= exwMax : null,
         // el costo puesto se calcula siempre (es lo que preguntó el importador);
         // el margen se borra si el precio no es suyo
         ...(() => {
           const m = margenCotizacion({
-            exwUsd: n.exwCotizadoUsd,
+            exwUsd: exwPagado,
             rec: recParaMargen,
             unidades: unidadesEfectivas,
             comisionPct,

@@ -50,6 +50,11 @@ const nichoSchema = new mongoose.Schema({
   // cotización real del proveedor (EXW por unidad de venta): se compara contra
   // el EXW máximo del análisis y alimenta el margen estimado en la planilla
   exwCotizadoUsd: { type: Number, default: null },
+  // RECARGO DE TRANSPORTE sobre el EXW de fábrica (%). El importador, 20-sep: el
+  // agente suma un porcentaje por transporte y ese es el precio que de verdad se
+  // paga. El EXW de fábrica NO se pisa: se guardan los dos para no confundirlos,
+  // y todo cálculo usa el ajustado (`exwConTransporte`).
+  recargoTransportePct: { type: Number, default: null },
   // costo REAL por unidad puesto en Chile (CLP, todo incluido: producto, flete,
   // internación, despacho). Manda sobre el cálculo desde EXW: es un dato del
   // importador, no una cadena de supuestos (cubicaje/prorrateo ya nos mordió

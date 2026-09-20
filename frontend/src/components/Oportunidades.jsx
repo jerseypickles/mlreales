@@ -639,7 +639,7 @@ function Cotizacion({ o, onRecargar }) {
         cot?.costoPuestoClp
           ? `Te cuesta ${fmtPrecio(cot.costoPuestoClp)} por unidad ya puesto en tu bodega, todo incluido — clic para cambiarlo`
           : cot?.exwUsd
-            ? `EXW US$ ${cot.exwUsd} + flete ${cot.fleteClp != null ? fmtPrecio(cot.fleteClp) : '?'} + seguro, arancel y despacho = ${cot.landedClp != null ? fmtPrecio(cot.landedClp) : '?'} INTERNADO, o sea hasta salir de aduana. Todavía FALTAN el transporte del puerto a tu bodega, los gastos locales de la naviera y el envío a Full.${cot.volumenSupuesto ? ` Y el flete usa un volumen SUPUESTO de ${cot.volumenM3} m³ porque la cotización no trae cubicaje.` : ''} No dice cuánto deja porque el precio de venta lo pones tú. Clic para escribir el costo puesto real.`
+            ? `EXW US$ ${cot.exwUsd}${cot.recargoTransportePct ? ` (fábrica US$ ${cot.exwFabricaUsd} + ${cot.recargoTransportePct}% de transporte del agente)` : ''} + flete ${cot.fleteClp != null ? fmtPrecio(cot.fleteClp) : '?'} + seguro, arancel y despacho = ${cot.landedClp != null ? fmtPrecio(cot.landedClp) : '?'} INTERNADO, o sea hasta salir de aduana. Todavía FALTAN el transporte del puerto a tu bodega, los gastos locales de la naviera y el envío a Full.${cot.volumenSupuesto ? ` Y el flete usa un volumen SUPUESTO de ${cot.volumenM3} m³ porque la cotización no trae cubicaje.` : ''} No dice cuánto deja porque el precio de venta lo pones tú. Clic para escribir el costo puesto real.`
             : 'Anota lo que te cuesta cada unidad ya puesta en Chile (con flete e internación): con eso el sistema calcula el margen real'
       }
       onClick={(e) => {
@@ -669,6 +669,11 @@ function Cotizacion({ o, onRecargar }) {
           : cot.landedClp != null
             ? `~ ${fmtPrecio(cot.landedClp)}/u internado${cot.volumenSupuesto ? ' ◊' : ''}`
             : `EXW US$ ${cot.exwUsd} · falta costo puesto`}
+      {/* DOS PRECIOS, SIN CONFUNDIRLOS (20-sep): el que se paga —con el transporte
+          del agente— es el que calcula; el de fábrica queda a la vista, en chico. */}
+      {cot?.recargoTransportePct && cot.costoPuestoClp == null
+        ? <small className="op-cot-dos">EXW US$ {cot.exwUsd} con transporte · fábrica US$ {cot.exwFabricaUsd} +{cot.recargoTransportePct}%</small>
+        : null}
     </button>
   )
 }

@@ -7220,3 +7220,6 @@ em.mg-agotado { color: var(--peligro); }
 .sn-mini-vendio img, .sn-mini-vendio .mv-sinfoto { border-color: var(--exito); box-shadow: 0 0 0 2px var(--exito-tenue); }
 .nv-fuera { color: var(--tinta-3); font-size: 11px; }
 @media (max-width: 720px) { .nv-resumen { grid-template-columns: 1fr; } .nv-tesela b { font-size: 28px; } }
+
+/* cotización con dos precios: el de fábrica en chico bajo el que se paga */
+.op-cot-dos { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 500; opacity: 0.8; white-space: normal; line-height: 1.3; }

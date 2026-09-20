@@ -549,7 +549,7 @@ router.post(
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {
   const cambios = {}
-  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, costoPuestoClp, unidadesPedido, volumenM3, pesoKg, precioVentaObjetivoClp, fletePropioClp } = req.body ?? {}
+  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, recargoTransportePct, costoPuestoClp, unidadesPedido, volumenM3, pesoKg, precioVentaObjetivoClp, fletePropioClp } = req.body ?? {}
   // cubicaje de la cotización: sin esto el flete del costo puesto es un supuesto
   // fletePropioClp: despacho por bulto con courier propio, la salida al volumétrico de ML
   for (const [campo, valor] of [['volumenM3', volumenM3], ['pesoKg', pesoKg], ['precioVentaObjetivoClp', precioVentaObjetivoClp], ['fletePropioClp', fletePropioClp]]) {
@@ -579,6 +579,14 @@ const ajustarNicho = manejar(async (req, res) => {
       if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'exwCotizadoUsd inválido (> 0)' })
       cambios.exwCotizadoUsd = n
       cambios.exwCotizadoEl = new Date()
+    }
+  }
+  if (recargoTransportePct !== undefined) {
+    if (recargoTransportePct === null || recargoTransportePct === '') cambios.recargoTransportePct = null
+    else {
+      const n = Number(recargoTransportePct)
+      if (!Number.isFinite(n) || n < 0 || n > 200) return res.status(400).json({ error: 'recargoTransportePct inválido (0 a 200)' })
+      cambios.recargoTransportePct = n
     }
   }
   if (costoPuestoClp !== undefined) {
