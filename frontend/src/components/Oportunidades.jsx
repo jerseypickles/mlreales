@@ -440,7 +440,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
         <i>{rank}</i>
         {o.imagen ? <Miniatura src={o.imagen} lado={36} /> : <b className="op-fila-sinfoto" aria-hidden="true"><ImageOff size={14} /></b>}
       </span>
-      <span className="op-fila-kw">
+      <span className="op-fila-kw" data-exw={o.cotizacion?.recargoTransportePct ? `EXW US$ ${String(o.cotizacion.exwUsd).replace('.', ',')} c/transporte` : undefined}>
         <MioBadge mios={o.mios} />
         {o.keyword}
         <ChipTramo mediana={o.mediana} />

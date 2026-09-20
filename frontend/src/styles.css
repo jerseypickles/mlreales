@@ -7225,11 +7225,15 @@ em.mg-agotado { color: var(--peligro); }
 .op-cot-dos { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 500; opacity: 0.8; white-space: normal; line-height: 1.3; }
 
 /* OPORTUNIDADES · filas con EXW de proveedor + transporte (20-sep). El importador:
-   "que cambie de color, para no confundirme". Violeta: no es verde (cierra) ni
-   rojo (no cierra) ni gris (estimado suelto) — es "precio real de proveedor". */
-:root { --transporte: #7c3aed; --transporte-tenue: #f1eafe; }
-@media (prefers-color-scheme: dark) { :root { --transporte: #b79bff; --transporte-tenue: #261c40; } }
-.op-cot-boton.con-transporte { border: 1px solid var(--transporte); background: var(--transporte-tenue); color: var(--transporte); border-radius: 10px; padding: 4px 10px; white-space: normal; text-align: left; }
+   "que cambie de color, para no confundirme" — y el primer intento, violeta, se
+   perdía contra el azul de "cotizando". NARANJO: borde, fondo tenue, y la etiqueta
+   azul COTIZANDO pasa a decir el precio. De lejos se separan las que ya tienen
+   precio de proveedor de las que solo están marcadas para cotizar. */
+:root { --transporte: #c2410c; --transporte-tenue: #fff1e6; --transporte-fuerte: #ea580c; }
+@media (prefers-color-scheme: dark) { :root { --transporte: #fdba74; --transporte-tenue: #3a2110; --transporte-fuerte: #ea580c; } }
+.op-fila.op-cotizando.op-con-exw { border-left-color: var(--transporte-fuerte); background: var(--transporte-tenue); }
+.op-fila.op-cotizando.op-con-exw:hover, .op-fila.op-cotizando.op-con-exw.op-fila-abierta { background: color-mix(in srgb, var(--transporte-fuerte) 16%, var(--superficie)); }
+.op-fila.op-con-exw .op-fila-kw::after { content: attr(data-exw); background: var(--transporte-fuerte); text-transform: none; letter-spacing: 0; font-size: 10px; padding: 2px 7px; border-radius: 999px; }
+.op-cot-boton.con-transporte { border: 1px solid var(--transporte-fuerte); background: var(--transporte-tenue); color: var(--transporte); border-radius: 10px; padding: 4px 10px; white-space: normal; text-align: left; }
 .op-cot-boton.con-transporte .op-cot-dos { opacity: 1; color: var(--transporte); }
 .op-cot-dos svg { vertical-align: -1px; }
-.op-fila.op-con-exw { box-shadow: inset 3px 0 0 var(--transporte); }
