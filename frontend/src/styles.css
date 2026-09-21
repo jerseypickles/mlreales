@@ -7231,9 +7231,11 @@ em.mg-agotado { color: var(--peligro); }
    precio de proveedor de las que solo están marcadas para cotizar. */
 :root { --transporte: #c2410c; --transporte-tenue: #fff1e6; --transporte-fuerte: #ea580c; }
 @media (prefers-color-scheme: dark) { :root { --transporte: #fdba74; --transporte-tenue: #3a2110; --transporte-fuerte: #ea580c; } }
-.op-fila.op-cotizando.op-con-exw { border-left-color: var(--transporte-fuerte); background: var(--transporte-tenue); }
-.op-fila.op-cotizando.op-con-exw:hover, .op-fila.op-cotizando.op-con-exw.op-fila-abierta { background: color-mix(in srgb, var(--transporte-fuerte) 16%, var(--superficie)); }
-.op-fila.op-con-exw .op-fila-kw::after { content: attr(data-exw); background: var(--transporte-fuerte); text-transform: none; letter-spacing: 0; font-size: 10px; padding: 2px 7px; border-radius: 999px; }
+/* vale para CUALQUIER etapa, no solo "cotizando": lo del primer contenedor ya está
+   comprado o vendiéndose y tiene su precio de proveedor igual */
+.op-fila.op-con-exw, .op-fila.op-cotizando.op-con-exw { border-left-color: var(--transporte-fuerte); background: var(--transporte-tenue); }
+.op-fila.op-con-exw:hover, .op-fila.op-con-exw.op-fila-abierta, .op-fila.op-cotizando.op-con-exw:hover, .op-fila.op-cotizando.op-con-exw.op-fila-abierta { background: color-mix(in srgb, var(--transporte-fuerte) 16%, var(--superficie)); }
+.op-fila.op-con-exw .op-fila-kw::after { content: attr(data-exw); margin-left: 6px; vertical-align: 1.5px; color: #fff; font-weight: 700; background: var(--transporte-fuerte); text-transform: none; letter-spacing: 0; font-size: 10px; padding: 2px 7px; border-radius: 999px; }
 .op-cot-boton.con-transporte { border: 1px solid var(--transporte-fuerte); background: var(--transporte-tenue); color: var(--transporte); border-radius: 10px; padding: 4px 10px; white-space: normal; text-align: left; }
 .op-cot-boton.con-transporte .op-cot-dos { opacity: 1; color: var(--transporte); }
 .op-cot-dos svg { vertical-align: -1px; }
