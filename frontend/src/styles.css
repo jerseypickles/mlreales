@@ -7239,3 +7239,7 @@ em.mg-agotado { color: var(--peligro); }
 .op-cot-boton.con-transporte { border: 1px solid var(--transporte-fuerte); background: var(--transporte-tenue); color: var(--transporte); border-radius: 10px; padding: 4px 10px; white-space: normal; text-align: left; }
 .op-cot-boton.con-transporte .op-cot-dos { opacity: 1; color: var(--transporte); }
 .op-cot-dos svg { vertical-align: -1px; }
+/* con varios productos la etiqueta es larga: baja a una segunda línea entera en vez
+   de cortarse con "…" justo donde dice el segundo precio */
+.op-fila.op-con-exw .op-fila-kw { white-space: normal; overflow: visible; line-height: 1.5; padding: 6px 0; }
+.op-fila.op-con-exw .op-fila-kw::after { display: inline-block; white-space: nowrap; max-width: 100%; vertical-align: middle; margin-top: 2px; }
