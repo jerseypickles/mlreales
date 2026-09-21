@@ -55,6 +55,12 @@ const nichoSchema = new mongoose.Schema({
   // paga. El EXW de fábrica NO se pisa: se guardan los dos para no confundirlos,
   // y todo cálculo usa el ajustado (`exwConTransporte`).
   recargoTransportePct: { type: Number, default: null },
+  // VARIOS PRODUCTOS EN UN NICHO. El importador, 21-sep: la manguera viene en 15 y
+  // 30 m, los focos en 200 y 300 W, las brochas en tres sets — "a futuro seguiremos
+  // haciendo" lo mismo. Un promedio no es el costo de ninguno. Cuando hay lista,
+  // `exwCotizadoUsd` es su promedio ponderado y `unidadesPedido` su suma (para
+  // ordenar y para lo que todavía mira un solo número); el detalle manda.
+  productosCotizados: { type: [{ _id: false, nombre: String, exwUsd: Number, unidades: Number }], default: undefined },
   // costo REAL por unidad puesto en Chile (CLP, todo incluido: producto, flete,
   // internación, despacho). Manda sobre el cálculo desde EXW: es un dato del
   // importador, no una cadena de supuestos (cubicaje/prorrateo ya nos mordió

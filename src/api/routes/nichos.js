@@ -549,7 +549,7 @@ router.post(
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {
   const cambios = {}
-  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, recargoTransportePct, costoPuestoClp, unidadesPedido, volumenM3, pesoKg, precioVentaObjetivoClp, fletePropioClp } = req.body ?? {}
+  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, recargoTransportePct, productosCotizados, costoPuestoClp, unidadesPedido, volumenM3, pesoKg, precioVentaObjetivoClp, fletePropioClp } = req.body ?? {}
   // cubicaje de la cotización: sin esto el flete del costo puesto es un supuesto
   // fletePropioClp: despacho por bulto con courier propio, la salida al volumétrico de ML
   for (const [campo, valor] of [['volumenM3', volumenM3], ['pesoKg', pesoKg], ['precioVentaObjetivoClp', precioVentaObjetivoClp], ['fletePropioClp', fletePropioClp]]) {
@@ -579,6 +579,20 @@ const ajustarNicho = manejar(async (req, res) => {
       if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'exwCotizadoUsd inválido (> 0)' })
       cambios.exwCotizadoUsd = n
       cambios.exwCotizadoEl = new Date()
+    }
+  }
+  if (productosCotizados !== undefined) {
+    if (productosCotizados === null || (Array.isArray(productosCotizados) && !productosCotizados.length)) cambios.productosCotizados = null
+    else {
+      if (!Array.isArray(productosCotizados) || productosCotizados.length > 10) return res.status(400).json({ error: 'productosCotizados: lista de 1 a 10 productos' })
+      const lista = productosCotizados.map((p) => ({ nombre: String(p?.nombre ?? '').trim().slice(0, 60), exwUsd: Number(p?.exwUsd), unidades: Math.round(Number(p?.unidades)) }))
+      if (lista.some((p) => !p.nombre || !(p.exwUsd > 0) || !(p.unidades >= 1))) return res.status(400).json({ error: 'cada producto necesita nombre, exwUsd > 0 y unidades >= 1' })
+      const total = lista.reduce((a, p) => a + p.unidades, 0)
+      cambios.productosCotizados = lista
+      // el resumen del nicho sale de la lista: promedio ponderado y suma
+      cambios.exwCotizadoUsd = Math.round((lista.reduce((a, p) => a + p.exwUsd * p.unidades, 0) / total) * 100) / 100
+      cambios.exwCotizadoEl = new Date()
+      cambios.unidadesPedido = total
     }
   }
   if (recargoTransportePct !== undefined) {

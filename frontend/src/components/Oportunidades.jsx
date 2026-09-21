@@ -440,7 +440,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
         <i>{rank}</i>
         {o.imagen ? <Miniatura src={o.imagen} lado={36} /> : <b className="op-fila-sinfoto" aria-hidden="true"><ImageOff size={14} /></b>}
       </span>
-      <span className="op-fila-kw" data-exw={o.cotizacion?.recargoTransportePct ? `EXW US$ ${String(o.cotizacion.exwUsd).replace('.', ',')} c/flete` : undefined}>
+      <span className="op-fila-kw" data-exw={etiquetaExw(o.cotizacion)}>
         <MioBadge mios={o.mios} />
         {o.keyword}
         <ChipTramo mediana={o.mediana} />
@@ -562,6 +562,15 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
   )
 }
 
+// La etiqueta naranja de la fila. Un nicho puede traer VARIOS productos (manguera
+// de 15 y 30 m, focos de 200 y 300 W): cada uno con su precio, nunca el promedio.
+const usd = (v) => String(v).replace('.', ',')
+function etiquetaExw(cot) {
+  if (!cot?.recargoTransportePct) return undefined
+  if (cot.productos?.length > 1) return `${cot.productos.map((p) => `${p.nombre} US$ ${usd(p.exwUsd)}`).join(' · ')} c/flete`
+  return `EXW US$ ${usd(cot.exwUsd)} c/flete`
+}
+
 // Etapas del embudo de compra (espejo de ETAPAS_COMPRA en el backend)
 const ETAPAS = ['evaluando', 'cotizando', 'pedido', 'vendiendo', 'en-espera', 'descartado']
 
@@ -666,13 +675,17 @@ function Cotizacion({ o, onRecargar }) {
         ? 'sin costo'
         : cot.costoPuestoClp != null
           ? `✓ ${fmtPrecio(cot.costoPuestoClp)}/u puesto`
+          : cot.productos?.length > 1 && cot.productos.every((p) => p.landedClp != null)
+            ? `~ ${fmtPrecio(Math.min(...cot.productos.map((p) => p.landedClp)))} a ${fmtPrecio(Math.max(...cot.productos.map((p) => p.landedClp)))}/u internado`
           : cot.landedClp != null
             ? `~ ${fmtPrecio(cot.landedClp)}/u internado${cot.volumenSupuesto ? ' ◊' : ''}`
             : `EXW US$ ${cot.exwUsd} · falta costo puesto`}
       {/* DOS PRECIOS, SIN CONFUNDIRLOS (20-sep): el que se paga —con el transporte
           del agente— es el que calcula; el de fábrica queda a la vista, en chico. */}
       {cot?.recargoTransportePct && cot.costoPuestoClp == null
-        ? <small className="op-cot-dos"><Truck size={11} aria-hidden="true" /> US$ {cot.exwUsd} con flete a Chile · fábrica US$ {cot.exwFabricaUsd} +{cot.recargoTransportePct}%</small>
+        ? cot.productos?.length > 1
+          ? cot.productos.map((p) => <small key={p.nombre} className="op-cot-dos"><Truck size={11} aria-hidden="true" /> <b>{p.nombre}</b> · US$ {usd(p.exwUsd)} con flete (fábrica {usd(p.exwFabricaUsd)}) × {p.unidades} u{p.landedClp != null ? ` → ~${fmtPrecio(p.landedClp)} internado` : ''}</small>)
+          : <small className="op-cot-dos"><Truck size={11} aria-hidden="true" /> US$ {usd(cot.exwUsd)} con flete a Chile · fábrica US$ {usd(cot.exwFabricaUsd)} +{cot.recargoTransportePct}%</small>
         : null}
     </button>
   )

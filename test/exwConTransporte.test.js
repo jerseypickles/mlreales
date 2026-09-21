@@ -19,3 +19,13 @@ test('si el precio ya trae el flete a Chile, el costo internado no suma otro fle
   assert.ok(con.porUnidad.fleteClp > 0)
   assert.ok(sin.porUnidad.landedNetoClp < con.porUnidad.landedNetoClp)
 })
+
+test('un nicho con varios productos guarda cada uno, y su resumen es el promedio ponderado y la suma', async () => {
+  // la cuenta que hace el PATCH, con la factura real de mangueras: 15 m y 30 m
+  const lista = [{ exwUsd: 4.5, unidades: 100 }, { exwUsd: 5.9, unidades: 50 }]
+  const total = lista.reduce((a, p) => a + p.unidades, 0)
+  assert.equal(total, 150)
+  assert.equal(Math.round((lista.reduce((a, p) => a + p.exwUsd * p.unidades, 0) / total) * 100) / 100, 4.97)
+  assert.equal(exwConTransporte(4.5, 15), 5.18)
+  assert.equal(exwConTransporte(5.9, 15), 6.79)
+})

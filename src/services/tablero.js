@@ -202,6 +202,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         frecuenciaScan: 1,
         exwCotizadoUsd: 1,
         recargoTransportePct: 1,
+        productosCotizados: 1,
         exwCotizadoEl: 1,
         costoPuestoClp: 1,
         costoPuestoEl: 1,
@@ -402,6 +403,15 @@ export async function tableroOportunidades({ todos = false } = {}) {
           return precioPropio ? m : { ...m, margenClp: null, margenPct: null, viable: null }
         })(),
       }
+    }
+    // cada producto del nicho con SU costo: el despacho se reparte entre todas las
+    // unidades del nicho, pero el precio y el flete son los de cada uno
+    if (cotizacion && n.productosCotizados?.length > 1) {
+      cotizacion.productos = n.productosCotizados.map((p) => {
+        const exwUsd = exwConTransporte(p.exwUsd, n.recargoTransportePct)
+        const m = margenCotizacion({ exwUsd, rec: recParaMargen, unidades: unidadesEfectivas, comisionPct, volumenM3: n.volumenM3 ?? null, tipoCambioUsdClp, fleteIncluido: dosPrecios.recargoTransportePct != null })
+        return { nombre: p.nombre, unidades: p.unidades, exwFabricaUsd: p.exwUsd, exwUsd, landedClp: m?.landedClp ?? null }
+      })
     }
     // gasto del pedido: cantidad × EXW cotizado (real) o × EXW máx (estimación)
     const precioGasto = cotizacion?.exwUsd ?? exwMax
