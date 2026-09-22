@@ -56,11 +56,25 @@ export function filasCompetidores(snaps, productos) {
   return filas
 }
 
+// Con 60% de pares en cero reseñas, los empates son la mayoría: sin rango
+// promedio el orden entre ceros sería arbitrario y ensuciaría la comparación.
+function rangos(valores) {
+  const orden = valores.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0])
+  const r = new Array(valores.length)
+  for (let i = 0; i < orden.length;) {
+    let j = i
+    while (j + 1 < orden.length && orden[j + 1][0] === orden[i][0]) j++
+    for (let k = i; k <= j; k++) r[orden[k][1]] = (i + j) / 2
+    i = j + 1
+  }
+  return r
+}
+
 function spearman(a, b) {
-  const rango = (v) => { const o = v.map((x, i) => [x, i]).sort((p, q) => p[0] - q[0]); const r = []; o.forEach(([, i], k) => { r[i] = k }); return r }
-  const ra = rango(a), rb = rango(b), n = a.length, m = (n - 1) / 2
+  const ra = rangos(a), rb = rangos(b), n = a.length
+  const ma = ra.reduce((x, y) => x + y, 0) / n, mb = rb.reduce((x, y) => x + y, 0) / n
   let num = 0, da = 0, db = 0
-  for (let i = 0; i < n; i++) { num += (ra[i] - m) * (rb[i] - m); da += (ra[i] - m) ** 2; db += (rb[i] - m) ** 2 }
+  for (let i = 0; i < n; i++) { num += (ra[i] - ma) * (rb[i] - mb); da += (ra[i] - ma) ** 2; db += (rb[i] - mb) ** 2 }
   return da > 0 && db > 0 ? num / Math.sqrt(da * db) : null
 }
 
