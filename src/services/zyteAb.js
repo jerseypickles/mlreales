@@ -117,7 +117,21 @@ export async function pruebaProducto({ urls = [], apiKey = config.zyteApiKey, co
     const ejemplo = {}
     for (const [k, v] of Object.entries(cmp)) if (v === 'distinto' || v === 'solo-zyte') ejemplo[k] = { zyte: k === 'titulo' ? x.product.name : k === 'marca' ? x.product.brand?.name : k === 'precioAnterior' ? x.product.regularPrice : k === 'nota' ? x.product.aggregateRating?.ratingValue : k === 'resenias' ? x.product.aggregateRating?.reviewCount : k === 'url' ? (x.product.canonicalUrl ?? x.product.url) : x.product[k === 'precio' ? 'price' : k === 'disponibilidad' ? 'availability' : k],
       html: k === 'titulo' ? propio?.name : k === 'marca' ? propio?.brand?.name : k === 'precioAnterior' ? propio?.regularPrice : k === 'nota' ? propio?.aggregateRating?.ratingValue : k === 'resenias' ? propio?.aggregateRating?.reviewCount : k === 'url' ? propio?.canonicalUrl : propio?.[k === 'precio' ? 'price' : k === 'disponibilidad' ? 'availability' : k] }
-    return { url, ok: true, probabilidad: x.product.metadata?.probability ?? null, htmlSinProducto: !propio, cmp, ejemplo }
+    // dónde vive en el HTML el número que Zyte mostró: así se escribe el lector
+    const donde = (valor, max = 4) => {
+      if (valor == null || valor === '') return []
+      const out = []
+      for (const m of x.html.matchAll(new RegExp(`[^0-9.]${String(valor).replace('.', '\\.')}[^0-9]`, 'g'))) {
+        out.push(x.html.slice(Math.max(0, m.index - 90), m.index + 40).replace(/\s+/g, ' '))
+        if (out.length >= max) break
+      }
+      return out
+    }
+    const rastro = {}
+    if (['distinto', 'solo-zyte'].includes(cmp.resenias)) rastro.resenias = donde(x.product.aggregateRating?.reviewCount)
+    if (['distinto', 'solo-zyte'].includes(cmp.nota)) rastro.nota = donde(x.product.aggregateRating?.ratingValue, 3)
+    if (['distinto', 'solo-html'].includes(cmp.precioAnterior)) rastro.precioAnterior = donde(propio?.regularPrice, 3)
+    return { url, ok: true, probabilidad: x.product.metadata?.probability ?? null, htmlSinProducto: !propio, cmp, ejemplo, rastro }
   })
   const resumen = {}
   for (const f of fichas.filter((x) => x.ok)) for (const [k, v] of Object.entries(f.cmp)) { resumen[k] ??= {}; resumen[k][v] = (resumen[k][v] ?? 0) + 1 }
