@@ -16,12 +16,69 @@ function evaluarCortes(filas, cortes, parametros) {
     for (const f of test) {
       const estimado = predecirRidge(modelo, f.xs)
       resultados.push({ grupo: f.grupo, origen: corte, objetivo: f.fin, h: f.h,
-        error: Math.abs(f.y - estimado), errorBase: Math.abs(f.y),
+        error: Math.abs(f.y - estimado), errorBase: Math.abs(f.y), y: f.y, estimado, impulso: f.xs[0],
         errorPersistencia: Math.abs(Math.log1p(f.real) - Math.log1p(f.ultima)),
         sesgo: estimado - f.y })
     }
   }
   return resultados
+}
+
+// Rangos promedio: los empates comparten posición.
+function rangos(valores) {
+  const orden = valores.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0])
+  const r = new Array(valores.length)
+  for (let i = 0; i < orden.length;) {
+    let j = i
+    while (j + 1 < orden.length && orden[j + 1][0] === orden[i][0]) j++
+    for (let k = i; k <= j; k++) r[orden[k][1]] = (i + j) / 2
+    i = j + 1
+  }
+  return r
+}
+
+function spearman(a, b) {
+  const ra = rangos(a), rb = rangos(b), n = a.length
+  const ma = (n - 1) / 2
+  let num = 0, da = 0, db = 0
+  for (let i = 0; i < n; i++) { num += (ra[i] - ma) * (rb[i] - ma); da += (ra[i] - ma) ** 2; db += (rb[i] - ma) ** 2 }
+  return da > 0 && db > 0 ? num / Math.sqrt(da * db) : null
+}
+
+// ¿ACIERTA CUÁL NICHO CRECE MÁS QUE OTRO? El error absoluto lo hunde una
+// deriva común a todas las keywords (el mercado entero bajó en 2025 y subió
+// en 2026). Comparando keywords del mismo mes y horizonte esa deriva se
+// cancela, y queda lo que sirve para elegir: el orden. La referencia es el
+// impulso (lo que ya crece interanual sigue creciendo); "repetir el año
+// pasado" le da cero a todas y no ordena nada.
+export function evaluarRanking(resultados, { minimo = 10 } = {}) {
+  const grupos = new Map()
+  for (const r of resultados) {
+    const k = `${r.origen}:${r.h}`
+    if (!grupos.has(k)) grupos.set(k, [])
+    grupos.get(k).push(r)
+  }
+  const acumulado = { modelo: [], impulso: [], topModelo: [], topImpulso: [] }
+  for (const filas of grupos.values()) {
+    if (filas.length < minimo) continue
+    const reales = filas.map((f) => f.y)
+    const sm = spearman(filas.map((f) => f.estimado), reales), si = spearman(filas.map((f) => f.impulso), reales)
+    if (sm === null || si === null) continue
+    acumulado.modelo.push(sm)
+    acumulado.impulso.push(si)
+    // del quinto que se predice crecer más, cuánto terminó en el quinto real
+    const n = Math.max(1, Math.floor(filas.length / 5))
+    const top = (campo) => new Set([...filas.keys()].sort((a, b) => filas[b][campo] - filas[a][campo]).slice(0, n))
+    const real = top('y')
+    acumulado.topModelo.push([...top('estimado')].filter((i) => real.has(i)).length / n)
+    acumulado.topImpulso.push([...top('impulso')].filter((i) => real.has(i)).length / n)
+  }
+  if (!acumulado.modelo.length) return null
+  const prom = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length
+  const spearmanModelo = prom(acumulado.modelo), spearmanImpulso = prom(acumulado.impulso)
+  return { metrica: 'Spearman por mes y horizonte (la deriva común se cancela)', grupos: acumulado.modelo.length,
+    spearman: spearmanModelo, spearmanImpulso, topQuintil: prom(acumulado.topModelo), topQuintilImpulso: prom(acumulado.topImpulso),
+    topQuintilAzar: 0.2, ordenaMejor: spearmanModelo > 0.1 && spearmanModelo > spearmanImpulso + 0.02 }
 }
 
 export function entrenarDemanda(series) {
@@ -55,6 +112,7 @@ export function entrenarDemanda(series) {
     superaReferencias: referencia > 0 && maeLog < referencia * 0.95,
     porHorizonte: HORIZONTES.map((h) => ({ h, maeLog: errorPorGrupo(errores.filter((e) => e.h === h)) })),
     // Rangos empíricos: no prometer cobertura nominal con observaciones correlacionadas.
+    ranking: evaluarRanking(errores),
     coberturaRangoEmpirico: errores.filter((e) => e.error <= cuantil(elegido.errores.filter((x) => x.h === e.h).map((x) => x.error), 0.9)).length / errores.length,
   }
   return { estado: 'sombra', version: VERSION_DEMANDA, objetivo: 'busquedas-google', cobertura, evaluacion,

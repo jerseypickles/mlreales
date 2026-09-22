@@ -7280,3 +7280,4 @@ em.mg-agotado { color: var(--peligro); }
 .sn-grilla .sn { position: relative; z-index: 1; }
 .nv-cuanto-est em { white-space: nowrap; }
 .nv-cuanto-fila { flex-wrap: wrap; }
+.apr-ranking { margin-top: 18px; padding-top: 4px; border-top: 1px solid var(--borde); }

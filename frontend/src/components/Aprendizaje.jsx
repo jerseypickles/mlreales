@@ -68,7 +68,7 @@ const VARIABLES = {
   estacionObjetivo: 'Estacionalidad del mes', horizonte: 'Meses hacia adelante',
 }
 
-function Comparacion({ filas }) {
+function Comparacion({ filas, formato = (v) => decimal(v, 3), nota = 'Error promedio de la prueba. Barra más corta = se equivoca menos.' }) {
   const max = Math.max(...filas.map((f) => f.valor))
   return (
     <div className="apr-comparacion">
@@ -76,10 +76,33 @@ function Comparacion({ filas }) {
         <div key={f.nombre} className={`apr-comp-fila${f.propio ? ' apr-comp-propio' : ''}${f.mejor ? ' apr-comp-mejor' : ''}`}>
           <span className="apr-comp-nombre">{f.nombre}</span>
           <span className="apr-comp-pista"><span style={{ width: `${(f.valor / max) * 100}%` }} /></span>
-          <span className="apr-comp-valor">{decimal(f.valor, 3)}</span>
+          <span className="apr-comp-valor">{formato(f.valor)}</span>
         </div>
       ))}
-      <p className="apr-nota">Error promedio de la prueba. Barra más corta = se equivoca menos.</p>
+      <p className="apr-nota">{nota}</p>
+    </div>
+  )
+}
+
+// Aunque falle en el número exacto (la deriva común del mercado lo arrastra),
+// el modelo puede acertar cuál nicho crece más que otro: eso es lo que sirve
+// para elegir, y se mide aparte.
+function Ranking({ r }) {
+  if (!r) return null
+  const filas = [
+    { nombre: 'Este modelo', valor: r.topQuintil, propio: true },
+    { nombre: 'Lo que ya crece, sigue', valor: r.topQuintilImpulso },
+    { nombre: 'Al azar', valor: r.topQuintilAzar },
+  ]
+  const max = Math.max(...filas.map((f) => f.valor))
+  return (
+    <div className="apr-ranking">
+      <p className={`apr-veredicto apr-veredicto-${r.ordenaMejor ? 'bien' : 'aviso'}`}>
+        {r.ordenaMejor ? <CheckCircle2 size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+        {r.ordenaMejor ? 'Sí sabe cuál nicho crece más que otro' : 'Todavía no ordena mejor que la regla simple'}
+      </p>
+      <Comparacion filas={filas.map((f) => ({ ...f, mejor: f.valor === max }))} formato={(v) => `${Math.round(v * 10)} de 10`}
+        nota={`De los nichos que marca como los que más crecerán, cuántos de cada 10 lo hicieron de verdad. Probado en ${r.grupos} meses y horizontes.`} />
     </div>
   )
 }
@@ -135,6 +158,7 @@ function Modelo({ modelo, Icono, titulo, pregunta, children }) {
         </p>
         <Comparacion filas={filas} />
         <p className="apr-nota">{gana ? 'Sigue en observación hasta confirmarlo con meses nuevos.' : 'Mientras no le gane a la regla simple, no se usa para decidir.'}</p>
+        {demanda && <Ranking r={e.ranking} />}
         <Pesos coeficientes={modelo.coeficientes} />
       </>}
       {!filas && children}
@@ -149,6 +173,7 @@ function estadoSemana(d, minimoVisitas) {
   if (d.admisible) return { clase: 'aviso', Icono: Eye, texto: `Pocas visitas · ${fmtNum(d.visitas)} de ${minimoVisitas}` }
   const quiebre = /sin stock parte del (\d{4}-\d{2}-\d{2})/.exec(d.motivo ?? '')
   if (quiebre) return { clase: 'mal', Icono: PackageX, texto: `Quiebre de stock el ${fecha(quiebre[1])}` }
+  if (/quiebre de stock/i.test(d.motivo ?? '')) return { clase: 'mal', Icono: PackageX, texto: 'Pausada sin stock' }
   if (/stock/i.test(d.motivo ?? '')) return { clase: 'aviso', Icono: PackageX, texto: 'Stock sin medir algún día' }
   if (/sin visitas/i.test(d.motivo ?? '')) return { clase: 'espera', Icono: CircleDashed, texto: 'Sin visitas' }
   return { clase: 'aviso', Icono: AlertTriangle, texto: d.motivo ?? 'Sin dato' }

@@ -170,3 +170,18 @@ test('una promo dentro de la ventana no anula la semana: el precio es el promedi
   assert.equal(diagnosticoObservacion({ ...pausada, mediciones: p.mediciones }, [], opts).motivo, 'publicación pausada en ML')
   assert.ok(diagnosticoObservacion({ ...p, estadoMl: 'active' }, [], opts).observacion)
 })
+
+test('evaluarRanking: mide el orden dentro de cada mes, sin que la deriva común lo castigue', async () => {
+  const { evaluarRanking } = await import('../src/services/ml/demanda.js')
+  // 20 keywords en dos meses; el mes 2 tiene una deriva de −0,5 para TODAS
+  const filas = [1, 2].flatMap((origen) => Array.from({ length: 20 }, (_, i) => ({
+    grupo: `k${i}`, origen, h: 3, y: i / 10 - (origen === 2 ? 0.5 : 0), estimado: i / 10, impulso: (i * 7) % 20,
+  })))
+  const r = evaluarRanking(filas)
+  assert.equal(r.grupos, 2)
+  assert.ok(Math.abs(r.spearman - 1) < 1e-9, 'el orden es perfecto aunque el nivel falle por 0,5')
+  assert.equal(r.topQuintil, 1)
+  assert.ok(r.spearmanImpulso < 0.5)
+  assert.equal(r.ordenaMejor, true)
+  assert.equal(evaluarRanking(filas.slice(0, 5)), null, 'con menos de 10 keywords no hay orden que medir')
+})
