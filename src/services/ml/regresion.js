@@ -15,7 +15,12 @@ export function ajustarRidge(filas, { lambda = 10, semivida = Infinity, hasta = 
   const suma = pesos.reduce((a, b) => a + b, 0)
   const escalaPeso = cuentas.size / suma
   const medias = Array.from({ length: p }, (_, j) => filas.reduce((a, f, i) => a + f.xs[j] * pesos[i], 0) / suma)
-  const escalas = medias.map((m, j) => Math.sqrt(filas.reduce((a, f, i) => a + (f.xs[j] - m) ** 2 * pesos[i], 0) / suma) || 1)
+  // una columna constante no deja desviación 0 exacta sino ~1e-16 de redondeo:
+  // estandarizarla por eso convertiría ruido numérico en una variable enorme
+  const escalas = medias.map((m, j) => {
+    const e = Math.sqrt(filas.reduce((a, f, i) => a + (f.xs[j] - m) ** 2 * pesos[i], 0) / suma)
+    return e > 1e-9 * Math.max(1, Math.abs(m)) ? e : 1
+  })
   const x = filas.map((f, i) => {
     const w = Math.sqrt(pesos[i] * escalaPeso)
     return [w, ...f.xs.map((v, j) => (v - medias[j]) / escalas[j] * w)]

@@ -100,6 +100,12 @@ router.get('/competidores', async (req, res) => {
   const dias = Math.min(180, Math.max(7, Number(req.query.dias) || 90))
   res.json(await auditoriaPanelCompetidores({ dias }))
 })
+// Modelo en sombra: qué hace vender a una publicación, aprendido del panel de
+// competidores y probado en nichos que no vio. Cacheado 30 minutos.
+router.get('/competidores/modelo', async (_req, res) => {
+  const { modeloCompetidores } = await import('../../services/ml/modeloCompetidores.js')
+  res.json(await modeloCompetidores())
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {
