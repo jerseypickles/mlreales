@@ -1,3 +1,4 @@
+import { objetoDesde } from './jsonEmbebido.js'
 import { skuDesdeUrl } from './normalizadorDetalle.js'
 import { config } from '../config/env.js'
 
@@ -180,7 +181,13 @@ export function productoDesdeHtml(html) {
   // principal (`"id":"price"`): el aria-label "Antes: …" y un original_price
   // suelto también aparecen en el carrusel de recomendados, y el 22-sep eso le
   // atribuyó al kayak ($89.990) el tachado de otro producto ($399.990).
-  const anterior = num(t.match(/"id":"price","price":\{"previous_price":\{"value":(\d+(?:\.\d+)?)/)?.[1])
+  // Y en catálogo hay VARIOS componentes de precio (una por oferta): el mismo
+  // masajeador dio "Antes" 17.015 y 81.107 en dos lecturas. Vale solo el
+  // componente cuyo precio actual es el precio del producto.
+  const componentesPrecio = [...t.matchAll(/"id":"price","price":\{/g)].map((m) => {
+    const o = objetoDesde(t, m.index + m[0].length - 1)
+    return { actual: num(o?.value), antes: num(o?.previous_price?.value) }
+  })
   // LAS RESEÑAS tampoco se leen del JSON-LD: su reviewCount son solo las que
   // traen comentario (178 de 276 en la freidora). Lo que la página muestra, y lo
   // que siempre guardó el sistema, es el `amount` del bloque de reseñas.
@@ -189,6 +196,7 @@ export function productoDesdeHtml(html) {
   const stock = stockDesdeHtml(t)
   const url = canonica ?? prod?.url ?? null
   const precio = num(oferta?.price) ?? metaPrecio
+  const anterior = componentesPrecio.find((c) => precio !== null && c.actual === precio && c.antes > precio)?.antes ?? null
   const titulo = prod?.name ?? ogTitulo
   if (precio === null && titulo === null) return null
   return {
