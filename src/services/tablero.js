@@ -374,7 +374,9 @@ export async function tableroOportunidades({ todos = false } = {}) {
     // un no_entrar con serie completa sí se esconde: ya se decidió. Uno sin
     // serie es un primer vistazo y se queda a la vista, marcado como midiendo.
     const scansDeEste = n.conteoDemanda?.[0]?.n ?? 0
-    if (!todos && analisis.veredicto === 'no_entrar' && scansDeEste >= config.maduracionScans) continue
+    // …salvo que el importador ya lo haya puesto a cotizar o pedir: eso lo decidió
+    // él mirando que el nicho vende (22-sep, silla gamer), y la IA no lo esconde
+    if (!todos && analisis.veredicto === 'no_entrar' && scansDeEste >= config.maduracionScans && !['cotizando', 'pedido'].includes(n.etapaCompra)) continue
 
     const ultimo = n.ultimos?.[0]
     const rec = analisis.recomendacion ?? {}
