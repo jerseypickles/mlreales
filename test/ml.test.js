@@ -185,3 +185,20 @@ test('evaluarRanking: mide el orden dentro de cada mes, sin que la deriva común
   assert.equal(r.ordenaMejor, true)
   assert.equal(evaluarRanking(filas.slice(0, 5)), null, 'con menos de 10 keywords no hay orden que medir')
 })
+
+test('ordenarPorTendencia: lugar de cada nicho con la emisión vigente y solo meses futuros', async () => {
+  const { ordenarPorTendencia } = await import('../src/api/routes/aprendizaje.js')
+  const hoy = '2026-09-21T13:31:00Z', vieja = '2026-09-07T13:31:00Z'
+  const nicho = (nombre, factor) => ({ nicho: nombre, meses: [
+    { periodo: '2026-08', estimado: 999999, referencia: 1, real: 5, emitidoEl: vieja }, // ya pasó: no cuenta
+    { periodo: '2026-12', estimado: 100 * factor, referencia: 100, real: null, emitidoEl: hoy },
+    { periodo: '2027-01', estimado: 100 * factor, referencia: 100, real: null, emitidoEl: hoy },
+  ] })
+  const salida = ordenarPorTendencia([nicho('a', 0.5), nicho('b', 1), nicho('c', 1.1), nicho('d', 1.2), nicho('e', 2), { nicho: 'sin', meses: [] }])
+  const por = Object.fromEntries(salida.map((n) => [n.nicho, n.tendencia]))
+  assert.equal(por.e.grupo, 'arriba')
+  assert.equal(por.a.grupo, 'abajo')
+  assert.equal(por.c.grupo, 'medio')
+  assert.equal(por.e.vsAnioPasadoPct, 100)
+  assert.equal(por.sin, null)
+})

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Search, Sun, Truck, Warehouse } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Search, Sun, Truck, TrendingDown, TrendingUp, Warehouse } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
@@ -419,7 +419,7 @@ function MarcaCotizando({ o, onRecargar }) {
   )
 }
 
-function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
+function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
   const ven = chipVentana(o.ventana)
   const c = o.curvaAnual
   const max = c?.curva?.length ? Math.max(...c.curva) : 0
@@ -445,6 +445,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
         {o.keyword}
         <ChipTramo mediana={o.mediana} />
         <ChipSinFull o={o} />
+        <ChipTendencia t={tendencia} />
         <NuevoBadge creadoEl={o.creadoEl} />
         {o.nivelBusqueda?.nivel === 'renombrar' ? <i className="op-fila-alerta" title="La gente escribe otra frase">keyword</i> : null}
       </span>
@@ -706,6 +707,24 @@ const LOGISTICA_CHIP = {
 // LO QUE NO ENTRA A FULL SE VE EN LA FILA CERRADA. El importador, 22-sep: "lo que
 // no se pueda Full ponle alguna etiqueta o color para tener idea". Antes esto
 // solo se veía abriendo la fila; una silla gamer de 19 kg pasaba desapercibida.
+// EL APRENDIZAJE ORDENA NICHOS. No sabe cuánto se va a buscar, pero sí cuál
+// viene mejor que otro (probado en dos períodos: 3,9-4,4 de cada 10 del quinto
+// de arriba lo cumplen; al azar serían 2). Solo se pinta el quinto de arriba y
+// el de abajo, que es lo que se validó, y solo si el último entrenamiento
+// volvió a pasar la prueba de orden.
+function ChipTendencia({ t }) {
+  if (!t || t.grupo === 'medio') return null
+  const arriba = t.grupo === 'arriba'
+  const Icono = arriba ? TrendingUp : TrendingDown
+  const lugar = arriba ? `entre el 20% que más crecerá de ${t.entre} nichos` : `entre el 20% que menos crecerá de ${t.entre} nichos`
+  return (
+    <em className={`op-tendencia op-tendencia-${t.grupo}`}
+      title={`Aprendizaje: ${lugar} en los próximos 3-5 meses (${t.vsAnioPasadoPct >= 0 ? '+' : ''}${t.vsAnioPasadoPct}% contra el mismo mes del año pasado). El orden es confiable; el porcentaje exacto no.`}>
+      <Icono size={11} aria-hidden="true" />{arriba ? 'viene mejor' : 'viene peor'}
+    </em>
+  )
+}
+
 function ChipSinFull({ o }) {
   const f = o.fueraDeFull
   // la regla física (medidas/peso contra los límites de ML) manda sobre lo que
@@ -1400,12 +1419,13 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const [expandido, setExpandido] = useState(null)
   const [busca, setBusca] = useState('')
   // pronósticos del aprendizaje, por nicho: alimentan el gráfico de la carta
-  const [pron, setPron] = useState({ porNicho: new Map(), modeloGana: false })
+  const [pron, setPron] = useState({ porNicho: new Map(), modeloGana: false, ordena: false })
   useEffect(() => {
     Promise.all([api.aprendizajePronosticosNichos(), api.aprendizaje()])
       .then(([p, e]) => setPron({
         porNicho: new Map((p.nichos ?? []).map((n) => [String(n.nichoId), n])),
         modeloGana: Boolean(e.modelos?.find((m) => m.objetivo === 'busquedas-google')?.evaluacion?.superaReferencias),
+        ordena: Boolean(e.modelos?.find((m) => m.objetivo === 'busquedas-google')?.evaluacion?.ranking?.ordenaMejor),
       }))
       .catch(() => {}) // sin pronósticos la carta funciona igual
   }, [])
@@ -1526,6 +1546,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
                   abierta={abierta}
                   onAlternar={() => setExpandido(abierta ? null : o.nichoId)}
                   onRecargar={cargar}
+                  tendencia={pron.ordena ? pron.porNicho.get(String(o.nichoId))?.tendencia : null}
                 />
                 {abierta ? (
                   <>

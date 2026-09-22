@@ -7281,3 +7281,7 @@ em.mg-agotado { color: var(--peligro); }
 .nv-cuanto-est em { white-space: nowrap; }
 .nv-cuanto-fila { flex-wrap: wrap; }
 .apr-ranking { margin-top: 18px; padding-top: 4px; border-top: 1px solid var(--borde); }
+/* chip del aprendizaje en la fila cerrada: color solo en la píldora */
+.op-tendencia { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; font-style: normal; vertical-align: 1.5px; white-space: nowrap; border: 1px solid currentColor; }
+.op-tendencia-arriba { color: var(--exito-tinta); background: color-mix(in srgb, var(--exito) 12%, transparent); }
+.op-tendencia-abajo { color: var(--tinta-2); background: var(--superficie-2); border-color: var(--borde); }
