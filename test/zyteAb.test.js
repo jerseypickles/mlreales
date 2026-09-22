@@ -42,3 +42,12 @@ test('productoDesdeHtml: lee del JSON-LD lo mismo que la extracción de Zyte, co
   assert.equal(c.marca, 'igual')
   assert.equal(productoDesdeHtml('<html>cascarón</html>'), null)
 })
+
+test('productoDesdeHtml: sin JSON-LD (catálogo) usa el título social, el precio meta y el sku de la URL', async () => {
+  const { productoDesdeHtml } = await import('../src/services/detalleMl.js')
+  const html = '<link rel="canonical" href="https://www.mercadolibre.cl/partidor-bateria/p/MLC72722591"/>' +
+    '<meta property="og:title" content="Partidor Bateria Auto Portatil 300a - $ 30.295"><meta itemprop="price" content="30295">' +
+    '"reviews":{"rating":4.6,"amount":88,"subtitle":"(88)"} (+10 disponibles)'
+  const p = productoDesdeHtml(html)
+  assert.deepEqual([p.name, p.price, p.sku, p.availability, p.aggregateRating.reviewCount], ['Partidor Bateria Auto Portatil 300a', 30295, 'MLC72722591', 'InStock', 88])
+})

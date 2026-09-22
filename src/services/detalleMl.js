@@ -1,3 +1,4 @@
+import { skuDesdeUrl } from './normalizadorDetalle.js'
 import { config } from '../config/env.js'
 
 // DETALLE DE FICHA POR ZYTE, CON LAS TRAMPAS YA PAGADAS.
@@ -171,6 +172,10 @@ export function productoDesdeHtml(html) {
   const oferta = Array.isArray(prod?.offers) ? prod.offers[0] : prod?.offers
   const canonica = t.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i)?.[1] ?? t.match(/<link[^>]+href="([^"]+)"[^>]+rel="canonical"/i)?.[1] ?? null
   const num = (v) => (v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null)
+  // 4 de 15 fichas del 22-sep no traían JSON-LD (tres de catálogo y una
+  // maleta): para esas, cada campo tiene un respaldo en la misma página
+  const ogTitulo = t.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i)?.[1]?.replace(/\s+-\s+\$\s*[\d.]+\s*$/, '').trim() ?? null
+  const metaPrecio = num(t.match(/itemprop="price"\s+content="([\d.]+)"/i)?.[1] ?? t.match(/content="([\d.]+)"\s+itemprop="price"/i)?.[1])
   // EL TACHADO no está en el JSON-LD. Se lee SOLO del componente de precio
   // principal (`"id":"price"`): el aria-label "Antes: …" y un original_price
   // suelto también aparecen en el carrusel de recomendados, y el 22-sep eso le
@@ -181,19 +186,24 @@ export function productoDesdeHtml(html) {
   // que siempre guardó el sistema, es el `amount` del bloque de reseñas.
   const visible = t.match(/"reviews":\{"rating":([\d.]+),"amount":(\d+)/) ?? t.match(/"rate":([\d.]+),"count":(\d+),"layout"/)
   const disp = String(oferta?.availability ?? '')
-  if (!prod) return null
+  const stock = stockDesdeHtml(t)
+  const url = canonica ?? prod?.url ?? null
+  const precio = num(oferta?.price) ?? metaPrecio
+  const titulo = prod?.name ?? ogTitulo
+  if (precio === null && titulo === null) return null
   return {
-    url: canonica ?? prod.url ?? null,
+    url,
     canonicalUrl: canonica,
-    sku: prod.sku ?? prod.productID ?? null,
-    name: prod.name ?? null,
-    price: num(oferta?.price),
+    sku: prod?.sku ?? prod?.productID ?? skuDesdeUrl(url),
+    name: titulo,
+    price: precio,
     regularPrice: anterior,
     currency: oferta?.priceCurrency ?? null,
-    availability: /InStock/i.test(disp) ? 'InStock' : /OutOfStock|SoldOut/i.test(disp) ? 'OutOfStock' : null,
-    brand: prod.brand ? { name: typeof prod.brand === 'string' ? prod.brand : prod.brand.name ?? null } : null,
+    availability: /InStock/i.test(disp) ? 'InStock' : /OutOfStock|SoldOut/i.test(disp) ? 'OutOfStock'
+      : stock?.stock > 0 ? 'InStock' : null,
+    brand: prod?.brand ? { name: typeof prod.brand === 'string' ? prod.brand : prod.brand.name ?? null } : null,
     aggregateRating: visible ? { ratingValue: num(visible[1]), reviewCount: num(visible[2]) }
-      : prod.aggregateRating ? { ratingValue: num(prod.aggregateRating.ratingValue), reviewCount: null } : null,
+      : prod?.aggregateRating ? { ratingValue: num(prod.aggregateRating.ratingValue), reviewCount: null } : null,
   }
 }
 
