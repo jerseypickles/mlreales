@@ -458,6 +458,44 @@ export function movimientoDelNicho(publicaciones) {
   return fs.filter((f) => f.tramosMedidos > 0 && f.dias >= 3).length >= 2 ? 'quieto' : 'sin-datos'
 }
 
+// EL PISO NO ES LA VENTA. El importador, 22-sep: "yo no puedo pensar que lo que me
+// muestra es el 100% de las ventas". Correcto: en un número exacto (1-5) cada
+// baja es una venta contada; en un rango ("+5", "+10", "+25") la venta queda
+// escondida hasta cruzar el escalón, y al cruzar se cuenta 1. Cuánto se ve de
+// verdad se mide con lo propio, POR ESCALÓN: en tus productos la venta real se
+// conoce, así que "en +25 el método ve el 20%" es un dato, no un supuesto.
+// Devuelve un factor por escalón (real / visto) y el porcentaje global; pide un
+// mínimo de venta real por escalón para no inventar con dos unidades.
+export const ESCALON_MIN_REAL = 8
+export const escalonDe = (l) => {
+  if (!l || !Number.isFinite(l.stock)) return null
+  if (l.topado) return l.stock >= 51 ? 'mas50' : l.stock >= 26 ? 'mas25' : l.stock >= 11 ? 'mas10' : 'mas5'
+  return 'exacto'
+}
+export function calibracionPorEscalon(muestras) {
+  const acc = {}
+  for (const m of muestras ?? []) {
+    if (!m.escalon) continue
+    const a = (acc[m.escalon] ??= { real: 0, visto: 0, productos: 0 })
+    a.real += m.real; a.visto += m.visto; a.productos++
+  }
+  const escalones = {}
+  for (const [k, a] of Object.entries(acc)) {
+    escalones[k] = { ...a, pctVisto: a.real ? Math.round((a.visto / a.real) * 100) : null,
+      // el factor solo se afirma con venta real suficiente; si nada se vio, no hay factor (sería infinito)
+      factor: a.real >= ESCALON_MIN_REAL && a.visto > 0 ? Math.round((a.real / a.visto) * 10) / 10 : null }
+  }
+  return escalones
+}
+
+// Pura. Con los factores por escalón, cuánto pudo vender de verdad una publicación
+// que muestra `piso` unidades vistas estando en `escalon`. Sin factor, solo el piso.
+export function ventaEstimada(piso, escalon, escalones) {
+  const f = escalones?.[escalon]?.factor
+  if (!(piso > 0) || !f) return { desde: piso, hasta: null }
+  return { desde: piso, hasta: Math.round(piso * f) }
+}
+
 // Lo que se muestra: por nicho, quién vende; y la calibración con lo propio.
 export async function resumenSeguimiento({ ahora = new Date(), keyword = null } = {}) {
   const seguidos = await SeguimientoStock.find(keyword ? { keyword } : {}).lean()
@@ -476,15 +514,29 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
   // CALIBRACIÓN: en lo propio la venta real se conoce. Cuánto del total ve el piso.
   let calibracion = null
   const propios = filas.filter((f) => f.esPropio && f.dias >= 3)
+  let escalones = {}
   if (propios.length) {
     let piso = 0, real = 0
+    const muestras = []
     for (const f of propios) {
       const serie = porSku.get(f.sku).filter((l) => l.ok !== false)
       const ventas = await VentaMl.find({ estado: { $ne: 'cancelled' }, 'items.itemId': f.itemIdPropio, fecha: { $gte: serie[0].fecha, $lte: serie.at(-1).fecha } }).lean()
-      real += ventas.reduce((a, v) => a + v.items.filter((i) => i.itemId === f.itemIdPropio).reduce((b, i) => b + (i.cantidad ?? 0), 0), 0)
+      const realDe = ventas.reduce((a, v) => a + v.items.filter((i) => i.itemId === f.itemIdPropio).reduce((b, i) => b + (i.cantidad ?? 0), 0), 0)
+      real += realDe
       piso += f.unidadesPiso
+      // el escalón en que pasó la mayor parte de la serie es el que se calibra
+      const vistos = serie.filter((l) => l.fuente === 'texto').map(escalonDe).filter(Boolean)
+      const moda = [...new Set(vistos)].sort((a, b) => vistos.filter((x) => x === b).length - vistos.filter((x) => x === a).length)[0] ?? null
+      muestras.push({ escalon: moda, real: realDe, visto: f.unidadesPiso })
     }
-    calibracion = { productos: propios.length, unidadesReales: real, unidadesVistas: piso, pctVisto: real ? Math.round((piso / real) * 100) : null }
+    escalones = calibracionPorEscalon(muestras)
+    calibracion = { productos: propios.length, unidadesReales: real, unidadesVistas: piso, pctVisto: real ? Math.round((piso / real) * 100) : null, escalones, minimoRealPorEscalon: ESCALON_MIN_REAL }
+  }
+  // cada publicación lleva su estimación: el piso visto y hasta cuánto pudo ser
+  for (const f of filas) {
+    const esc = escalonDe([...(porSku.get(f.sku) ?? [])].reverse().find((l) => l.ok !== false && l.fuente === 'texto'))
+    f.escalonActual = esc
+    f.estimado = ventaEstimada(f.unidadesPiso, esc, escalones)
   }
   const porNicho = new Map()
   for (const f of filas.filter((x) => !x.esPropio && x.keyword)) porNicho.set(f.keyword, [...(porNicho.get(f.keyword) ?? []), f])
@@ -507,7 +559,10 @@ export async function resumenSeguimiento({ ahora = new Date(), keyword = null } 
     },
     catalogo: { seguidos: filas.filter((f) => !f.esPropio && f.esCatalogo).length, cambiosDeVendedor: filas.reduce((a, f) => a + (f.cambiosDeVendedor ?? 0), 0) },
     pendientesAhora: seguidos.filter((s) => s.activo && +new Date(s.proximaLecturaEl) <= +ahora).length,
-    nichos: [...porNicho].map(([k, fs]) => ({ keyword: k, movimiento: movimientoDelNicho(fs), seguidos: fs.filter((f) => f.activo).length, vendiendo: fs.filter((f) => f.unidadesPiso > 0).length, fuertes: fs.filter((f) => (f.fuerza === 'ciclo' || f.fuerza === 'repone') && f.atribucion !== 'probable').length,
+    nichos: [...porNicho].map(([k, fs]) => ({ keyword: k, movimiento: movimientoDelNicho(fs),
+      // visto y hasta cuánto pudo ser: solo suma "hasta" si TODAS las que vendieron tienen factor
+      estimado: { desde: fs.reduce((a, f) => a + (f.estimado?.desde ?? 0), 0), hasta: fs.filter((f) => f.unidadesPiso > 0).every((f) => f.estimado?.hasta != null) && fs.some((f) => f.unidadesPiso > 0) ? fs.reduce((a, f) => a + (f.estimado?.hasta ?? 0), 0) : null },
+      seguidos: fs.filter((f) => f.activo).length, vendiendo: fs.filter((f) => f.unidadesPiso > 0).length, fuertes: fs.filter((f) => (f.fuerza === 'ciclo' || f.fuerza === 'repone') && f.atribucion !== 'probable').length,
       probables: fs.filter((f) => (f.fuerza === 'ciclo' || f.fuerza === 'repone' || f.unidadesPiso > 0) && f.atribucion === 'probable').length,
       unidadesRepuestasPiso: fs.reduce((a, f) => a + (f.unidadesRepuestasPiso ?? 0), 0),
       unidadesPisoSemana: Math.round(fs.reduce((a, f) => a + (f.porSemana ?? 0), 0) * 10) / 10, reposiciones: fs.reduce((a, f) => a + f.reposiciones, 0),

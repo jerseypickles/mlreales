@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo, seguidoFlojo, esMedible, quienSeQueda, movimientoDelNicho, fichaDe } from '../src/services/seguimientoStock.js'
+import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo, seguidoFlojo, esMedible, quienSeQueda, movimientoDelNicho, fichaDe, calibracionPorEscalon, ventaEstimada, escalonDe } from '../src/services/seguimientoStock.js'
 
 test('se lee más seguido donde más se ve: "+50" semanal, rangos diario, número exacto cada 12 h', () => {
   assert.equal(horasHastaLaProxima({ stock: 51, topado: true }), 168)
@@ -252,4 +252,19 @@ test('una publicación resuelta se reconoce aunque ML responda desde la ficha de
   // la misma ficha de catálogo filtrada por OTRA oferta no es de este vendedor
   assert.equal(fichaDe({ ...p, itemIdReal: 'MLC15715044' }, [ficha]), undefined)
   assert.equal(fichaDe({ ...p, itemIdReal: 'MLC999' }, [{ ...ficha, url: ficha.url.replace('MLC1571504417', 'MLC888') }]), undefined)
+})
+
+test('la calibración por escalón: en número exacto se ve todo, en rango una fracción, y sin venta real suficiente no hay factor', () => {
+  const esc = calibracionPorEscalon([
+    { escalon: 'exacto', real: 10, visto: 10 }, { escalon: 'mas25', real: 12, visto: 3 }, { escalon: 'mas5', real: 3, visto: 1 },
+  ])
+  assert.equal(esc.exacto.factor, 1)
+  assert.equal(esc.mas25.factor, 4)
+  assert.equal(esc.mas25.pctVisto, 25)
+  assert.equal(esc.mas5.factor, null) // 3 unidades reales no alcanzan
+  assert.deepEqual(ventaEstimada(3, 'mas25', esc), { desde: 3, hasta: 12 })
+  assert.deepEqual(ventaEstimada(3, 'mas5', esc), { desde: 3, hasta: null })
+  assert.deepEqual(ventaEstimada(0, 'mas25', esc), { desde: 0, hasta: null })
+  assert.equal(escalonDe({ stock: 26, topado: true }), 'mas25')
+  assert.equal(escalonDe({ stock: 4, topado: false }), 'exacto')
 })

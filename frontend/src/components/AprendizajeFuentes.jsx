@@ -137,8 +137,12 @@ const lecturaDelNicho = (n) => {
     l = { mov: n.movimiento ?? (n.vendiendo || n.fuertes ? 'mueve' : 'sin-datos'), sensores,
       conDos: sensores.filter((f) => ultimas(f).cuantas >= 2).length,
       unidades: n.publicaciones.reduce((a, f) => a + (f.unidadesPiso ?? 0), 0),
+      hasta: n.estimado?.hasta ?? null,
       dias: Math.max(0, ...n.publicaciones.map((f) => f.dias ?? 0)),
-      vendieron: n.publicaciones.filter((f) => f.unidadesPiso > 0).length,
+      vendieron: n.publicaciones.filter((f) => f.unidadesPiso > 0),
+      fuertes: n.publicaciones.filter((f) => (f.fuerza === 'ciclo' || f.fuerza === 'repone') && f.atribucion !== 'probable'),
+      // cuánto se puede confiar en los sensores: exacto ve todo, rango ve poco, +50 nada
+      calidad: { exacto: sensores.filter((f) => ultimas(f).escalon === 4).length, rango: sensores.filter((f) => [1, 2, 3].includes(ultimas(f).escalon)).length, ciego: sensores.filter((f) => ultimas(f).escalon === 0).length, sinLeer: sensores.filter((f) => ultimas(f).escalon === -1).length },
       fueraDeLista: n.publicaciones.length - sensores.length }
     cacheNicho.set(n, l)
   }
@@ -147,33 +151,79 @@ const lecturaDelNicho = (n) => {
 const FILTROS_STOCK = [['todos', 'Todos'], ['mueve', 'Se mueven'], ['quieto', 'Quietos'], ['sin-datos', 'Midiendo']]
 const fmtDias = (d) => `${String(Math.round(d * 10) / 10).replace('.', ',')} ${d === 1 ? 'día' : 'días'}`
 
-// Un nicho de la grilla. Memoizado: escribir en el buscador o abrir OTRO nicho no
-// vuelve a dibujar las tarjetas con sus fotos y medidores.
+// LO GRANDE ES LO QUE SE SABE. El importador, 22-sep: "yo no puedo pensar que lo que
+// me muestra es el 100% de las ventas". Antes la tarjeta decía "≥3 unidades" en
+// grande y nadie lee el "≥": se leía "vendió 3", y "≥0 unidades" junto a "1 vendió y
+// repuso" era una contradicción a la vista. Ahora el orden es: ¿se mueve? (cierto),
+// ¿hay alguien fuerte? (cierto), ¿cuánto? (un piso, dicho como piso, y una
+// estimación solo cuando la calibración con lo propio la respalda).
+const ESCALON_NOMBRE = { mas50: '+50', mas25: '+25', mas10: '+10', mas5: '+5', exacto: 'exacto' }
+
+function Cuanto({ l, n }) {
+  if (!l.vendieron.length) return null
+  const semana = n.unidadesPisoSemana
+  return (
+    <span className="nv-cuanto">
+      <span className="nv-cuanto-fila"><small>visto</small><b>{fmtNum(l.unidades)}</b><small>u en {fmtDias(l.dias)}{semana ? ` · ≥${fmtNum(semana)}/sem` : ''}</small></span>
+      {l.hasta != null && l.hasta > l.unidades
+        ? <span className="nv-cuanto-fila nv-cuanto-est"><small>estimado</small><b>{fmtNum(l.unidades)}–{fmtNum(l.hasta)}</b><small>según lo que el método ve en tus productos</small></span>
+        : <span className="nv-cuanto-fila nv-cuanto-est"><small>real</small><em>más que eso</em><small>{l.vendieron.some((f) => f.escalonActual && f.escalonActual !== 'exacto') ? 'hay ventas escondidas en el rango del stock' : 'solo se cuenta lo que baja a la vista'}</small></span>}
+    </span>
+  )
+}
+
+// Calidad de los sensores: cuánto pueden ver. Exacto = cada venta se cuenta;
+// rango = la venta queda escondida hasta cruzar el escalón; +50 = no se ve nada.
+function Calidad({ c, total }) {
+  if (!total) return null
+  const partes = [['exacto', c.exacto, 'ven cada venta'], ['rango', c.rango, 'ven solo los cruces de escalón'], ['ciego', c.ciego, 'en +50: no ven nada'], ['sinleer', c.sinLeer, 'sin leer']].filter(([, n]) => n)
+  return <span className="nv-calidad" title={partes.map(([, n, t]) => `${n} ${t}`).join(' · ')}>{partes.map(([k, n, t]) => <i key={k} className={`nv-cal-${k}`} style={{ flex: n }}><b>{n}</b> {t}</i>)}</span>
+}
+
 const TarjetaNicho = memo(function TarjetaNicho({ n, abierto, alAlternar }) {
   const l = lecturaDelNicho(n)
   const v = VEREDICTOS[l.mov]
   const total = l.sensores.length || 1
+  const f0 = l.fuertes[0]
   return (
-    <div className={`sn nv-${l.mov}${abierto ? ' sn-abierto' : ''}${n.fuertes ? ' sn-fuerte' : ''}`}>
+    <div className={`sn nv-${l.mov}${abierto ? ' sn-abierto' : ''}${l.fuertes.length ? ' sn-fuerte' : ''}`}>
       <button type="button" className="sn-cab" aria-expanded={abierto} onClick={() => alAlternar(n.keyword)}>
         <span className="sn-titulo"><strong>{n.keyword}</strong>
           <span className={`nv-sello nv-sello-${l.mov}`} title={v.ayuda}><v.Icono size={14} aria-hidden="true" />{v.nombre}</span></span>
-        {l.mov === 'mueve' ? <span className="nv-dato"><span><b>≥{fmtNum(l.unidades)}</b> {l.unidades === 1 ? 'unidad vendida' : 'unidades vendidas'} en {fmtDias(l.dias)}</span>
-            <small>{l.vendieron} de {n.publicaciones.length} sensores vendieron{n.unidadesPisoSemana ? ` · ritmo ≥${fmtNum(n.unidadesPisoSemana)} u/sem` : ''}</small>
-            {n.fuertes ? <small className="nv-fuerte"><Flame size={12} aria-hidden="true" />{n.fuertes} {n.fuertes === 1 ? 'vendió y repuso' : 'vendieron y repusieron'} · ≥{fmtNum(n.unidadesRepuestasPiso)} u repuestas</small>
-              : n.probables ? <small title="Movimiento del mismo vendedor, pero solo una de las dos lecturas lo identificó">{n.probables} por confirmar de quién es el stock</small> : null}</span>
-          : l.mov === 'quieto' ? <span className="nv-dato"><span><b>0</b> bajas de stock en {fmtDias(l.dias)}</span><small>{l.conDos} sensores leídos más de una vez y ninguno se movió</small></span>
+        {l.fuertes.length ? <span className="nv-fuerte-titular"><Flame size={15} aria-hidden="true" />
+            <span><b>{l.fuertes.length === 1 ? (f0.vendedor ?? 'un vendedor') : `${l.fuertes.length} vendedores`}</b> {l.fuertes.length === 1 ? 'vendió y repuso' : 'vendieron y repusieron'}{f0.esFull ? ' en Full' : ''} · metió ≥{fmtNum(n.unidadesRepuestasPiso)} u</span></span>
+          : n.probables ? <span className="nv-fuerte-titular nv-tibio" title="Movimiento del mismo vendedor, pero solo una de las dos lecturas lo identificó"><Flame size={15} aria-hidden="true" /><span>{n.probables} por confirmar de quién es el stock</span></span> : null}
+        {l.mov === 'mueve' ? <Cuanto l={l} n={n} />
+          : l.mov === 'quieto' ? <span className="nv-dato"><span><b>0</b> bajas en {fmtDias(l.dias)}</span><small>{l.conDos} sensores leídos más de una vez y ninguno se movió{l.calidad.ciego ? ` · ${l.calidad.ciego} en +50 no verían nada igual` : ''}</small></span>
             : <span className="nv-dato nv-dato-espera"><span className="nv-avance" role="img" aria-label={`${l.conDos} de ${total} sensores con segunda lectura`}><i style={{ width: `${(l.conDos / total) * 100}%` }} /></span>
-              <small>{l.conDos} de {total} sensores con 2ª lectura{l.dias ? ` · ${fmtDias(l.dias)} mirando` : ''}. Hacen falta dos con tres días para decir “quieto”.</small></span>}
-        <span className="sn-fotos nv-sensores">{l.sensores.map((f) => (
-          <span key={f.sku} className={`sn-mini${f.fuerza === 'ciclo' || f.fuerza === 'repone' ? ' sn-mini-fuerte' : ''}${f.unidadesPiso > 0 ? ' sn-mini-vendio' : ''}`}>{f.imagen ? <Miniatura src={f.imagen} lado={56} /> : <span className="mv-sinfoto" />}<Medidor ahora={ultimas(f).ahora} antes={ultimas(f).antes} compacto /></span>
-        ))}</span>
+              <small>{l.conDos} de {total} sensores con 2ª lectura{l.dias ? ` · ${fmtDias(l.dias)} mirando` : ''}</small></span>}
+        <span className="sn-fotos nv-sensores">{l.sensores.map((f) => { const e = ultimas(f).escalon; return (
+          <span key={f.sku} className={`sn-mini nv-cal-borde-${e === 4 ? 'exacto' : e === 0 ? 'ciego' : e === -1 ? 'sinleer' : 'rango'}${f.fuerza === 'ciclo' || f.fuerza === 'repone' ? ' sn-mini-fuerte' : ''}${f.unidadesPiso > 0 ? ' sn-mini-vendio' : ''}`} title={`${f.vendedor ?? ''} · ${e === 4 ? 'número exacto: cada venta se cuenta' : e === 0 ? '+50: no se ve nada' : e === -1 ? 'sin leer' : 'rango: la venta queda escondida hasta cruzar el escalón'}`}>{f.imagen ? <Miniatura src={f.imagen} lado={56} /> : <span className="mv-sinfoto" />}<Medidor ahora={ultimas(f).ahora} antes={ultimas(f).antes} compacto /></span>) })}</span>
+        <Calidad c={l.calidad} total={l.sensores.length} />
         {l.fueraDeLista ? <small className="nv-fuera">+{l.fueraDeLista} que ya no se {l.fueraDeLista === 1 ? 'lee' : 'leen'} (su historia sigue contando)</small> : null}
       </button>
       {abierto ? <div className="sv-grilla sn-detalle">{[...n.publicaciones].sort((a, b) => Number(a.activo === false) - Number(b.activo === false)).map((f) => <TarjetaVendedor key={f.sku} f={f} />)}</div> : null}
     </div>
   )
 })
+
+// LA REGLA DE LECTURA, SIEMPRE A LA VISTA. Lo que ves es un piso, no la venta.
+// Cuánto falta se mide en tus propios productos, donde la venta real se conoce.
+function Regla({ cal }) {
+  const esc = cal?.escalones ?? {}
+  const conFactor = Object.entries(esc).filter(([, e]) => e.factor)
+  return (
+    <aside className="nv-regla" role="note">
+      <AlertTriangle size={16} aria-hidden="true" />
+      <div>
+        <strong>Lo que ves es un piso, no la venta.</strong> Mercado Libre muestra el stock por escalones: con número exacto cada venta se cuenta; en un rango (+5, +10, +25) la venta queda escondida hasta cruzar el escalón, y al cruzar se cuenta una sola.
+        {cal?.pctVisto != null
+          ? <> Hoy, en tus productos, el método ve el <b>{cal.pctVisto}%</b> de las ventas reales ({fmtNum(cal.unidadesVistas)} de {fmtNum(cal.unidadesReales)} unidades en {cal.productos} publicaciones tuyas).{conFactor.length ? <> Por escalón: {conFactor.map(([k, e]) => `${ESCALON_NOMBRE[k]} ve el ${e.pctVisto}%`).join(' · ')}. Con eso se calcula la <b>venta estimada</b> de cada nicho.</> : <> Todavía no hay venta real suficiente por escalón (mínimo {cal.minimoRealPorEscalon} u) para estimar: se muestra solo el piso.</>}</>
+          : <> La calibración con tus productos necesita unos días de lecturas.</>}
+      </div>
+    </aside>
+  )
+}
 
 export function StockCompetidores() {
   const [d, setD] = useState(null)
@@ -216,6 +266,7 @@ export function StockCompetidores() {
       <section className="apr-seccion">
         <div className="apr-seccion-cabeza"><h3>¿Se mueve el nicho?</h3>
           <p>Cada nicho se mide con pocos sensores —hasta 3 publicaciones, las que mejor dejan ver su stock— leídos seguido. Basta que uno baje para saber que el nicho vende; para decir “quieto” hacen falta dos sensores mirados tres días sin una sola baja.</p></div>
+        <Regla cal={cal} />
         <div className="nv-resumen" role="group" aria-label="Filtrar nichos por veredicto">
           {FILTROS_STOCK.filter(([id]) => id !== 'todos').map(([id]) => { const v = VEREDICTOS[id]; return (
             <button key={id} type="button" className={`nv-tesela nv-tesela-${id}${filtro === id ? ' activo' : ''}`} aria-pressed={filtro === id} onClick={() => setFiltro(filtro === id ? 'todos' : id)} title={v.ayuda}>
