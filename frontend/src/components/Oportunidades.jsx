@@ -719,7 +719,7 @@ function ChipTendencia({ t }) {
   const lugar = arriba ? `entre el 20% que más crecerá de ${t.entre} nichos` : `entre el 20% que menos crecerá de ${t.entre} nichos`
   return (
     <em className={`op-tendencia op-tendencia-${t.grupo}`}
-      title={`Aprendizaje: ${lugar} en los próximos 3-5 meses (${t.vsAnioPasadoPct >= 0 ? '+' : ''}${t.vsAnioPasadoPct}% contra el mismo mes del año pasado). El orden es confiable; el porcentaje exacto no.`}>
+      title={`Aprendizaje: ${lugar} en los próximos 3-5 meses (${t.vsAnioPasadoPct >= 0 ? '+' : ''}${t.vsAnioPasadoPct}% contra el mismo mes del año pasado). El orden es confiable; el porcentaje exacto no.${arriba ? '' : ' En un producto de temporada significa un pico más bajo que el del año pasado, no que no haya temporada: pasó así en las dos pruebas (acertó 5 de cada 10 veces; al azar serían 2).'}`}>
       <Icono size={11} aria-hidden="true" />{arriba ? 'viene mejor' : 'viene peor'}
     </em>
   )
