@@ -230,3 +230,16 @@ test('panel de competidores: la reseña compartida por catálogo y la caída de 
   assert.equal(a.resenias.paresUtiles, 1)
   assert.deepEqual(a.resenias.descartes, { 'compartida-catalogo': 2, caida: 1 })
 })
+
+test('panel de competidores: dos publicaciones chicas con la misma cifra no son un catálogo', async () => {
+  const { paresDeLecturas } = await import('../src/services/ml/competidores.js')
+  const d = (n) => new Date(Date.UTC(2026, 8, 1 + n))
+  const snaps = [
+    { sku: 'X', keyword: 'k', fecha: d(0), numReviewsApi: 2 }, { sku: 'X', keyword: 'k', fecha: d(7), numReviewsApi: 3 },
+    { sku: 'Y', keyword: 'k', fecha: d(0), numReviewsApi: 2 }, { sku: 'Y', keyword: 'k', fecha: d(7), numReviewsApi: 3 },
+    // misma foto inicial, distinto destino: tampoco es catálogo
+    { sku: 'Z', keyword: 'k', fecha: d(0), numReviewsApi: 50 }, { sku: 'Z', keyword: 'k', fecha: d(7), numReviewsApi: 52 },
+    { sku: 'W', keyword: 'k', fecha: d(0), numReviewsApi: 50 }, { sku: 'W', keyword: 'k', fecha: d(7), numReviewsApi: 51 },
+  ]
+  assert.deepEqual(paresDeLecturas(snaps).map((p) => p.resenias), [1, 1, 2, 1])
+})
