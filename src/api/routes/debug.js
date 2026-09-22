@@ -211,12 +211,14 @@ router.post(
   '/zyte-ab',
   autorizado,
   manejar(async (req, res) => {
-    const urls = (Array.isArray(req.body?.urls) ? req.body.urls : []).filter((u) => /^https:\/\/[a-z.]*mercadolibre\.cl\//.test(u)).slice(0, 12)
+    const modo = req.body?.modo === 'producto' ? 'producto' : 'variantes'
+    // en modo producto se paga una lectura por ficha (no cuatro): tope 30
+    const urls = (Array.isArray(req.body?.urls) ? req.body.urls : []).filter((u) => /^https:\/\/[a-z.]*mercadolibre\.cl\//.test(u)).slice(0, modo === 'producto' ? 30 : 12)
     const keywords = (Array.isArray(req.body?.keywords) ? req.body.keywords : []).map((k) => String(k).trim()).filter(Boolean).slice(0, 3)
     if (!urls.length && !keywords.length) return res.status(400).json({ error: 'falta urls[] o keywords[]' })
     const { lanzarPruebaAb } = await import('../../services/zyteAb.js')
     // corre en segundo plano: tarda minutos y un navegador corta la espera
-    res.status(202).json(lanzarPruebaAb({ urls, keywords }))
+    res.status(202).json(lanzarPruebaAb({ urls, keywords, modo }))
   }),
 )
 router.get(

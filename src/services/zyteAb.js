@@ -1,5 +1,5 @@
 import { config } from '../config/env.js'
-import { cuerpoPeticion, stockDesdeHtml, vendedorDesdeHtml } from './detalleMl.js'
+import { cuerpoPeticion, stockDesdeHtml, vendedorDesdeHtml, productoDesdeHtml, precioAnteriorReal } from './detalleMl.js'
 import { cuerpoListado, urlListado, itemsDesdeHtml } from './listadoMl.js'
 
 // PRUEBA A/B DE CONFIGURACIONES DE ZYTE (22-sep-2026).
@@ -87,7 +87,45 @@ async function enParalelo(tareas, limite) {
 const igual = (a, b) => a === null || b === null ? null : a === b
 const mismoStock = (a, b) => !a || !b ? null : a.stock === b.stock && a.stockFuente === b.stockFuente
 
-export async function pruebaAb({ urls = [], keywords = [], apiKey = config.zyteApiKey, concurrencia = 4 } = {}) {
+// Pura. Campo por campo: lo que Zyte extrajo contra lo que leemos del HTML de
+// la MISMA respuesta. Es la prueba para quitar `product: true`.
+const normTexto = (v) => (v == null ? null : String(v).trim().toLowerCase().replace(/\s+/g, ' '))
+export function compararProducto(zyte, propio) {
+  const z = zyte ?? {}, p = propio ?? {}
+  const campo = (a, b) => (a == null && b == null ? 'ambos-vacios' : a == null ? 'solo-html' : b == null ? 'solo-zyte' : a === b ? 'igual' : 'distinto')
+  return {
+    sku: campo(z.sku ?? null, p.sku ?? null),
+    titulo: campo(normTexto(z.name), normTexto(p.name)),
+    precio: campo(Number(z.price) || null, p.price),
+    // Zyte mezcla la cuota con el tachado; se compara lo que el pipeline guarda
+    precioAnterior: campo(precioAnteriorReal(Number(z.price), Number(z.regularPrice)), precioAnteriorReal(p.price, p.regularPrice)),
+    nota: campo(Number(z.aggregateRating?.ratingValue) || null, p.aggregateRating?.ratingValue ?? null),
+    resenias: campo(Number(z.aggregateRating?.reviewCount) || null, p.aggregateRating?.reviewCount ?? null),
+    disponibilidad: campo(z.availability ?? null, p.availability),
+    marca: campo(normTexto(z.brand?.name), normTexto(p.brand?.name)),
+    url: campo(z.canonicalUrl ?? z.url ?? null, p.canonicalUrl ?? p.url ?? null),
+  }
+}
+
+export async function pruebaProducto({ urls = [], apiKey = config.zyteApiKey, concurrencia = 4 } = {}) {
+  if (!apiKey) throw new Error('falta ZYTE_API_KEY')
+  const r = await enParalelo(urls.map((url) => async () => ({ url, r: await pedir(VARIANTES_FICHA.actual(url), apiKey) })), concurrencia)
+  const fichas = r.map(({ url, r: x }) => {
+    if (!x.ok || !x.product) return { url, ok: false, error: x.error ?? 'sin product' }
+    const propio = productoDesdeHtml(x.html)
+    const cmp = compararProducto(x.product, propio)
+    const ejemplo = {}
+    for (const [k, v] of Object.entries(cmp)) if (v === 'distinto' || v === 'solo-zyte') ejemplo[k] = { zyte: k === 'titulo' ? x.product.name : k === 'marca' ? x.product.brand?.name : k === 'precioAnterior' ? x.product.regularPrice : k === 'nota' ? x.product.aggregateRating?.ratingValue : k === 'resenias' ? x.product.aggregateRating?.reviewCount : k === 'url' ? (x.product.canonicalUrl ?? x.product.url) : x.product[k === 'precio' ? 'price' : k === 'disponibilidad' ? 'availability' : k],
+      html: k === 'titulo' ? propio?.name : k === 'marca' ? propio?.brand?.name : k === 'precioAnterior' ? propio?.regularPrice : k === 'nota' ? propio?.aggregateRating?.ratingValue : k === 'resenias' ? propio?.aggregateRating?.reviewCount : k === 'url' ? propio?.canonicalUrl : propio?.[k === 'precio' ? 'price' : k === 'disponibilidad' ? 'availability' : k] }
+    return { url, ok: true, probabilidad: x.product.metadata?.probability ?? null, htmlSinProducto: !propio, cmp, ejemplo }
+  })
+  const resumen = {}
+  for (const f of fichas.filter((x) => x.ok)) for (const [k, v] of Object.entries(f.cmp)) { resumen[k] ??= {}; resumen[k][v] = (resumen[k][v] ?? 0) + 1 }
+  return { modo: 'producto', fichas, resumen, pedidas: urls.length }
+}
+
+export async function pruebaAb({ urls = [], keywords = [], apiKey = config.zyteApiKey, concurrencia = 4, modo = 'variantes' } = {}) {
+  if (modo === 'producto') return pruebaProducto({ urls, apiKey, concurrencia })
   if (!apiKey) throw new Error('falta ZYTE_API_KEY')
   const tareas = []
   for (const url of urls) for (const [nombre, cuerpo] of Object.entries(VARIANTES_FICHA)) tareas.push(async () => ({ tipo: 'ficha', url, nombre, r: await pedir(cuerpo(url), apiKey) }))

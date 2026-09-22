@@ -20,3 +20,20 @@ test('A/B de Zyte: sin navegador no hay acciones ni extracción; la variante act
   assert.equal(VARIANTES_FICHA.httpSinGeo(u).geolocation, undefined)
   assert.equal(VARIANTES_FICHA.actual(u).product, true)
 })
+
+test('productoDesdeHtml: lee del JSON-LD lo mismo que la extracción de Zyte, con su forma', async () => {
+  const { productoDesdeHtml } = await import('../src/services/detalleMl.js')
+  const { compararProducto } = await import('../src/services/zyteAb.js')
+  const ld = { '@context': 'https://schema.org', '@type': 'Product', name: 'Set 8 Brochas', sku: 'MLC4212659314', brand: { '@type': 'Brand', name: 'Genérica' },
+    offers: { '@type': 'Offer', price: 4490, priceCurrency: 'CLP', availability: 'https://schema.org/InStock' }, aggregateRating: { ratingValue: 4.8, reviewCount: 57 } }
+  const html = `<link rel="canonical" href="https://articulo.mercadolibre.cl/MLC-4212659314-set-_JM"/><script type="application/ld+json">${JSON.stringify(ld)}</script>"original_price":5990`
+  const p = productoDesdeHtml(html)
+  assert.deepEqual([p.sku, p.name, p.price, p.regularPrice, p.availability, p.brand.name, p.aggregateRating.reviewCount], ['MLC4212659314', 'Set 8 Brochas', 4490, 5990, 'InStock', 'Genérica', 57])
+  const zyte = { sku: 'MLC4212659314', name: 'Set 8  Brochas', price: '4490', regularPrice: '749', availability: 'InStock', brand: { name: 'genérica' },
+    aggregateRating: { ratingValue: 4.8, reviewCount: 57 }, canonicalUrl: 'https://articulo.mercadolibre.cl/MLC-4212659314-set-_JM' }
+  const c = compararProducto(zyte, p)
+  assert.equal(c.titulo, 'igual', 'espacios y mayúsculas no son diferencia')
+  assert.equal(c.precioAnterior, 'solo-html', 'la cuota de Zyte (749) no es precio anterior: el HTML sí trae el tachado')
+  assert.equal(c.marca, 'igual')
+  assert.equal(productoDesdeHtml('<html>cascarón</html>'), null)
+})

@@ -147,6 +147,50 @@ export function stockDesdeHtml(html) {
   return { stock: cantidad, stockTopado: cantidad >= 51, stockFuente: 'telemetria', vendidosFicha }
 }
 
+// EL PRODUCTO, LEÍDO DEL HTML SIN LA EXTRACCIÓN DE ZYTE (en prueba).
+//
+// `product: true` se cobra aparte por cada ficha. La A/B del 22-sep-2026 mostró
+// que el precio leído de los datos estructurados de la página coincide con el
+// de Zyte en 8 de 8 fichas. Esto lee el resto de lo que el pipeline usa, con la
+// MISMA forma que `product` de Zyte, para poder cambiar una por otra sin tocar
+// `aItemDetalle`. No se usa en producción hasta medir paridad campo por campo.
+function jsonLd(html) {
+  const bloques = []
+  for (const m of String(html ?? '').matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const j = JSON.parse(m[1])
+      for (const x of [j, ...(Array.isArray(j) ? j : []), ...(Array.isArray(j?.['@graph']) ? j['@graph'] : [])]) if (x && typeof x === 'object') bloques.push(x)
+    } catch { /* un bloque roto no invalida los otros */ }
+  }
+  return bloques
+}
+
+export function productoDesdeHtml(html) {
+  const t = String(html ?? '')
+  const prod = jsonLd(t).find((b) => b['@type'] === 'Product' || (Array.isArray(b['@type']) && b['@type'].includes('Product')))
+  const oferta = Array.isArray(prod?.offers) ? prod.offers[0] : prod?.offers
+  const canonica = t.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i)?.[1] ?? t.match(/<link[^>]+href="([^"]+)"[^>]+rel="canonical"/i)?.[1] ?? null
+  const num = (v) => (v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null)
+  // el tachado no está en el JSON-LD: se lee del estado embebido o del
+  // aria-label del precio anterior
+  const anterior = num(t.match(/"original_price":\s*(\d+(?:\.\d+)?)/)?.[1]) ??
+    num(t.match(/andes-money-amount--previous[^>]*aria-label="[^"\d]*([\d.]+)/)?.[1]?.replace(/\./g, ''))
+  const disp = String(oferta?.availability ?? '')
+  if (!prod) return null
+  return {
+    url: canonica ?? prod.url ?? null,
+    canonicalUrl: canonica,
+    sku: prod.sku ?? prod.productID ?? null,
+    name: prod.name ?? null,
+    price: num(oferta?.price),
+    regularPrice: anterior,
+    currency: oferta?.priceCurrency ?? null,
+    availability: /InStock/i.test(disp) ? 'InStock' : /OutOfStock|SoldOut/i.test(disp) ? 'OutOfStock' : null,
+    brand: prod.brand ? { name: typeof prod.brand === 'string' ? prod.brand : prod.brand.name ?? null } : null,
+    aggregateRating: prod.aggregateRating ? { ratingValue: num(prod.aggregateRating.ratingValue), reviewCount: num(prod.aggregateRating.reviewCount ?? prod.aggregateRating.ratingCount) } : null,
+  }
+}
+
 // Pura. ¿La extracción reconoció una ficha, o devolvió el cascarón?
 export function confiable(respuesta) {
   const p = respuesta?.product?.metadata?.probability
