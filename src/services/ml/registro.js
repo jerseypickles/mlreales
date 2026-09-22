@@ -26,6 +26,7 @@ export async function guardarSeriesMl(resultados, { pais, idioma, ahora = new Da
 }
 
 const DIA = 86400e3
+const ESTADOS_ML = { paused: 'pausada', closed: 'cerrada', under_review: 'en revisión', inactive: 'inactiva' }
 // Las campañas de ML mueven el precio efectivo cada pocos días: anular toda
 // ventana con un cambio dejaba a la tienda sin una sola observación. El precio
 // de la semana es su promedio ponderado por tiempo, y el rango viaja con la
@@ -57,6 +58,12 @@ export function diagnosticoObservacion(propio, ventas, { desdeSincronizado, ahor
   if (!ultima) return no('sin mediciones')
   if (!desdeSincronizado || !Number.isFinite(+new Date(desdeSincronizado))) return no('órdenes sin sincronizar')
   if (!propio.categoriaMl) return no('sin categoría de ML')
+  // ML pausa sola la publicación que se queda sin stock: eso no es "sin
+  // visitas", es un quiebre, y el diagnóstico tiene que nombrarlo así.
+  if (propio.estadoMl && propio.estadoMl !== 'active') {
+    const estado = ESTADOS_ML[propio.estadoMl] ?? propio.estadoMl
+    return no(ultima.stock === 0 ? `${estado} por quiebre de stock` : `publicación ${estado} en ML`)
+  }
   if (!Number.isFinite(ultima.visitas) || ultima.visitas < 1) return no('sin visitas en la semana')
   if (!ultima.visitasDesde || !ultima.visitasHasta) return no('ML no declaró las fechas de la ventana de visitas')
   const hasta = new Date(ultima.visitasHasta), desde = new Date(ultima.visitasDesde)

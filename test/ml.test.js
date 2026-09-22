@@ -165,4 +165,8 @@ test('una promo dentro de la ventana no anula la semana: el precio es el promedi
   assert.equal(ventanasIndependientes([grande]).length, 0, 'una rebaja de 31% se guarda pero no entrena')
   assert.match(diagnosticoObservacion({ ...p, stockDiario: p.stockDiario.map((s, i) => i === 3 ? { ...s, conStock: 0 } : s) }, [], opts).motivo, /sin stock parte del 2026-09-08/)
   assert.match(diagnosticoObservacion({ ...p, historialLogistica: [{ fecha: new Date(+desde + 86400e3) }] }, [], opts).motivo, /logística/)
+  const pausada = { ...p, estadoMl: 'paused', mediciones: [{ ...p.mediciones[0], visitas: 0, stock: 0 }] }
+  assert.equal(diagnosticoObservacion(pausada, [], opts).motivo, 'pausada por quiebre de stock')
+  assert.equal(diagnosticoObservacion({ ...pausada, mediciones: p.mediciones }, [], opts).motivo, 'publicación pausada en ML')
+  assert.ok(diagnosticoObservacion({ ...p, estadoMl: 'active' }, [], opts).observacion)
 })
