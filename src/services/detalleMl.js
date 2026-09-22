@@ -171,10 +171,15 @@ export function productoDesdeHtml(html) {
   const oferta = Array.isArray(prod?.offers) ? prod.offers[0] : prod?.offers
   const canonica = t.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i)?.[1] ?? t.match(/<link[^>]+href="([^"]+)"[^>]+rel="canonical"/i)?.[1] ?? null
   const num = (v) => (v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null)
-  // el tachado no está en el JSON-LD: se lee del estado embebido o del
-  // aria-label del precio anterior
-  const anterior = num(t.match(/"original_price":\s*(\d+(?:\.\d+)?)/)?.[1]) ??
-    num(t.match(/andes-money-amount--previous[^>]*aria-label="[^"\d]*([\d.]+)/)?.[1]?.replace(/\./g, ''))
+  // EL TACHADO no está en el JSON-LD. Se lee SOLO del componente de precio
+  // principal (`"id":"price"`): el aria-label "Antes: …" y un original_price
+  // suelto también aparecen en el carrusel de recomendados, y el 22-sep eso le
+  // atribuyó al kayak ($89.990) el tachado de otro producto ($399.990).
+  const anterior = num(t.match(/"id":"price","price":\{"previous_price":\{"value":(\d+(?:\.\d+)?)/)?.[1])
+  // LAS RESEÑAS tampoco se leen del JSON-LD: su reviewCount son solo las que
+  // traen comentario (178 de 276 en la freidora). Lo que la página muestra, y lo
+  // que siempre guardó el sistema, es el `amount` del bloque de reseñas.
+  const visible = t.match(/"reviews":\{"rating":([\d.]+),"amount":(\d+)/) ?? t.match(/"rate":([\d.]+),"count":(\d+),"layout"/)
   const disp = String(oferta?.availability ?? '')
   if (!prod) return null
   return {
@@ -187,7 +192,8 @@ export function productoDesdeHtml(html) {
     currency: oferta?.priceCurrency ?? null,
     availability: /InStock/i.test(disp) ? 'InStock' : /OutOfStock|SoldOut/i.test(disp) ? 'OutOfStock' : null,
     brand: prod.brand ? { name: typeof prod.brand === 'string' ? prod.brand : prod.brand.name ?? null } : null,
-    aggregateRating: prod.aggregateRating ? { ratingValue: num(prod.aggregateRating.ratingValue), reviewCount: num(prod.aggregateRating.reviewCount ?? prod.aggregateRating.ratingCount) } : null,
+    aggregateRating: visible ? { ratingValue: num(visible[1]), reviewCount: num(visible[2]) }
+      : prod.aggregateRating ? { ratingValue: num(prod.aggregateRating.ratingValue), reviewCount: null } : null,
   }
 }
 

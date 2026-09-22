@@ -24,9 +24,14 @@ test('A/B de Zyte: sin navegador no hay acciones ni extracción; la variante act
 test('productoDesdeHtml: lee del JSON-LD lo mismo que la extracción de Zyte, con su forma', async () => {
   const { productoDesdeHtml } = await import('../src/services/detalleMl.js')
   const { compararProducto } = await import('../src/services/zyteAb.js')
+  // el reviewCount del JSON-LD son solo las reseñas con comentario (31 de 57)
   const ld = { '@context': 'https://schema.org', '@type': 'Product', name: 'Set 8 Brochas', sku: 'MLC4212659314', brand: { '@type': 'Brand', name: 'Genérica' },
-    offers: { '@type': 'Offer', price: 4490, priceCurrency: 'CLP', availability: 'https://schema.org/InStock' }, aggregateRating: { ratingValue: 4.8, reviewCount: 57 } }
-  const html = `<link rel="canonical" href="https://articulo.mercadolibre.cl/MLC-4212659314-set-_JM"/><script type="application/ld+json">${JSON.stringify(ld)}</script>"original_price":5990`
+    offers: { '@type': 'Offer', price: 4490, priceCurrency: 'CLP', availability: 'https://schema.org/InStock' }, aggregateRating: { ratingValue: 4.8, reviewCount: 31 } }
+  const html = `<link rel="canonical" href="https://articulo.mercadolibre.cl/MLC-4212659314-set-_JM"/><script type="application/ld+json">${JSON.stringify(ld)}</script>` +
+    '{"type":"price","id":"price","price":{"previous_price":{"value":5990,"currency":"CLP"}}}' +
+    // el carrusel de recomendados trae su propio "Antes" y su propio original_price: no son de este producto
+    '<span class="andes-money-amount--previous" aria-label="Antes: 399990 pesos chilenos"></span>"original_price":199990' +
+    '"reviews":{"rating":4.8,"amount":57,"subtitle":"(57)"}'
   const p = productoDesdeHtml(html)
   assert.deepEqual([p.sku, p.name, p.price, p.regularPrice, p.availability, p.brand.name, p.aggregateRating.reviewCount], ['MLC4212659314', 'Set 8 Brochas', 4490, 5990, 'InStock', 'Genérica', 57])
   const zyte = { sku: 'MLC4212659314', name: 'Set 8  Brochas', price: '4490', regularPrice: '749', availability: 'InStock', brand: { name: 'genérica' },
