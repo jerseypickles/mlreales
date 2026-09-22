@@ -28,10 +28,10 @@ test('productoDesdeHtml: lee del JSON-LD lo mismo que la extracción de Zyte, co
   const ld = { '@context': 'https://schema.org', '@type': 'Product', name: 'Set 8 Brochas', sku: 'MLC4212659314', brand: { '@type': 'Brand', name: 'Genérica' },
     offers: { '@type': 'Offer', price: 4490, priceCurrency: 'CLP', availability: 'https://schema.org/InStock' }, aggregateRating: { ratingValue: 4.8, reviewCount: 31 } }
   const html = `<link rel="canonical" href="https://articulo.mercadolibre.cl/MLC-4212659314-set-_JM"/><script type="application/ld+json">${JSON.stringify(ld)}</script>` +
-    // otra oferta del catálogo con su propio precio y tachado: no es la del producto
-    '{"type":"price","id":"price","price":{"previous_price":{"value":81107,"currency":"CLP"},"value":39990}}' +
-    '{"type":"price","id":"price","price":{"previous_price":{"value":5990,"currency":"CLP"},"value":4490}}' +
-    // el carrusel de recomendados trae su propio "Antes" y su propio original_price: no son de este producto
+    // el estado embebido trae previous_price de otras ofertas: no se usa
+    '{"type":"price","id":"price","price":{"previous_price":{"value":81107,"currency":"CLP"}}}' +
+    // el primer "Antes" visible es el del precio principal; el segundo, del carrusel
+    '<span class="andes-money-amount--previous" aria-label="Antes: 5990 pesos chilenos"></span>' +
     '<span class="andes-money-amount--previous" aria-label="Antes: 399990 pesos chilenos"></span>"original_price":199990' +
     '"reviews":{"rating":4.8,"amount":57,"subtitle":"(57)"}'
   const p = productoDesdeHtml(html)

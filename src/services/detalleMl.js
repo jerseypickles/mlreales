@@ -1,4 +1,3 @@
-import { objetoDesde } from './jsonEmbebido.js'
 import { skuDesdeUrl } from './normalizadorDetalle.js'
 import { config } from '../config/env.js'
 
@@ -177,17 +176,12 @@ export function productoDesdeHtml(html) {
   // maleta): para esas, cada campo tiene un respaldo en la misma página
   const ogTitulo = t.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i)?.[1]?.replace(/\s+-\s+\$\s*[\d.]+\s*$/, '').trim() ?? null
   const metaPrecio = num(t.match(/itemprop="price"\s+content="([\d.]+)"/i)?.[1] ?? t.match(/content="([\d.]+)"\s+itemprop="price"/i)?.[1])
-  // EL TACHADO no está en el JSON-LD. Se lee SOLO del componente de precio
-  // principal (`"id":"price"`): el aria-label "Antes: …" y un original_price
-  // suelto también aparecen en el carrusel de recomendados, y el 22-sep eso le
-  // atribuyó al kayak ($89.990) el tachado de otro producto ($399.990).
-  // Y en catálogo hay VARIOS componentes de precio (una por oferta): el mismo
-  // masajeador dio "Antes" 17.015 y 81.107 en dos lecturas. Vale solo el
-  // componente cuyo precio actual es el precio del producto.
-  const componentesPrecio = [...t.matchAll(/"id":"price","price":\{/g)].map((m) => {
-    const o = objetoDesde(t, m.index + m[0].length - 1)
-    return { actual: num(o?.value), antes: num(o?.previous_price?.value) }
-  })
+  // EL TACHADO no está en el JSON-LD. Medido el 22-sep contra Zyte en 9
+  // fichas: los `previous_price` del estado embebido son de OTRAS ofertas y del
+  // carrusel (el masajeador dio 17.015 y 81.107 en dos lecturas; Zyte y la
+  // página decían 12.784). Lo que coincide con Zyte (7 de 9) es el primer
+  // "Antes: …" visible, que es el del bloque de precio principal.
+  const antesVisibles = [...t.matchAll(/aria-label="Antes: (\d+)/g)].map((m) => Number(m[1]))
   // LAS RESEÑAS tampoco se leen del JSON-LD: su reviewCount son solo las que
   // traen comentario (178 de 276 en la freidora). Lo que la página muestra, y lo
   // que siempre guardó el sistema, es el `amount` del bloque de reseñas.
@@ -196,7 +190,9 @@ export function productoDesdeHtml(html) {
   const stock = stockDesdeHtml(t)
   const url = canonica ?? prod?.url ?? null
   const precio = num(oferta?.price) ?? metaPrecio
-  const anterior = componentesPrecio.find((c) => precio !== null && c.actual === precio && c.antes > precio)?.antes ?? null
+  // solo el primero: si no es mayor que el precio, el producto no tiene tachado
+  // y los siguientes son de otros productos
+  const anterior = precio !== null && antesVisibles[0] > precio ? antesVisibles[0] : null
   const titulo = prod?.name ?? ogTitulo
   if (precio === null && titulo === null) return null
   return {
