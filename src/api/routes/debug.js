@@ -204,6 +204,21 @@ router.get(
   }),
 )
 
+// PRUEBA A/B DE ZYTE: la misma ficha/listado con cada configuración, leída con
+// nuestro parser y comparada contra la actual. Cuesta (se paga cada variante):
+// tope 12 fichas y 3 listados por llamada.
+router.post(
+  '/zyte-ab',
+  autorizado,
+  manejar(async (req, res) => {
+    const urls = (Array.isArray(req.body?.urls) ? req.body.urls : []).filter((u) => /^https:\/\/[a-z.]*mercadolibre\.cl\//.test(u)).slice(0, 12)
+    const keywords = (Array.isArray(req.body?.keywords) ? req.body.keywords : []).map((k) => String(k).trim()).filter(Boolean).slice(0, 3)
+    if (!urls.length && !keywords.length) return res.status(400).json({ error: 'falta urls[] o keywords[]' })
+    const { pruebaAb } = await import('../../services/zyteAb.js')
+    res.json(await pruebaAb({ urls, keywords }))
+  }),
+)
+
 // El HTML que ML sirvió en el último scan de un nicho, para diagnosticar un
 // cambio de forma sin volver a scrapear. Con ?resumen=1 devuelve solo lo que el
 // parser sacó ese día, que es la primera pregunta: ¿cambió ML o cambiamos
