@@ -56,9 +56,12 @@ const VOLUMEN_SUPUESTO_M3 = 0.003
 export function fueraDeFull({ perfilFisico, pesoKg, volumenM3 } = {}) {
   const motivos = []
   const texto = String(perfilFisico ?? '')
-  const m = texto.replace(/,/g, '.').match(/(\d{2,3})\s*[x×]\s*(\d{2,3})\s*[x×]\s*(\d{2,3})/i)
+  // medidas "83x63x35" (cm). El decimal chileno usa coma: "1,95 kg" es 1,95, no 95.
+  const m = texto.match(/(\d{2,3})\s*[x×]\s*(\d{2,3})\s*[x×]\s*(\d{2,3})\s*cm/i) ?? texto.match(/(\d{2,3})\s*[x×]\s*(\d{2,3})\s*[x×]\s*(\d{2,3})/i)
   const lados = m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
-  const kg = texto.match(/(\d{1,3}(?:[.,]\d)?)\s*kg\s*(?:reales|real)?/i)
+  // el peso REAL: "19 kg reales", "~19 kg", "1,8 kg reales". Nunca el facturable ni
+  // el volumétrico, que son otra cosa (46 kg facturables entran a Full igual).
+  const kg = texto.match(/(?<![\d.,])(\d{1,2}(?:[.,]\d{1,2})?)\s*kg\s*(?:reales?|real)\b/i) ?? texto.match(/(?<![\d.,])(\d{1,2}(?:[.,]\d{1,2})?)\s*kg(?!\s*(?:facturable|volum))/i)
   const peso = Number.isFinite(pesoKg) ? pesoKg : kg ? Number(kg[1].replace(',', '.')) : null
   if (lados) {
     if (Math.max(...lados) > LIMITES_FULL.ladoMaxCm) motivos.push(`lado de ${Math.max(...lados)} cm (máx 120)`)
