@@ -214,8 +214,17 @@ router.post(
     const urls = (Array.isArray(req.body?.urls) ? req.body.urls : []).filter((u) => /^https:\/\/[a-z.]*mercadolibre\.cl\//.test(u)).slice(0, 12)
     const keywords = (Array.isArray(req.body?.keywords) ? req.body.keywords : []).map((k) => String(k).trim()).filter(Boolean).slice(0, 3)
     if (!urls.length && !keywords.length) return res.status(400).json({ error: 'falta urls[] o keywords[]' })
-    const { pruebaAb } = await import('../../services/zyteAb.js')
-    res.json(await pruebaAb({ urls, keywords }))
+    const { lanzarPruebaAb } = await import('../../services/zyteAb.js')
+    // corre en segundo plano: tarda minutos y un navegador corta la espera
+    res.status(202).json(lanzarPruebaAb({ urls, keywords }))
+  }),
+)
+router.get(
+  '/zyte-ab',
+  autorizado,
+  manejar(async (_req, res) => {
+    const { ultimaPruebaAb } = await import('../../services/zyteAb.js')
+    res.json(ultimaPruebaAb())
   }),
 )
 

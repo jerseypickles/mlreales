@@ -64,11 +64,13 @@ async function pedir(cuerpo, apiKey) {
       signal: AbortSignal.timeout(200_000),
     })
     const ms = Date.now() - inicio
+    console.log(`[zyte-ab] ${cuerpo.tags?.ab} ${r.status} ${ms} ms ${cuerpo.url.slice(0, 70)}`)
     if (!r.ok) return { ok: false, ms, status: r.status, error: (await r.text().catch(() => '')).slice(0, 160) }
     const j = await r.json()
     const html = j.browserHtml ?? (j.httpResponseBody ? Buffer.from(j.httpResponseBody, 'base64').toString('utf8') : '')
     return { ok: true, ms, html, product: j.product ?? null }
   } catch (err) {
+    console.log(`[zyte-ab] ${cuerpo.tags?.ab} error ${err.message} ${cuerpo.url.slice(0, 70)}`)
     return { ok: false, ms: Date.now() - inicio, error: err.message }
   }
 }
@@ -127,4 +129,15 @@ export async function pruebaAb({ urls = [], keywords = [], apiKey = config.zyteA
     })) }
   })
   return { fichas, listados, pedidas: tareas.length }
+}
+
+let ultima = { estado: 'nunca' }
+export const ultimaPruebaAb = () => ultima
+export function lanzarPruebaAb(opciones) {
+  if (ultima.estado === 'corriendo') return ultima
+  ultima = { estado: 'corriendo', inicio: new Date() }
+  pruebaAb(opciones)
+    .then((resultado) => { ultima = { estado: 'listo', inicio: ultima.inicio, fin: new Date(), ...resultado } })
+    .catch((err) => { ultima = { estado: 'error', inicio: ultima.inicio, error: err.message } })
+  return ultima
 }
