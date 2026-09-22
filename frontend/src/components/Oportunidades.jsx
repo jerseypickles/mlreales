@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Search, Sun, Truck } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Search, Sun, Truck, Warehouse } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
@@ -444,6 +444,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar }) {
         <MioBadge mios={o.mios} />
         {o.keyword}
         <ChipTramo mediana={o.mediana} />
+        <ChipSinFull o={o} />
         <NuevoBadge creadoEl={o.creadoEl} />
         {o.nivelBusqueda?.nivel === 'renombrar' ? <i className="op-fila-alerta" title="La gente escribe otra frase">keyword</i> : null}
       </span>
@@ -700,6 +701,22 @@ const LOGISTICA_CHIP = {
   full: { texto: 'Full', title: 'El analista propone vender por Full' },
   bodega_propia: { texto: 'bodega', title: 'El analista propone despachar desde tu bodega por Mercado Envíos (misma tarifa que Full, sin bodegaje ML)' },
   flete_propio: { texto: 'flete propio', title: 'El analista propone despachar desde tu bodega con courier propio: el volumétrico de Mercado Envíos no cierra' },
+}
+
+// LO QUE NO ENTRA A FULL SE VE EN LA FILA CERRADA. El importador, 22-sep: "lo que
+// no se pueda Full ponle alguna etiqueta o color para tener idea". Antes esto
+// solo se veía abriendo la fila; una silla gamer de 19 kg pasaba desapercibida.
+function ChipSinFull({ o }) {
+  const f = o.fueraDeFull
+  // la regla física (medidas/peso contra los límites de ML) manda sobre lo que
+  // declaró la IA: silla gamer decía "full" con una caja de 19 kg
+  if (f?.estado === 'no-cabe') return <em className="op-sinfull op-sinfull-nocabe" title={`No entra a Full: ${f.motivos.join(' · ')}`}><Warehouse size={11} aria-hidden="true" />no entra a Full</em>
+  if (o.logistica && o.logistica !== 'full') {
+    const chip = LOGISTICA_CHIP[o.logistica]
+    return <em className={`op-sinfull op-sinfull-${o.logistica}`} title={chip.title}><Warehouse size={11} aria-hidden="true" />{o.logistica === 'flete_propio' ? 'sin Full · flete propio' : 'sin Full · desde bodega'}</em>
+  }
+  if (f?.estado === 'al-limite') return <em className="op-sinfull op-sinfull-limite" title={`Cabe en Full, pero al límite: ${f.motivos.join(' · ')}`}><Warehouse size={11} aria-hidden="true" />Full al límite</em>
+  return null
 }
 
 function FletePropio({ o, onRecargar }) {

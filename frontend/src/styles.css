@@ -7243,3 +7243,12 @@ em.mg-agotado { color: var(--peligro); }
    de cortarse con "…" justo donde dice el segundo precio */
 .op-fila.op-con-exw .op-fila-kw { white-space: normal; overflow: visible; line-height: 1.5; padding: 6px 0; }
 .op-fila.op-con-exw .op-fila-kw::after { display: inline-block; white-space: nowrap; max-width: 100%; vertical-align: middle; margin-top: 2px; }
+
+/* fuera de Full: etiqueta en la fila cerrada. Marrón, que no se confunde con el
+   naranjo del precio de proveedor ni con el azul de cotizando */
+.op-sinfull { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; font-style: normal; letter-spacing: 0; vertical-align: 1.5px; white-space: nowrap; background: #fbe9d7; color: #8a4b12; border: 1px solid #e9b98c; }
+.op-sinfull-flete_propio { background: #f3e2f8; color: #6b2d8a; border-color: #d3a9e3; }
+@media (prefers-color-scheme: dark) { .op-sinfull { background: #3a2a18; color: #f0c08e; border-color: #7a5230; } .op-sinfull-flete_propio { background: #33203d; color: #d9a9ee; border-color: #6e4580; } }
+.op-sinfull-nocabe { background: #fde2e2; color: #9b1c1c; border-color: #f0a8a8; }
+.op-sinfull-limite { background: #fdf3d6; color: #8a5a00; border-color: #ecd08a; }
+@media (prefers-color-scheme: dark) { .op-sinfull-nocabe { background: #3d1b1b; color: #f3a1a1; border-color: #7a3a3a; } .op-sinfull-limite { background: #3a2f12; color: #f2d48a; border-color: #7a6330; } }

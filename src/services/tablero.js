@@ -1,3 +1,4 @@
+import { LIMITES_FULL } from './envioFull.js'
 import { Nicho } from '../models/Nicho.js'
 import {
   detectarTramites,
@@ -45,6 +46,33 @@ function margenPuesto({ costoPuestoClp, rec, comisionPct = null }) {
 // Ahora el cubicaje viaja desde el nicho cuando existe, y cuando no, el número
 // sale igual PERO con `volumenSupuesto` en true para que la pantalla lo diga.
 const VOLUMEN_SUPUESTO_M3 = 0.003
+
+// ¿ENTRA A FULL? Regla física, no opinión de la IA. El analista declara la
+// logística, pero para silla gamer escribió "full" y a la vez describió una caja de
+// 83x63x35 y 19 kg que roza el tope. Se lee el perfil físico que él mismo declaró
+// (medidas y peso) y el cubicaje/peso anotados en el nicho, y se contrasta con los
+// límites oficiales de ML (envioFull.js): 20 kg, 120 cm por lado, 260 cm de suma.
+// Con "casi al tope" también se avisa: un bulto al límite es un problema en bodega.
+export function fueraDeFull({ perfilFisico, pesoKg, volumenM3 } = {}) {
+  const motivos = []
+  const texto = String(perfilFisico ?? '')
+  const m = texto.replace(/,/g, '.').match(/(\d{2,3})\s*[x×]\s*(\d{2,3})\s*[x×]\s*(\d{2,3})/i)
+  const lados = m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+  const kg = texto.match(/(\d{1,3}(?:[.,]\d)?)\s*kg\s*(?:reales|real)?/i)
+  const peso = Number.isFinite(pesoKg) ? pesoKg : kg ? Number(kg[1].replace(',', '.')) : null
+  if (lados) {
+    if (Math.max(...lados) > LIMITES_FULL.ladoMaxCm) motivos.push(`lado de ${Math.max(...lados)} cm (máx 120)`)
+    const suma = lados.reduce((a, b) => a + b, 0)
+    if (suma > LIMITES_FULL.sumaLadosMaxCm) motivos.push(`suma de lados ${suma} cm (máx 260)`)
+  }
+  if (peso != null && peso >= 20) motivos.push(`${peso} kg (máx 20)`)
+  if (Number.isFinite(volumenM3) && volumenM3 >= 0.15) motivos.push(`${volumenM3} m³ por unidad`)
+  if (motivos.length) return { estado: 'no-cabe', motivos }
+  if ((peso != null && peso >= 17) || (lados && lados.reduce((a, b) => a + b, 0) >= 230) || (Number.isFinite(volumenM3) && volumenM3 >= 0.1)) {
+    return { estado: 'al-limite', motivos: [peso != null && peso >= 17 ? `${peso} kg, al borde de los 20` : lados ? `suma de lados ${lados.reduce((a, b) => a + b, 0)} cm, cerca de 260` : `${volumenM3} m³ por unidad`] }
+  }
+  return null
+}
 
 // Pura. El precio que de verdad se paga: el EXW de fábrica más el recargo del
 // agente, que CUBRE EL FLETE DE CHINA A CHILE (lo aclaró el importador el 20-sep).
@@ -427,6 +455,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
       fletePropioClp: n.fletePropioClp ?? null,
       // por dónde recomienda vender el analista: full / bodega_propia / flete_propio
       logistica: n.conAnalisis?.[0]?.analisis?.recomendacion?.logistica ?? null,
+      // la regla física manda sobre lo que declaró la IA
+      fueraDeFull: fueraDeFull({ perfilFisico: n.conAnalisis?.[0]?.analisis?.recomendacion?.perfilFisico, pesoKg: n.pesoKg, volumenM3: n.volumenM3 }),
       // ¿alguien busca esta keyword? La mesa de compra también tiene que
       // avisarlo: se cotiza con proveedores sobre esta fila
       nivelBusqueda: n.nivelBusqueda
