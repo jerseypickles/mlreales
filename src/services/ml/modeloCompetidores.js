@@ -104,6 +104,21 @@ export function entrenarCompetidores(filasEntrada, { lambda = 10 } = {}) {
     variables: VARIABLES_COMPETIDORES, pesos, ajuste: final }
 }
 
+// Pura. Los promedios crudos detrás de cada peso: antes de creerle a un
+// coeficiente hay que ver si el dato lo sostiene sin el resto del modelo.
+export function diagnosticoCompetidores(filas) {
+  const prom = (fs) => fs.length ? { n: fs.length, resenasSemana: Math.round(fs.reduce((a, f) => a + Math.expm1(f.y), 0) / fs.length * 100) / 100,
+    conVenta: Math.round(fs.filter((f) => f.y > 0).length / fs.length * 100) } : { n: 0 }
+  const binarias = Object.fromEntries(['full', 'tiendaOficial', 'catalogo', 'anuncio', 'sinRating', 'reputacionVerde'].map((v) => {
+    const j = VARIABLES_COMPETIDORES.indexOf(v)
+    return [v, { si: prom(filas.filter((f) => f.xs[j] === 1)), no: prom(filas.filter((f) => f.xs[j] === 0)) }]
+  }))
+  const posicion = Object.fromEntries([[1, 10], [11, 25], [26, 50], [51, 100], [101, Infinity]].map(([a, b]) =>
+    [`${a}-${b === Infinity ? '+' : b}`, prom(filas.filter((f) => { const p = Math.round(Math.exp(f.xs[0])); return p >= a && p <= b }))]))
+  const conDescuento = { si: prom(filas.filter((f) => f.xs[2] > 0)), no: prom(filas.filter((f) => f.xs[2] === 0)) }
+  return { binarias, posicion, conDescuento }
+}
+
 let cache = null
 export async function modeloCompetidores({ dias = 90, ahora = new Date() } = {}) {
   if (cache && +ahora - cache.en < 30 * 60e3) return cache.valor
@@ -112,7 +127,9 @@ export async function modeloCompetidores({ dias = 90, ahora = new Date() } = {})
   const skus = [...new Set(snaps.map((s) => s.sku))]
   const productos = await Producto.find({ sku: { $in: skus } })
     .select('sku esFull esTiendaOficial tipoListing origenCrossBorder reputacionSeller -_id').lean()
-  const { ajuste, ...valor } = entrenarCompetidores(filasCompetidores(snaps, productos))
+  const filas = filasCompetidores(snaps, productos)
+  const { ajuste, ...modelo } = entrenarCompetidores(filas)
+  const valor = { ...modelo, diagnostico: diagnosticoCompetidores(filas) }
   cache = { en: +ahora, valor }
   return valor
 }
