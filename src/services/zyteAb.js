@@ -1,6 +1,7 @@
 import { config } from '../config/env.js'
 import { cuerpoPeticion, stockDesdeHtml, vendedorDesdeHtml, productoDesdeHtml, precioAnteriorReal } from './detalleMl.js'
 import { cuerpoListado, urlListado, itemsDesdeHtml } from './listadoMl.js'
+import { objetoDesde } from './jsonEmbebido.js'
 
 // PRUEBA A/B DE CONFIGURACIONES DE ZYTE (22-sep-2026).
 //
@@ -130,7 +131,15 @@ export async function pruebaProducto({ urls = [], apiKey = config.zyteApiKey, co
     const rastro = {}
     if (['distinto', 'solo-zyte'].includes(cmp.resenias)) rastro.resenias = donde(x.product.aggregateRating?.reviewCount)
     if (['distinto', 'solo-zyte'].includes(cmp.nota)) rastro.nota = donde(x.product.aggregateRating?.ratingValue, 3)
-    if (['distinto', 'solo-html'].includes(cmp.precioAnterior)) rastro.precioAnterior = donde(propio?.regularPrice, 3)
+    if (cmp.precioAnterior !== 'igual' && cmp.precioAnterior !== 'ambos-vacios') {
+      rastro.precioAnterior = donde(propio?.regularPrice, 2)
+      // todos los componentes de precio de la página: {precio actual, antes}
+      rastro.componentesPrecio = [...x.html.matchAll(/"id":"price","price":\{/g)].slice(0, 6).map((m) => {
+        const o = objetoDesde(x.html, m.index + m[0].length - 1)
+        return { actual: o?.value ?? null, antes: o?.previous_price?.value ?? null }
+      })
+      rastro.antesVisible = [...x.html.matchAll(/aria-label="Antes: (\d+)/g)].slice(0, 4).map((m) => Number(m[1]))
+    }
     return { url, ok: true, probabilidad: x.product.metadata?.probability ?? null, htmlSinProducto: !propio, cmp, ejemplo, rastro }
   })
   const resumen = {}
