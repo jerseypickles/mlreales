@@ -93,6 +93,13 @@ router.get('/pronosticos-nichos', async (_req, res) => {
   }
   res.json({ modo: 'sombra', nichos: ordenarPorTendencia(salida) })
 })
+// Cuánto del panel de competidores (Snapshot) sirve para entrenar, con los
+// descartes por motivo. Solo lectura; cacheado 10 minutos.
+router.get('/competidores', async (req, res) => {
+  const { auditoriaPanelCompetidores } = await import('../../services/ml/competidores.js')
+  const dias = Math.min(180, Math.max(7, Number(req.query.dias) || 90))
+  res.json(await auditoriaPanelCompetidores({ dias }))
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {

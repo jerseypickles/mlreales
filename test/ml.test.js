@@ -202,3 +202,31 @@ test('ordenarPorTendencia: lugar de cada nicho con la emisión vigente y solo me
   assert.equal(por.e.vsAnioPasadoPct, 100)
   assert.equal(por.sin, null)
 })
+
+test('panel de competidores: la reseña compartida por catálogo y la caída de fuente no son ventas', async () => {
+  const { paresDeLecturas, auditarPanel } = await import('../src/services/ml/competidores.js')
+  const d = (n) => new Date(Date.UTC(2026, 8, 1 + n))
+  const snaps = [
+    // propia: 100 → 104 en una semana = 4 reseñas
+    { sku: 'A', keyword: 'k', fecha: d(0), numReviewsApi: 100, vendidos: 100, preguntasIds: ['1'] },
+    { sku: 'A', keyword: 'k', fecha: d(7), numReviewsApi: 104, vendidos: 500, preguntasIds: ['1', '2', '3'] },
+    // B y C comparten el conteo del catálogo en los dos scans
+    { sku: 'B', keyword: 'k', fecha: d(0), numReviewsApi: 572 }, { sku: 'C', keyword: 'k', fecha: d(0), numReviewsApi: 572 },
+    { sku: 'B', keyword: 'k', fecha: d(7), numReviewsApi: 634 }, { sku: 'C', keyword: 'k', fecha: d(7), numReviewsApi: 634 },
+    // D pasa de un agregado a su propia cuenta
+    { sku: 'D', keyword: 'k', fecha: d(0), numReviewsApi: 1538 }, { sku: 'D', keyword: 'k', fecha: d(7), numReviewsApi: 70 },
+    // E: listado y ficha del mismo scan no son un par
+    { sku: 'E', keyword: 'k', fecha: d(0), numReviewsApi: 5 }, { sku: 'E', keyword: 'k', fecha: new Date(+d(0) + 3600e3), numReviewsApi: 5 },
+  ]
+  const pares = paresDeLecturas(snaps)
+  const por = Object.fromEntries(pares.map((p) => [p.sku, p]))
+  assert.equal(por.A.resenias, 4)
+  assert.equal(por.A.preguntas, 2)
+  assert.equal(por.A.balde, 'subio')
+  assert.equal(por.B.motivo, 'compartida-catalogo')
+  assert.equal(por.D.motivo, 'caida')
+  assert.equal(por.E, undefined)
+  const a = auditarPanel(snaps, pares)
+  assert.equal(a.resenias.paresUtiles, 1)
+  assert.deepEqual(a.resenias.descartes, { 'compartida-catalogo': 2, caida: 1 })
+})
