@@ -74,5 +74,22 @@ export async function estadoResenias({ ahora = new Date() } = {}) {
     LecturaResenia.aggregate([{ $group: { _id: '$dia', lecturas: { $sum: 1 } } }, { $sort: { _id: -1 } }, { $limit: 14 }]),
     LecturaResenia.countDocuments({ dia }),
   ])
-  return { dia, leidasHoy, porDia: porDia.map((d) => ({ dia: d._id, lecturas: d.lecturas })) }
+  // CALIDAD: entre los dos últimos días completos, un contador acumulado solo
+  // sube o queda igual; una baja es anomalía (reseña borrada o cambio de fuente)
+  let comparacion = null
+  const dias = porDia.map((d) => d._id).sort()
+  if (dias.length >= 2) {
+    const [a, b] = dias.slice(-2)
+    const filas = await LecturaResenia.find({ dia: { $in: [a, b] } }).select('itemId dia numReviews -_id').lean()
+    const antes = new Map(filas.filter((f) => f.dia === a).map((f) => [f.itemId, f.numReviews]))
+    let ambos = 0, suben = 0, bajan = 0, iguales = 0, nuevas = 0
+    for (const f of filas.filter((x) => x.dia === b)) {
+      if (!antes.has(f.itemId)) continue
+      ambos++
+      const d = f.numReviews - antes.get(f.itemId)
+      if (d > 0) { suben++; nuevas += d } else if (d < 0) bajan++; else iguales++
+    }
+    comparacion = { desde: a, hasta: b, enAmbos: ambos, suben, iguales, bajan, reseniasNuevas: nuevas }
+  }
+  return { dia, leidasHoy, porDia: porDia.map((d) => ({ dia: d._id, lecturas: d.lecturas })), comparacion }
 }
