@@ -7315,3 +7315,6 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .curva-periodo-chip small { font-weight: 500; opacity: 0.8; }
 .curva-periodo-chip.sin-porque { color: var(--avisa-tinta); background: color-mix(in srgb, var(--avisa-tinta) 10%, transparent); }
 .curva-periodo-chip.valle { color: var(--tinta-2); background: var(--superficie-2); border-color: var(--borde); }
+/* curva pareja: tono sólido intermedio, no el pálido de "mes normal" */
+.og-barras-parejas .og-barra { background: color-mix(in srgb, var(--acento) 55%, var(--acento-borde)); }
+.og-l-parejo { background: color-mix(in srgb, var(--acento) 55%, var(--acento-borde)); }

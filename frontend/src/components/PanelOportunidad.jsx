@@ -47,13 +47,15 @@ export function GraficoTemporada({ curva, ventana, hoy = new Date() }) {
   const picosFuertes = (periodos?.picos ?? []).filter((p) => p.multiplicador >= 1.5)
   const mesesFuertes = periodos ? new Set(picosFuertes.flatMap((p) => p.meses.map((m) => m - 1))) : null
   const coma = (n) => String(n).replace('.', ',')
+  const parejo = !!mesesFuertes && !mesesFuertes.size && curva.clasificacion !== 'estacional'
   return (
     <div className="og">
       <div className="og-cab">
         <h4>Cuándo se busca, y cuándo llega tu stock</h4>
         <span className="og-cifra">{curva.busquedasMes != null ? `${fmtNum(curva.busquedasMes)} búsq/mes` : ''}</span>
       </div>
-      <div className="og-barras" role="img" aria-label={`Búsquedas por mes. Pico en ${MESES[pico]}.`}>
+      {/* pareja de verdad: barras en tono sólido, no pálidas — pálido parecía "sin dato" */}
+      <div className={`og-barras${parejo ? ' og-barras-parejas' : ''}`} role="img" aria-label={parejo ? 'Búsquedas por mes: parejas todo el año.' : `Búsquedas por mes. Pico en ${MESES[pico]}.`}>
         {curva.curva.map((v, i) => (
           <div key={i} className="og-col" title={`${MESES[i]}: ${esGoogle ? `${fmtNum(v)} búsquedas` : `índice ${v}`}`}>
             <span className="og-valor">{i === pico && esGoogle ? fmtNum(v) : ''}</span>
@@ -65,7 +67,7 @@ export function GraficoTemporada({ curva, ventana, hoy = new Date() }) {
       {pedir.size ? <div className="og-tira" aria-hidden="true">{MESES.map((m, i) => <span key={m} className={pedir.has(i) ? 'og-t-pedir' : ''} />)}</div> : null}
       <div className="og-tira" aria-hidden="true">{MESES.map((m, i) => <span key={m} className={llega.has(i) ? 'og-t-llega' : ''} />)}</div>
       <p className="og-leyenda">
-        {!mesesFuertes || mesesFuertes.size ? <span><i className="og-l og-l-pico" />meses fuertes</span> : null}
+        {parejo ? <span><i className="og-l og-l-parejo" />búsquedas del mes (sin meses fuertes)</span> : <span><i className="og-l og-l-pico" />meses fuertes</span>}
         {pedir.size ? <span><i className="og-l og-l-pedir" />ventana para pedir</span> : null}
         <span><i className="og-l og-l-llega" />pidiendo hoy, tu stock vende aquí</span>
       </p>
