@@ -1,3 +1,4 @@
+import { verificarFilaRepuesto } from './compatibilidad.js'
 import { LIMITES_FULL } from './envioFull.js'
 import { Nicho } from '../models/Nicho.js'
 import {
@@ -554,7 +555,9 @@ export async function tableroOportunidades({ todos = false } = {}) {
         ? [...analisis.planRepuestos].sort((a, b) => (a.prioridad ?? 99) - (b.prioridad ?? 99)).slice(0, 4)
           .map((f) => ({ prioridad: f.prioridad, pieza: f.pieza ?? null, marca: f.marca, modelos: f.modelos, referencia: f.referencia ?? null, precioVentaClp: f.precioVentaClp ?? null,
             // análisis anteriores al 23-sep no traen verificación: se muestran como tales
-            verificacion: f.verificacion ?? 'no-revisada', fuente: f.fuente ?? null }))
+            // se recalcula al leer: una mejora del verificador vale para
+            // análisis viejos sin volver a pagar la IA
+            verificacion: f.fuente?.titulo ? verificarFilaRepuesto(f, f.fuente).estado : f.verificacion ?? 'no-revisada', fuente: f.fuente ?? null }))
         : null,
       segmento: rec.segmento ?? null,
       // cuánto del top mezclado respalda la jugada, y la búsqueda que la aísla

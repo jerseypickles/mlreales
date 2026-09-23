@@ -100,7 +100,12 @@ function palabrasModelo(modelos) {
 // Pura. {estado, fuente}: 'verificada' = modelo y años en el título citado;
 // 'parcial' = el modelo está pero los años no calzan; 'no-calza' = el título
 // citado es de otro auto; 'sin-fuente' = la IA no citó publicación.
-export function verificarFilaRepuesto(fila, producto) {
+// lo que va entre paréntesis son notas ("el mismo SKU aparece 2016-2024 en pos
+// 25"), no lo que se declara: sus años no se le exigen al título citado
+const sinNotas = (texto) => String(texto ?? '').replace(/\([^)]*\)/g, ' ')
+
+export function verificarFilaRepuesto(filaEntrada, producto) {
+  const fila = { ...filaEntrada, modelos: sinNotas(filaEntrada.modelos) }
   if (!producto) return { estado: 'sin-fuente', fuente: null }
   const fuente = { titulo: producto.titulo ?? null, url: producto.url ?? null, sku: producto.sku ?? null, precio: producto.precio ?? null, posicion: producto.posicion ?? null }
   const titulo = String(producto.titulo ?? '').toLowerCase()

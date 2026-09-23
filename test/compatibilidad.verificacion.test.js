@@ -21,3 +21,9 @@ test('verificación de una fila del plan contra el título que la IA citó', () 
   assert.deepEqual(plan.map((f) => f.verificacion), ['verificada', 'sin-fuente'])
   assert.equal(plan[0].fuente.url, 'u')
 })
+
+test('las notas entre paréntesis no se le exigen al título citado', () => {
+  const l200 = { posicion: 16, titulo: 'Pastillas Freno Delanteras Mitsubishi New L200 2.4 2016-2023' }
+  assert.equal(verificarFilaRepuesto({ modelos: 'New L200 2.4 2016-2023 (el mismo SKU aparece declarado 2016-2024 en pos 25)' }, l200).estado, 'verificada')
+  assert.equal(verificarFilaRepuesto({ modelos: 'New L200 2.4 2016-2024' }, l200).estado, 'parcial')
+})
