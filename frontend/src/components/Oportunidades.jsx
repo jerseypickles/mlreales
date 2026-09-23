@@ -901,6 +901,22 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronos
         ) : null}
 
         {o.titular ? <p className="op-titular">{o.titular}</p> : null}
+        {/* repuestos: la compra es por pieza y por auto — sin modelo y años no se cotiza */}
+        {o.planRepuestos?.length ? (
+          <ol className="op-plan-repuestos">
+            {o.planRepuestos.map((f) => (
+              <li key={`${f.prioridad}-${f.marca}-${f.pieza}`}>
+                <b className="op-plan-n">{f.prioridad}</b>
+                <span className="op-plan-auto">
+                  <strong>{f.marca}</strong>{f.pieza ? <em> · {f.pieza}</em> : null}
+                  <span className="op-plan-modelos">{f.modelos}</span>
+                </span>
+                {f.referencia ? <code className="op-plan-ref" title="Código de la pieza, tal como aparece en el top de ML">{f.referencia}</code> : null}
+                {f.precioVentaClp ? <span className="op-plan-precio">{fmtPrecio(f.precioVentaClp)}</span> : null}
+              </li>
+            ))}
+          </ol>
+        ) : null}
 
         {/* fila 2: los números de la compra */}
         <div className="op-hechos">

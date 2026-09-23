@@ -549,6 +549,11 @@ export async function tableroOportunidades({ todos = false } = {}) {
       // que no se pierdan entre 44 filas que ya estaban ahí ayer
       creadoEl: n.creadoEl ?? null,
       titular: rec.titular ?? null,
+      // repuestos: qué pieza y para qué autos y años, que es lo que se cotiza
+      planRepuestos: Array.isArray(analisis?.planRepuestos) && analisis.planRepuestos.length
+        ? [...analisis.planRepuestos].sort((a, b) => (a.prioridad ?? 99) - (b.prioridad ?? 99)).slice(0, 4)
+          .map((f) => ({ prioridad: f.prioridad, pieza: f.pieza ?? null, marca: f.marca, modelos: f.modelos, referencia: f.referencia ?? null, precioVentaClp: f.precioVentaClp ?? null }))
+        : null,
       segmento: rec.segmento ?? null,
       // cuánto del top mezclado respalda la jugada, y la búsqueda que la aísla
       shareJugadaPct: analisis.shareJugadaPct ?? null,

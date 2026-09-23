@@ -369,8 +369,9 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
                     <tr key={`${f.prioridad}-${f.marca}`} className={f.prioridad === 1 ? 'fila-destacada' : ''}>
                       <td className="num">{f.prioridad}</td>
                       <td>
-                        <strong>{f.marca}</strong>
+                        <strong>{f.marca}</strong>{f.pieza ? ` · ${f.pieza}` : ''}
                         <span className="sub">{f.modelos}</span>
+                        {f.referencia ? <span className="sub">Ref. {f.referencia}</span> : null}
                       </td>
                       <td className="sin-corte">{fmtPrecio(f.precioVentaClp)}</td>
                       <td className="sin-corte">US$ {f.exwMaximoUsd}</td>
