@@ -428,8 +428,13 @@ export async function analizarNicho(nicho) {
   try {
     const { CurvaEstacional } = await import('../models/CurvaEstacional.js')
     const { periodosDelAnio } = await import('./estacionalidad.js')
-    const curva = await CurvaEstacional.findOne({ keyword: nicho.keyword }).select('serieMensual').lean()
-    const p = periodosDelAnio(curva?.serieMensual, { keyword: nicho.keyword })
+    const curva = await CurvaEstacional.findOne({ keyword: nicho.keyword }).select('serieMensual keywordMedida').lean()
+    let serie = curva?.serieMensual
+    if (!(serie?.length >= 24)) {
+      const { seriesActuales } = await import('./ml/servicio.js')
+      serie = (await seriesActuales({ keywords: [curva?.keywordMedida || nicho.keyword] }))[0]?.meses
+    }
+    const p = periodosDelAnio(serie, { keyword: nicho.keyword })
     if (p) periodosDelAnioMedidos = {
       picos: p.picos.map((x) => ({ meses: x.texto, multiplicador: x.multiplicador, porque: x.porque?.nombre ?? 'sin explicación en el calendario', repiteEnAnios: `${x.repite} de ${x.anios}`, participacionPct: x.participacionPct })),
       valles: p.valles.map((x) => ({ meses: x.texto, multiplicador: x.multiplicador })),

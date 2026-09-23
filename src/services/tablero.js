@@ -284,8 +284,17 @@ export async function tableroOportunidades({ todos = false } = {}) {
     // los períodos del año (qué meses suben, cuánto, si se repite y por qué),
     // medidos sobre los 48 meses; la serie cruda no viaja al navegador
     const { periodosDelAnio } = await import('./estacionalidad.js')
+    // muchas curvas no guardaron su serie de 48 meses; la del aprendizaje
+    // (SerieNichoMl, por la palabra que de verdad se mide) sí la tiene
+    const faltan = curvas.filter((c) => !(c.serieMensual?.length >= 24)).map((c) => c.keywordMedida || c.keyword)
+    const respaldo = new Map()
+    if (faltan.length) {
+      const { seriesActuales } = await import('./ml/servicio.js')
+      for (const x of await seriesActuales({ keywords: [...new Set(faltan)] })) respaldo.set(x.keyword, x.meses)
+    }
     for (const c of curvas) {
-      const p = periodosDelAnio(c.serieMensual, { keyword: c.keyword })
+      const serie = c.serieMensual?.length >= 24 ? c.serieMensual : respaldo.get(c.keywordMedida || c.keyword)
+      const p = periodosDelAnio(serie, { keyword: c.keyword })
       c.periodos = p ? { picos: p.picos, valles: p.valles, amplitud: p.amplitud, indices: p.meses.map((m) => m.indice) } : null
       delete c.serieMensual
       curvaPorKeyword.set(c.keyword, c)
