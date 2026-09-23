@@ -276,12 +276,20 @@ export async function tableroOportunidades({ todos = false } = {}) {
   try {
     const { CurvaEstacional } = await import('../models/CurvaEstacional.js')
     const curvas = await CurvaEstacional.find({ 'curva.11': { $exists: true } })
-      .select('keyword curva mesPico nombreMesPico ratioPico clasificacion promedio fuente busquedasMes competenciaAds cpcUsd keywordMedida correccionFactor variacionInteranualPct salud')
+      .select('keyword curva mesPico nombreMesPico ratioPico clasificacion promedio fuente busquedasMes competenciaAds cpcUsd keywordMedida correccionFactor variacionInteranualPct salud serieMensual')
       .lean()
     // la salud se lee contra la mediana de todas las keywords medidas
     const { saludRelativaAlMercado } = await import('./volumenBusqueda.js')
     saludRelativaAlMercado(curvas)
-    for (const c of curvas) curvaPorKeyword.set(c.keyword, c)
+    // los períodos del año (qué meses suben, cuánto, si se repite y por qué),
+    // medidos sobre los 48 meses; la serie cruda no viaja al navegador
+    const { periodosDelAnio } = await import('./estacionalidad.js')
+    for (const c of curvas) {
+      const p = periodosDelAnio(c.serieMensual, { keyword: c.keyword })
+      c.periodos = p ? { picos: p.picos, valles: p.valles, amplitud: p.amplitud, indices: p.meses.map((m) => m.indice) } : null
+      delete c.serieMensual
+      curvaPorKeyword.set(c.keyword, c)
+    }
   } catch {
     // sin curvas medidas el tablero funciona igual, con la estacionalidad del radar
   }

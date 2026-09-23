@@ -7306,3 +7306,12 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .mv-calzan { margin: 2px 0 8px; font-size: 13px; color: var(--tinta-2); }
 .mv-fila.mv-ajena { opacity: 0.55; }
 .mv-fila.mv-ajena:hover { opacity: 1; }
+/* períodos del año medidos: meses de pico marcados en las barras y chips con su porqué */
+.op-fila-curva i.pico { background: var(--acento, #3b5bdb); opacity: 1; }
+.op-fila-conpico b { font-weight: 700; color: var(--tinta); }
+.curva-barra.curva-periodo { outline: 2px solid color-mix(in srgb, var(--exito) 55%, transparent); outline-offset: -2px; }
+.curva-periodos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.curva-periodo-chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; color: var(--exito-tinta); background: color-mix(in srgb, var(--exito) 12%, transparent); border: 1px solid currentColor; white-space: nowrap; }
+.curva-periodo-chip small { font-weight: 500; opacity: 0.8; }
+.curva-periodo-chip.sin-porque { color: var(--avisa-tinta); background: color-mix(in srgb, var(--avisa-tinta) 10%, transparent); }
+.curva-periodo-chip.valle { color: var(--tinta-2); background: var(--superficie-2); border-color: var(--borde); }

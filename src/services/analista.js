@@ -247,6 +247,7 @@ Reglas:
 - BÚSQUEDAS EN ALZA (campo busquedasEnAlza, si viene): consultas del autocompletado de ML que están subiendo esta semana en la vertical de este nicho — señal de demanda en tiempo real que complementa el delta de reseñas; úsala para elegir el segmento y el ángulo del producto.
 - CONTEXTO DEL IMPORTADOR SOBRE ESTE NICHO (campo contextoImportador, si viene): es experiencia de primera mano — ventas reales suyas en este nicho, conocimiento del segmento, canal o temporada. Pésalo POR SOBRE lo que infieras de las reseñas: las reseñas acumuladas por listing miden permanencia, y los vendedores genéricos rotan publicaciones — sus ventas se dispersan en listings de vida corta que no acumulan reseñas, así que "genéricos con pocas reseñas" NO prueba que el genérico no venda si el importador ya lo vendió. Si su experiencia contradice tu lectura de los datos, dilo explícitamente en el resumen y ajusta el veredicto considerando ambas evidencias.
 - Sé directo y escéptico: si el nicho no da, di no_entrar y explica por qué. Un veredicto inflado cuesta dinero real.
+- PERÍODOS DEL AÑO (periodosDelAnioMedidos, si viene): MEDIDOS en 4 años de búsquedas de Google en Chile — qué meses suben, cuánto (multiplicador contra lo normal de ese año), en cuántos años se repitió y qué evento del calendario lo explica. Mandan sobre "estacionalidad", que es una inferencia del radar. Un nicho "de todo el año" con un pico ×1,7 que se repite 3 de 3 años (ej: calculadora científica en marzo-mayo, inicio del año académico) NO es plano: dilo, y usa el período para la PRIMERA COMPRA (cuánto y cuándo debe estar el stock vendiendo) y para el valle (no llegar con stock nuevo al valle). Un pico "sin explicación en el calendario" es un hallazgo: dilo, no lo inventes.
 - El usuario quiere LA decisión, no un informe: titular de máximo 90 caracteres con el producto concreto a traer, resumen de máximo 2 frases, razón de cada segmento en 1 frase, riesgos de 1 línea cada uno. Cero relleno.
 - Todo en español de Chile, precios en CLP.`
 
@@ -421,6 +422,23 @@ export async function analizarNicho(nicho) {
     // sin cuenta ML o sin respuesta: el analista trabaja con la regla de 4.000 cm³/kg
   }
 
+  // LOS PERÍODOS DEL AÑO MEDIDOS en 4 años de Google (no la estacionalidad que
+  // el radar escribió de memoria): qué meses suben, cuánto, si se repite y por qué
+  let periodosDelAnioMedidos
+  try {
+    const { CurvaEstacional } = await import('../models/CurvaEstacional.js')
+    const { periodosDelAnio } = await import('./estacionalidad.js')
+    const curva = await CurvaEstacional.findOne({ keyword: nicho.keyword }).select('serieMensual').lean()
+    const p = periodosDelAnio(curva?.serieMensual, { keyword: nicho.keyword })
+    if (p) periodosDelAnioMedidos = {
+      picos: p.picos.map((x) => ({ meses: x.texto, multiplicador: x.multiplicador, porque: x.porque?.nombre ?? 'sin explicación en el calendario', repiteEnAnios: `${x.repite} de ${x.anios}`, participacionPct: x.participacionPct })),
+      valles: p.valles.map((x) => ({ meses: x.texto, multiplicador: x.multiplicador })),
+      amplitudMesFuerteVsFlojo: p.amplitud,
+    }
+  } catch {
+    // sin serie: el analista trabaja con la estacionalidad del radar, como antes
+  }
+
   const entrada = {
     keyword: nicho.keyword,
     nivelBusquedaDeLaKeyword: nivelBusqueda
@@ -447,6 +465,7 @@ export async function analizarNicho(nicho) {
       timeZone: 'America/Santiago',
     }),
     estacionalidad: nicho.radarInfo?.estacionalidad ?? undefined,
+    periodosDelAnioMedidos,
     ventanaImportacionSegunRadar: nicho.radarInfo?.ventanaImportacion ?? undefined,
     contextoImportador: nicho.contextoUsuario ?? undefined,
     criteriosImportador: criterios.length ? criterios : undefined,

@@ -116,6 +116,13 @@ router.post('/resenias-diarias', async (_req, res) => {
   const job = await obtenerColas().tendencias.add('resenias-diarias', {}, { jobId: `resenias-manual-${Math.floor(Date.now() / 300000)}` })
   res.status(202).json({ jobId: job.id })
 })
+// Qué eventos del calendario mueven qué nichos, aprendido de todas las series
+// de búsqueda (4 años): fuerza, repetición y picos sin explicar.
+router.get('/temporadas', async (_req, res) => {
+  const { mapaDeTemporadas } = await import('../../services/ml/temporadas.js')
+  const series = await seriesActuales()
+  res.json(mapaDeTemporadas(series.map((s) => ({ keyword: s.keyword, meses: s.meses }))))
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {

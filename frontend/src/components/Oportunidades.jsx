@@ -74,6 +74,44 @@ function chipSalud(c) {
   return null
 }
 
+// LOS PERÍODOS DEL AÑO, MEDIDOS (ver estacionalidad.periodosDelAnio): qué meses
+// suben de verdad, cuánto, si se repite año a año y por qué. "Todo el año" no
+// alcanza: la calculadora científica se busca todo el año, pero marzo-mayo se
+// busca 4 veces más que el verano.
+const PICO_QUE_SE_DICE = 1.5
+function picosDe(curva) {
+  return new Set((curva?.periodos?.picos ?? []).filter((p) => p.multiplicador >= PICO_QUE_SE_DICE).flatMap((p) => p.meses))
+}
+function textoPeriodo(p) {
+  return `${p.texto} ×${String(p.multiplicador).replace('.', ',')}${p.porque ? ` · ${p.porque.nombre}` : ' · sin explicación en el calendario'} · se repitió ${p.repite} de ${p.anios} años · ${p.participacionPct}% de las búsquedas del año`
+}
+function TodoElAnio({ periodos }) {
+  const pico = (periodos?.picos ?? []).find((p) => p.multiplicador >= PICO_QUE_SE_DICE)
+  if (!pico) return <em className="op-fila-plano">todo el año</em>
+  return (
+    <em className="op-fila-plano op-fila-conpico" title={`Se vende todo el año, con un período fuerte medido en 4 años de Google: ${textoPeriodo(pico)}`}>
+      todo el año · <b>pico {pico.texto}</b>
+    </em>
+  )
+}
+function PeriodosMedidos({ p }) {
+  if (!p?.picos?.length && !p?.valles?.length) return null
+  return (
+    <span className="curva-periodos">
+      {p.picos.map((x) => (
+        <b key={`p${x.texto}`} className={`curva-periodo-chip${x.porque ? '' : ' sin-porque'}`} title={textoPeriodo(x)}>
+          ▲ {x.texto} ×{String(x.multiplicador).replace('.', ',')} · {x.porque ? x.porque.nombre : '¿por qué?'} <small>{x.repite}/{x.anios} años</small>
+        </b>
+      ))}
+      {p.valles.map((x) => (
+        <b key={`v${x.texto}`} className="curva-periodo-chip valle" title={`Valle: ${x.texto}, ×${String(x.multiplicador).replace('.', ',')} de lo normal, se repitió ${x.repite} de ${x.anios} años`}>
+          ▼ {x.texto} ×{String(x.multiplicador).replace('.', ',')}
+        </b>
+      ))}
+    </span>
+  )
+}
+
 function chipVentana(v) {
   if (!v || v.estado === 'sin-temporada') return null
   const pico = v.pico ? ` · pico ${fmtMes(v.pico)}` : ''
@@ -143,7 +181,7 @@ function CurvaAno({ curva }) {
         {curva.curva.map((v, i) => (
           <span
             key={i}
-            className={`curva-barra${i === mesHoy ? ' curva-hoy' : ''}`}
+            className={`curva-barra${i === mesHoy ? ' curva-hoy' : ''}${picosDe(curva).has(i + 1) ? ' curva-periodo' : ''}`}
             style={{ height: `${Math.max(6, Math.round((100 * v) / max))}%` }}
             // el valor del mes al pasar el mouse: en google-ads son búsquedas
             // reales, en trends un índice 0-100 relativo a la propia keyword
@@ -176,6 +214,7 @@ function CurvaAno({ curva }) {
           : curva.clasificacion === 'alza-suave'
             ? ` se busca todo el año · leve alza en ${curva.nombreMesPico} (${curva.ratioPico}×)`
             : ' se busca parejo todo el año'}
+        <PeriodosMedidos p={curva.periodos} />
       </span>
     </div>
   )
@@ -527,7 +566,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
           title={`Forma del año según Google Trends (5 años). Pico ${c.nombreMesPico ?? '—'}, ${c.ratioPico}× sobre el promedio.`}
         >
           {c.curva.map((v, i) => (
-            <i key={i} className={i === mesHoy ? 'hoy' : undefined} style={{ height: `${Math.max(8, Math.round((100 * v) / max))}%` }} />
+            <i key={i} className={[i === mesHoy ? 'hoy' : '', picosDe(c).has(i + 1) ? 'pico' : ''].join(' ').trim() || undefined} style={{ height: `${Math.max(8, Math.round((100 * v) / max))}%` }} />
           ))}
         </span>
       ) : (
@@ -548,7 +587,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
       {/* ── EL CRUCE: ¿esa búsqueda de Google se convierte en venta acá? ── */}
       <Conversion c={o.conversion} />
       <span className="op-fila-ventana">
-        {ven ? <em className={`chip-ventana v-${ven.clase}`}>{ven.texto}</em> : <em className="op-fila-plano">todo el año</em>}
+        {ven ? <em className={`chip-ventana v-${ven.clase}`}>{ven.texto}</em> : <TodoElAnio periodos={c?.periodos} />}
       </span>
       {o.midiendo ? (
         <span className="op-fila-ver op-fila-faltan">
