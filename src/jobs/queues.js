@@ -109,6 +109,13 @@ export async function registrarProgramados() {
     { pattern: process.env.SEGUIMIENTO_CRON || '15 */2 * * *', tz: 'America/Santiago' },
     { name: 'seguimiento-stock', data: {} },
   )
+  // reseñas de la competencia, una lectura diaria por publicación, repartida en
+  // pasadas cortas cada hora (gratis: API de ML). Ver services/reseniasDiarias.js
+  await colas.tendencias.upsertJobScheduler(
+    'resenias-diarias',
+    { pattern: process.env.RESENIAS_CRON || '25 * * * *', tz: 'America/Santiago' },
+    { name: 'resenias-diarias', data: {} },
+  )
   // el ranking oficial de más vendidos, una vez al día (gratis: API de ML).
   // 07:40, antes del radar de las 08:00, que lee lo que entró al top.
   await colas.tendencias.upsertJobScheduler(

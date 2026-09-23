@@ -106,6 +106,16 @@ router.get('/competidores/modelo', async (_req, res) => {
   const { modeloCompetidores } = await import('../../services/ml/modeloCompetidores.js')
   res.json(await modeloCompetidores())
 })
+// Lectura diaria de reseñas de la competencia: cuánto del panel va leído hoy
+// y cuántas lecturas hubo cada día. POST encola una pasada ahora.
+router.get('/resenias-diarias', async (_req, res) => {
+  const { estadoResenias } = await import('../../services/reseniasDiarias.js')
+  res.json(await estadoResenias())
+})
+router.post('/resenias-diarias', async (_req, res) => {
+  const job = await obtenerColas().tendencias.add('resenias-diarias', {}, { jobId: `resenias-manual-${Math.floor(Date.now() / 300000)}` })
+  res.status(202).json({ jobId: job.id })
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {
