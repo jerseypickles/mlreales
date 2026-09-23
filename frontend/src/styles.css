@@ -7302,3 +7302,7 @@ em.mg-agotado { color: var(--peligro); }
 .op-plan-sello-mal { color: var(--peligro); background: var(--peligro-tenue); }
 a.op-plan-sello:hover { text-decoration: underline; }
 @media (max-width: 640px) { .op-plan-sello { grid-column: 2; justify-self: start; } }
+/* ranking de la categoría: lo que no es de la búsqueda del nicho va atenuado */
+.mv-calzan { margin: 2px 0 8px; font-size: 13px; color: var(--tinta-2); }
+.mv-fila.mv-ajena { opacity: 0.55; }
+.mv-fila.mv-ajena:hover { opacity: 1; }

@@ -96,6 +96,21 @@ export function movimientosDeRanking(hoy, antes) {
 // El ranking de hoy de cada categoría comparado contra el de hace ~7 días (o el
 // más viejo que haya), con la ficha de cada producto y en cuántos días de los
 // guardados estuvo en el top.
+// API pública de ML; el nombre de una categoría no cambia: se cachea en memoria
+const nombresCategoria = new Map()
+async function nombreCategoria(id, pedir = meliGet) {
+  if (!id) return null
+  if (nombresCategoria.has(id)) return nombresCategoria.get(id)
+  try {
+    const r = await pedir(`/categories/${id}`)
+    const nombre = r?.name ?? null
+    nombresCategoria.set(id, nombre)
+    return nombre
+  } catch {
+    return null
+  }
+}
+
 export async function rankingsConMovimiento({ ahora = new Date(), dias = 7, nicho = null } = {}) {
   const desde = diaChile(+ahora - 35 * DIA)
   const filtro = { dia: { $gte: desde }, ...(nicho ? { nichos: nicho } : {}) }
@@ -115,6 +130,9 @@ export async function rankingsConMovimiento({ ahora = new Date(), dias = 7, nich
     items.forEach((i) => ids.add(i.id))
     salida.push({ categoriaId, nichos: ultimo.nichos, dia: ultimo.dia, comparadoCon: base && base.dia !== ultimo.dia ? base.dia : null, diasGuardados: serie.length, items })
   }
+  // el nombre de la categoría: sin él el panel parecía un ranking de la
+  // búsqueda y no de TODA la categoría (mesa auxiliar mostraba mesas plegables)
+  for (const c of salida) c.categoriaNombre = await nombreCategoria(c.categoriaId)
   const fichas = new Map((await FichaMasVendido.find({ id: { $in: [...ids] } }).lean()).map((f) => [f.id, f]))
   for (const c of salida) c.items = c.items.map((i) => ({ ...i, titulo: fichas.get(i.id)?.titulo ?? null, imagen: fichas.get(i.id)?.imagen ?? null,
     precio: fichas.get(i.id)?.precio ?? null, url: fichas.get(i.id)?.url ?? null, enNuestroScan: fichas.get(i.id)?.fuente === 'scan' }))
