@@ -295,7 +295,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
     for (const c of curvas) {
       const serie = c.serieMensual?.length >= 24 ? c.serieMensual : respaldo.get(c.keywordMedida || c.keyword)
       const p = periodosDelAnio(serie, { keyword: c.keyword })
-      c.periodos = p ? { picos: p.picos, valles: p.valles, amplitud: p.amplitud, indices: p.meses.map((m) => m.indice) } : null
+      c.periodos = p ? { picos: p.picos, valles: p.valles, amplitud: p.amplitud, indices: p.meses.map((m) => m.indice), anios: Math.min(...p.meses.map((m) => m.anios)) } : null
       delete c.serieMensual
       curvaPorKeyword.set(c.keyword, c)
     }

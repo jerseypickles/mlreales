@@ -65,7 +65,7 @@ export function GraficoTemporada({ curva, ventana, hoy = new Date() }) {
       {pedir.size ? <div className="og-tira" aria-hidden="true">{MESES.map((m, i) => <span key={m} className={pedir.has(i) ? 'og-t-pedir' : ''} />)}</div> : null}
       <div className="og-tira" aria-hidden="true">{MESES.map((m, i) => <span key={m} className={llega.has(i) ? 'og-t-llega' : ''} />)}</div>
       <p className="og-leyenda">
-        <span><i className="og-l og-l-pico" />meses fuertes</span>
+        {!mesesFuertes || mesesFuertes.size ? <span><i className="og-l og-l-pico" />meses fuertes</span> : null}
         {pedir.size ? <span><i className="og-l og-l-pedir" />ventana para pedir</span> : null}
         <span><i className="og-l og-l-llega" />pidiendo hoy, tu stock vende aquí</span>
       </p>
@@ -83,7 +83,12 @@ export function GraficoTemporada({ curva, ventana, hoy = new Date() }) {
         </div>
       ) : null}
       <p className="og-lectura">
-        {curva.clasificacion !== 'estacional' && picosFuertes.length
+        {/* con los períodos medidos la frase sale de ellos, no del ratio viejo */}
+        {periodos && curva.clasificacion !== 'estacional' && !picosFuertes.length
+          ? (periodos.picos.length
+            ? <>Se busca todo el año, con alzas leves: {periodos.picos.map((x, i) => <span key={x.texto}>{i ? '; ' : ''}<strong>{x.texto}</strong> ×{coma(x.multiplicador)}{x.porque ? ` (${x.porque.nombre})` : ''}, {x.repite} de {x.anios} años</span>)}. No alcanzan a ser temporada: no hay fecha límite para pedir.</>
+            : <>Parejo de verdad: en {periodos.anios ?? 3} años medidos ningún mes sube más de ×{coma(Math.max(...(periodos.indices ?? [1])).toFixed(1))} sobre lo normal de su año. No hay temporada ni fecha límite para pedir.</>)
+        : curva.clasificacion !== 'estacional' && picosFuertes.length
           ? <>Se busca todo el año, <strong>pero con temporada</strong>: {picosFuertes.map((x, i) => <span key={x.texto}>{i ? '; ' : ''}<strong>{x.texto}</strong> ×{coma(x.multiplicador)}{x.porque ? ` (${x.porque.nombre})` : ''}, {x.repite} de {x.anios} años</span>)}{periodos.valles.length ? <>. Valle en {periodos.valles.map((v) => v.texto).join(' y ')}: no conviene que el stock nuevo llegue ahí</> : null}. El stock tiene que estar vendiendo cuando arranca el pico.</>
         : curva.clasificacion === 'estacional'
           ? <>Temporada real: pico en <strong>{curva.nombreMesPico}</strong>, {curva.ratioPico}× el promedio. {llegaAntes === false ? 'Pidiendo hoy el stock llega con el pico ya pasado.' : 'Pidiendo hoy, el stock alcanza a estar vendiendo para el pico.'}</>
