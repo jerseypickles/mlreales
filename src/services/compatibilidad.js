@@ -66,3 +66,58 @@ export function desglosePorMarca(productos, { max = 8 } = {}) {
     .sort((a, b) => b.reviews - a.reviews || b.items - a.items)
     .slice(0, max)
 }
+
+// ¿LOS MODELOS Y AÑOS DEL PLAN SON VERÍDICOS O LOS PUSO LA IA?
+//
+// ML no entrega la compatibilidad oficial de publicaciones ajenas (/items/{id}/
+// compatibilities da 403, probado el 23-sep-2026 en 5 del top de pastillas).
+// Lo verificable es el título: el vendedor escribe ahí para qué auto y años es
+// ("Pastillas De Freno Kia Rio 4 2012-2023"). Cada fila del plan cita la
+// posición del top de donde la sacó, y esto comprueba SIN la IA que el modelo
+// y los años estén escritos en ese título. Es lo que declara un vendedor real,
+// no una tabla oficial: sirve para separar dato de invención, no más.
+const AÑO_MIN = 1985
+export function aniosDe(texto) {
+  const t = String(texto ?? '')
+  const anios = new Set()
+  for (const m of t.matchAll(/\b(19[89]\d|20[0-4]\d)\b/g)) anios.add(Number(m[1]))
+  // "12/20", "12-20", "2012/20": años abreviados en pares
+  for (const m of t.matchAll(/\b(\d{2}|\d{4})\s*[/-]\s*(\d{2})\b/g)) {
+    const a = m[1].length === 4 ? Number(m[1]) : 2000 + Number(m[1])
+    const b = 2000 + Number(m[2])
+    if (a >= AÑO_MIN && a <= 2049 && b >= a && b <= 2049) { anios.add(a); anios.add(b) }
+  }
+  return anios
+}
+
+// palabras de modelo: lo que no es año, cilindrada ni relleno
+const RELLENO = new Set(['y', 'e', 'con', 'de', 'del', 'la', 'el', 'los', 'las', 'new', 'nuevo', 'motor', 'bencinero', 'diesel', 'diésel', 'sedan', 'sedán', 'hatch', 'hb'])
+function palabrasModelo(modelos) {
+  return String(modelos ?? '').toLowerCase().split(/[^a-z0-9áéíóúñ]+/)
+    .filter((w) => w.length >= 2 && !RELLENO.has(w) && !/^\d+(\.\d+)?$/.test(w) && !/^(19|20)\d\d$/.test(w))
+}
+
+// Pura. {estado, fuente}: 'verificada' = modelo y años en el título citado;
+// 'parcial' = el modelo está pero los años no calzan; 'no-calza' = el título
+// citado es de otro auto; 'sin-fuente' = la IA no citó publicación.
+export function verificarFilaRepuesto(fila, producto) {
+  if (!producto) return { estado: 'sin-fuente', fuente: null }
+  const fuente = { titulo: producto.titulo ?? null, url: producto.url ?? null, sku: producto.sku ?? null, precio: producto.precio ?? null, posicion: producto.posicion ?? null }
+  const titulo = String(producto.titulo ?? '').toLowerCase()
+  const palabras = palabrasModelo(fila.modelos)
+  const modeloEnTitulo = palabras.some((w) => new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`).test(titulo))
+  if (!modeloEnTitulo) return { estado: 'no-calza', fuente }
+  const delPlan = aniosDe(fila.modelos), delTitulo = aniosDe(producto.titulo)
+  if (!delPlan.size) return { estado: 'parcial', fuente }
+  const calzan = [...delPlan].every((a) => delTitulo.has(a))
+  return { estado: calzan ? 'verificada' : 'parcial', fuente }
+}
+
+export function verificarPlanRepuestos(plan, productos) {
+  if (!Array.isArray(plan)) return plan
+  const porPosicion = new Map((productos ?? []).map((p) => [p.posicion, p]))
+  return plan.map((f) => {
+    const v = verificarFilaRepuesto(f, Number.isInteger(f.fuentePos) ? porPosicion.get(f.fuentePos) : null)
+    return { ...f, verificacion: v.estado, fuente: v.fuente }
+  })
+}

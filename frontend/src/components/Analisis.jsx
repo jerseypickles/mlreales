@@ -372,6 +372,12 @@ export function Analisis({ nichoId, analisisInicial, contextoInicial, revisarElI
                         <strong>{f.marca}</strong>{f.pieza ? ` · ${f.pieza}` : ''}
                         <span className="sub">{f.modelos}</span>
                         {f.referencia ? <span className="sub">Ref. {f.referencia}</span> : null}
+                        {f.verificacion ? (
+                          <span className="sub">
+                            {{ verificada: '✓ modelo y años en el título de', parcial: '≈ modelo en', 'no-calza': '⚠ la publicación citada es de otro auto:', 'sin-fuente': '⚠ sin publicación que lo respalde (dato de la IA)' }[f.verificacion]}
+                            {f.fuente?.url ? <> <a href={f.fuente.url} target="_blank" rel="noreferrer">{f.fuente.titulo ?? 'la publicación'}</a></> : null}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="sin-corte">{fmtPrecio(f.precioVentaClp)}</td>
                       <td className="sin-corte">US$ {f.exwMaximoUsd}</td>

@@ -7287,7 +7287,7 @@ em.mg-agotado { color: var(--peligro); }
 .op-tendencia-abajo { color: var(--tinta-2); background: var(--superficie-2); border-color: var(--borde); }
 /* plan de repuestos en la carta: pieza y autos con años, una fila por pieza */
 .op-plan-repuestos { list-style: none; margin: 6px 0 14px; padding: 0; display: grid; gap: 6px; }
-.op-plan-repuestos li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); }
+.op-plan-repuestos li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto auto; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); }
 .op-plan-n { width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center; font-size: 11px; background: var(--superficie-2); color: var(--tinta-2); }
 .op-plan-repuestos li:first-child .op-plan-n { background: var(--exito); color: #fff; }
 .op-plan-auto { font-size: 13px; color: var(--tinta); min-width: 0; }
@@ -7296,3 +7296,9 @@ em.mg-agotado { color: var(--peligro); }
 .op-plan-ref { font-size: 11px; padding: 2px 6px; border-radius: 6px; background: var(--superficie-2); color: var(--tinta-2); }
 .op-plan-precio { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--tinta); }
 @media (max-width: 640px) { .op-plan-repuestos li { grid-template-columns: 22px minmax(0, 1fr); } .op-plan-ref, .op-plan-precio { grid-column: 2; } }
+.op-plan-sello { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; text-decoration: none; border: 1px solid currentColor; }
+.op-plan-sello-ok { color: var(--exito-tinta); background: color-mix(in srgb, var(--exito) 12%, transparent); }
+.op-plan-sello-medio { color: var(--avisa-tinta); background: color-mix(in srgb, var(--avisa-tinta) 10%, transparent); }
+.op-plan-sello-mal { color: var(--peligro); background: var(--peligro-tenue); }
+a.op-plan-sello:hover { text-decoration: underline; }
+@media (max-width: 640px) { .op-plan-sello { grid-column: 2; justify-self: start; } }

@@ -725,6 +725,24 @@ function ChipTendencia({ t }) {
   )
 }
 
+// ¿El modelo y los años salen de una publicación real o los puso la IA? ML no
+// entrega la compatibilidad oficial de publicaciones ajenas; lo verificable es
+// lo que el vendedor escribió en su título, y eso se comprueba sin la IA.
+const SELLOS = {
+  verificada: { clase: 'ok', texto: '✓ en publicación', ayuda: 'El modelo y los años están escritos en el título de esta publicación del top. Es lo que declara el vendedor, no la tabla oficial de ML.' },
+  parcial: { clase: 'medio', texto: '≈ años sin confirmar', ayuda: 'El modelo aparece en la publicación citada, pero los años no están escritos así en su título: pueden ser de la IA.' },
+  'no-calza': { clase: 'mal', texto: '⚠ no calza', ayuda: 'La publicación citada es de otro auto: esta fila no tiene respaldo.' },
+  'sin-fuente': { clase: 'mal', texto: '⚠ sin respaldo', ayuda: 'Ninguna publicación del top respalda estos modelos y años: vienen del conocimiento de la IA. Verificar con el proveedor antes de cotizar.' },
+  'no-revisada': { clase: 'medio', texto: 'sin revisar', ayuda: 'Análisis anterior a la verificación: se revisa en el próximo análisis.' },
+}
+function SelloVerificacion({ f }) {
+  const s = SELLOS[f.verificacion] ?? SELLOS['no-revisada']
+  const titulo = `${s.ayuda}${f.fuente?.titulo ? `\nFuente: "${f.fuente.titulo}"` : ''}`
+  return f.fuente?.url
+    ? <a className={`op-plan-sello op-plan-sello-${s.clase}`} href={f.fuente.url} target="_blank" rel="noreferrer" title={titulo} onClick={(e) => e.stopPropagation()}>{s.texto}</a>
+    : <span className={`op-plan-sello op-plan-sello-${s.clase}`} title={titulo}>{s.texto}</span>
+}
+
 function ChipSinFull({ o }) {
   const f = o.fueraDeFull
   // la regla física (medidas/peso contra los límites de ML) manda sobre lo que
@@ -905,12 +923,13 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronos
         {o.planRepuestos?.length ? (
           <ol className="op-plan-repuestos">
             {o.planRepuestos.map((f) => (
-              <li key={`${f.prioridad}-${f.marca}-${f.pieza}`}>
+              <li key={`${f.prioridad}-${f.marca}-${f.pieza}`} className={`op-plan-${f.verificacion ?? 'no-revisada'}`}>
                 <b className="op-plan-n">{f.prioridad}</b>
                 <span className="op-plan-auto">
                   <strong>{f.marca}</strong>{f.pieza ? <em> · {f.pieza}</em> : null}
                   <span className="op-plan-modelos">{f.modelos}</span>
                 </span>
+                <SelloVerificacion f={f} />
                 {f.referencia ? <code className="op-plan-ref" title="Código de la pieza, tal como aparece en el top de ML">{f.referencia}</code> : null}
                 {f.precioVentaClp ? <span className="op-plan-precio">{fmtPrecio(f.precioVentaClp)}</span> : null}
               </li>

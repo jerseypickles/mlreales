@@ -552,7 +552,9 @@ export async function tableroOportunidades({ todos = false } = {}) {
       // repuestos: qué pieza y para qué autos y años, que es lo que se cotiza
       planRepuestos: Array.isArray(analisis?.planRepuestos) && analisis.planRepuestos.length
         ? [...analisis.planRepuestos].sort((a, b) => (a.prioridad ?? 99) - (b.prioridad ?? 99)).slice(0, 4)
-          .map((f) => ({ prioridad: f.prioridad, pieza: f.pieza ?? null, marca: f.marca, modelos: f.modelos, referencia: f.referencia ?? null, precioVentaClp: f.precioVentaClp ?? null }))
+          .map((f) => ({ prioridad: f.prioridad, pieza: f.pieza ?? null, marca: f.marca, modelos: f.modelos, referencia: f.referencia ?? null, precioVentaClp: f.precioVentaClp ?? null,
+            // análisis anteriores al 23-sep no traen verificación: se muestran como tales
+            verificacion: f.verificacion ?? 'no-revisada', fuente: f.fuente ?? null }))
         : null,
       segmento: rec.segmento ?? null,
       // cuánto del top mezclado respalda la jugada, y la búsqueda que la aísla

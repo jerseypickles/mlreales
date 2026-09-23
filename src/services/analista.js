@@ -90,10 +90,14 @@ const SCHEMA_ANALISIS = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['prioridad', 'pieza', 'marca', 'modelos', 'referencia', 'precioVentaClp', 'exwMaximoUsd', 'competencia', 'porQue'],
+        required: ['prioridad', 'pieza', 'fuentePos', 'marca', 'modelos', 'referencia', 'precioVentaClp', 'exwMaximoUsd', 'competencia', 'porQue'],
         properties: {
           prioridad: { type: 'integer', description: '1 = el primero que se compra' },
           pieza: { type: 'string', description: 'La pieza exacta, corta, ej: "pastillas delanteras cerámicas" o "kit delantero + trasero"' },
+          fuentePos: {
+            type: ['integer', 'null'],
+            description: 'El campo pos de la publicación del top50 cuyo TÍTULO declara estos modelos y años (la que usaste como fuente). El sistema comprueba que el modelo y los años estén escritos en ese título y marca la fila como verificada o no. null si la fila no sale de ninguna publicación del top (oportunidad sin oferta medida): quedará marcada "sin respaldo".',
+          },
           referencia: {
             type: ['string', 'null'],
             description: 'Código OEM o FMSI de la pieza SOLO si aparece literal en los títulos o datos del top que recibiste (ej: "D1295", "96534653"). null si no aparece: NUNCA lo deduzcas ni lo inventes — un código equivocado es una compra de la pieza equivocada.',
@@ -216,6 +220,7 @@ Reglas:
   1. LLENA planRepuestos con 3 a 6 filas ordenadas por prioridad de compra (prioridad 1 = lo primero que se pide). Cada fila justifica con los NÚMEROS del desglose que recibes: listings de esa marca, % del top, reseñas acumuladas, %Full y precio mediana de esa marca. Prohibido recomendar una marca sin citar su fila del desglose.
   2. CRUZA DOS FUENTES para elegir marcas: (a) la TRACCIÓN medida en el desglose y (b) marcasMasBuscadasEnMl, que es lo que el propio selector de ML declara como más buscado en Chile. Una marca top del selector con pocos listings en el desglose es OPORTUNIDAD (demanda declarada por ML, poca oferta medida); una marca con muchos listings y muchas reseñas es DEMANDA PROBADA pero más peleada. Di a cuál de los dos casos corresponde cada fila.
   3. MODELOS Y AÑOS, no solo la marca: un SKU cubre varios años del mismo modelo ("Sail 1.4 2010-2019"), y eso es lo que se cotiza y se publica. Sácalos de los títulos del top50.
+  3a. CITA LA FUENTE: fuentePos = la pos de la publicación del top50 cuyo título declara esos modelos y años, y copia los años TAL COMO los escribe ese título (no los amplíes con lo que creas saber). El sistema lo verifica contra el título; lo que no se pueda verificar se le muestra al importador como "sin respaldo".
   3b. UNA FILA = UNA PIEZA FÍSICA. No agrupes en una fila modelos que usan pastillas distintas (ej: Spark LT 2004-2016 no comparte pastilla con Sail 2010-2023): cada pieza distinta es otro SKU, otra cotización y otra fila, aunque sea la misma marca. Si no sabes si dos modelos comparten la pieza, sepáralos. El campo referencia (OEM/FMSI) va SOLO si aparece literal en los títulos del top; si no, null.
   3c. El TITULAR nombra la pieza de la prioridad 1 con marca, modelo y años: es lo que el importador lee primero y lo que manda a cotizar.
   4. El genérico SÍ vende en este rubro: los compradores compran pastillas genéricas aptas para su modelo, con Full y vendedores de miles de ventas. No rechaces por "marca" ni por "seguridad" — si hay motivo de rechazo, que sea falta de movimiento medido.
@@ -479,6 +484,13 @@ export async function analizarNicho(nicho) {
     maxTokens: 12_000,
     modelo: config.llmModelAnalista, // la decisión cara corre en el modelo más capaz
   })
+
+  // los modelos y años de cada fila se contrastan, sin la IA, contra el título
+  // de la publicación que la IA citó: dato de un vendedor real vs invención
+  if (Array.isArray(analisis.planRepuestos)) {
+    const { verificarPlanRepuestos } = await import('./compatibilidad.js')
+    analisis.planRepuestos = verificarPlanRepuestos(analisis.planRepuestos, vista.productos)
+  }
 
   reporte.analisis = {
     ...analisis,
