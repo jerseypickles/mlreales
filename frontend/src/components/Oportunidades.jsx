@@ -1408,6 +1408,7 @@ function DetalleNicho({ o, pronostico, modeloGana }) {
 const idsDe = (p) => [p.sku, p.itemId, p.catalogId].filter(Boolean)
 function CompetenciaNicho({ o }) {
   const [datos, setDatos] = useState(null)
+  const [todos, setTodos] = useState(false)
   useEffect(() => {
     let vivo = true
     Promise.all([
@@ -1435,7 +1436,7 @@ function CompetenciaNicho({ o }) {
         {conStock ? <> · <strong>{conStock}</strong> con stock seguido</> : null}
       </p>
       <ol className="prod-lista">
-        {productos.map((p) => {
+        {(todos ? productos : productos.slice(0, 10)).map((p) => {
           const r = idsDe(p).map((id) => ranking.get(id)).find(Boolean)
           const sg = seguido.get(p.sku)
           return (
@@ -1471,6 +1472,9 @@ function CompetenciaNicho({ o }) {
           )
         })}
       </ol>
+      {!todos && productos.length > 10 ? (
+        <button type="button" className="boton-secundario comp-mas" onClick={() => setTodos(true)}>ver {productos.length - 10} más</button>
+      ) : null}
       {fuera.length ? (
         <div className="comp-fuera">
           <strong>Más vendidos de la categoría que no salen en tu scan</strong>

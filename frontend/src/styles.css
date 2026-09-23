@@ -7337,3 +7337,4 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .comp-fuera-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .comp-fuera-item:hover span { text-decoration: underline; }
 @media (max-width: 640px) { .op-pestanas { display: flex; } .op-pestana { flex: 1; } }
+.comp-mas { justify-self: start; }
