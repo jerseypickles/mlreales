@@ -7318,3 +7318,22 @@ a.op-plan-sello:hover { text-decoration: underline; }
 /* curva pareja: tono sólido intermedio, no el pálido de "mes normal" */
 .og-barras-parejas .og-barra { background: color-mix(in srgb, var(--acento) 55%, var(--acento-borde)); }
 .og-l-parejo { background: color-mix(in srgb, var(--acento) 55%, var(--acento-borde)); }
+/* acordeón en pestañas: temporada y precio | competencia (una sola lista) */
+.op-detalle { margin-top: 14px; }
+.op-pestanas { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 12px; border-radius: 12px; background: var(--superficie-2); border: 1px solid var(--borde); }
+.op-pestana { appearance: none; border: 0; background: transparent; padding: 7px 14px; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 600; color: var(--tinta-2); cursor: pointer; }
+.op-pestana:hover { color: var(--tinta); }
+.op-pestana.activa { background: var(--superficie); color: var(--tinta); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+.comp { display: grid; gap: 10px; }
+.comp-resumen { margin: 0; font-size: 13px; color: var(--tinta-2); }
+.comp-resumen strong { color: var(--tinta); }
+.prod-chip.chip-top { color: var(--exito-tinta); background: color-mix(in srgb, var(--exito) 12%, transparent); border: 1px solid currentColor; font-weight: 700; }
+.prod-chip.chip-stock { color: var(--avisa-tinta); background: color-mix(in srgb, var(--avisa-tinta) 10%, transparent); border: 1px solid currentColor; }
+.prod-chip.chip-stock.fuerte { font-weight: 700; }
+.prod-fila.prod-top .prod-pos { color: var(--exito-tinta); font-weight: 700; }
+.comp-fuera { padding: 10px 12px; border: 1px dashed var(--borde); border-radius: 12px; font-size: 13px; }
+.comp-fuera-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin-top: 8px; }
+.comp-fuera-item { display: flex; align-items: center; gap: 8px; color: var(--tinta); text-decoration: none; min-width: 0; }
+.comp-fuera-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.comp-fuera-item:hover span { text-decoration: underline; }
+@media (max-width: 640px) { .op-pestanas { display: flex; } .op-pestana { flex: 1; } }

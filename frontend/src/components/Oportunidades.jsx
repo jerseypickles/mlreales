@@ -5,7 +5,8 @@ import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
 import { compararOportunidades } from '../lib/sidebar.js'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
-import { GraficoTemporada, GraficoPrecio, GraficoPronostico, MasVendidosCategoria, VendedoresSeguidos } from './PanelOportunidad.jsx'
+import { GraficoTemporada, GraficoPrecio, GraficoPronostico } from './PanelOportunidad.jsx'
+import { calzaConBusqueda } from '../lib/calzaConBusqueda.js'
 
 // LA MESA DE COMPRA. El orden es el mensaje: primero si la gente BUSCA eso
 // (una keyword que nadie escribe mide un escaparate que no se abre), después
@@ -1055,25 +1056,11 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronos
           ) : null}
         </div>
 
-        <div className="op-graficos" onClick={(e) => e.stopPropagation()}>
-          <GraficoTemporada curva={o.curvaAnual} ventana={o.ventana} />
-          <GraficoPrecio precios={o.precios} precioVenta={o.precioVentaClp} />
-          <GraficoPronostico pronostico={pronostico} modeloGana={modeloGana} />
-        </div>
-        <div onClick={(e) => e.stopPropagation()}><VendedoresSeguidos nicho={o.keyword} /><MasVendidosCategoria nicho={o.keyword} /></div>
-
-        {/* la estimación existe pero no manda: plegada y con su aritmética a la
-            vista, para que nadie la confunda con una medición */}
-        {o.ventasDia != null && o.resenasNuevas != null ? (
-          <details className="op-estimacion">
-            <summary>estimación de ventas</summary>
-            <span>
-              {fmtNum(o.resenasNuevas)} reseñas ÷ {o.ventanaDias} días × factor {o.factorEstimacion ?? 25} ≈{' '}
-              <strong>{fmtNum(Math.round(o.ventasDia))}/día</strong>. El factor no está calibrado — la medición
-              propia (54 ventas reales → 3 reseñas) sugiere 18, no 25.
-            </span>
-          </details>
-        ) : null}
+        {/* EL DETALLE EN PESTAÑAS. Antes eran siete bloques apilados (~2.000 px) y
+            cada producto salía hasta tres veces: en el ranking de la categoría,
+            en los vendedores seguidos y en la lista del scan. Ahora la
+            competencia es UNA lista y cada producto lleva sus sellos. */}
+        <DetalleNicho o={o} pronostico={pronostico} modeloGana={modeloGana} />
 
         {/* fila 3: en qué estado está la decisión */}
         <div className="op-estado">
@@ -1392,6 +1379,125 @@ const FILTROS = [
 //
 // Se pide al abrir la fila, no con el tablero: son ~95 productos por nicho y
 // cargarlos para las 69 filas de una sola vez es un payload que nadie mira.
+function DetalleNicho({ o, pronostico, modeloGana }) {
+  const [pestana, setPestana] = useState('temporada')
+  const PESTANAS = [['temporada', 'Temporada y precio'], ['competencia', 'Competencia']]
+  return (
+    <div className="op-detalle" onClick={(e) => e.stopPropagation()}>
+      <div className="op-pestanas" role="tablist">
+        {PESTANAS.map(([id, nombre]) => (
+          <button key={id} type="button" role="tab" aria-selected={pestana === id} className={`op-pestana${pestana === id ? ' activa' : ''}`} onClick={() => setPestana(id)}>{nombre}</button>
+        ))}
+      </div>
+      {pestana === 'temporada' ? (
+        <div className="op-graficos">
+          <GraficoTemporada curva={o.curvaAnual} ventana={o.ventana} />
+          <GraficoPrecio precios={o.precios} precioVenta={o.precioVentaClp} />
+          <GraficoPronostico pronostico={pronostico} modeloGana={modeloGana} />
+        </div>
+      ) : (
+        <CompetenciaNicho o={o} />
+      )}
+    </div>
+  )
+}
+
+// UNA lista de competencia: el scan (orden de ML) con lo que se sabe de cada
+// producto pegado como sello —su lugar en los más vendidos de la categoría y
+// lo que vendió medido por stock— en vez de tres listas que se repetían.
+const idsDe = (p) => [p.sku, p.itemId, p.catalogId].filter(Boolean)
+function CompetenciaNicho({ o }) {
+  const [datos, setDatos] = useState(null)
+  useEffect(() => {
+    let vivo = true
+    Promise.all([
+      api.productosNicho(o.nichoId, 20).catch(() => null),
+      api.masVendidos(o.keyword).catch(() => null),
+      api.seguimiento(o.keyword).catch(() => null),
+    ]).then(([prod, mv, seg]) => vivo && setDatos({ prod, cat: mv?.categorias?.[0] ?? null, seguidos: seg?.nichos?.find((n) => n.keyword === o.keyword)?.publicaciones ?? [] }))
+    return () => { vivo = false }
+  }, [o.nichoId, o.keyword])
+  if (!datos) return <Cargando texto="Juntando la competencia…" />
+  const productos = datos.prod?.productos ?? []
+  if (!productos.length) return <p className="prod-vacio">El scan no dejó productos.</p>
+  const ranking = new Map((datos.cat?.items ?? []).map((i) => [i.id, i]))
+  const seguido = new Map(datos.seguidos.filter((x) => x.activo !== false).map((x) => [x.sku, x]))
+  const enScan = new Set(productos.flatMap(idsDe))
+  const enRanking = productos.filter((p) => idsDe(p).some((id) => ranking.has(id))).length
+  const conStock = productos.filter((p) => seguido.has(p.sku)).length
+  // del ranking, solo lo que es de la búsqueda y no salió en el scan
+  const fuera = (datos.cat?.items ?? []).filter((i) => !enScan.has(i.id) && i.titulo && calzaConBusqueda(i.titulo, o.keyword)).slice(0, 6)
+  return (
+    <div className="comp">
+      <p className="comp-resumen">
+        <strong>{productos.length}</strong> primeros de {fmtNum(datos.prod.total)} en el orden de ML · scan del {fmtFecha(datos.prod.fechaScan)}
+        {datos.cat ? <> · <strong>{enRanking}</strong> están entre los más vendidos de «{datos.cat.categoriaNombre ?? 'la categoría'}»</> : null}
+        {conStock ? <> · <strong>{conStock}</strong> con stock seguido</> : null}
+      </p>
+      <ol className="prod-lista">
+        {productos.map((p) => {
+          const r = idsDe(p).map((id) => ranking.get(id)).find(Boolean)
+          const sg = seguido.get(p.sku)
+          return (
+            <li key={p.sku} className={`prod-fila${r ? ' prod-top' : ''}`}>
+              <span className="prod-pos">{p.posicion ?? '·'}</span>
+              {p.imagen ? <Miniatura className="prod-foto" src={p.imagen} lado={44} /> : <span className="prod-foto prod-foto-vacia" aria-hidden="true" />}
+              <div className="prod-centro">
+                {p.url ? <a className="prod-titulo" href={p.url} target="_blank" rel="noreferrer">{p.titulo ?? p.sku}</a> : <span className="prod-titulo">{p.titulo ?? p.sku}</span>}
+                <div className="prod-sellos">
+                  {p.vendedor ? <span className="prod-vendedor">{p.vendedor}</span> : null}
+                  {r ? <span className="prod-chip chip-top" title={`Puesto ${r.posicion} en el ranking oficial de más vendidos de la categoría${r.subio ? `, subió ${r.subio} en la semana` : ''}`}>#{r.posicion} más vendido{r.subio >= 2 ? ` ▲${r.subio}` : ''}</span> : null}
+                  {sg && (sg.unidadesPiso > 0 || ['ciclo', 'repone', 'vende'].includes(sg.fuerza)) ? (
+                    <span className={`prod-chip chip-stock${['ciclo', 'repone'].includes(sg.fuerza) ? ' fuerte' : ''}`} title="Medido por baja de stock entre lecturas: venta real, como mínimo">
+                      {['ciclo', 'repone'].includes(sg.fuerza) ? 'vende y repone' : `vendió ≥${fmtNum(sg.unidadesPiso)} u`}
+                    </span>
+                  ) : null}
+                  {p.esTiendaOficial ? <span className="prod-chip chip-oficial">tienda oficial</span> : null}
+                  {p.esFull ? <span className="prod-chip chip-full">Full</span> : null}
+                  {p.origenCrossBorder ? <span className="prod-chip chip-cbt" title="Se despacha desde el exterior">del exterior</span> : null}
+                  {p.tipoListing === 'catalogo' ? <span className="prod-chip chip-catalogo">catálogo</span> : null}
+                  {p.esAnuncio ? <span className="prod-chip chip-anuncio" title="Posición pagada: no cuenta para el top del nicho">anuncio</span> : null}
+                </div>
+              </div>
+              <div className="prod-numeros">
+                <span className="prod-precio">{fmtPrecio(p.precio)}</span>
+                <span className="prod-sub">
+                  {Number.isFinite(p.vendidos) ? <b title="Badge acumulado de ML, en baldes">+{fmtNum(p.vendidos)} vend.</b> : null}
+                  {Number.isFinite(p.numReviews) ? <span>{Number.isFinite(p.vendidos) ? ' · ' : ''}{fmtNum(p.numReviews)} reseñas</span> : null}
+                </span>
+                {Number.isFinite(p.resenasNuevasDia) && p.resenasNuevasDia > 0 ? <span className="prod-velocidad">{p.resenasNuevasDia} reseñas/día</span> : null}
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+      {fuera.length ? (
+        <div className="comp-fuera">
+          <strong>Más vendidos de la categoría que no salen en tu scan</strong>
+          <div className="comp-fuera-lista">
+            {fuera.map((i) => (
+              <a key={i.id} className="comp-fuera-item" href={i.url} target="_blank" rel="noreferrer" title={i.titulo}>
+                {i.imagen ? <Miniatura src={i.imagen} lado={36} /> : null}
+                <span>#{i.posicion} · {i.titulo}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {o.ventasDia != null && o.resenasNuevas != null ? (
+        <details className="op-estimacion">
+          <summary>estimación de ventas</summary>
+          <span>
+            {fmtNum(o.resenasNuevas)} reseñas ÷ {o.ventanaDias} días × factor {o.factorEstimacion ?? 25} ≈{' '}
+            <strong>{fmtNum(Math.round(o.ventasDia))}/día</strong>. El factor no está calibrado — la medición
+            propia (54 ventas reales → 3 reseñas) sugiere 18, no 25.
+          </span>
+        </details>
+      ) : null}
+    </div>
+  )
+}
+
 function ProductosEscaneados({ nichoId }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
@@ -1644,7 +1750,8 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
                       <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} onRecargar={cargar}
                         pronostico={pron.porNicho.get(String(o.nichoId))} modeloGana={pron.modeloGana} />
                     )}
-                    <ProductosEscaneados nichoId={o.nichoId} />
+                    {/* con carta, la competencia vive en su pestaña (sin repetir productos) */}
+                    {o.midiendo ? <ProductosEscaneados nichoId={o.nichoId} /> : null}
                     {o.familiaMiembros?.length ? (
                       <FamiliaColapsada miembros={o.familiaMiembros} porKeyword={porKeyword} lider={o} onAbrir={onAbrirNicho} onRecargar={cargar} />
                     ) : null}
