@@ -41,6 +41,12 @@ export function GraficoTemporada({ curva, ventana, hoy = new Date() }) {
   // ¿el barco lento llega antes del pico? distancia hacia adelante, en meses
   const ultimoMesLlegada = new Date(+hoy + (LEAD_MAX + RAMPA) * DIA).getMonth()
   const llegaAntes = ventana?.tipo !== 'estacional' ? null : (pico - ultimoMesLlegada + 12) % 12 <= 6
+  // los períodos MEDIDOS en 4 años mandan sobre "80% del máximo": marcan los
+  // meses que suben de verdad y se repiten, con su porqué
+  const periodos = curva.periodos
+  const picosFuertes = (periodos?.picos ?? []).filter((p) => p.multiplicador >= 1.5)
+  const mesesFuertes = periodos ? new Set(picosFuertes.flatMap((p) => p.meses.map((m) => m - 1))) : null
+  const coma = (n) => String(n).replace('.', ',')
   return (
     <div className="og">
       <div className="og-cab">
@@ -51,7 +57,7 @@ export function GraficoTemporada({ curva, ventana, hoy = new Date() }) {
         {curva.curva.map((v, i) => (
           <div key={i} className="og-col" title={`${MESES[i]}: ${esGoogle ? `${fmtNum(v)} búsquedas` : `índice ${v}`}`}>
             <span className="og-valor">{i === pico && esGoogle ? fmtNum(v) : ''}</span>
-            <span className={`og-barra${v >= max * 0.8 ? ' og-pico' : ''}${i === mesHoy ? ' og-hoy' : ''}`} style={{ height: `${Math.max(4, (v / max) * 100)}%` }} />
+            <span className={`og-barra${(mesesFuertes ? mesesFuertes.has(i) : v >= max * 0.8) ? ' og-pico' : ''}${i === mesHoy ? ' og-hoy' : ''}`} style={{ height: `${Math.max(4, (v / max) * 100)}%` }} />
           </div>
         ))}
       </div>
@@ -63,12 +69,28 @@ export function GraficoTemporada({ curva, ventana, hoy = new Date() }) {
         {pedir.size ? <span><i className="og-l og-l-pedir" />ventana para pedir</span> : null}
         <span><i className="og-l og-l-llega" />pidiendo hoy, tu stock vende aquí</span>
       </p>
+      {periodos && (periodos.picos.length || periodos.valles.length) ? (
+        <div className="curva-periodos">
+          {periodos.picos.map((x) => (
+            <b key={`p${x.texto}`} className={`curva-periodo-chip${x.porque && x.porque.certeza !== 'ambiguo' && x.porque.certeza !== 'coincide' ? '' : ' sin-porque'}`}
+              title={`${x.texto}: ×${coma(x.multiplicador)} de lo normal de su año · se repitió ${x.repite} de ${x.anios} años · ${x.participacionPct}% de las búsquedas del año${x.porque ? '' : ' · ningún evento del calendario lo explica'}`}>
+              ▲ {x.texto} ×{coma(x.multiplicador)} · {x.porque ? x.porque.nombre : '¿por qué?'} <small>{x.repite}/{x.anios} años</small>
+            </b>
+          ))}
+          {periodos.valles.map((x) => (
+            <b key={`v${x.texto}`} className="curva-periodo-chip valle" title={`Valle: ${x.texto}, ×${coma(x.multiplicador)} de lo normal, se repitió ${x.repite} de ${x.anios} años`}>▼ {x.texto} ×{coma(x.multiplicador)}</b>
+          ))}
+        </div>
+      ) : null}
       <p className="og-lectura">
-        {curva.clasificacion === 'estacional'
+        {curva.clasificacion !== 'estacional' && picosFuertes.length
+          ? <>Se busca todo el año, <strong>pero con temporada</strong>: {picosFuertes.map((x, i) => <span key={x.texto}>{i ? '; ' : ''}<strong>{x.texto}</strong> ×{coma(x.multiplicador)}{x.porque ? ` (${x.porque.nombre})` : ''}, {x.repite} de {x.anios} años</span>)}{periodos.valles.length ? <>. Valle en {periodos.valles.map((v) => v.texto).join(' y ')}: no conviene que el stock nuevo llegue ahí</> : null}. El stock tiene que estar vendiendo cuando arranca el pico.</>
+        : curva.clasificacion === 'estacional'
           ? <>Temporada real: pico en <strong>{curva.nombreMesPico}</strong>, {curva.ratioPico}× el promedio. {llegaAntes === false ? 'Pidiendo hoy el stock llega con el pico ya pasado.' : 'Pidiendo hoy, el stock alcanza a estar vendiendo para el pico.'}</>
           : curva.clasificacion === 'alza-suave'
             ? <>Se busca todo el año, con una leve alza en <strong>{curva.nombreMesPico}</strong> ({curva.ratioPico}×). No hay fecha límite para pedir.</>
             : <>Se busca parejo todo el año: no hay fecha límite para pedir.</>}
+        {' '}
         {curva.keywordMedida && curva.keywordMedida !== curva.keyword ? <> Medido como «{curva.keywordMedida}».</> : null}
       </p>
     </div>
