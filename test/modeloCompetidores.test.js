@@ -11,7 +11,7 @@ test('modelo de competidores: aprende que Full y buena posición venden más, y 
   for (let n = 0; n < 120; n++) for (let s = 0; s < 15; s++) {
     const full = azar() < 0.5, pos = 1 + Math.floor(azar() * 48), res = Math.floor(azar() * 300)
     for (let k = 0; k < 2; k++) {
-      const xs = [Math.log(pos), (azar() - 0.5) * 0.6, 0, Number(full), 0, 0, 0, Math.log1p(res), Math.log1p(100), 1, 0, 0, 1]
+      const xs = [Math.log(pos), (azar() - 0.5) * 0.6, 0, Number(full), 0, 0, 0, Math.log1p(res), Math.log1p(100), 1, 0, 0, 1, 0, 1, 0, 0, 0, 1]
       const y = Math.max(0, 1.2 + 0.6 * xs[3] - 0.35 * xs[0] + 0.15 * xs[7] + (azar() - 0.5) * 0.4)
       filas.push({ grupo: `n${n}s${s}`, keyword: `nicho-${n}`, fecha: k, dias: 7, xs, y })
     }
@@ -45,4 +45,30 @@ test('modelo de competidores: la fila usa lo que se sabía al inicio del par y e
   assert.equal(a.xs[9], 1)
   assert.ok(Math.abs(a.xs[11] - 0.3) < 1e-9)
   assert.equal(filas.find((f) => f.grupo === 'B').y, 0, 'cero reseñas nuevas también es dato')
+})
+
+test('variables nuevas: temporada del mes, cambio de precio y ranking, sin confundir "sin dato" con "fuera del top"', async () => {
+  const { filasCompetidores, VARIABLES_COMPETIDORES: V } = await import('../src/services/ml/modeloCompetidores.js')
+  const f = (n) => new Date(Date.UTC(2026, 8, n, 15))
+  const snaps = [
+    { sku: 'A', keyword: 'k', fecha: f(1), precio: 1000, posicion: 1, numReviewsApi: 10 },
+    { sku: 'A', keyword: 'k', fecha: f(10), precio: 800, posicion: 1, numReviewsApi: 12 },
+    { sku: 'A', keyword: 'k', fecha: f(19), precio: 800, posicion: 1, numReviewsApi: 15 },
+    { sku: 'B', keyword: 'k', fecha: f(1), precio: 900, posicion: 2, numReviewsApi: 5 },
+    { sku: 'B', keyword: 'k', fecha: f(10), precio: 900, posicion: 2, numReviewsApi: 5 },
+  ]
+  const estacion = new Map([['k', [1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1]]]) // septiembre ×2
+  const ranking = new Map([['CAT-A|2026-09-10', 4], ['CAT-A|2026-09-19', 3]])
+  const filas = filasCompetidores(snaps, [{ sku: 'A', catalogId: 'CAT-A' }, { sku: 'B' }], { estacion, ranking, primerDiaRanking: '2026-09-10' })
+  const a1 = filas.find((x) => x.grupo === 'A' && x.dias && x.xs[V.indexOf('cambioPrecioLog')] === 0)
+  const a2 = filas.find((x) => x.grupo === 'A' && x.xs[V.indexOf('cambioPrecioLog')] !== 0)
+  assert.ok(Math.abs(a1.xs[V.indexOf('estacionLog')] - Math.log(2)) < 1e-9, 'septiembre es ×2 en su año')
+  assert.equal(a1.xs[V.indexOf('sinRanking')], 1, 'el 1-sep no había ranking: sin dato, no "fuera del top"')
+  assert.equal(a1.xs[V.indexOf('enTop')], 0)
+  assert.ok(Math.abs(a2.xs[V.indexOf('cambioPrecioLog')] - Math.log(800 / 1000)) < 1e-9, 'bajó 20% contra su lectura anterior')
+  assert.equal(a2.xs[V.indexOf('enTop')], 1, 'el 10-sep estaba #4 por su id de catálogo')
+  assert.ok(Math.abs(a2.xs[V.indexOf('posTopLog')] - Math.log(4)) < 1e-9)
+  assert.equal(a2.enTopFin, true)
+  const b = filas.find((x) => x.grupo === 'B')
+  assert.equal(b.enTopFin, false, 'con ranking guardado ese día y fuera del top')
 })

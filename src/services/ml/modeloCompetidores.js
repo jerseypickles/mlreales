@@ -19,15 +19,41 @@ import { ajustarRidge, predecirRidge, errorPorGrupo } from './regresion.js'
 
 export const VERSION_COMPETIDORES = 'competidores-resenias-v1'
 export const VARIABLES_COMPETIDORES = ['posicionLog', 'precioRelativoLog', 'descuento', 'full', 'tiendaOficial', 'catalogo',
-  'crossBorder', 'reseniasLog', 'vendidosLog', 'reputacionVerde', 'anuncio', 'ratingCentrado', 'sinRating']
+  'crossBorder', 'reseniasLog', 'vendidosLog', 'reputacionVerde', 'anuncio', 'ratingCentrado', 'sinRating',
+  // 24-sep: la temporada del nicho en el mes de la lectura, el cambio de precio
+  // del propio producto y su lugar en el ranking oficial de más vendidos
+  'estacionLog', 'sinEstacion', 'cambioPrecioLog', 'enTop', 'posTopLog', 'sinRanking']
+// las primeras 13 son las del modelo original: se entrena también solo con
+// ellas, sobre las mismas filas, para medir si las nuevas aportan
+export const VARIABLES_BASE = 13
+const diaChile = (f) => new Date(f).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
 const DIAS_MIN = 3, DIAS_MAX = 15
 const mediana = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? (s[Math.floor((s.length - 1) / 2)] + s[Math.floor(s.length / 2)]) / 2 : null }
 const enPrueba = (keyword) => createHash('sha256').update(String(keyword)).digest()[0] % 4 === 0
 
 // Pura. Una fila por par de lecturas con etiqueta, con las variables tal como
 // estaban al INICIO del par (nada del futuro).
-export function filasCompetidores(snaps, productos) {
+// contexto: { estacion: Map(keyword → 12 índices del año), ranking: Map(`id|día`
+// → puesto), primerDiaRanking: 'AAAA-MM-DD' } — todo opcional
+export function filasCompetidores(snaps, productos, contexto = {}) {
   const ficha = new Map(productos.map((p) => [p.sku, p]))
+  const { estacion = new Map(), ranking = new Map(), primerDiaRanking = null } = contexto
+  // el precio anterior del MISMO producto (la lectura previa a la del par)
+  const precioPrevio = new Map()
+  {
+    const porSku = new Map()
+    for (const x of snaps) if (x.precio > 0) porSku.set(x.sku, [...(porSku.get(x.sku) ?? []), x])
+    for (const [sku, xs] of porSku) {
+      const orden = xs.sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha))
+      for (let i = 1; i < orden.length; i++) if ((+new Date(orden[i].fecha) - +new Date(orden[i - 1].fecha)) / 86400e3 >= 0.5) precioPrevio.set(`${sku}|${+new Date(orden[i].fecha)}`, orden[i - 1].precio)
+    }
+  }
+  // puesto en el ranking de su categoría ese día (por cualquiera de sus ids)
+  const puestoEn = (f, sku, fecha) => {
+    const dia = diaChile(fecha)
+    for (const id of [sku, f?.itemId, f?.catalogId]) { const p = id ? ranking.get(`${id}|${dia}`) : null; if (p) return p }
+    return null
+  }
   // precio mediano de cada scan de cada nicho, para el precio relativo
   const preciosScan = new Map()
   for (const s of snaps) {
@@ -45,13 +71,25 @@ export function filasCompetidores(snaps, productos) {
     const med = medianaScan.get(`${a?.keyword}|${+new Date(a?.fecha)}`)
     if (!a || !f || !(a.precio > 0) || !(med > 0) || !Number.isFinite(a.posicion) || a.posicion < 1) continue
     const rating = Number.isFinite(a.rating) && a.rating > 0 ? a.rating : null
+    const indices = estacion.get(a.keyword)
+    const mes = Number(diaChile(a.fecha).slice(5, 7))
+    const idx = Array.isArray(indices) && indices[mes - 1] > 0 ? indices[mes - 1] : null
+    const prev = precioPrevio.get(`${p.sku}|${+new Date(a.fecha)}`)
+    const cambio = prev > 0 ? Math.max(-1, Math.min(1, Math.log(a.precio / prev))) : 0
+    // antes del primer día guardado del ranking NO es "fuera del top": no se sabe
+    const conRanking = primerDiaRanking && diaChile(a.fecha) >= primerDiaRanking
+    const puesto = conRanking ? puestoEn(f, p.sku, a.fecha) : null
+    const puestoFin = primerDiaRanking && diaChile(p.hasta) >= primerDiaRanking ? puestoEn(f, p.sku, p.hasta) : undefined
     filas.push({ grupo: p.sku, keyword: p.keyword, fecha: +new Date(p.hasta), dias: p.dias,
+      // para la segunda prueba: ¿estaba en el top al final del par? (undefined = sin ranking)
+      enTopFin: puestoFin === undefined ? undefined : puestoFin != null,
       y: Math.log1p(p.resenias / p.dias * 7),
       xs: [Math.log(a.posicion), Math.log(a.precio / med), Math.max(0, Math.min(1, (a.descuentoPct ?? 0) / 100)),
         Number(f.esFull === true), Number(f.esTiendaOficial === true), Number(f.tipoListing === 'catalogo'),
         Number(f.origenCrossBorder === true), Math.log1p(a.numReviewsApi ?? 0), Math.log1p(a.vendidos ?? 0),
         Number(/^5_green/.test(f.reputacionSeller ?? '')), Number(a.esAnuncio === true),
-        rating === null ? 0 : rating - 4.5, Number(rating === null)] })
+        rating === null ? 0 : rating - 4.5, Number(rating === null),
+        idx ? Math.log(idx) : 0, Number(!idx), cambio, Number(puesto != null), puesto ? Math.log(puesto) : 0, Number(!conRanking)] })
   }
   return filas
 }
@@ -107,6 +145,28 @@ export function entrenarCompetidores(filasEntrada, { lambda = 10 } = {}) {
   const referencias = { promedio: errorPorGrupo(evaluadas.map((f) => ({ ...f, error: Math.abs(media - f.y) }))), posicion: mae('porPosicion'), resenias: mae('porResenias') }
   const mejorRef = Math.min(...Object.values(referencias))
   const orden = { modelo: ordenPorScan(evaluadas, 'estimado'), posicion: ordenPorScan(evaluadas, 'porPosicion'), resenias: ordenPorScan(evaluadas, 'porResenias') }
+  // ¿APORTAN LAS VARIABLES NUEVAS? El mismo modelo con solo las originales,
+  // mismas filas y mismo corte
+  const base = filas[0].xs.length > VARIABLES_BASE ? (() => {
+    const recorta = (f) => ({ ...f, xs: f.xs.slice(0, VARIABLES_BASE) })
+    const m = ajustarRidge(train.map(recorta), { lambda })
+    const ev = test.map((f) => ({ ...f, estimado: predecirRidge(m, f.xs.slice(0, VARIABLES_BASE)) }))
+    return { maeLog: errorPorGrupo(ev.map((f) => ({ ...f, error: Math.abs(f.estimado - f.y) }))), orden: ordenPorScan(ev, 'estimado') }
+  })() : null
+  // SEGUNDA PRUEBA, CON OTRA FUENTE: lo que el modelo pone arriba, ¿ML lo pone
+  // en su ranking? Por cada nicho y fecha con publicaciones dentro y fuera del
+  // top, qué parte de los pares (dentro, fuera) el modelo ordena bien. Azar = 0,5
+  const aciertoTop = (campo) => {
+    let bien = 0, total = 0
+    const grupos = new Map()
+    for (const f of evaluadas) if (f.enTopFin !== undefined) { const k = `${f.keyword}|${f.fecha}`; grupos.set(k, [...(grupos.get(k) ?? []), f]) }
+    for (const g of grupos.values()) {
+      const dentro = g.filter((f) => f.enTopFin), fuera = g.filter((f) => !f.enTopFin)
+      for (const a of dentro) for (const b of fuera) { total++; if (a[campo] > b[campo]) bien++; else if (a[campo] === b[campo]) bien += 0.5 }
+    }
+    return total ? { acierto: Math.round(bien / total * 1000) / 1000, pares: total } : null
+  }
+  const conRanking = { modelo: aciertoTop('estimado'), posicion: aciertoTop('porPosicion'), resenias: aciertoTop('porResenias') }
   // el ajuste final usa todo; los pesos se entregan en unidades legibles:
   // cuánto multiplica la velocidad de reseñas cada variable, con el resto igual
   const final = ajustarRidge(filas, { lambda })
@@ -114,7 +174,8 @@ export function entrenarCompetidores(filasEntrada, { lambda = 10 } = {}) {
   return { estado: 'sombra', version: VERSION_COMPETIDORES, objetivo: 'resenias-por-semana', cobertura,
     evaluacion: { tipo: 'nichos-no-vistos', metrica: 'MAE log1p(reseñas/semana) balanceado por publicación', maeLog, referencias,
       mejoraPct: (1 - maeLog / mejorRef) * 100, superaReferencias: maeLog < mejorRef * 0.95, orden,
-      ordenaMejor: !!orden.modelo && orden.modelo.spearman > Math.max(orden.posicion?.spearman ?? 0, orden.resenias?.spearman ?? 0) + 0.02 },
+      ordenaMejor: !!orden.modelo && orden.modelo.spearman > Math.max(orden.posicion?.spearman ?? 0, orden.resenias?.spearman ?? 0) + 0.02,
+      sinVariablesNuevas: base, contraRankingMl: conRanking },
     variables: VARIABLES_COMPETIDORES, pesos, ajuste: final }
 }
 
@@ -140,10 +201,39 @@ export async function modeloCompetidores({ dias = 90, ahora = new Date() } = {})
     .select('sku fecha keyword precio descuentoPct posicion esAnuncio numReviewsApi vendidos rating preguntasIds -_id').lean()
   const skus = [...new Set(snaps.map((s) => s.sku))]
   const productos = await Producto.find({ sku: { $in: skus } })
-    .select('sku esFull esTiendaOficial tipoListing origenCrossBorder reputacionSeller -_id').lean()
-  const filas = filasCompetidores(snaps, productos)
+    .select('sku itemId catalogId esFull esTiendaOficial tipoListing origenCrossBorder reputacionSeller -_id').lean()
+  // la forma del año de cada nicho (índice de cada mes contra lo normal)
+  const estacion = new Map()
+  try {
+    const { CurvaEstacional } = await import('../../models/CurvaEstacional.js')
+    const { periodosDelAnio } = await import('../estacionalidad.js')
+    const { seriesActuales } = await import('./servicio.js')
+    const keywords = [...new Set(snaps.map((x) => x.keyword))]
+    const curvas = await CurvaEstacional.find({ keyword: { $in: keywords } }).select('keyword keywordMedida serieMensual').lean()
+    const series = new Map((await seriesActuales({ keywords: [...new Set(curvas.map((c) => c.keywordMedida || c.keyword))] })).map((x) => [x.keyword, x.meses]))
+    for (const c of curvas) {
+      const serie = c.serieMensual?.length >= 24 ? c.serieMensual : series.get(c.keywordMedida || c.keyword)
+      const p = periodosDelAnio(serie, { keyword: c.keyword })
+      if (p) estacion.set(c.keyword, p.meses.map((m) => m.indice))
+    }
+  } catch { /* sin forma del año: la variable queda "sin dato" */ }
+  // el ranking oficial por id y día
+  const ranking = new Map()
+  let primerDiaRanking = null
+  try {
+    const { RankingMasVendidos } = await import('../../models/RankingMasVendidos.js')
+    const docs = await RankingMasVendidos.find({}).select('dia items -_id').lean()
+    for (const d of docs) {
+      if (!primerDiaRanking || d.dia < primerDiaRanking) primerDiaRanking = d.dia
+      for (const i of d.items ?? []) if (i.id && i.posicion) ranking.set(`${i.id}|${d.dia}`, i.posicion)
+    }
+  } catch { /* sin ranking: todas las filas quedan "sin dato" */ }
+  const filas = filasCompetidores(snaps, productos, { estacion, ranking, primerDiaRanking })
   const { ajuste, ...modelo } = entrenarCompetidores(filas)
-  const valor = { ...modelo, diagnostico: diagnosticoCompetidores(filas) }
+  const valor = { ...modelo, diagnostico: diagnosticoCompetidores(filas),
+    datosNuevos: { nichosConForma: estacion.size, diasDeRanking: new Set([...ranking.keys()].map((k) => k.split('|')[1])).size,
+      filasEnTop: filas.filter((f) => f.xs[VARIABLES_COMPETIDORES.indexOf('enTop')] === 1).length,
+      filasConCambioPrecio: filas.filter((f) => f.xs[VARIABLES_COMPETIDORES.indexOf('cambioPrecioLog')] !== 0).length } }
   cache = { en: +ahora, valor }
   return valor
 }
