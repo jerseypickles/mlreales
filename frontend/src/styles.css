@@ -7352,9 +7352,11 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .op-maestro { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(460px, 1fr); gap: 18px; align-items: start; }
 .op-maestro-lista { min-width: 0; }
 /* en la lista no va la columna de veredicto: está en el panel */
-.op-maestro .op-fila { grid-template-columns: 60px minmax(140px, 1fr) 30px 92px 52px 62px 36px 42px minmax(104px, 150px) 30px; }
-.op-maestro .op-fila > .op-fila-ver { display: none; }
-.op-maestro .op-fila-bandas > span:nth-last-child(2) { display: none; }
+.op-maestro .op-fila { grid-template-columns: 56px minmax(150px, 1fr) 30px 84px 48px 60px 34px 42px 26px; }
+/* el momento de compra, bajo el nombre */
+.op-fila-momento { display: flex; align-items: center; gap: 6px; flex-basis: 100%; margin-top: 3px; min-width: 0; }
+.op-fila-momento .chip-momento { max-width: 100%; }
+.op-fila-faltan-txt { font-size: 11px; color: var(--tinta-3); white-space: nowrap; }
 .op-maestro .op-fila-abierta { background: color-mix(in srgb, var(--acento) 9%, var(--superficie)); box-shadow: inset 3px 0 0 var(--acento); }
 .op-panel { position: sticky; top: 84px; max-height: calc(100vh - 100px); overflow: auto; border: 1px solid var(--borde); border-radius: 16px; background: var(--superficie); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06); overscroll-behavior: contain; }
 .op-panel-dentro { padding: 14px 18px 20px; }
@@ -7376,3 +7378,4 @@ a.op-plan-sello:hover { text-decoration: underline; }
 }
 @media (prefers-reduced-motion: reduce) { .op-panel { transition: none; } }
 .op-panel .op-carta.op-carta-panel { padding: 0; margin: 0; border: 0; box-shadow: none; }
+.op-maestro .op-fila-kw { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; white-space: normal; }

@@ -494,6 +494,10 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
         <ChipTendencia t={tendencia} />
         <NuevoBadge creadoEl={o.creadoEl} />
         {o.nivelBusqueda?.nivel === 'renombrar' ? <i className="op-fila-alerta" title="La gente escribe otra frase">keyword</i> : null}
+        <span className="op-fila-momento">
+          <ChipMomento o={o} />
+          {o.midiendo ? <small className="op-fila-faltan-txt">faltan {o.faltanScans} {o.faltanScans === 1 ? 'scan' : 'scans'}</small> : null}
+        </span>
       </span>
       {o.midiendo ? (
         <span
@@ -593,18 +597,8 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
       </span>
       {/* ── EL CRUCE: ¿esa búsqueda de Google se convierte en venta acá? ── */}
       <Conversion c={o.conversion} />
-      <span className="op-fila-ventana">
-        <ChipMomento o={o} />
-      </span>
-      {o.midiendo ? (
-        <span className="op-fila-ver op-fila-faltan">
-          faltan {o.faltanScans} {o.faltanScans === 1 ? 'scan' : 'scans'}
-        </span>
-      ) : (
-        <span className={`op-fila-ver veredicto-${o.veredicto}`}>
-          {o.veredicto === 'entrar' ? 'entrar' : 'condiciones'}
-        </span>
-      )}
+      {/* el veredicto y los scans que faltan viven en el panel; el momento de
+          compra va bajo el nombre, que es donde se lee junto al porqué */}
       <MarcaCotizando o={o} onRecargar={onRecargar} />
     </div>
   )
@@ -1337,7 +1331,7 @@ function GrupoOportunidades({ grupo, filas, children }) {
             <span className="op-banda op-banda-google">Google</span>
             <span className="op-banda op-banda-ml">Mercado Libre</span>
             <span className="op-banda op-banda-cruce">cruce</span>
-            <span /><span /><span />
+            <span />
           </div>
           <div className="op-fila op-fila-cab" aria-hidden="true">
             <span /><span>nicho</span><span>score</span>
@@ -1345,7 +1339,7 @@ function GrupoOportunidades({ grupo, filas, children }) {
             <span className="op-fila-vend" title="Unidades que el top acumula desde que se publicó cada aviso. No es por mes ni por año.">vendido</span>
             <span>full</span>
             <span title="Ventas en ML por búsqueda en Google, contra lo normal de su tramo de precio">convierte</span>
-            <span>ventana</span><span>veredicto</span><span />
+            <span />
           </div>
           {children}
         </div>
