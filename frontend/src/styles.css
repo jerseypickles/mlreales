@@ -7349,10 +7349,12 @@ a.op-plan-sello:hover { text-decoration: underline; }
 /* ═══ OPORTUNIDADES: LISTA + PANEL (24-sep-2026) ═══
    La lista conserva las columnas Google vs ML; el nicho elegido se ve entero a
    la derecha, fijo y con su propio scroll, sin acordeón que empuje la lista. */
-.op-maestro { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(460px, 1fr); gap: 18px; align-items: start; }
+.op-maestro { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.op-maestro.con-panel { grid-template-columns: minmax(0, 1.15fr) minmax(460px, 1fr); }
 .op-maestro-lista { min-width: 0; }
 /* en la lista no va la columna de veredicto: está en el panel */
-.op-maestro .op-fila { grid-template-columns: 56px minmax(150px, 1fr) 30px 84px 48px 60px 34px 42px 26px; }
+.op-maestro .op-fila { grid-template-columns: 60px minmax(160px, 1fr) 30px 96px 56px 66px 38px 44px 26px; }
+.op-maestro.con-panel .op-fila { grid-template-columns: 54px minmax(130px, 1fr) 30px 80px 46px 58px 34px 40px 24px; gap: 8px; }
 /* el momento de compra, bajo el nombre */
 .op-fila-momento { display: flex; align-items: center; gap: 6px; flex-basis: 100%; margin-top: 3px; min-width: 0; }
 .op-fila-momento .chip-momento { max-width: 100%; }
@@ -7362,7 +7364,8 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .op-panel-dentro { padding: 14px 18px 20px; }
 .op-panel-barra { position: sticky; top: -14px; z-index: 2; display: flex; align-items: center; gap: 10px; margin: -14px -18px 12px; padding: 10px 18px; background: var(--superficie); border-bottom: 1px solid var(--borde); }
 .op-panel-momento { flex: 1; min-width: 0; }
-.op-panel-cerrar { display: none; appearance: none; border: 1px solid var(--borde); background: var(--superficie); border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.op-panel-cerrar { appearance: none; border: 1px solid var(--borde); background: var(--superficie); border-radius: 999px; width: 32px; height: 32px; font: inherit; font-size: 15px; line-height: 1; color: var(--tinta-2); cursor: pointer; flex-shrink: 0; }
+.op-panel-cerrar:hover { color: var(--tinta); background: var(--superficie-2); }
 .op-panel-ir { white-space: nowrap; }
 .op-carta-panel { border: 0; box-shadow: none; padding: 0; cursor: default; }
 .op-carta-panel:hover { box-shadow: none; transform: none; }
@@ -7371,10 +7374,9 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .reporte-fecha kbd { font: inherit; font-size: 11px; padding: 1px 5px; border: 1px solid var(--borde); border-bottom-width: 2px; border-radius: 4px; background: var(--superficie); }
 /* pantalla chica: una columna y el panel se abre encima */
 @media (max-width: 1180px) {
-  .op-maestro { grid-template-columns: 1fr; }
+  .op-maestro, .op-maestro.con-panel { grid-template-columns: 1fr; }
   .op-panel { position: fixed; inset: 0 0 0 auto; width: min(100vw, 760px); max-height: none; border-radius: 0; z-index: 50; transform: translateX(100%); transition: transform 0.2s ease; }
   .op-panel.abierto { transform: none; }
-  .op-panel-cerrar { display: inline-block; }
 }
 @media (prefers-reduced-motion: reduce) { .op-panel { transition: none; } }
 .op-panel .op-carta.op-carta-panel { padding: 0; margin: 0; border: 0; box-shadow: none; }

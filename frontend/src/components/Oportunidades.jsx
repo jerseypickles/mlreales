@@ -1369,9 +1369,9 @@ function PanelNicho({ o, rank, mismaCompraQue, porKeyword, onAbrir, onRecargar, 
   return (
     <div className="op-panel-dentro">
       <div className="op-panel-barra">
-        <button type="button" className="op-panel-cerrar" onClick={onCerrar} aria-label="Volver a la lista">← lista</button>
         <span className="op-panel-momento"><ChipMomento o={o} /></span>
         <button type="button" className="boton-secundario op-panel-ir" onClick={() => onAbrir(o.nichoId)}>Ver análisis completo →</button>
+        <button type="button" className="op-panel-cerrar" onClick={onCerrar} aria-label="Cerrar el detalle (Esc)" title="Cerrar (Esc)">✕</button>
       </div>
       {o.midiendo ? (
         <>
@@ -1633,8 +1633,17 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const [activos, setActivos] = useState([])
   // LISTA + PANEL: la fila elegida se ve entera a la derecha, sin acordeón que
   // empuje la lista. En pantalla chica el panel se abre encima.
+  // null = panel cerrado y la lista a todo el ancho
   const [seleccion, setSeleccion] = useState(null)
-  const [panelMovil, setPanelMovil] = useState(false)
+  // se cierra con Esc o con un clic fuera del panel y de las filas
+  useEffect(() => {
+    if (!seleccion) return
+    const alTeclear = (e) => { if (e.key === 'Escape') setSeleccion(null) }
+    const alClic = (e) => { if (!e.target.closest?.('.op-panel, .op-fila, .op-filtros, .op-kpis')) setSeleccion(null) }
+    window.addEventListener('keydown', alTeclear)
+    document.addEventListener('mousedown', alClic)
+    return () => { window.removeEventListener('keydown', alTeclear); document.removeEventListener('mousedown', alClic) }
+  }, [seleccion])
   const [busca, setBusca] = useState('')
   // pronósticos del aprendizaje, por nicho: alimentan el gráfico de la carta
   const [pron, setPron] = useState({ porNicho: new Map(), modeloGana: false, ordena: false })
@@ -1682,7 +1691,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
           <p className="reporte-fecha">
             Una sola lista, mezclada por <strong>lo que conviene traer ahora</strong>: temporadas con la ventana
             abierta y productos de todo el año juntos, cada uno con su porqué. Elige uno para verlo entero a la
-            derecha; <kbd>↑</kbd> <kbd>↓</kbd> para recorrerlos.
+            derecha; <kbd>↑</kbd> <kbd>↓</kbd> para recorrerlos y <kbd>Esc</kbd> o un clic afuera para cerrar.
           </p>
         </div>
       </div>
@@ -1758,8 +1767,9 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
               else dueno.set(o.productoClave, o.keyword)
             }
           })
-          const elegido = orden.find((o) => o.nichoId === seleccion) ?? orden[0]
-          const elegir = (o) => { setSeleccion(o.nichoId); setPanelMovil(true) }
+          const elegido = orden.find((o) => o.nichoId === seleccion) ?? null
+          // clic en la fila abierta la cierra
+          const elegir = (o) => setSeleccion((actual) => (actual === o.nichoId ? null : o.nichoId))
           const fila = (o) => (
             <div key={o.nichoId} className="op-item" id={`op-${o.nichoId}`}>
               <FilaCompacta o={o} rank={rankDe.get(o.nichoId)} abierta={elegido?.nichoId === o.nichoId} onAlternar={() => elegir(o)} onRecargar={cargar}
@@ -1767,22 +1777,22 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
             </div>
           )
           return (
-            <div className="op-maestro">
+            <div className={`op-maestro${elegido ? ' con-panel' : ''}`}>
               <div className="op-maestro-lista">
-                <NavegarConFlechas orden={orden} actual={elegido} onElegir={(o) => { setSeleccion(o.nichoId); document.getElementById(`op-${o.nichoId}`)?.scrollIntoView({ block: 'nearest' }) }} />
+                {elegido ? <NavegarConFlechas orden={orden} actual={elegido} onElegir={(o) => { setSeleccion(o.nichoId); document.getElementById(`op-${o.nichoId}`)?.scrollIntoView({ block: 'nearest' }) }} /> : null}
                 {secciones.map(({ grupo, filas }) => (
                   <GrupoOportunidades key={grupo.id} grupo={grupo} filas={filas}>
                     {filas.map(fila)}
                   </GrupoOportunidades>
                 ))}
               </div>
-              <aside className={`op-panel${panelMovil ? ' abierto' : ''}`} aria-label="Detalle del nicho elegido">
-                {elegido ? (
+              {elegido ? (
+                <aside className="op-panel abierto" aria-label="Detalle del nicho elegido">
                   <PanelNicho key={elegido.nichoId} o={elegido} rank={rankDe.get(elegido.nichoId)} mismaCompraQue={mismaDe.get(elegido.nichoId)}
-                    porKeyword={porKeyword} onAbrir={onAbrirNicho} onRecargar={cargar} onCerrar={() => setPanelMovil(false)}
+                    porKeyword={porKeyword} onAbrir={onAbrirNicho} onRecargar={cargar} onCerrar={() => setSeleccion(null)}
                     pronostico={pron.porNicho.get(String(elegido.nichoId))} modeloGana={pron.modeloGana} />
-                ) : null}
-              </aside>
+                </aside>
+              ) : null}
             </div>
           )
         })()
