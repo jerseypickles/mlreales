@@ -43,7 +43,8 @@ export function momentoDeCompra(o, hoy = new Date()) {
   const porque = o?.curvaAnual?.periodos?.picos?.[0]?.porque?.nombre
   if (esPlano(o)) {
     const p = picoAPreparar(o, mesHoy)
-    if (p) {
+    // un pico que ya no se alcanza no se "prepara": sigue siendo de todo el año
+    if (p && !(p.calendario?.estado === 'ya-no-llega' && !(p.calendarioAlternativa && p.calendarioAlternativa.estado !== 'ya-no-llega'))) {
       return { grupo: 'ahora', bono: BONO['prepara-pico'], etiqueta: `prepara pico ${p.texto}`, clase: 'pico',
         motivo: `Se vende todo el año, y en ${p.texto} se busca ×${String(p.multiplicador).replace('.', ',')}${p.porque ? ` (${p.porque.nombre})` : ''}: pidiendo ahora el stock llega para el arranque del pico` }
     }
@@ -51,7 +52,21 @@ export function momentoDeCompra(o, hoy = new Date()) {
   }
   if (!o?.curvaAnual?.clasificacion) return { grupo: 'sin-medir', bono: 0, etiqueta: 'sin temporada medida', motivo: 'todavía sin curva de búsqueda', clase: 'medio' }
   const pico = mesDe(v?.pico)
-  const temporada = porque ?? (pico ? `pico ${pico}` : 'temporada')
+  let temporada = porque ?? (pico ? `pico ${pico}` : 'temporada')
+  // EL CALENDARIO MANDA SOBRE LA VENTANA VIEJA: la ventana sale del mes pico y
+  // no sabe que Navidad tiene fin duro. Si la temporada ya no llega, no se pide;
+  // si es "Navidad o verano" y solo verano llega, se pide por verano.
+  const p0 = o?.curvaAnual?.periodos?.picos?.[0]
+  const cal = p0?.calendario, alt = p0?.calendarioAlternativa
+  if (cal?.estado === 'ya-no-llega') {
+    if (alt && alt.estado !== 'ya-no-llega') temporada = `${alt.nombre.toLowerCase()} (${cal.nombre} ya no llega)`
+    else return { grupo: 'adelante', bono: 0, etiqueta: `${cal.nombre} ya no llega`, clase: 'medio',
+      motivo: `Pidiendo hoy el stock llega con ${cal.nombre} ya encima o terminada.${cal.proximoPlazo ? ` Para la próxima, pagar antes del ${new Date(cal.proximoPlazo).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })}.` : ''}` }
+  }
+  if (cal?.estado === 'justo' && ['ahora', 'ultimo-mes'].includes(v?.estado)) {
+    return { grupo: 'ahora', bono: BONO['ultimo-mes'], etiqueta: `último plazo · ${temporada}`, clase: 'urgente',
+      motivo: `Solo llega pidiendo ya: último plazo para pagar ${cal.plazo ? new Date(cal.plazo).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' }) : 'esta semana'}` }
+  }
   if (v?.estado === 'ultimo-mes') return { grupo: 'ahora', bono: BONO['ultimo-mes'], etiqueta: `último mes · ${temporada}`, clase: 'urgente', motivo: `Pidiendo este mes el stock llega justo al arranque del pico${pico ? ` (${pico})` : ''}. El mes que viene ya no llega.` }
   if (v?.estado === 'ahora') return { grupo: 'ahora', bono: BONO.ahora, etiqueta: `pedir ahora · ${temporada}`, clase: 'temporada', motivo: `Ventana abierta hasta ${mesDe(v.hasta) ?? '—'}: pidiendo ahora el stock vende en el pico${pico ? ` de ${pico}` : ''}` }
   if (v?.estado === 'pronto') return { grupo: 'adelante', bono: 0, etiqueta: `pedir desde ${mesDe(v.desde) ?? '—'} · ${temporada}`, clase: 'medio', motivo: `Todavía no toca: la ventana abre en ${v.mesesAl} mes(es)` }

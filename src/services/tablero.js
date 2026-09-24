@@ -292,10 +292,15 @@ export async function tableroOportunidades({ todos = false } = {}) {
       const { seriesActuales } = await import('./ml/servicio.js')
       for (const x of await seriesActuales({ keywords: [...new Set(faltan)] })) respaldo.set(x.keyword, x.meses)
     }
+    // ¿esa temporada todavía se alcanza pidiendo hoy? (el mismo calendario que
+    // lee el radar: Navidad en septiembre ya no llega)
+    const { calendarioTemporadas } = await import('./calendarioTemporadas.js')
+    const alcance = new Map(calendarioTemporadas().map((t) => [t.id, { estado: t.estado, nombre: t.nombre, plazo: t.estado === 'justo' ? t.plazoFinal : t.plazoHolgado, proximoPlazo: t.proximoPlazo }]))
+    const conAlcance = (pico) => (pico.porque ? { ...pico, calendario: alcance.get(pico.porque.id) ?? null, calendarioAlternativa: pico.porque.alternativa ? alcance.get(pico.porque.alternativa) ?? null : null } : pico)
     for (const c of curvas) {
       const serie = c.serieMensual?.length >= 24 ? c.serieMensual : respaldo.get(c.keywordMedida || c.keyword)
       const p = periodosDelAnio(serie, { keyword: c.keyword })
-      c.periodos = p ? { picos: p.picos, valles: p.valles, amplitud: p.amplitud, indices: p.meses.map((m) => m.indice), anios: Math.min(...p.meses.map((m) => m.anios)) } : null
+      c.periodos = p ? { picos: p.picos.map(conAlcance), valles: p.valles, amplitud: p.amplitud, indices: p.meses.map((m) => m.indice), anios: Math.min(...p.meses.map((m) => m.anios)) } : null
       delete c.serieMensual
       curvaPorKeyword.set(c.keyword, c)
     }

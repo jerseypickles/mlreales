@@ -21,3 +21,16 @@ test('lista mezclada: la temporada que se cierra sube sobre un plano parecido, n
   const planoMuyBueno = { ...plano, score: 99 }
   assert.equal(orden([planoMuyBueno, verano])[0], planoMuyBueno, '99 > 95')
 })
+
+test('el calendario manda: Navidad que ya no llega no se pide, y si es "Navidad o verano" se pide por verano', () => {
+  const navidad = { score: 80, curvaAnual: { clasificacion: 'estacional', periodos: { picos: [{ porque: { id: 'navidad', nombre: 'Navidad' }, calendario: { estado: 'ya-no-llega', nombre: 'Navidad y fin de año' } }] } }, ventana: { estado: 'ahora', pico: '2026-12' } }
+  const m = momentoDeCompra(navidad, hoy)
+  assert.equal(m.grupo, 'adelante')
+  assert.match(m.etiqueta, /ya no llega/)
+  const ambiguo = { ...navidad, curvaAnual: { ...navidad.curvaAnual, periodos: { picos: [{ ...navidad.curvaAnual.periodos.picos[0], porque: { id: 'navidad', nombre: 'Navidad o verano', alternativa: 'verano' }, calendarioAlternativa: { estado: 'a-tiempo', nombre: 'Verano' } }] } } }
+  const a = momentoDeCompra(ambiguo, hoy)
+  assert.equal(a.grupo, 'ahora')
+  assert.match(a.etiqueta, /verano \(Navidad y fin de año ya no llega\)/)
+  const planoNavidad = { score: 80, curvaAnual: { clasificacion: 'todo-el-año', periodos: { picos: [{ meses: [12], texto: 'dic', multiplicador: 1.8, porque: { id: 'navidad' }, calendario: { estado: 'ya-no-llega' } }] } } }
+  assert.equal(momentoDeCompra(planoNavidad, hoy).etiqueta, 'todo el año', 'un pico que no se alcanza no se prepara')
+})
