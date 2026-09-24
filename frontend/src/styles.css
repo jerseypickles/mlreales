@@ -7338,3 +7338,10 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .comp-fuera-item:hover span { text-decoration: underline; }
 @media (max-width: 640px) { .op-pestanas { display: flex; } .op-pestana { flex: 1; } }
 .comp-mas { justify-self: start; }
+/* momento de compra en la fila: el porqué del lugar en la lista mezclada */
+.chip-momento { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; font-weight: 700; font-style: normal; padding: 3px 9px; border-radius: 999px; border: 1px solid transparent; }
+.chip-momento.m-urgente { color: var(--peligro); background: var(--peligro-tenue); border-color: currentColor; }
+.chip-momento.m-temporada { color: var(--avisa-tinta); background: color-mix(in srgb, var(--avisa-tinta) 12%, transparent); border-color: currentColor; }
+.chip-momento.m-pico { color: var(--exito-tinta); background: color-mix(in srgb, var(--exito) 12%, transparent); border-color: currentColor; }
+.chip-momento.m-plano { color: var(--tinta-2); background: var(--superficie-2); }
+.chip-momento.m-medio { color: var(--tinta-2); background: transparent; border-color: var(--borde); font-weight: 600; }

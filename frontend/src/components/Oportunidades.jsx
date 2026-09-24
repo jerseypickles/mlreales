@@ -7,6 +7,7 @@ import { compararOportunidades } from '../lib/sidebar.js'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 import { GraficoTemporada, GraficoPrecio, GraficoPronostico } from './PanelOportunidad.jsx'
 import { calzaConBusqueda } from '../lib/calzaConBusqueda.js'
+import { momentoDeCompra, compararPorMomento } from '../lib/momentoCompra.js'
 
 // LA MESA DE COMPRA. El orden es el mensaje: primero si la gente BUSCA eso
 // (una keyword que nadie escribe mide un escaparate que no se abre), después
@@ -86,6 +87,11 @@ function picosDe(curva) {
 function textoPeriodo(p) {
   return `${p.texto} ×${String(p.multiplicador).replace('.', ',')}${p.porque ? ` · ${p.porque.nombre}` : ' · sin explicación en el calendario'} · se repitió ${p.repite} de ${p.anios} años · ${p.participacionPct}% de las búsquedas del año`
 }
+function ChipMomento({ o }) {
+  const m = momentoDeCompra(o)
+  return <em className={`chip-momento m-${m.clase}`} title={m.motivo}>{m.etiqueta}</em>
+}
+
 function TodoElAnio({ periodos }) {
   const pico = (periodos?.picos ?? []).find((p) => p.multiplicador >= PICO_QUE_SE_DICE)
   if (!pico) return <em className="op-fila-plano">todo el año</em>
@@ -588,7 +594,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
       {/* ── EL CRUCE: ¿esa búsqueda de Google se convierte en venta acá? ── */}
       <Conversion c={o.conversion} />
       <span className="op-fila-ventana">
-        {ven ? <em className={`chip-ventana v-${ven.clase}`}>{ven.texto}</em> : <TodoElAnio periodos={c?.periodos} />}
+        <ChipMomento o={o} />
       </span>
       {o.midiendo ? (
         <span className="op-fila-ver op-fila-faltan">
@@ -1231,41 +1237,25 @@ function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) 
 // mostrándose en cada fila.
 const esPlano = (o) => ['todo-el-año', 'alza-suave'].includes(o.curvaAnual?.clasificacion)
 
+// UNA LISTA MEZCLADA POR MOMENTO DE COMPRA (24-sep-2026). Los grupos por
+// constancia dejaban la temporada abajo y el importador terminó cotizando solo
+// productos planos. Ahora arriba va todo lo que se puede traer hoy —verano con
+// la ventana abierta, planos, planos con un pico por preparar— ordenado por
+// puntaje + urgencia, y cada fila dice por qué (ver lib/momentoCompra.js).
 const GRUPOS_OP = [
   {
-    id: 'todo-el-ano',
-    titulo: 'Se venden todo el año',
-    sub: 'la base del negocio: rotan el capital varias veces al año y mantienen la cuenta vendiendo siempre',
-    abierto: true,
-    test: esPlano,
-  },
-  {
     id: 'ahora',
-    titulo: 'Estacionales con la ventana abierta',
-    sub: 'apuestas que hay que decidir hoy: pidiendo ahora el stock llega para el pico',
+    titulo: 'Para traer ahora',
+    sub: 'mezclado: temporadas con la ventana abierta y productos de todo el año, ordenados por puntaje + urgencia; cada fila dice por qué',
     abierto: true,
-    test: (o) => !esPlano(o) && ['ahora', 'ultimo-mes'].includes(o.ventana?.estado),
+    test: (o) => momentoDeCompra(o).grupo === 'ahora',
   },
   {
-    id: 'pronto',
-    titulo: 'Estacionales que se acercan',
-    sub: 'todavía no toca pedir, pero falta poco',
+    id: 'adelante',
+    titulo: 'Más adelante',
+    sub: 'temporadas que todavía no toca pedir: pedir hoy es capital dormido',
     abierto: false,
-    test: (o) => !esPlano(o) && o.ventana?.estado === 'pronto',
-  },
-  {
-    id: 'espera',
-    titulo: 'Estacionales lejanos',
-    sub: 'el pico está a varios meses: no hay nada que hacer hoy',
-    abierto: false,
-    // EXIGE CURVA MEDIDA. Antes era el cajón de todo lo que no fuera plano, así
-    // que un nicho SIN curva —recién descubierto, todavía sin medir en Google—
-    // caía acá y quedaba rotulado "estacional lejano" sin que nadie lo hubiera
-    // medido. Al 18-ago le pasaba a cinco: extractor de leche, escurridor de
-    // platos, zapatos de seguridad, medias de compresión y soporte de monitor,
-    // que resultaron ser todos de TODO EL AÑO o alza suave.
-    // Sin clasificación caen al grupo "Sin temporada medida", que dice la verdad.
-    test: (o) => !esPlano(o) && Boolean(o.curvaAnual?.clasificacion),
+    test: (o) => momentoDeCompra(o).grupo === 'adelante',
   },
 ]
 
@@ -1662,15 +1652,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
         {sinMedir ? <div className="op-kpi op-kpi-aviso"><span className="op-kpi-icono op-kpi-ambar"><AlertTriangle size={16} aria-hidden="true" /></span><div><b>{sinMedir}</b><small>sin medir la búsqueda</small></div></div> : null}
       </div>
 
-      {!activos.length && !q ? (
-        <VitrinaTemporada
-          oportunidades={todas}
-          onElegir={(o) => {
-            setExpandido(o.nichoId)
-            requestAnimationFrame(() => document.getElementById(`op-${o.nichoId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
-          }}
-        />
-      ) : null}
+      {/* la vitrina de temporada ya no va: la temporada abierta entra mezclada en "Para traer ahora" */}
 
       <div className="chips op-filtros">
         <div className="op-buscador">
@@ -1766,7 +1748,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
           }
           const usados = new Set()
           const secciones = GRUPOS_OP.map((g) => {
-            const filas = sinLider.filter((o) => !usados.has(o.nichoId) && g.test(o))
+            const filas = sinLider.filter((o) => !usados.has(o.nichoId) && g.test(o)).sort((a, b) => compararPorMomento(a, b))
             filas.forEach((o) => usados.add(o.nichoId))
             return { grupo: g, filas }
           })
@@ -1780,7 +1762,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
               ))}
               {resto.length ? (
                 <GrupoOportunidades
-                  grupo={{ id: 'resto', titulo: 'Sin temporada medida', sub: 'todavía sin curva de búsqueda: el cron la mide en los próximos días', abierto: false }}
+                  grupo={{ id: 'resto', titulo: 'Midiendo o sin medir', sub: 'recién descubiertos, sin curva de búsqueda o sin búsqueda en ML', abierto: false }}
                   filas={resto}
                 >
                   {resto.map(carta)}
