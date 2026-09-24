@@ -1669,6 +1669,21 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
     cargar()
   }, [cargar])
 
+  // AL VOLVER A LA PESTAÑA, LOS DATOS SE REFRESCAN. Una cotización cargada por
+  // fuera (otra pestaña, la API) no se veía hasta recargar a mano: el
+  // cosmetiquero seguía sin naranjo con su EXW ya guardado.
+  useEffect(() => {
+    let ultima = Date.now()
+    const alVolver = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - ultima < 60_000) return
+      ultima = Date.now()
+      api.oportunidades().then(setDatos).catch(() => {})
+    }
+    document.addEventListener('visibilitychange', alVolver)
+    window.addEventListener('focus', alVolver)
+    return () => { document.removeEventListener('visibilitychange', alVolver); window.removeEventListener('focus', alVolver) }
+  }, [])
+
   if (error) return <main><p className="error-bloque">Error: {error}</p></main>
   if (!datos) return <main><Cargando texto="Cargando oportunidades…" /></main>
 
