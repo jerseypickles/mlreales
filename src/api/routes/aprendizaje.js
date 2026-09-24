@@ -123,6 +123,12 @@ router.get('/temporadas', async (_req, res) => {
   const series = await seriesActuales()
   res.json(mapaDeTemporadas(series.map((s) => ({ keyword: s.keyword, meses: s.meses }))))
 })
+// Cuántas ventas hay detrás de cada reseña, por tres métodos independientes.
+// MODO AUDITORÍA: no cambia ningún número de la app.
+router.get('/calibracion-resenias', async (_req, res) => {
+  const { calibracionResenias } = await import('../../services/ml/calibracionResenias.js')
+  res.json(await calibracionResenias())
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {
