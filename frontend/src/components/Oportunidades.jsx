@@ -871,7 +871,7 @@ function FletePropio({ o, onRecargar }) {
   )
 }
 
-function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronostico, modeloGana }) {
+function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronostico, modeloGana, enPanel = false }) {
   const flecha = o.tendenciaVentas ? FLECHA[o.tendenciaVentas] : null
   const nb = o.nivelBusqueda
   const nivel = nb?.nivel ? NIVELES[nb.nivel] : null
@@ -881,11 +881,12 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronos
 
   return (
     <article
-      className={`op-carta${nb?.nivel === 'renombrar' || nb?.nivel === 'nulo' ? ' op-carta-tibia' : ''}`}
-      onClick={() => onAbrir(o.nichoId)}
-      tabIndex={0}
-      role="button"
-      onKeyDown={(e) => {
+      className={`op-carta${enPanel ? ' op-carta-panel' : ''}${nb?.nivel === 'renombrar' || nb?.nivel === 'nulo' ? ' op-carta-tibia' : ''}`}
+      // en el panel lateral la carta no es un botón: un clic cualquiera sacaba de la página
+      onClick={enPanel ? undefined : () => onAbrir(o.nichoId)}
+      tabIndex={enPanel ? undefined : 0}
+      role={enPanel ? undefined : 'button'}
+      onKeyDown={enPanel ? undefined : (e) => {
         if (e.key === 'Enter') onAbrir(o.nichoId)
       }}
     >
@@ -1369,6 +1370,53 @@ const FILTROS = [
 //
 // Se pide al abrir la fila, no con el tablero: son ~95 productos por nicho y
 // cargarlos para las 69 filas de una sola vez es un payload que nadie mira.
+// El detalle del nicho elegido, fijo a la derecha con su propio scroll.
+function PanelNicho({ o, rank, mismaCompraQue, porKeyword, onAbrir, onRecargar, onCerrar, pronostico, modeloGana }) {
+  return (
+    <div className="op-panel-dentro">
+      <div className="op-panel-barra">
+        <button type="button" className="op-panel-cerrar" onClick={onCerrar} aria-label="Volver a la lista">← lista</button>
+        <span className="op-panel-momento"><ChipMomento o={o} /></span>
+        <button type="button" className="boton-secundario op-panel-ir" onClick={() => onAbrir(o.nichoId)}>Ver análisis completo →</button>
+      </div>
+      {o.midiendo ? (
+        <>
+          <div className="op-midiendo-carta">
+            <strong>{o.keyword} · midiendo entrabilidad · {o.scansConDemanda} de {o.scansConDemanda + o.faltanScans} scans</strong>
+            <p>
+              El radar lo descubrió recién y el sistema lo escanea a diario. No hay score ni veredicto porque todavía no
+              hay serie que los sostenga, y no se van a estimar.
+              {o.curvaAnual?.busquedasMes ? ` Lo que sí está medido: ${fmtNum(o.curvaAnual.busquedasMes)} búsquedas al mes en Chile.` : ' Falta medirle el volumen de búsqueda.'}
+            </p>
+          </div>
+          <ProductosEscaneados nichoId={o.nichoId} />
+        </>
+      ) : (
+        <CartaOportunidad o={o} rank={rank} onAbrir={onAbrir} mismaCompraQue={mismaCompraQue} onRecargar={onRecargar}
+          pronostico={pronostico} modeloGana={modeloGana} enPanel />
+      )}
+      {o.familiaMiembros?.length ? (
+        <FamiliaColapsada miembros={o.familiaMiembros} porKeyword={porKeyword} lider={o} onAbrir={onAbrir} onRecargar={onRecargar} />
+      ) : null}
+    </div>
+  )
+}
+
+// ↑ ↓ recorren la lista con el panel a la vista (no cuando se escribe en un campo)
+function NavegarConFlechas({ orden, actual, onElegir }) {
+  useEffect(() => {
+    const alTeclear = (e) => {
+      if (!['ArrowDown', 'ArrowUp'].includes(e.key) || /input|select|textarea/i.test(e.target?.tagName ?? '')) return
+      const i = orden.findIndex((o) => o.nichoId === actual?.nichoId)
+      const siguiente = orden[Math.min(orden.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)))]
+      if (siguiente && siguiente !== actual) { e.preventDefault(); onElegir(siguiente) }
+    }
+    window.addEventListener('keydown', alTeclear)
+    return () => window.removeEventListener('keydown', alTeclear)
+  }, [orden, actual, onElegir])
+  return null
+}
+
 function DetalleNicho({ o, pronostico, modeloGana }) {
   const [pestana, setPestana] = useState('temporada')
   const PESTANAS = [['temporada', 'Temporada y precio'], ['competencia', 'Competencia']]
@@ -1589,8 +1637,10 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [activos, setActivos] = useState([])
-  // una sola fila abierta a la vez: el detalle es para decidir, no para comparar
-  const [expandido, setExpandido] = useState(null)
+  // LISTA + PANEL: la fila elegida se ve entera a la derecha, sin acordeón que
+  // empuje la lista. En pantalla chica el panel se abre encima.
+  const [seleccion, setSeleccion] = useState(null)
+  const [panelMovil, setPanelMovil] = useState(false)
   const [busca, setBusca] = useState('')
   // pronósticos del aprendizaje, por nicho: alimentan el gráfico de la carta
   const [pron, setPron] = useState({ porNicho: new Map(), modeloGana: false, ordena: false })
@@ -1636,8 +1686,9 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
         <div>
           <h2>Oportunidades</h2>
           <p className="reporte-fecha">
-            Ordenadas por lo que decide la compra: primero si <strong>la gente busca</strong> esa keyword,
-            después <strong>cuándo hay que pedir</strong>, y al final el score.
+            Una sola lista, mezclada por <strong>lo que conviene traer ahora</strong>: temporadas con la ventana
+            abierta y productos de todo el año juntos, cada uno con su porqué. Elige uno para verlo entero a la
+            derecha; <kbd>↑</kbd> <kbd>↓</kbd> para recorrerlos.
           </p>
         </div>
       </div>
@@ -1695,57 +1746,6 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
           const dueno = new Map()
           const porKeyword = new Map(todas.map((o) => [o.keyword, o]))
           const sinLider = visibles.filter((o) => !o.familiaLider)
-          let rank = 0
-          const carta = (o) => {
-            rank++
-            let mismaCompraQue = null
-            if (o.productoClave) {
-              if (dueno.has(o.productoClave)) mismaCompraQue = dueno.get(o.productoClave)
-              else dueno.set(o.productoClave, o.keyword)
-            }
-            const abierta = expandido === o.nichoId
-            return (
-              <div key={o.nichoId} className="op-item" id={`op-${o.nichoId}`}>
-                <FilaCompacta
-                  o={o}
-                  rank={rank}
-                  abierta={abierta}
-                  onAlternar={() => setExpandido(abierta ? null : o.nichoId)}
-                  onRecargar={cargar}
-                  tendencia={pron.ordena ? pron.porNicho.get(String(o.nichoId))?.tendencia : null}
-                />
-                {abierta ? (
-                  <>
-                    {/* sin análisis no hay tarjeta que mostrar: la carta vive de
-                        recomendación, precios y riesgos que todavía no existen */}
-                    {o.midiendo ? (
-                      <div className="op-midiendo-carta">
-                        <strong>Midiendo entrabilidad · {o.scansConDemanda} de {o.scansConDemanda + o.faltanScans} scans</strong>
-                        <p>
-                          El radar lo descubrió recién y el sistema lo escanea a diario. No hay score ni
-                          veredicto porque todavía no hay serie que los sostenga, y no se van a estimar.
-                          {o.curvaAnual?.busquedasMes
-                            ? ` Lo que sí está medido: ${fmtNum(o.curvaAnual.busquedasMes)} búsquedas al mes en Chile.`
-                            : ' Falta medirle el volumen de búsqueda.'}
-                        </p>
-                        <button type="button" className="boton-secundario" onClick={(e) => { e.stopPropagation(); onAbrirNicho(o.nichoId) }}>
-                          Ver el nicho
-                        </button>
-                      </div>
-                    ) : (
-                      <CartaOportunidad o={o} rank={rank} onAbrir={onAbrirNicho} mismaCompraQue={mismaCompraQue} onRecargar={cargar}
-                        pronostico={pron.porNicho.get(String(o.nichoId))} modeloGana={pron.modeloGana} />
-                    )}
-                    {/* con carta, la competencia vive en su pestaña (sin repetir productos) */}
-                    {o.midiendo ? <ProductosEscaneados nichoId={o.nichoId} /> : null}
-                    {o.familiaMiembros?.length ? (
-                      <FamiliaColapsada miembros={o.familiaMiembros} porKeyword={porKeyword} lider={o} onAbrir={onAbrirNicho} onRecargar={cargar} />
-                    ) : null}
-                  </>
-                ) : null}
-              </div>
-            )
-          }
           const usados = new Set()
           const secciones = GRUPOS_OP.map((g) => {
             const filas = sinLider.filter((o) => !usados.has(o.nichoId) && g.test(o)).sort((a, b) => compararPorMomento(a, b))
@@ -1753,22 +1753,43 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
             return { grupo: g, filas }
           })
           const resto = sinLider.filter((o) => !usados.has(o.nichoId))
+          if (resto.length) secciones.push({ grupo: { id: 'resto', titulo: 'Midiendo o sin medir', sub: 'recién descubiertos, sin curva de búsqueda o sin búsqueda en ML', abierto: false }, filas: resto })
+          // rango y "misma compra que" en el orden en que se ven
+          const orden = secciones.flatMap((x) => x.filas)
+          const rankDe = new Map(), mismaDe = new Map()
+          orden.forEach((o, i) => {
+            rankDe.set(o.nichoId, i + 1)
+            if (o.productoClave) {
+              if (dueno.has(o.productoClave)) mismaDe.set(o.nichoId, dueno.get(o.productoClave))
+              else dueno.set(o.productoClave, o.keyword)
+            }
+          })
+          const elegido = orden.find((o) => o.nichoId === seleccion) ?? orden[0]
+          const elegir = (o) => { setSeleccion(o.nichoId); setPanelMovil(true) }
+          const fila = (o) => (
+            <div key={o.nichoId} className="op-item" id={`op-${o.nichoId}`}>
+              <FilaCompacta o={o} rank={rankDe.get(o.nichoId)} abierta={elegido?.nichoId === o.nichoId} onAlternar={() => elegir(o)} onRecargar={cargar}
+                tendencia={pron.ordena ? pron.porNicho.get(String(o.nichoId))?.tendencia : null} />
+            </div>
+          )
           return (
-            <>
-              {secciones.map(({ grupo, filas }) => (
-                <GrupoOportunidades key={grupo.id} grupo={grupo} filas={filas}>
-                  {filas.map(carta)}
-                </GrupoOportunidades>
-              ))}
-              {resto.length ? (
-                <GrupoOportunidades
-                  grupo={{ id: 'resto', titulo: 'Midiendo o sin medir', sub: 'recién descubiertos, sin curva de búsqueda o sin búsqueda en ML', abierto: false }}
-                  filas={resto}
-                >
-                  {resto.map(carta)}
-                </GrupoOportunidades>
-              ) : null}
-            </>
+            <div className="op-maestro">
+              <div className="op-maestro-lista">
+                <NavegarConFlechas orden={orden} actual={elegido} onElegir={(o) => { setSeleccion(o.nichoId); document.getElementById(`op-${o.nichoId}`)?.scrollIntoView({ block: 'nearest' }) }} />
+                {secciones.map(({ grupo, filas }) => (
+                  <GrupoOportunidades key={grupo.id} grupo={grupo} filas={filas}>
+                    {filas.map(fila)}
+                  </GrupoOportunidades>
+                ))}
+              </div>
+              <aside className={`op-panel${panelMovil ? ' abierto' : ''}`} aria-label="Detalle del nicho elegido">
+                {elegido ? (
+                  <PanelNicho key={elegido.nichoId} o={elegido} rank={rankDe.get(elegido.nichoId)} mismaCompraQue={mismaDe.get(elegido.nichoId)}
+                    porKeyword={porKeyword} onAbrir={onAbrirNicho} onRecargar={cargar} onCerrar={() => setPanelMovil(false)}
+                    pronostico={pron.porNicho.get(String(elegido.nichoId))} modeloGana={pron.modeloGana} />
+                ) : null}
+              </aside>
+            </div>
           )
         })()
       )}
