@@ -7381,3 +7381,7 @@ a.op-plan-sello:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .op-panel { transition: none; } }
 .op-panel .op-carta.op-carta-panel { padding: 0; margin: 0; border: 0; box-shadow: none; }
 .op-maestro .op-fila-kw { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; white-space: normal; }
+/* con el panel abierto la columna del nombre es angosta: el tramo de precio
+   (que el panel muestra entero) sale de la fila para que no se apilen sellos */
+.op-maestro.con-panel .op-fila-kw .op-chip-tramo { display: none; }
+.op-maestro.con-panel .op-fila { min-height: 48px; padding-top: 8px; padding-bottom: 8px; }
