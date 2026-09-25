@@ -21,7 +21,9 @@ test('saltos que no son ventas: trayectoria compartida y salto de fuente se desc
     { itemId: 'C', antes: 100, ahora: 938 }, // salto de fuente
     { itemId: 'D', antes: 2000, ahora: 2030 }, // +30 en un top: normal
     { itemId: 'E', antes: 3, ahora: 5 }, { itemId: 'F', antes: 3, ahora: 5 }, // cifras chicas iguales: azar, no se castiga
+    { itemId: 'G', antes: 40, ahora: 41 }, { itemId: 'H', antes: 40, ahora: 41 }, // +1 igual en dos: azar
   ])
+  assert.equal(fuera.has('G'), false, 'una reseña más el mismo día en dos publicaciones no es agrupación')
   assert.equal(fuera.get('A'), 'compartida')
   assert.equal(fuera.get('B'), 'compartida')
   assert.equal(fuera.get('C'), 'salto')

@@ -27,11 +27,15 @@ export const SALTO_MIN = 50
 export const SALTO_PROPORCION = 0.5
 export function saltosSospechosos(pares) {
   const cuenta = new Map()
-  for (const p of pares) if (p.ahora >= 10 && p.ahora !== p.antes) { const k = `${p.antes}|${p.ahora}`; cuenta.set(k, (cuenta.get(k) ?? 0) + 1) }
+  // con 5.000 publicaciones, pasar de 20 a 21 el mismo día le ocurre a varias
+  // por azar (la primera versión descartaba 600 de 1.218): una agrupación de ML
+  // es un salto grande y repetido, no una coincidencia chica
+  const compartible = (p) => p.ahora >= 30 && p.ahora - p.antes >= 5
+  for (const p of pares) if (compartible(p)) { const k = `${p.antes}|${p.ahora}`; cuenta.set(k, (cuenta.get(k) ?? 0) + 1) }
   const fuera = new Map()
   for (const p of pares) {
     const d = p.ahora - p.antes
-    if ((cuenta.get(`${p.antes}|${p.ahora}`) ?? 0) > 1) fuera.set(p.itemId, 'compartida')
+    if (compartible(p) && (cuenta.get(`${p.antes}|${p.ahora}`) ?? 0) > 1) fuera.set(p.itemId, 'compartida')
     else if (d > SALTO_MIN && d > p.antes * SALTO_PROPORCION) fuera.set(p.itemId, 'salto')
   }
   return fuera
