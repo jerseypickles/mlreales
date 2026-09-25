@@ -236,6 +236,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         exwCotizadoUsd: 1,
         recargoTransportePct: 1,
         productosCotizados: 1,
+        tablaTallasProveedor: 1,
         exwCotizadoEl: 1,
         costoPuestoClp: 1,
         costoPuestoEl: 1,
