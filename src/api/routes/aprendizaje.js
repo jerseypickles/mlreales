@@ -139,6 +139,12 @@ router.post('/panorama', async (_req, res) => {
   const job = await obtenerColas().tendencias.add('panorama-ml', {}, { jobId: `panorama-manual-${Math.floor(Date.now() / 300000)}` })
   res.status(202).json({ jobId: job.id })
 })
+// Publicaciones que aparecieron hace poco en un nicho que ya se escaneaba y
+// ya suben de posición, ganan reseñas o cambian de balde.
+router.get('/nuevos-que-despegan', async (_req, res) => {
+  const { productosNuevosQueDespegan } = await import('../../services/nuevosQueDespegan.js')
+  res.json({ productos: await productosNuevosQueDespegan() })
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {

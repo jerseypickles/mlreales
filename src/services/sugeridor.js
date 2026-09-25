@@ -178,6 +178,9 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   // las búsquedas que ENTRARON a las tendencias de su categoría esta semana, en
   // todo Mercado Libre (panoramaMl.js): lo que la gente empezó a buscar
   const suben = await import('./panoramaMl.js').then((m) => m.busquedasQueSuben()).catch(() => [])
+  // publicaciones que llegaron hace poco a nichos que ya miramos y despegan:
+  // otro importador trajo algo que el mercado está aceptando
+  const despegan = await import('./nuevosQueDespegan.js').then((m) => m.productosNuevosQueDespegan({ max: 12 })).catch(() => [])
   // El ML observa esta salida: sus perfiles y predicciones no se incluyen en
   // el prompt durante esta etapa, para poder evaluar el radar sin influirlo.
   const hoy = new Date()
@@ -210,6 +213,9 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
       ? `PRODUCTOS QUE ENTRARON O SUBIERON EN EL RANKING OFICIAL DE MÁS VENDIDOS de Mercado Libre Chile esta semana (dato de ML, no una estimación). Es la evidencia más fuerte de demanda que recibes: si alguno abre un nicho que el tablero no cubre y cumple las demás reglas, propónlo con la keyword que un comprador escribiría (no el título del producto):\n${entradas
           .map((e) => `- #${e.posicion} ${e.nuevo ? 'NUEVO en el top 20' : `subió ${e.subio} puestos`}: "${e.titulo}"${e.categoria ? ` — categoría ${e.categoria}` : ''}${e.nichos?.length ? ` (ya cubierta por: ${e.nichos.slice(0, 3).join(', ')})` : ' (pasillo SIN nichos en el tablero)'}`)
           .join('\n')}`
+      : '',
+    despegan.length
+      ? `PRODUCTOS NUEVOS QUE DESPEGAN en nichos que ya escaneamos (aparecieron en los últimos 30 días y ya suben de posición, ganan reseñas o cambian de balde de vendidos — otro importador trajo algo que funciona). Pregúntate si es una VARIANTE o un producto vecino que el tablero no cubre; propón la keyword que un comprador escribiría:\n${despegan.map((x) => `- "${x.titulo ?? x.sku}" en "${x.keyword}": de #${x.posicionInicial} a #${x.posicion} en ${x.dias} días${x.reseniasGanadas != null ? `, +${x.reseniasGanadas} reseñas` : ''}${x.baldeSubio ? ', subió de balde de vendidos' : ''}`).join('\n')}`
       : '',
     suben.length
       ? `BÚSQUEDAS QUE ENTRARON A LAS TENDENCIAS DE SU CATEGORÍA esta semana, en todo Mercado Libre Chile (dato de ML: son términos que la semana anterior no estaban). Escritas como las escribe la gente. Úsalas para abrir pasillos que el tablero no mira:\n${suben.map((x) => `- "${x.termino}" — ${x.categoria}`).join('\n')}`
