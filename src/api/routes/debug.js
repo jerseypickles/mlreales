@@ -230,6 +230,36 @@ router.get(
   }),
 )
 
+// CÓDIGOS DE PIEZA DE UNA FICHA (repuestos): el proveedor pide el número OE
+// ("需要OE号码") para fabricar la pieza exacta. Muchas fichas de ML lo declaran
+// en sus características ("Número de pieza OEM", "Código OEM") o en el texto.
+// Devuelve lo que la ficha dice y el contexto de donde salió; es lo que declara
+// el vendedor, no un catálogo oficial. Una lectura de Zyte (~US$0,006).
+router.get(
+  '/ficha-oem',
+  autorizado,
+  manejar(async (req, res) => {
+    const url = String(req.query.url ?? '')
+    if (!/^https:\/\/[a-z.]*mercadolibre\.cl\//.test(url)) return res.status(400).json({ error: 'falta ?url= de mercadolibre.cl' })
+    const { config } = await import('../../config/env.js')
+    const { pedirUna } = await import('../../services/detalleMl.js')
+    const r = await pedirUna(url, { geolocation: 'CL', apiKey: config.zyteApiKey })
+    const html = r?.browserHtml ?? ''
+    const limpio = (t) => t.replace(/\\u002F/g, '/').replace(/\s+/g, ' ')
+    const contextos = []
+    for (const m of html.matchAll(/n[uú]mero de pieza|c[oó]digo (?:de pieza|oem|original)|\bOEM\b|\bOE\b|part number|FMSI|n[uú]mero de parte/gi)) {
+      contextos.push(limpio(html.slice(Math.max(0, m.index - 60), m.index + 220)))
+      if (contextos.length >= 12) break
+    }
+    // atributos de la ficha técnica: pares nombre → valor del estado embebido
+    const atributos = []
+    for (const m of html.matchAll(/"text":"([^"]{2,60})","values":\{"value_text":\{"text":"([^"]{1,80})"/g)) atributos.push([m[1], m[2]])
+    res.json({ chars: html.length, titulo: r?.product?.name ?? null,
+      atributosPieza: atributos.filter(([n]) => /pieza|oem|\boe\b|c[oó]digo|parte|part|fmsi|modelo|marca|posici/i.test(n)),
+      atributos: atributos.slice(0, 40), contextos })
+  }),
+)
+
 // El HTML que ML sirvió en el último scan de un nicho, para diagnosticar un
 // cambio de forma sin volver a scrapear. Con ?resumen=1 devuelve solo lo que el
 // parser sacó ese día, que es la primera pregunta: ¿cambió ML o cambiamos
