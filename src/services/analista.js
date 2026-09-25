@@ -1,3 +1,4 @@
+import { equivalenciaChilena } from './tallasChile.js'
 import { pedirJSON } from './llm.js'
 import { exwMaximoUsd } from './margen.js'
 import { obtenerProductosUltimoScan } from './metricas.js'
@@ -247,6 +248,7 @@ Reglas:
 - BÚSQUEDAS EN ALZA (campo busquedasEnAlza, si viene): consultas del autocompletado de ML que están subiendo esta semana en la vertical de este nicho — señal de demanda en tiempo real que complementa el delta de reseñas; úsala para elegir el segmento y el ángulo del producto.
 - CONTEXTO DEL IMPORTADOR SOBRE ESTE NICHO (campo contextoImportador, si viene): es experiencia de primera mano — ventas reales suyas en este nicho, conocimiento del segmento, canal o temporada. Pésalo POR SOBRE lo que infieras de las reseñas: las reseñas acumuladas por listing miden permanencia, y los vendedores genéricos rotan publicaciones — sus ventas se dispersan en listings de vida corta que no acumulan reseñas, así que "genéricos con pocas reseñas" NO prueba que el genérico no venda si el importador ya lo vendió. Si su experiencia contradice tu lectura de los datos, dilo explícitamente en el resumen y ajusta el veredicto considerando ambas evidencias.
 - Sé directo y escéptico: si el nicho no da, di no_entrar y explica por qué. Un veredicto inflado cuesta dinero real.
+- TALLAS (tallasProveedorEnChile, si viene): la tabla del proveedor convertida a talla chilena por cm. Si correChica, dilo: su letra le queda a una talla menor en Chile y hay que publicar con la chilena. Si faltanEnChile trae tallas (ej: XL y XXL), es un riesgo de surtido — en trajes de baño y ropa la parte grande de la curva vende mucho en Chile — y va en riesgos y en cómo validar: pedirle al proveedor esas tallas. Las tallas de fueraDeDemanda no se piden (o muy pocas). En primeraCompra reparte las unidades por talla chilena, cargadas hacia M, L y XL.
 - PERÍODOS DEL AÑO (periodosDelAnioMedidos, si viene): MEDIDOS en 4 años de búsquedas de Google en Chile — qué meses suben, cuánto (multiplicador contra lo normal de ese año), en cuántos años se repitió y qué evento del calendario lo explica. Mandan sobre "estacionalidad", que es una inferencia del radar. Un nicho "de todo el año" con un pico ×1,7 que se repite 3 de 3 años (ej: calculadora científica en marzo-mayo, inicio del año académico) NO es plano: dilo, y usa el período para la PRIMERA COMPRA (cuánto y cuándo debe estar el stock vendiendo) y para el valle (no llegar con stock nuevo al valle). Un pico "sin explicación en el calendario" es un hallazgo: dilo, no lo inventes.
 - El usuario quiere LA decisión, no un informe: titular de máximo 90 caracteres con el producto concreto a traer, resumen de máximo 2 frases, razón de cada segmento en 1 frase, riesgos de 1 línea cada uno. Cero relleno.
 - Todo en español de Chile, precios en CLP.`
@@ -471,6 +473,7 @@ export async function analizarNicho(nicho) {
     }),
     estacionalidad: nicho.radarInfo?.estacionalidad ?? undefined,
     periodosDelAnioMedidos,
+    tallasProveedorEnChile: nicho.tablaTallasProveedor?.length ? equivalenciaChilena(nicho.tablaTallasProveedor) : undefined,
     ventanaImportacionSegunRadar: nicho.radarInfo?.ventanaImportacion ?? undefined,
     contextoImportador: nicho.contextoUsuario ?? undefined,
     criteriosImportador: criterios.length ? criterios : undefined,

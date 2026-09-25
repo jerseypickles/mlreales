@@ -765,6 +765,38 @@ function ChipTendencia({ t }) {
   )
 }
 
+// ROPA: la tabla del proveedor llevada a talla chilena por cm (ver
+// services/tallasChile.js). Se publica con la letra chilena, no con la suya.
+function TallasChile({ t }) {
+  const cm = (a, b) => (a != null && b != null ? `${a}-${b}` : a ?? b ?? '—')
+  return (
+    <div className="tallas" onClick={(e) => e.stopPropagation()}>
+      <div className="tallas-cab">
+        <strong>Tallas del proveedor en talla chilena</strong>
+        <span className="tallas-avisos">
+          {t.correChica ? <em className="tallas-aviso mal">viene una talla más chica: publicar con la chilena</em> : null}
+          {t.faltanEnChile?.length ? <em className="tallas-aviso medio">faltan {t.faltanEnChile.join(', ')}: pedírselas</em> : null}
+          {t.fueraDeDemanda?.length ? <em className="tallas-aviso">su {t.fueraDeDemanda.join(', ')} casi no se vende en Chile</em> : null}
+        </span>
+      </div>
+      <table className="tallas-tabla">
+        <thead><tr><th>Proveedor</th><th>Chile</th><th>Busto</th><th>Cintura</th><th>Cadera</th><th>Copa</th></tr></thead>
+        <tbody>
+          {t.filas.map((f) => (
+            <tr key={f.talla} className={f.diferencia === 'chica' ? 'chica' : ''}>
+              <td>{f.talla}</td>
+              <td><b>{f.letraCl ?? '—'}</b>{f.numeroCl ? <small> ({f.numeroCl})</small> : null}</td>
+              <td>{cm(f.bustoMin, f.bustoMax)}</td><td>{cm(f.cinturaMin, f.cinturaMax)}</td><td>{cm(f.caderaMin, f.caderaMax)}</td>
+              <td>{f.copa ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="tallas-nota">Por centímetros contra la numeración que usa el comercio en Chile (no hay tabla oficial). En traje de baño pesa más la cadera. Medidas en cm.</p>
+    </div>
+  )
+}
+
 // ¿El modelo y los años salen de una publicación real o los puso la IA? ML no
 // entrega la compatibilidad oficial de publicaciones ajenas; lo verificable es
 // lo que el vendedor escribió en su título, y eso se comprueba sin la IA.
@@ -960,6 +992,7 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronos
         ) : null}
 
         {o.titular ? <p className="op-titular">{o.titular}</p> : null}
+        {o.tallas ? <TallasChile t={o.tallas} /> : null}
         {/* repuestos: la compra es por pieza y por auto — sin modelo y años no se cotiza */}
         {o.planRepuestos?.length ? (
           <ol className="op-plan-repuestos">

@@ -549,7 +549,19 @@ router.post(
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {
   const cambios = {}
-  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, recargoTransportePct, productosCotizados, costoPuestoClp, unidadesPedido, volumenM3, pesoKg, precioVentaObjetivoClp, fletePropioClp } = req.body ?? {}
+  const { estado, frecuenciaScan, contextoUsuario, etapaCompra, notaEtapa, revisarEl, exwCotizadoUsd, recargoTransportePct, productosCotizados, costoPuestoClp, unidadesPedido, volumenM3, pesoKg, precioVentaObjetivoClp, fletePropioClp, tablaTallasProveedor } = req.body ?? {}
+  if (tablaTallasProveedor !== undefined) {
+    if (tablaTallasProveedor === null || (Array.isArray(tablaTallasProveedor) && !tablaTallasProveedor.length)) cambios.tablaTallasProveedor = null
+    else {
+      if (!Array.isArray(tablaTallasProveedor) || tablaTallasProveedor.length > 12) return res.status(400).json({ error: 'tablaTallasProveedor: lista de 1 a 12 tallas' })
+      const num = (v) => (v === null || v === undefined || v === '' ? undefined : Number(v))
+      const filas = tablaTallasProveedor.map((f) => ({ talla: String(f?.talla ?? '').trim().slice(0, 8),
+        ...Object.fromEntries(['bustoMin', 'bustoMax', 'cinturaMin', 'cinturaMax', 'caderaMin', 'caderaMax'].map((k) => [k, num(f?.[k])]).filter(([, v]) => v !== undefined)),
+        ...(f?.copa ? { copa: String(f.copa).slice(0, 8) } : {}) }))
+      if (filas.some((f) => !f.talla || Object.entries(f).some(([k, v]) => k !== 'talla' && k !== 'copa' && !(v > 20 && v < 250)))) return res.status(400).json({ error: 'cada talla necesita nombre y medidas en cm (20 a 250)' })
+      cambios.tablaTallasProveedor = filas
+    }
+  }
   // cubicaje de la cotización: sin esto el flete del costo puesto es un supuesto
   // fletePropioClp: despacho por bulto con courier propio, la salida al volumétrico de ML
   for (const [campo, valor] of [['volumenM3', volumenM3], ['pesoKg', pesoKg], ['precioVentaObjetivoClp', precioVentaObjetivoClp], ['fletePropioClp', fletePropioClp]]) {

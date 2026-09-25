@@ -1,3 +1,4 @@
+import { equivalenciaChilena } from './tallasChile.js'
 import { verificarFilaRepuesto } from './compatibilidad.js'
 import { LIMITES_FULL } from './envioFull.js'
 import { Nicho } from '../models/Nicho.js'
@@ -572,6 +573,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
       // que no se pierdan entre 44 filas que ya estaban ahí ayer
       creadoEl: n.creadoEl ?? null,
       titular: rec.titular ?? null,
+      // ropa: la tabla del proveedor llevada a talla chilena por cm
+      tallas: n.tablaTallasProveedor?.length ? equivalenciaChilena(n.tablaTallasProveedor) : null,
       // repuestos: qué pieza y para qué autos y años, que es lo que se cotiza
       planRepuestos: Array.isArray(analisis?.planRepuestos) && analisis.planRepuestos.length
         ? [...analisis.planRepuestos].sort((a, b) => (a.prioridad ?? 99) - (b.prioridad ?? 99)).slice(0, 4)

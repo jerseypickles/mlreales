@@ -61,6 +61,9 @@ const nichoSchema = new mongoose.Schema({
   // `exwCotizadoUsd` es su promedio ponderado y `unidadesPedido` su suma (para
   // ordenar y para lo que todavía mira un solo número); el detalle manda.
   productosCotizados: { type: [{ _id: false, nombre: String, exwUsd: Number, unidades: Number }], default: undefined },
+  // tabla de tallas del proveedor (ropa): se convierte a talla chilena por cm
+  // (services/tallasChile.js) para la publicación, el analista y el panel
+  tablaTallasProveedor: { type: [{ _id: false, talla: String, bustoMin: Number, bustoMax: Number, cinturaMin: Number, cinturaMax: Number, caderaMin: Number, caderaMax: Number, copa: String }], default: undefined },
   // costo REAL por unidad puesto en Chile (CLP, todo incluido: producto, flete,
   // internación, despacho). Manda sobre el cálculo desde EXW: es un dato del
   // importador, no una cadena de supuestos (cubicaje/prorrateo ya nos mordió

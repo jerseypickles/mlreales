@@ -1,4 +1,5 @@
 import { pedirJSON } from './llm.js'
+import { equivalenciaChilena } from './tallasChile.js'
 import { obtenerProductosUltimoScan } from './metricas.js'
 import { sugerenciasReales } from './busquedasReales.js'
 import { Reporte } from '../models/Reporte.js'
@@ -88,6 +89,8 @@ DESCRIPCIÓN:
 - Teje las keywords secundarias de forma natural (el buscador de ML también lee la descripción).
 - Te paso PREGUNTAS REALES de compradores del nicho: la descripción debe responder las más repetidas de frente (qué incluye, compatibilidad, medidas, potencia) — cada pregunta respondida antes de que la hagan es una venta que no se cae.
 
+TALLAS (si viene guiaTallasChile): la tabla del proveedor ya viene convertida a talla chilena por centímetros. Las variantes se publican con la LETRA CHILENA (letraCl), jamás con la del proveedor, que suele venir una talla más chica y llena la cuenta de devoluciones. La descripción lleva una sección GUÍA DE TALLAS: por cada talla, letra chilena, número y busto/cintura/cadera en cm, y una línea "si estás entre dos tallas, elige la mayor". Si faltanEnChile trae tallas, agrégalo al checklist: pedirle al proveedor esas tallas antes de cerrar. Si fueraDeDemanda trae tallas, el checklist dice que no conviene pedirlas.
+
 FICHA TÉCNICA: los atributos que ML exige al publicar en la categoría (Marca, Modelo, y los específicos). Si el producto es genérico importado, Marca = "Genérica" y Modelo inventado corto.
 
 TIPO DE PUBLICACIÓN: clásica (menos comisión) vs premium (+3-4 pts de comisión, cuotas sin interés — conviene en tickets altos donde las cuotas destraban la compra).
@@ -139,6 +142,8 @@ export async function generarListing(nicho) {
     recomendacionDelAnalisis: reporte?.analisis?.recomendacion ?? null,
     veredicto: reporte?.analisis?.veredicto ?? null,
     titulosGanadores: ganadores,
+    // ropa: la tabla del proveedor YA convertida a talla chilena por cm
+    guiaTallasChile: nicho.tablaTallasProveedor?.length ? equivalenciaChilena(nicho.tablaTallasProveedor) : undefined,
   }
 
   const { datos, costoUsd } = await pedirJSON({
