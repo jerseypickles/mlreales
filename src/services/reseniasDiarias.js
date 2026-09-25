@@ -83,13 +83,21 @@ export async function estadoResenias({ ahora = new Date() } = {}) {
     const filas = await LecturaResenia.find({ dia: { $in: [a, b] } }).select('itemId dia numReviews -_id').lean()
     const antes = new Map(filas.filter((f) => f.dia === a).map((f) => [f.itemId, f.numReviews]))
     let ambos = 0, suben = 0, bajan = 0, iguales = 0, nuevas = 0
+    const saltos = []
     for (const f of filas.filter((x) => x.dia === b)) {
       if (!antes.has(f.itemId)) continue
       ambos++
       const d = f.numReviews - antes.get(f.itemId)
-      if (d > 0) { suben++; nuevas += d } else if (d < 0) bajan++; else iguales++
+      if (d > 0) { suben++; nuevas += d; saltos.push({ itemId: f.itemId, antes: antes.get(f.itemId), ahora: f.numReviews, delta: d }) } else if (d < 0) bajan++; else iguales++
     }
-    comparacion = { desde: a, hasta: b, enAmbos: ambos, suben, iguales, bajan, reseniasNuevas: nuevas }
+    // ¿lo nuevo lo explican muchas publicaciones o unas pocas con saltos raros?
+    saltos.sort((x, y) => y.delta - x.delta)
+    const deltas = saltos.map((x) => x.delta).sort((x, y) => x - y)
+    const top10 = saltos.slice(0, 10).reduce((acc, x) => acc + x.delta, 0)
+    comparacion = { desde: a, hasta: b, enAmbos: ambos, suben, iguales, bajan, reseniasNuevas: nuevas,
+      medianaDelta: deltas.length ? deltas[Math.floor(deltas.length / 2)] : null,
+      p99Delta: deltas.length ? deltas[Math.floor(deltas.length * 0.99)] : null,
+      top10Pct: nuevas ? Math.round(top10 / nuevas * 100) : null, mayoresSaltos: saltos.slice(0, 10) }
   }
   return { dia, leidasHoy, porDia: porDia.map((d) => ({ dia: d._id, lecturas: d.lecturas })), comparacion }
 }
