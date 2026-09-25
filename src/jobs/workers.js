@@ -737,6 +737,9 @@ export async function procesarRadar() {
         estacionalidad: s.estacionalidad,
         ventanaImportacion: s.ventanaImportacion,
         riesgo: s.riesgo,
+        // de qué señal salió: el aprendizaje mide qué fuentes descubren bien
+        fuente: s.fuente ?? null,
+        evidencia: s.evidencia || null,
         keywordIdeada: keyword !== ideada ? ideada : undefined,
         descubiertoEl: new Date(),
       },

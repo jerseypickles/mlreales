@@ -154,6 +154,12 @@ router.post('/tiendas', async (_req, res) => {
   const job = await obtenerColas().tendencias.add('tiendas-ganadoras', {}, { jobId: `tiendas-manual-${Math.floor(Date.now() / 300000)}` })
   res.status(202).json({ jobId: job.id })
 })
+// Qué señal del radar descubre buenos nichos: fuente de cada nicho cruzada con
+// su veredicto, puntaje y si avanzó a cotización o compra.
+router.get('/fuentes-radar', async (_req, res) => {
+  const { fuentesDelRadar } = await import('../../services/ml/fuentesRadar.js')
+  res.json(await fuentesDelRadar())
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {

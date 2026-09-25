@@ -20,6 +20,8 @@ export function palabrasSaturadas(keywords, { umbral = 3 } = {}) {
   return new Set([...conteo].filter(([, c]) => c >= umbral).map(([p]) => p))
 }
 
+export const FUENTES_RADAR = ['ranking-ml', 'busqueda-que-sube', 'producto-que-despega', 'tienda-ganadora', 'autocompletado', 'temporada', 'categoria-hermana', 'pasillo-probado', 'intuicion']
+
 const SCHEMA_SUGERENCIAS = {
   type: 'object',
   additionalProperties: false,
@@ -30,8 +32,17 @@ const SCHEMA_SUGERENCIAS = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['keyword', 'categoria', 'razon', 'estacionalidad', 'ventanaImportacion', 'riesgo'],
+        required: ['keyword', 'categoria', 'razon', 'estacionalidad', 'ventanaImportacion', 'riesgo', 'fuente', 'evidencia'],
         properties: {
+          // DE QUÉ SEÑAL SALIÓ. Se guarda en el nicho y se cruza con su veredicto
+          // y sus ventas: así el sistema aprende qué fuentes descubren buenos
+          // nichos y cuáles son ruido (fuentesRadar.js)
+          fuente: {
+            type: 'string',
+            enum: FUENTES_RADAR,
+            description: 'La señal PRINCIPAL que te llevó a proponerlo. Sé honesto: si no sale de ningún bloque de datos que recibiste, es "intuicion".',
+          },
+          evidencia: { type: 'string', description: 'El dato puntual de esa señal, copiado del bloque: el producto del ranking, la búsqueda que subió, el vendedor, etc. Máximo 1 línea. Vacío si es intuicion.' },
           keyword: { type: 'string', description: 'Keyword tal como se buscaría en mercadolibre.cl, en minúsculas' },
           categoria: { type: 'string' },
           // acotada a propósito: los filtros de negocio que se agregaron el
@@ -183,6 +194,9 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   const despegan = await import('./nuevosQueDespegan.js').then((m) => m.productosNuevosQueDespegan({ max: 12 })).catch(() => [])
   // lo que publicaron de nuevo los vendedores que venden y reponen
   const lanzamientos = await import('./tiendasGanadoras.js').then((m) => m.lanzamientosDeGanadores({ max: 15 })).catch(() => [])
+  // LO QUE EL SISTEMA APRENDIÓ DE SUS PROPIAS FUENTES: qué señales dieron nichos
+  // que terminaron en "entrar". Solo las que ya tienen muestra suficiente.
+  const historialFuentes = await import('./ml/fuentesRadar.js').then((m) => m.historialParaRadar()).catch(() => [])
   // El ML observa esta salida: sus perfiles y predicciones no se incluyen en
   // el prompt durante esta etapa, para poder evaluar el radar sin influirlo.
   const hoy = new Date()
@@ -215,6 +229,9 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
       ? `PRODUCTOS QUE ENTRARON O SUBIERON EN EL RANKING OFICIAL DE MÁS VENDIDOS de Mercado Libre Chile esta semana (dato de ML, no una estimación). Es la evidencia más fuerte de demanda que recibes: si alguno abre un nicho que el tablero no cubre y cumple las demás reglas, propónlo con la keyword que un comprador escribiría (no el título del producto):\n${entradas
           .map((e) => `- #${e.posicion} ${e.nuevo ? 'NUEVO en el top 20' : `subió ${e.subio} puestos`}: "${e.titulo}"${e.categoria ? ` — categoría ${e.categoria}` : ''}${e.nichos?.length ? ` (ya cubierta por: ${e.nichos.slice(0, 3).join(', ')})` : ' (pasillo SIN nichos en el tablero)'}`)
           .join('\n')}`
+      : '',
+    historialFuentes.length
+      ? `TU PROPIO HISTORIAL POR FUENTE (medido por el sistema con los veredictos de los nichos que propusiste): de qué señales salieron nichos buenos. Dale más peso a las fuentes que rinden y sé más exigente con las que no:\n${historialFuentes.join('\n')}`
       : '',
     lanzamientos.length
       ? `LO QUE PUBLICARON ESTA SEMANA LOS VENDEDORES QUE GANAN (vendedores chicos que el sistema vio vender y reponer stock: importadores a los que les va bien). Un producto nuevo en su tienda es una apuesta de alguien que ya sabe vender; propón la keyword si abre un nicho que el tablero no cubre:\n${lanzamientos.map((x) => `- "${x.titulo}" (${x.vendedor ?? 'vendedor'}, $${x.precio ?? '?'})`).join('\n')}`
