@@ -129,6 +129,16 @@ router.get('/calibracion-resenias', async (_req, res) => {
   const { calibracionResenias } = await import('../../services/ml/calibracionResenias.js')
   res.json(await calibracionResenias())
 })
+// El panorama de ML: árbol de categorías, ranking de todas las categorías
+// finales y búsquedas que suben. POST encola una pasada ahora.
+router.get('/panorama', async (_req, res) => {
+  const { estadoPanorama } = await import('../../services/panoramaMl.js')
+  res.json(await estadoPanorama())
+})
+router.post('/panorama', async (_req, res) => {
+  const job = await obtenerColas().tendencias.add('panorama-ml', {}, { jobId: `panorama-manual-${Math.floor(Date.now() / 300000)}` })
+  res.status(202).json({ jobId: job.id })
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {

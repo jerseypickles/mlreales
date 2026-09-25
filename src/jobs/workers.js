@@ -1127,6 +1127,7 @@ export function iniciarWorkers() {
       if (job.name === 'seguimiento-stock') return import('../services/seguimientoStock.js').then((m) => m.pasadaDeSeguimiento())
       if (job.name === 'ranking-mas-vendidos') return import('../services/rankingMasVendidos.js').then((m) => m.capturarRankings())
       if (job.name === 'resenias-diarias') return import('../services/reseniasDiarias.js').then((m) => m.pasadaResenias())
+      if (job.name === 'panorama-ml') return import('../services/panoramaMl.js').then((m) => m.pasadaPanorama())
       if (job.name === 'nivel-busqueda') return procesarNivelBusqueda(job)
       if (job.name === 'refresco-curvas') return procesarRefrescoCurvas()
       return procesarTendencias(job)

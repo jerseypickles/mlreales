@@ -175,6 +175,9 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   const criterios = await criteriosActivos().catch(() => [])
   // lo que ENTRÓ al top 20 de más vendidos de ML esta semana: demanda dicha por ML
   const entradas = await import('./rankingMasVendidos.js').then((m) => m.entradasAlTop()).catch(() => [])
+  // las búsquedas que ENTRARON a las tendencias de su categoría esta semana, en
+  // todo Mercado Libre (panoramaMl.js): lo que la gente empezó a buscar
+  const suben = await import('./panoramaMl.js').then((m) => m.busquedasQueSuben()).catch(() => [])
   // El ML observa esta salida: sus perfiles y predicciones no se incluyen en
   // el prompt durante esta etapa, para poder evaluar el radar sin influirlo.
   const hoy = new Date()
@@ -205,8 +208,11 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
       : '',
     entradas.length
       ? `PRODUCTOS QUE ENTRARON O SUBIERON EN EL RANKING OFICIAL DE MÁS VENDIDOS de Mercado Libre Chile esta semana (dato de ML, no una estimación). Es la evidencia más fuerte de demanda que recibes: si alguno abre un nicho que el tablero no cubre y cumple las demás reglas, propónlo con la keyword que un comprador escribiría (no el título del producto):\n${entradas
-          .map((e) => `- #${e.posicion} ${e.nuevo ? 'NUEVO en el top 20' : `subió ${e.subio} puestos`}: "${e.titulo}"${e.nichos?.length ? ` (categoría de: ${e.nichos.slice(0, 3).join(', ')})` : ''}`)
+          .map((e) => `- #${e.posicion} ${e.nuevo ? 'NUEVO en el top 20' : `subió ${e.subio} puestos`}: "${e.titulo}"${e.categoria ? ` — categoría ${e.categoria}` : ''}${e.nichos?.length ? ` (ya cubierta por: ${e.nichos.slice(0, 3).join(', ')})` : ' (pasillo SIN nichos en el tablero)'}`)
           .join('\n')}`
+      : '',
+    suben.length
+      ? `BÚSQUEDAS QUE ENTRARON A LAS TENDENCIAS DE SU CATEGORÍA esta semana, en todo Mercado Libre Chile (dato de ML: son términos que la semana anterior no estaban). Escritas como las escribe la gente. Úsalas para abrir pasillos que el tablero no mira:\n${suben.map((x) => `- "${x.termino}" — ${x.categoria}`).join('\n')}`
       : '',
     tendencias?.length
       ? `Búsquedas EN ALZA esta semana según el autocompletado real de ML (gente escribiéndolas más que antes — priorízalas como candidatas si cumplen las demás reglas):\n${tendencias.join('\n')}`

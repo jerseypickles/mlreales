@@ -31,7 +31,7 @@ export async function categoriasDelTablero() {
 // y con foto); lo que falte y sea producto de catálogo se le pregunta a la API
 // oficial, que responde para catálogos de terceros. Las publicaciones sueltas
 // ajenas dan 403: quedan con su enlace y sin nombre.
-async function resolverFichas(ids, { ahora = new Date(), pedir = meliGet } = {}) {
+export async function resolverFichas(ids, { ahora = new Date(), pedir = meliGet } = {}) {
   const conocidas = new Map((await FichaMasVendido.find({ id: { $in: ids.map((i) => i.id) } }).lean()).map((f) => [f.id, f]))
   const faltan = ids.filter((i) => !conocidas.get(i.id)?.titulo && (conocidas.get(i.id)?.intentos ?? 0) < 3)
   if (!faltan.length) return 0
@@ -111,8 +111,8 @@ async function nombreCategoria(id, pedir = meliGet) {
   }
 }
 
-export async function rankingsConMovimiento({ ahora = new Date(), dias = 7, nicho = null } = {}) {
-  const desde = diaChile(+ahora - 35 * DIA)
+export async function rankingsConMovimiento({ ahora = new Date(), dias = 7, nicho = null, ventanaDias = 35 } = {}) {
+  const desde = diaChile(+ahora - ventanaDias * DIA)
   const filtro = { dia: { $gte: desde }, ...(nicho ? { nichos: nicho } : {}) }
   const docs = await RankingMasVendidos.find(filtro).sort({ dia: 1 }).lean()
   const porCat = new Map()
@@ -132,7 +132,11 @@ export async function rankingsConMovimiento({ ahora = new Date(), dias = 7, nich
   }
   // el nombre de la categoría: sin él el panel parecía un ranking de la
   // búsqueda y no de TODA la categoría (mesa auxiliar mostraba mesas plegables)
-  for (const c of salida) c.categoriaNombre = await nombreCategoria(c.categoriaId)
+  // primero el árbol guardado (panoramaMl.js); a ML solo lo que falte: con el
+  // panorama son mil categorías y no se puede preguntar una por una
+  const { CategoriaMl } = await import('../models/CategoriaMl.js')
+  const guardadas = new Map((await CategoriaMl.find({ id: { $in: salida.map((c) => c.categoriaId) }, nombre: { $ne: null } }).select('id nombre').lean()).map((c) => [c.id, c.nombre]))
+  for (const c of salida) c.categoriaNombre = guardadas.get(c.categoriaId) ?? (nicho ? await nombreCategoria(c.categoriaId) : null)
   const fichas = new Map((await FichaMasVendido.find({ id: { $in: [...ids] } }).lean()).map((f) => [f.id, f]))
   for (const c of salida) c.items = c.items.map((i) => ({ ...i, titulo: fichas.get(i.id)?.titulo ?? null, imagen: fichas.get(i.id)?.imagen ?? null,
     precio: fichas.get(i.id)?.precio ?? null, url: fichas.get(i.id)?.url ?? null, enNuestroScan: fichas.get(i.id)?.fuente === 'scan' }))
@@ -141,9 +145,14 @@ export async function rankingsConMovimiento({ ahora = new Date(), dias = 7, nich
 
 // Lo que el radar lee: productos que ENTRARON al top 20 o subieron fuerte, con
 // nombre. Vacío hasta que haya dos días guardados — no se inventa movimiento.
-export async function entradasAlTop({ ahora = new Date(), max = 25 } = {}) {
-  const cats = await rankingsConMovimiento({ ahora })
+// Con el panorama (panoramaMl.js) son las categorías de TODO Mercado Libre, no
+// solo las del tablero: cada entrada lleva la ruta de su categoría, y van primero
+// las que entraron al top 10.
+export async function entradasAlTop({ ahora = new Date(), max = 40 } = {}) {
+  const cats = await rankingsConMovimiento({ ahora, ventanaDias: 9 })
+  const { CategoriaMl } = await import('../models/CategoriaMl.js')
+  const rutas = new Map((await CategoriaMl.find({ id: { $in: cats.map((c) => c.categoriaId) } }).select('id ruta').lean()).map((c) => [c.id, c.ruta]))
   return cats.flatMap((c) => c.items.filter((i) => c.comparadoCon && i.titulo && (i.nuevo || i.subio >= 5))
-    .map((i) => ({ titulo: i.titulo, posicion: i.posicion, nuevo: i.nuevo, subio: i.subio, nichos: c.nichos, desde: c.comparadoCon })))
-    .sort((a, b) => a.posicion - b.posicion).slice(0, max)
+    .map((i) => ({ titulo: i.titulo, posicion: i.posicion, nuevo: i.nuevo, subio: i.subio, nichos: c.nichos, categoria: rutas.get(c.categoriaId) ?? c.categoriaNombre ?? null, desde: c.comparadoCon })))
+    .sort((a, b) => Number(b.posicion <= 10 && b.nuevo) - Number(a.posicion <= 10 && a.nuevo) || a.posicion - b.posicion).slice(0, max)
 }

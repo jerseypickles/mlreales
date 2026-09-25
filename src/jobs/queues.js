@@ -116,6 +116,14 @@ export async function registrarProgramados() {
     { pattern: process.env.RESENIAS_CRON || '25 * * * *', tz: 'America/Santiago' },
     { name: 'resenias-diarias', data: {} },
   )
+  // el panorama de ML: árbol de categorías, ranking de todas las categorías
+  // finales y búsquedas que suben, en pasadas cortas cada hora (gratis). Ver
+  // services/panoramaMl.js
+  await colas.tendencias.upsertJobScheduler(
+    'panorama-ml',
+    { pattern: process.env.PANORAMA_CRON || '45 * * * *', tz: 'America/Santiago' },
+    { name: 'panorama-ml', data: {} },
+  )
   // el ranking oficial de más vendidos, una vez al día (gratis: API de ML).
   // 07:40, antes del radar de las 08:00, que lee lo que entró al top.
   await colas.tendencias.upsertJobScheduler(
