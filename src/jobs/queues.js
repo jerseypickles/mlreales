@@ -124,6 +124,13 @@ export async function registrarProgramados() {
     { pattern: process.env.PANORAMA_CRON || '45 * * * *', tz: 'America/Santiago' },
     { name: 'panorama-ml', data: {} },
   )
+  // tiendas de los vendedores que venden y reponen: qué publican de nuevo
+  // (Zyte, un listado por vendedor y semana). Ver services/tiendasGanadoras.js
+  await colas.tendencias.upsertJobScheduler(
+    'tiendas-ganadoras',
+    { pattern: process.env.TIENDAS_CRON || '5 10 * * *', tz: 'America/Santiago' },
+    { name: 'tiendas-ganadoras', data: {} },
+  )
   // el ranking oficial de más vendidos, una vez al día (gratis: API de ML).
   // 07:40, antes del radar de las 08:00, que lee lo que entró al top.
   await colas.tendencias.upsertJobScheduler(

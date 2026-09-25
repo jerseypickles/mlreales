@@ -145,6 +145,15 @@ router.get('/nuevos-que-despegan', async (_req, res) => {
   const { productosNuevosQueDespegan } = await import('../../services/nuevosQueDespegan.js')
   res.json({ productos: await productosNuevosQueDespegan() })
 })
+// Tiendas de los vendedores que venden y reponen: qué publican de nuevo.
+router.get('/tiendas', async (_req, res) => {
+  const { estadoTiendas } = await import('../../services/tiendasGanadoras.js')
+  res.json(await estadoTiendas())
+})
+router.post('/tiendas', async (_req, res) => {
+  const job = await obtenerColas().tendencias.add('tiendas-ganadoras', {}, { jobId: `tiendas-manual-${Math.floor(Date.now() / 300000)}` })
+  res.status(202).json({ jobId: job.id })
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {

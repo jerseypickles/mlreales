@@ -181,6 +181,8 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   // publicaciones que llegaron hace poco a nichos que ya miramos y despegan:
   // otro importador trajo algo que el mercado está aceptando
   const despegan = await import('./nuevosQueDespegan.js').then((m) => m.productosNuevosQueDespegan({ max: 12 })).catch(() => [])
+  // lo que publicaron de nuevo los vendedores que venden y reponen
+  const lanzamientos = await import('./tiendasGanadoras.js').then((m) => m.lanzamientosDeGanadores({ max: 15 })).catch(() => [])
   // El ML observa esta salida: sus perfiles y predicciones no se incluyen en
   // el prompt durante esta etapa, para poder evaluar el radar sin influirlo.
   const hoy = new Date()
@@ -213,6 +215,9 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
       ? `PRODUCTOS QUE ENTRARON O SUBIERON EN EL RANKING OFICIAL DE MÁS VENDIDOS de Mercado Libre Chile esta semana (dato de ML, no una estimación). Es la evidencia más fuerte de demanda que recibes: si alguno abre un nicho que el tablero no cubre y cumple las demás reglas, propónlo con la keyword que un comprador escribiría (no el título del producto):\n${entradas
           .map((e) => `- #${e.posicion} ${e.nuevo ? 'NUEVO en el top 20' : `subió ${e.subio} puestos`}: "${e.titulo}"${e.categoria ? ` — categoría ${e.categoria}` : ''}${e.nichos?.length ? ` (ya cubierta por: ${e.nichos.slice(0, 3).join(', ')})` : ' (pasillo SIN nichos en el tablero)'}`)
           .join('\n')}`
+      : '',
+    lanzamientos.length
+      ? `LO QUE PUBLICARON ESTA SEMANA LOS VENDEDORES QUE GANAN (vendedores chicos que el sistema vio vender y reponer stock: importadores a los que les va bien). Un producto nuevo en su tienda es una apuesta de alguien que ya sabe vender; propón la keyword si abre un nicho que el tablero no cubre:\n${lanzamientos.map((x) => `- "${x.titulo}" (${x.vendedor ?? 'vendedor'}, $${x.precio ?? '?'})`).join('\n')}`
       : '',
     despegan.length
       ? `PRODUCTOS NUEVOS QUE DESPEGAN en nichos que ya escaneamos (aparecieron en los últimos 30 días y ya suben de posición, ganan reseñas o cambian de balde de vendidos — otro importador trajo algo que funciona). Pregúntate si es una VARIANTE o un producto vecino que el tablero no cubre; propón la keyword que un comprador escribiría:\n${despegan.map((x) => `- "${x.titulo ?? x.sku}" en "${x.keyword}": de #${x.posicionInicial} a #${x.posicion} en ${x.dias} días${x.reseniasGanadas != null ? `, +${x.reseniasGanadas} reseñas` : ''}${x.baldeSubio ? ', subió de balde de vendidos' : ''}`).join('\n')}`
