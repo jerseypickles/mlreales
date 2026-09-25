@@ -16,6 +16,27 @@ import { diaChile } from './inventarioFull.js'
 // Se reparte en pasadas cortas cada hora: la cola de tendencias corre de a un
 // trabajo y la cuota de ML la comparten el scan de propios y las órdenes.
 
+// SALTOS QUE NO SON VENTAS. El 25-sep-2026 cuatro publicaciones distintas
+// pasaron EXACTAMENTE de 397 a 1.816 reseñas el mismo día, y otras cuatro de
+// 2.012 a 2.731: ML empezó a sumar las reseñas del producto completo (varias
+// publicaciones agrupadas). Solo las 10 mayores explicaban el 32% de las
+// "reseñas nuevas" del día, con una mediana real de 2. Dos filtros:
+//  - trayectoria compartida: mismo (antes, ahora) en 2+ publicaciones distintas
+//  - salto de fuente: más de 50 reseñas Y más de la mitad de las que tenía
+export const SALTO_MIN = 50
+export const SALTO_PROPORCION = 0.5
+export function saltosSospechosos(pares) {
+  const cuenta = new Map()
+  for (const p of pares) if (p.ahora >= 10 && p.ahora !== p.antes) { const k = `${p.antes}|${p.ahora}`; cuenta.set(k, (cuenta.get(k) ?? 0) + 1) }
+  const fuera = new Map()
+  for (const p of pares) {
+    const d = p.ahora - p.antes
+    if ((cuenta.get(`${p.antes}|${p.ahora}`) ?? 0) > 1) fuera.set(p.itemId, 'compartida')
+    else if (d > SALTO_MIN && d > p.antes * SALTO_PROPORCION) fuera.set(p.itemId, 'salto')
+  }
+  return fuera
+}
+
 export const PANEL_MAX = 5000
 export const VENTANA_PANEL_DIAS = 14
 const POR_PASADA = 400
@@ -91,13 +112,18 @@ export async function estadoResenias({ ahora = new Date() } = {}) {
       if (d > 0) { suben++; nuevas += d; saltos.push({ itemId: f.itemId, antes: antes.get(f.itemId), ahora: f.numReviews, delta: d }) } else if (d < 0) bajan++; else iguales++
     }
     // ¿lo nuevo lo explican muchas publicaciones o unas pocas con saltos raros?
+    const fuera = saltosSospechosos(saltos)
+    const limpias = saltos.filter((x) => !fuera.has(x.itemId)).reduce((acc, x) => acc + x.delta, 0)
     saltos.sort((x, y) => y.delta - x.delta)
     const deltas = saltos.map((x) => x.delta).sort((x, y) => x - y)
     const top10 = saltos.slice(0, 10).reduce((acc, x) => acc + x.delta, 0)
     comparacion = { desde: a, hasta: b, enAmbos: ambos, suben, iguales, bajan, reseniasNuevas: nuevas,
       medianaDelta: deltas.length ? deltas[Math.floor(deltas.length / 2)] : null,
       p99Delta: deltas.length ? deltas[Math.floor(deltas.length * 0.99)] : null,
-      top10Pct: nuevas ? Math.round(top10 / nuevas * 100) : null, mayoresSaltos: saltos.slice(0, 10) }
+      top10Pct: nuevas ? Math.round(top10 / nuevas * 100) : null,
+      descartadas: { compartidas: [...fuera.values()].filter((v) => v === 'compartida').length, saltos: [...fuera.values()].filter((v) => v === 'salto').length },
+      reseniasNuevasLimpias: limpias,
+      mayoresSaltos: saltos.slice(0, 10).map((x) => ({ ...x, descartada: fuera.get(x.itemId) ?? null })) }
   }
   return { dia, leidasHoy, porDia: porDia.map((d) => ({ dia: d._id, lecturas: d.lecturas })), comparacion }
 }

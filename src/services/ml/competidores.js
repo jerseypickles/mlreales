@@ -58,6 +58,9 @@ export function paresDeLecturas(snaps) {
     if (!Number.isFinite(a.numReviewsApi) || !Number.isFinite(b.numReviewsApi)) motivo = 'sin-api'
     else if (compartidos.has(claveTrayecto(a, b))) motivo = 'compartida-catalogo'
     else if (b.numReviewsApi < a.numReviewsApi * (1 - CAIDA_TOLERADA) - 1) motivo = 'caida'
+    // ML a veces pasa a sumar las reseñas del producto agrupado: 397 → 1.816 de
+    // un día a otro en cuatro publicaciones distintas (25-sep-2026). No es venta
+    else if (b.numReviewsApi - a.numReviewsApi > 50 && b.numReviewsApi - a.numReviewsApi > a.numReviewsApi * 0.5) motivo = 'salto-fuente'
     else resenias = Math.max(0, b.numReviewsApi - a.numReviewsApi)
     const preguntas = Array.isArray(a.preguntasIds) && Array.isArray(b.preguntasIds)
       ? b.preguntasIds.filter((id) => !new Set(a.preguntasIds).has(id)).length : null

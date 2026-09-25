@@ -243,3 +243,14 @@ test('panel de competidores: dos publicaciones chicas con la misma cifra no son 
   ]
   assert.deepEqual(paresDeLecturas(snaps).map((p) => p.resenias), [1, 1, 2, 1])
 })
+
+test('panel de competidores: un salto de fuente (ML agrupa reseñas) no es venta', async () => {
+  const { paresDeLecturas } = await import('../src/services/ml/competidores.js')
+  const d = (n) => new Date(Date.UTC(2026, 8, 1 + n))
+  const pares = paresDeLecturas([
+    { sku: 'S', keyword: 'k', fecha: d(0), numReviewsApi: 100 }, { sku: 'S', keyword: 'k', fecha: d(7), numReviewsApi: 938 },
+    { sku: 'N', keyword: 'k', fecha: d(0), numReviewsApi: 2000 }, { sku: 'N', keyword: 'k', fecha: d(7), numReviewsApi: 2090 },
+  ])
+  assert.equal(pares.find((p) => p.sku === 'S').motivo, 'salto-fuente')
+  assert.equal(pares.find((p) => p.sku === 'N').resenias, 90, 'un top que gana 90 en una semana es crecimiento real')
+})

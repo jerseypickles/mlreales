@@ -127,6 +127,9 @@ export function casosStock(seguidos, lecturasPorSku, reseniasPorItem) {
     const en = (fecha) => { const d = new Date(fecha).toISOString().slice(0, 10); return serie.filter((x) => x.dia <= d).at(-1) ?? null }
     const r0 = en(mejor.inicio), r1 = en(mejor.fin)
     if (!r0 || !r1 || r1.dia === r0.dia) continue
+    // un salto de fuente dentro de la ventana (ML agrupó reseñas) no es venta
+    const tramo = serie.filter((x) => x.dia >= r0.dia && x.dia <= r1.dia)
+    if (tramo.some((x, i) => i > 0 && x.numReviews - tramo[i - 1].numReviews > 50 && x.numReviews - tramo[i - 1].numReviews > tramo[i - 1].numReviews * 0.5)) continue
     casos.push({ itemId, sku: s.sku, keyword: s.keyword, unidades: mejor.unidades, dias: Math.round(dias * 10) / 10,
       resenias: Math.max(0, r1.numReviews - r0.numReviews), reseniasPorVenta: Math.max(0, r1.numReviews - r0.numReviews) / mejor.unidades })
   }
