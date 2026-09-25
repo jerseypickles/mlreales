@@ -254,6 +254,8 @@ router.get(
     // atributos de la ficha técnica: pares nombre → valor del estado embebido
     const atributos = []
     for (const m of html.matchAll(/"text":"([^"]{2,60})","values":\{"value_text":\{"text":"([^"]{1,80})"/g)) atributos.push([m[1], m[2]])
+    // la forma de la tabla de características: {"id":"Código OEM","text":"PN3809"}
+    for (const m of html.matchAll(/\{"id":"([^"]{2,60})","text":"([^"]{1,120})"\}/g)) if (!atributos.some(([n, v]) => n === m[1] && v === m[2])) atributos.push([m[1], m[2]])
     res.json({ chars: html.length, titulo: r?.product?.name ?? null,
       atributosPieza: atributos.filter(([n]) => /pieza|oem|\boe\b|c[oó]digo|parte|part|fmsi|modelo|marca|posici/i.test(n)),
       atributos: atributos.slice(0, 40), contextos })
