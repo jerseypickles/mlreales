@@ -17,11 +17,19 @@ test('nuevos que despegan: aparece en un nicho viejo, sube y gana reseñas; el n
     { sku: 'PAGADO', keyword: 'k', fecha: d(10), posicion: 30, esAnuncio: true }, { sku: 'PAGADO', keyword: 'k', fecha: d(24), posicion: 2, esAnuncio: true },
     // nicho "z" empezó el 20-sep: todo parece nuevo y no cuenta
     { sku: 'Z1', keyword: 'z', fecha: d(20), posicion: 30, numReviewsApi: 0 }, { sku: 'Z1', keyword: 'z', fecha: d(24), posicion: 5, numReviewsApi: 9 },
+    // republicación de algo viejo: llega con 300 reseñas
+    { sku: 'REPUB', keyword: 'k', fecha: d(10), posicion: 8, numReviewsApi: 300 }, { sku: 'REPUB', keyword: 'k', fecha: d(24), posicion: 2, numReviewsApi: 330 },
+    // dos publicaciones del mismo catálogo: mismas reseñas al inicio y al final
+    { sku: 'CAT1', keyword: 'k', fecha: d(10), posicion: 50, numReviewsApi: 5 }, { sku: 'CAT1', keyword: 'k', fecha: d(24), posicion: 12, numReviewsApi: 25 },
+    { sku: 'CAT2', keyword: 'k', fecha: d(10), posicion: 52, numReviewsApi: 5 }, { sku: 'CAT2', keyword: 'k', fecha: d(24), posicion: 15, numReviewsApi: 25 },
+    // se hunde en el ranking aunque gane reseñas
+    { sku: 'HUNDE', keyword: 'k', fecha: d(10), posicion: 20, numReviewsApi: 2 }, { sku: 'HUNDE', keyword: 'k', fecha: d(24), posicion: 60, numReviewsApi: 12 },
     // salto de fuente: 100 → 900 reseñas no es venta, y sin subir de posición no despega
     { sku: 'AGRUPADO', keyword: 'k', fecha: d(10), posicion: 20, numReviewsApi: 100 }, { sku: 'AGRUPADO', keyword: 'k', fecha: d(24), posicion: 19, numReviewsApi: 900 },
   ]
   const r = nuevosQueDespegan(snaps, [{ sku: 'NUEVO', titulo: 'Producto nuevo' }], { ahora: hoy })
-  assert.deepEqual(r.map((x) => x.sku), ['NUEVO'])
-  assert.equal(r[0].subida, 34)
-  assert.equal(r[0].reseniasGanadas, 8)
+  assert.deepEqual(r.map((x) => x.sku).sort(), ['CAT1', 'NUEVO'], 'del catálogo queda uno solo; la republicación y el que se hunde no')
+  const nuevo = r.find((x) => x.sku === 'NUEVO')
+  assert.equal(nuevo.subida, 34)
+  assert.equal(nuevo.reseniasGanadas, 8)
 })

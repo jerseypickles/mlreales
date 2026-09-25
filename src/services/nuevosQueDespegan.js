@@ -18,6 +18,7 @@ import { Producto } from '../models/Producto.js'
 const DIA = 86400e3
 export const VENTANA_NUEVO_DIAS = 30
 const DESPUES_DEL_PRIMER_SCAN_DIAS = 7
+export const NUEVO_MAX_RESENIAS = 30
 
 // Pura. snaps: lecturas del panel; productos: Producto (para foto, Full, etc).
 export function nuevosQueDespegan(snaps, productos, { ahora = new Date(), max = 30 } = {}) {
@@ -31,6 +32,17 @@ export function nuevosQueDespegan(snaps, productos, { ahora = new Date(), max = 
     const k = `${s.keyword}|${s.sku}`
     serie.set(k, [...(serie.get(k) ?? []), s])
   }
+  // reseñas de catálogo compartidas: varias publicaciones del mismo nicho con
+  // idéntico inicio y fin son UN producto (la cortina blackout salía 3 veces
+  // con las mismas 218 reseñas)
+  const trayectoria = new Map()
+  for (const [, lista] of serie) {
+    const o = [...lista].sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha))
+    if (!Number.isFinite(o[0].numReviewsApi) || !Number.isFinite(o.at(-1).numReviewsApi) || o.at(-1).numReviewsApi < 10) continue
+    const t = `${o[0].keyword}|${o[0].numReviewsApi}|${o.at(-1).numReviewsApi}`
+    trayectoria.set(t, [...(trayectoria.get(t) ?? []), o[0].sku])
+  }
+  const compartida = new Set([...trayectoria.values()].filter((xs) => xs.length > 1).flatMap((xs) => xs.slice(1)))
   const salida = []
   for (const [k, lista] of serie) {
     const orden = lista.sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha))
@@ -40,6 +52,10 @@ export function nuevosQueDespegan(snaps, productos, { ahora = new Date(), max = 
     if (t0 < primerScan.get(keyword) + DESPUES_DEL_PRIMER_SCAN_DIAS * DIA) continue // el nicho era nuevo, no el producto
     if (+ahora - t0 > VENTANA_NUEVO_DIAS * DIA) continue
     if (orden.length < 2 || +new Date(ultima.fecha) - t0 < 2 * DIA) continue
+    if (compartida.has(primera.sku)) continue
+    // un producto nuevo de verdad no llega con cientos de reseñas: eso es una
+    // publicación nueva de algo que ya existía (catálogo, republicación)
+    if (Number.isFinite(primera.numReviewsApi) && primera.numReviewsApi > NUEVO_MAX_RESENIAS) continue
     const organicas = orden.filter((s) => Number.isFinite(s.posicion) && s.esAnuncio !== true)
     if (organicas.length < 2) continue // la posición comprada no dice nada
     const subida = organicas[0].posicion - organicas.at(-1).posicion
@@ -48,7 +64,8 @@ export function nuevosQueDespegan(snaps, productos, { ahora = new Date(), max = 
     if (resenias != null && (resenias < 0 || (resenias > 50 && resenias > primera.numReviewsApi * 0.5))) resenias = null
     const baldeSubio = Number.isFinite(primera.vendidos) && Number.isFinite(ultima.vendidos) && ultima.vendidos > primera.vendidos
     const posicion = organicas.at(-1).posicion
-    const despega = (resenias ?? 0) >= 3 || subida >= 10 || baldeSubio || (posicion <= 10 && subida >= 3)
+    // si se hunde en el ranking no despega, aunque sume reseñas
+    const despega = subida > -10 && ((resenias ?? 0) >= 3 || subida >= 10 || baldeSubio || (posicion <= 10 && subida >= 3))
     if (!despega) continue
     const f = ficha.get(primera.sku)
     salida.push({ sku: primera.sku, keyword, titulo: f?.titulo ?? null, imagen: f?.imagen ?? null, url: f?.url ?? null,
