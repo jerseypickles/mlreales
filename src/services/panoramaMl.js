@@ -89,8 +89,11 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 120, pres
   const dia = diaChile(ahora)
   const inicio = Date.now()
   // mientras el árbol no esté completo, la pasada lo avanza primero
-  const arbol = (await CategoriaMl.exists({ actualizadoEl: null })) || !(await CategoriaMl.exists({}))
-    ? await avanzarArbol({ ahora, presupuestoMs: presupuestoMs / 2, obtener }) : null
+  // con mucho árbol por leer, casi toda la pasada va al árbol: sin él no hay
+  // categorías que rankear (1ª pasada: 227 leídas en 2 min, 0 frenos de ML)
+  const porLeer = await CategoriaMl.countDocuments({ actualizadoEl: null })
+  const arbol = porLeer || !(await CategoriaMl.exists({}))
+    ? await avanzarArbol({ ahora, presupuestoMs: presupuestoMs * (porLeer > 300 ? 0.85 : 0.5), obtener }) : null
   const hojas = await CategoriaMl.find({ hoja: true, totalItems: { $gte: MIN_ITEMS_CATEGORIA } }).select('id').sort({ totalItems: -1 }).lean()
   const hechas = new Set(await RankingMasVendidos.distinct('categoriaId', { dia }))
   const delTablero = await categoriasDelTablero().catch(() => new Map())
