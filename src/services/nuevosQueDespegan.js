@@ -64,8 +64,13 @@ export function nuevosQueDespegan(snaps, productos, { ahora = new Date(), max = 
     if (resenias != null && (resenias < 0 || (resenias > 50 && resenias > primera.numReviewsApi * 0.5))) resenias = null
     const baldeSubio = Number.isFinite(primera.vendidos) && Number.isFinite(ultima.vendidos) && ultima.vendidos > primera.vendidos
     const posicion = organicas.at(-1).posicion
-    // si se hunde en el ranking no despega, aunque sume reseñas
-    const despega = subida > -10 && ((resenias ?? 0) >= 3 || subida >= 10 || baldeSubio || (posicion <= 10 && subida >= 3))
+    // LA POSICIÓN SOLA ES RUIDO: ML baraja fuerte más allá del puesto 100 (un
+    // ukelele "saltó" de #177 a #25 con 0 reseñas). Sin señal de venta
+    // (reseñas o balde), solo cuenta si llegó al top 15 y se sostuvo dos
+    // lecturas seguidas. Y si se hunde, no despega aunque sume reseñas.
+    const venta = (resenias ?? 0) >= 3 || baldeSubio
+    const sostenida = organicas.length >= 3 && organicas.slice(-2).every((s) => s.posicion <= 15)
+    const despega = subida > -10 && (venta || (sostenida && subida >= 10))
     if (!despega) continue
     const f = ficha.get(primera.sku)
     salida.push({ sku: primera.sku, keyword, titulo: f?.titulo ?? null, imagen: f?.imagen ?? null, url: f?.url ?? null,

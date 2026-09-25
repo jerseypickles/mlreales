@@ -24,11 +24,15 @@ test('nuevos que despegan: aparece en un nicho viejo, sube y gana reseñas; el n
     { sku: 'CAT2', keyword: 'k', fecha: d(10), posicion: 52, numReviewsApi: 5 }, { sku: 'CAT2', keyword: 'k', fecha: d(24), posicion: 15, numReviewsApi: 25 },
     // se hunde en el ranking aunque gane reseñas
     { sku: 'HUNDE', keyword: 'k', fecha: d(10), posicion: 20, numReviewsApi: 2 }, { sku: 'HUNDE', keyword: 'k', fecha: d(24), posicion: 60, numReviewsApi: 12 },
+    // solo posición, sin venta y sin sostenerse: barajado de ML
+    { sku: 'BARAJA', keyword: 'k', fecha: d(10), posicion: 177, numReviewsApi: 0 }, { sku: 'BARAJA', keyword: 'k', fecha: d(24), posicion: 25, numReviewsApi: 0 },
+    // solo posición pero llega al top y se sostiene: cuenta
+    { sku: 'SOSTIENE', keyword: 'k', fecha: d(10), posicion: 60, numReviewsApi: 0 }, { sku: 'SOSTIENE', keyword: 'k', fecha: d(17), posicion: 12 }, { sku: 'SOSTIENE', keyword: 'k', fecha: d(24), posicion: 9, numReviewsApi: 0 },
     // salto de fuente: 100 → 900 reseñas no es venta, y sin subir de posición no despega
     { sku: 'AGRUPADO', keyword: 'k', fecha: d(10), posicion: 20, numReviewsApi: 100 }, { sku: 'AGRUPADO', keyword: 'k', fecha: d(24), posicion: 19, numReviewsApi: 900 },
   ]
   const r = nuevosQueDespegan(snaps, [{ sku: 'NUEVO', titulo: 'Producto nuevo' }], { ahora: hoy })
-  assert.deepEqual(r.map((x) => x.sku).sort(), ['CAT1', 'NUEVO'], 'del catálogo queda uno solo; la republicación y el que se hunde no')
+  assert.deepEqual(r.map((x) => x.sku).sort(), ['CAT1', 'NUEVO', 'SOSTIENE'], 'del catálogo queda uno solo; la republicación, el que se hunde y el barajado no')
   const nuevo = r.find((x) => x.sku === 'NUEVO')
   assert.equal(nuevo.subida, 34)
   assert.equal(nuevo.reseniasGanadas, 8)
