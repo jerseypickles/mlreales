@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Lightbulb, Search, Sun, Truck, TrendingDown, TrendingUp, Warehouse } from 'lucide-react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
+import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Lightbulb, Search, Sun, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
@@ -7,6 +7,7 @@ import { compararOportunidades } from '../lib/sidebar.js'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 import { GraficoTemporada, GraficoPrecio, GraficoPronostico } from './PanelOportunidad.jsx'
 import { calzaConBusqueda } from '../lib/calzaConBusqueda.js'
+import { tituloTrae } from '../lib/tituloTrae.js'
 import { momentoDeCompra, compararPorMomento } from '../lib/momentoCompra.js'
 
 // LA MESA DE COMPRA. El orden es el mensaje: primero si la gente BUSCA eso
@@ -770,10 +771,58 @@ function ChipTendencia({ t }) {
 // de un nicho mal medido en Google. El sistema sugiere con el volumen medido;
 // aplicar o descartar lo decide el importador, y queda como aprendizaje.
 function MejorasNicho({ o, onRecargar }) {
+  return (
+    <>
+      {o.mejoras.some((x) => x.tipo === 'competencia') ? <MejoraCompetencia o={o} m={o.mejoras.find((x) => x.tipo === 'competencia')} onRecargar={onRecargar} /> : null}
+      {o.mejoras.some((x) => x.tipo === 'medicion') ? <MejoraMedicion o={o} m={o.mejoras.find((x) => x.tipo === 'medicion')} onRecargar={onRecargar} /> : null}
+    </>
+  )
+}
+
+// La búsqueda de ML mezcla otros productos: el vigía los agrupa, verifica la
+// frase contra los títulos y pregunta. Aplicado, el reporte se recalcula.
+function MejoraCompetencia({ o, m, onRecargar }) {
+  const [elegidas, setElegidas] = useState(() => new Set(m.grupos.map((g) => g.frase)))
   const [ocupado, setOcupado] = useState(null)
   const [error, setError] = useState(null)
-  const m = o.mejoras.find((x) => x.tipo === 'medicion')
-  if (!m) return null
+  const accion = async (fn, clave) => {
+    setOcupado(clave); setError(null)
+    try { await fn(); onRecargar() } catch (e) { setError(e.message) } finally { setOcupado(null) }
+  }
+  const alternar = (f) => setElegidas((prev) => { const n = new Set(prev); n.has(f) ? n.delete(f) : n.add(f); return n })
+  return (
+    <div className="mejora" onClick={(e) => e.stopPropagation()}>
+      <div className="mejora-cab"><Lightbulb size={16} aria-hidden="true" /><strong>Mejora detectada: el nicho mide productos que no son</strong></div>
+      <p className="mejora-motivo">{m.motivo}. Marcados, salen del precio, las ventas y el score; los ves tachados en Competencia y se pueden devolver.</p>
+      <ul className="mejora-lista mejora-grupos">
+        {m.grupos.map((g) => (
+          <li key={g.frase}>
+            <label className="mejora-grupo">
+              <input type="checkbox" checked={elegidas.has(g.frase)} onChange={() => alternar(g.frase)} disabled={!!ocupado} />
+              <span>
+                <span className="mejora-kw">{g.nombre}</span>
+                <small className="mejora-ejemplos" title={g.ejemplos.join('\n')}>títulos con «{g.frase}» · ej: {g.ejemplos[0]}</small>
+              </span>
+            </label>
+            <b className="mejora-vol">{g.productos} productos</b>
+            <em className="mejora-rel amplia">{g.pctVendidos != null ? `${g.pctVendidos}% de lo vendido` : `${g.pctProductos}% del top`}</em>
+          </li>
+        ))}
+      </ul>
+      <div className="mejora-pie">
+        <button type="button" className="boton-secundario" disabled={!!ocupado || !elegidas.size} onClick={() => accion(() => api.aplicarMejoraCompetencia(o.nichoId, [...elegidas]), 'aplicar')}>
+          {ocupado === 'aplicar' ? 'recalculando…' : `Sacar ${elegidas.size === 1 ? 'este grupo' : `estos ${elegidas.size} grupos`} del nicho`}
+        </button>
+        <button type="button" className="enlace-boton" disabled={!!ocupado} onClick={() => accion(() => api.descartarMejora(o.nichoId, 'competencia'), 'descartar')}>Descartar: todos son del nicho</button>
+        {error ? <span className="mejora-error">{error}</span> : null}
+      </div>
+    </div>
+  )
+}
+
+function MejoraMedicion({ o, m, onRecargar }) {
+  const [ocupado, setOcupado] = useState(null)
+  const [error, setError] = useState(null)
   const accion = async (fn, clave) => {
     setOcupado(clave); setError(null)
     try { await fn(); onRecargar() } catch (e) { setError(e.message) } finally { setOcupado(null) }
@@ -1512,6 +1561,17 @@ const idsDe = (p) => [p.sku, p.itemId, p.catalogId].filter(Boolean)
 function CompetenciaNicho({ o }) {
   const [datos, setDatos] = useState(null)
   const [todos, setTodos] = useState(false)
+  const [version, setVersion] = useState(0)
+  const [marcando, setMarcando] = useState(null) // sku al que se le escribe la frase
+  const [frase, setFrase] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+  const [error, setError] = useState(null)
+  // sacar o devolver productos del nicho: recalcula el reporte en el servidor
+  const ajustar = async (cambios) => {
+    setOcupado(true); setError(null)
+    try { await api.ajustarExcluidos(o.nichoId, cambios); setMarcando(null); setFrase(''); setVersion((v) => v + 1) }
+    catch (e) { setError(e.message) } finally { setOcupado(false) }
+  }
   useEffect(() => {
     let vivo = true
     Promise.all([
@@ -1520,7 +1580,7 @@ function CompetenciaNicho({ o }) {
       api.seguimiento(o.keyword).catch(() => null),
     ]).then(([prod, mv, seg]) => vivo && setDatos({ prod, cat: mv?.categorias?.[0] ?? null, seguidos: seg?.nichos?.find((n) => n.keyword === o.keyword)?.publicaciones ?? [] }))
     return () => { vivo = false }
-  }, [o.nichoId, o.keyword])
+  }, [o.nichoId, o.keyword, version])
   if (!datos) return <Cargando texto="Juntando la competencia…" />
   const productos = datos.prod?.productos ?? []
   if (!productos.length) return <p className="prod-vacio">El scan no dejó productos.</p>
@@ -1538,12 +1598,22 @@ function CompetenciaNicho({ o }) {
         {datos.cat ? <> · <strong>{enRanking}</strong> están entre los más vendidos de «{datos.cat.categoriaNombre ?? 'la categoría'}»</> : null}
         {conStock ? <> · <strong>{conStock}</strong> con stock seguido</> : null}
       </p>
+      {datos.prod.excluidas?.length ? (
+        <p className="comp-excluidas">
+          <span>No se miden (no son de este nicho):</span>
+          {datos.prod.excluidas.map((f) => (
+            <button key={f} type="button" className="comp-excluida" disabled={ocupado} title="Devolver al nicho" onClick={() => ajustar({ quitar: [f] })}>«{f}» <X size={11} aria-hidden="true" /></button>
+          ))}
+        </p>
+      ) : null}
+      {error ? <p className="mejora-error">{error}</p> : null}
       <ol className="prod-lista">
         {(todos ? productos : productos.slice(0, 10)).map((p) => {
           const r = idsDe(p).map((id) => ranking.get(id)).find(Boolean)
           const sg = seguido.get(p.sku)
           return (
-            <li key={p.sku} className={`prod-fila${r ? ' prod-top' : ''}`}>
+            <Fragment key={p.sku}>
+            <li className={`prod-fila${r ? ' prod-top' : ''}${p.fueraDelNicho ? ' prod-fuera' : ''}`}>
               <span className="prod-pos">{p.posicion ?? '·'}</span>
               {p.imagen ? <Miniatura className="prod-foto" src={p.imagen} lado={44} /> : <span className="prod-foto prod-foto-vacia" aria-hidden="true" />}
               <div className="prod-centro">
@@ -1561,6 +1631,9 @@ function CompetenciaNicho({ o }) {
                   {p.origenCrossBorder ? <span className="prod-chip chip-cbt" title="Se despacha desde el exterior">del exterior</span> : null}
                   {p.tipoListing === 'catalogo' ? <span className="prod-chip chip-catalogo">catálogo</span> : null}
                   {p.esAnuncio ? <span className="prod-chip chip-anuncio" title="Posición pagada: no cuenta para el top del nicho">anuncio</span> : null}
+                  {p.fueraDelNicho ? <span className="prod-chip chip-fuera" title="No cuenta para precio, ventas ni score">no es del nicho · «{p.fueraDelNicho}»</span> : (
+                    <button type="button" className="prod-sacar" onClick={() => { setMarcando(marcando === p.sku ? null : p.sku); setFrase('') }}>no es de este nicho</button>
+                  )}
                 </div>
               </div>
               <div className="prod-numeros">
@@ -1572,6 +1645,19 @@ function CompetenciaNicho({ o }) {
                 {Number.isFinite(p.resenasNuevasDia) && p.resenasNuevasDia > 0 ? <span className="prod-velocidad">{p.resenasNuevasDia} reseñas/día</span> : null}
               </div>
             </li>
+            {marcando === p.sku ? (
+              <li className="prod-marcar">
+                <form onSubmit={(e) => { e.preventDefault(); if (frase.trim()) ajustar({ agregar: [frase.trim()] }) }}>
+                  <label>
+                    ¿Qué palabra lo delata? Todos los títulos que la traigan dejan de medirse
+                    <input autoFocus value={frase} onChange={(e) => setFrase(e.target.value)} placeholder="ej: toldo" maxLength={60} />
+                  </label>
+                  {frase.trim() ? <small>{productos.filter((x) => !x.fueraDelNicho && tituloTrae(x.titulo, frase)).length} de estos {productos.length} salen</small> : null}
+                  <button type="submit" className="boton-secundario" disabled={ocupado || !frase.trim()}>{ocupado ? 'recalculando…' : 'Sacar del nicho'}</button>
+                </form>
+              </li>
+            ) : null}
+            </Fragment>
           )
         })}
       </ol>

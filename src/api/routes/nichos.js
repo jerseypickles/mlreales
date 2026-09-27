@@ -467,7 +467,8 @@ router.get(
     const nicho = await Nicho.findById(req.params.id)
     if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
 
-    const vista = await obtenerProductosUltimoScan(nicho)
+    // el panel muestra también lo que no es del nicho, tachado y con la frase
+    const vista = await obtenerProductosUltimoScan(nicho, { incluirExcluidos: true })
     if (!vista) return res.status(404).json({ error: 'aún no hay scans completados para este nicho' })
 
     // `limite` es para la vista de la mesa: al abrir un nicho en Oportunidades
@@ -479,7 +480,7 @@ router.get(
       ? vista.productos.slice(0, limite).map(({ preguntas, ...resto }) => resto)
       : vista.productos
 
-    res.json({ fechaScan: vista.fechaScan, total: vista.productos.length, productos })
+    res.json({ fechaScan: vista.fechaScan, total: vista.productos.length, productos, excluidas: nicho.competenciaExcluida ?? [] })
   }),
 )
 
@@ -552,6 +553,24 @@ router.post(
     const { aplicarMejoraMedicion } = await import('../../services/vigiaMejoras.js')
     const r = await aplicarMejoraMedicion(req.params.id, String(req.body?.keyword ?? ''))
     res.status(r.error ? 409 : 200).json(r)
+  }),
+)
+router.post(
+  '/:id/mejoras/competencia/aplicar',
+  manejar(async (req, res) => {
+    const { aplicarMejoraCompetencia } = await import('../../services/vigiaMejoras.js')
+    const r = await aplicarMejoraCompetencia(req.params.id, Array.isArray(req.body?.frases) ? req.body.frases.map(String) : [])
+    res.status(r.error ? 409 : 200).json(r)
+  }),
+)
+// lo que no es del nicho, a mano: { agregar: [frase], quitar: [frase] }
+router.post(
+  '/:id/competencia-excluida',
+  manejar(async (req, res) => {
+    const { ajustarExclusiones } = await import('../../services/vigiaMejoras.js')
+    const lista = (v) => (Array.isArray(v) ? v : v ? [v] : []).map(String)
+    const r = await ajustarExclusiones(req.params.id, { agregar: lista(req.body?.agregar), quitar: lista(req.body?.quitar) })
+    res.status(r.error ? 400 : 200).json(r)
   }),
 )
 router.post(

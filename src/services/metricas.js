@@ -1,6 +1,7 @@
 import { Producto } from '../models/Producto.js'
 import { Snapshot } from '../models/Snapshot.js'
 import { scoring } from '../config/scoring.js'
+import { fraseQueExcluye, separarSnapshots } from './filtroNicho.js'
 
 export function percentil(valoresOrdenados, p) {
   const n = valoresOrdenados.length
@@ -913,15 +914,26 @@ export function ventaEntreLecturas(antes, ahora) {
   return { ...base, unidades, esPiso: !exacta, porDia: redondear(unidades / dias, 2) }
 }
 
-export async function obtenerProductosUltimoScan(nicho) {
+// Por defecto sin lo que no es del nicho (análisis, listing y tabla lo leen
+// limpio); `incluirExcluidos` los deja marcados con `fueraDelNicho` para que
+// el panel los muestre tachados.
+export async function obtenerProductosUltimoScan(nicho, { incluirExcluidos = false } = {}) {
   const ultimo = await Snapshot.findOne({ keyword: nicho.keyword }).sort({ fecha: -1 }).lean()
   if (!ultimo) return null
 
-  const snapshots = await Snapshot.find({ keyword: nicho.keyword, fecha: ultimo.fecha })
+  let snapshots = await Snapshot.find({ keyword: nicho.keyword, fecha: ultimo.fecha })
     .sort({ posicion: 1 })
     .lean()
   const productos = await Producto.find({ sku: { $in: snapshots.map((s) => s.sku) } }).lean()
   const porSku = new Map(productos.map((p) => [p.sku, p]))
+  const fueraPor = new Map()
+  if (nicho.competenciaExcluida?.length) {
+    for (const s of snapshots) {
+      const f = fraseQueExcluye(porSku.get(s.sku)?.titulo, nicho.competenciaExcluida)
+      if (f) fueraPor.set(s.sku, f)
+    }
+    if (!incluirExcluidos) snapshots = snapshots.filter((s) => !fueraPor.has(s.sku))
+  }
 
   // el nivel 2 puede fallar parcialmente (bloqueos de ML): para reviews/rating usar
   // el último valor conocido — son acumulativos, el dato anterior sigue siendo válido
@@ -1051,6 +1063,7 @@ export async function obtenerProductosUltimoScan(nicho) {
         origenCrossBorder: p.origenCrossBorder ?? false,
         tipoListing: p.tipoListing ?? null,
         primeraVezVisto: p.primeraVezVisto ?? null,
+        fueraDelNicho: fueraPor.get(s.sku) ?? undefined,
       }
     }),
   }
@@ -1142,7 +1155,7 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   const ultimoSnap = await Snapshot.findOne({ keyword: nicho.keyword }).sort({ fecha: -1 }).lean()
   if (!ultimoSnap) return null
 
-  const snapshots = await Snapshot.find({ keyword: nicho.keyword, fecha: ultimoSnap.fecha }).lean()
+  let snapshots = await Snapshot.find({ keyword: nicho.keyword, fecha: ultimoSnap.fecha }).lean()
   const productos = await Producto.find({ sku: { $in: snapshots.map((s) => s.sku) } }).lean()
   const productosPorSku = new Map(productos.map((p) => [p.sku, p]))
 
@@ -1159,9 +1172,22 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
     (await Snapshot.findOne({ keyword: nicho.keyword, fecha: { $lt: ultimoSnap.fecha } })
       .sort({ fecha: -1 })
       .lean())
-  const snapshotsPrevios = snapPrevio
+  let snapshotsPrevios = snapPrevio
     ? await Snapshot.find({ keyword: nicho.keyword, fecha: snapPrevio.fecha }).lean()
     : null
+
+  // lo que no es del nicho no se mide (services/filtroNicho.js): se saca de
+  // los dos scans para que el delta compare el mismo producto
+  let excluidos = null
+  if (nicho.competenciaExcluida?.length) {
+    const faltan = (snapshotsPrevios ?? []).map((s) => s.sku).filter((sku) => !productosPorSku.has(sku))
+    if (faltan.length) for (const p of await Producto.find({ sku: { $in: faltan } }).select('sku titulo').lean()) productosPorSku.set(p.sku, p)
+    const hoy = separarSnapshots(snapshots, productosPorSku, nicho.competenciaExcluida)
+    snapshots = hoy.dentro
+    if (snapshotsPrevios) snapshotsPrevios = separarSnapshots(snapshotsPrevios, productosPorSku, nicho.competenciaExcluida).dentro
+    excluidos = { productos: hoy.fuera.length, frases: nicho.competenciaExcluida }
+    if (!snapshots.length) return null
+  }
 
   // antes de medir nada: las lecturas de reseñas que retroceden son scrapeos
   // fallidos y se anulan, para que la buena que viene detrás no se lea como un
@@ -1230,6 +1256,7 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
     ratioPico: curvaNicho?.ratioPico ?? null,
     comisionPct,
   })
+  if (excluidos) metricas.competencia.excluidos = excluidos
   const gemelos = detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPrevios })
   if (gemelos) metricas.competencia.sellersGemelos = gemelos
   const porUnidad = preciosPorUnidad({ snapshots, productosPorSku })
