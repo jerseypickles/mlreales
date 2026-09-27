@@ -237,6 +237,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         recargoTransportePct: 1,
         productosCotizados: 1,
         tablaTallasProveedor: 1,
+        mejoras: 1,
         exwCotizadoEl: 1,
         costoPuestoClp: 1,
         costoPuestoEl: 1,
@@ -576,6 +577,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
       titular: rec.titular ?? null,
       // ropa: la tabla del proveedor llevada a talla chilena por cm
       tallas: n.tablaTallasProveedor?.length ? equivalenciaChilena(n.tablaTallasProveedor) : null,
+      // lo que el vigía encontró para mejorar y espera la decisión del importador
+      mejoras: (n.mejoras ?? []).filter((m) => m.estado === 'pendiente'),
       // repuestos: qué pieza y para qué autos y años, que es lo que se cotiza
       planRepuestos: Array.isArray(analisis?.planRepuestos) && analisis.planRepuestos.length
         ? [...analisis.planRepuestos].sort((a, b) => (a.prioridad ?? 99) - (b.prioridad ?? 99)).slice(0, 4)

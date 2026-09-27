@@ -13,6 +13,9 @@ const nichoSchema = new mongoose.Schema({
   origen: { type: String, enum: ['manual', 'radar', 'jugada'], default: 'manual' },
   // metadata del descubrimiento del radar: razon, estacionalidad, ventanaImportacion
   radarInfo: { type: mongoose.Schema.Types.Mixed, default: null },
+  // MEJORAS que el vigía detecta y el importador aprueba o descarta
+  // (services/vigiaMejoras.js): [{tipo, estado, detectadoEl, motivo, candidatas, ...}]
+  mejoras: { type: [mongoose.Schema.Types.Mixed], default: undefined },
   // ¿alguien BUSCA esta keyword? Medido contra el autocompletado de ML (gratis).
   // Un nicho puede tener veredicto de entrada y ser puro ruido si nadie escribe
   // esa frase — el radar inventa keywords largas que no existen.

@@ -545,6 +545,23 @@ router.post(
   }),
 )
 
+// MEJORAS DEL VIGÍA: aprobar la keyword chilena sugerida, o descartar
+router.post(
+  '/:id/mejoras/medicion/aplicar',
+  manejar(async (req, res) => {
+    const { aplicarMejoraMedicion } = await import('../../services/vigiaMejoras.js')
+    const r = await aplicarMejoraMedicion(req.params.id, String(req.body?.keyword ?? ''))
+    res.status(r.error ? 409 : 200).json(r)
+  }),
+)
+router.post(
+  '/:id/mejoras/:tipo/descartar',
+  manejar(async (req, res) => {
+    const { descartarMejora } = await import('../../services/vigiaMejoras.js')
+    res.json(await descartarMejora(req.params.id, req.params.tipo))
+  }),
+)
+
 // Ajustar un nicho a mano: pausar/reactivar o cambiar su cadencia de scan
 // (diario = modo lupa para el nicho al que le vas a poner plata; semanal = seguimiento)
 const ajustarNicho = manejar(async (req, res) => {

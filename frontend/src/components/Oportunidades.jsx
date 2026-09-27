@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Search, Sun, Truck, TrendingDown, TrendingUp, Warehouse } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Lightbulb, Search, Sun, Truck, TrendingDown, TrendingUp, Warehouse } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
@@ -492,6 +492,7 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
         <ChipTramo mediana={o.mediana} />
         <ChipSinFull o={o} />
         <ChipTendencia t={tendencia} />
+        {o.mejoras?.length ? <em className="op-mejora-icono" title={`El sistema detectó ${o.mejoras.length === 1 ? 'una mejora' : `${o.mejoras.length} mejoras`}: ${o.mejoras.map((m) => m.motivo).join(' · ')}`}><Lightbulb size={12} aria-hidden="true" />mejora</em> : null}
         <NuevoBadge creadoEl={o.creadoEl} />
         {o.nivelBusqueda?.nivel === 'renombrar' ? <i className="op-fila-alerta" title="La gente escribe otra frase">keyword</i> : null}
         <span className="op-fila-momento">
@@ -765,6 +766,42 @@ function ChipTendencia({ t }) {
   )
 }
 
+// LO QUE EL VIGÍA ENCONTRÓ (services/vigiaMejoras.js). Hoy: el nombre chileno
+// de un nicho mal medido en Google. El sistema sugiere con el volumen medido;
+// aplicar o descartar lo decide el importador, y queda como aprendizaje.
+function MejorasNicho({ o, onRecargar }) {
+  const [ocupado, setOcupado] = useState(null)
+  const [error, setError] = useState(null)
+  const m = o.mejoras.find((x) => x.tipo === 'medicion')
+  if (!m) return null
+  const accion = async (fn, clave) => {
+    setOcupado(clave); setError(null)
+    try { await fn(); onRecargar() } catch (e) { setError(e.message) } finally { setOcupado(null) }
+  }
+  return (
+    <div className="mejora" onClick={(e) => e.stopPropagation()}>
+      <div className="mejora-cab"><Lightbulb size={16} aria-hidden="true" /><strong>Mejora detectada: en Chile se busca con otro nombre</strong></div>
+      <p className="mejora-motivo">{m.motivo}. Hoy se mide como «{m.medidaActual?.keyword}» ({fmtNum(m.medidaActual?.volumen ?? 0)}/mes).</p>
+      <ul className="mejora-lista">
+        {m.candidatas.map((c) => (
+          <li key={c.keyword}>
+            <span className="mejora-kw">«{c.keyword}»</span>
+            <b className="mejora-vol">{fmtNum(c.volumen)}/mes</b>
+            <em className={`mejora-rel ${c.relacion === 'mismo-producto' ? 'ok' : 'amplia'}`} title={c.nota}>{c.relacion === 'mismo-producto' ? 'mismo producto' : 'familia más amplia'}</em>
+            <button type="button" className="boton-secundario" disabled={!!ocupado} onClick={() => accion(() => api.aplicarMejoraMedicion(o.nichoId, c.keyword), c.keyword)}>
+              {ocupado === c.keyword ? 'aplicando…' : 'Usar esta'}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="mejora-pie">
+        <button type="button" className="enlace-boton" disabled={!!ocupado} onClick={() => accion(() => api.descartarMejora(o.nichoId, 'medicion'), 'descartar')}>Descartar: la medición actual está bien</button>
+        {error ? <span className="mejora-error">{error}</span> : null}
+      </div>
+    </div>
+  )
+}
+
 // ROPA: la tabla del proveedor llevada a talla chilena por cm (ver
 // services/tallasChile.js). Se publica con la letra chilena, no con la suya.
 function TallasChile({ t }) {
@@ -992,6 +1029,7 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronos
         ) : null}
 
         {o.titular ? <p className="op-titular">{o.titular}</p> : null}
+        {o.mejoras?.length ? <MejorasNicho o={o} onRecargar={onRecargar} /> : null}
         {o.tallas ? <TallasChile t={o.tallas} /> : null}
         {/* repuestos: la compra es por pieza y por auto — sin modelo y años no se cotiza */}
         {o.planRepuestos?.length ? (

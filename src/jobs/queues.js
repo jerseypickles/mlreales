@@ -131,6 +131,12 @@ export async function registrarProgramados() {
     { pattern: process.env.TIENDAS_CRON || '5 10 * * *', tz: 'America/Santiago' },
     { name: 'tiendas-ganadoras', data: {} },
   )
+  // el vigía de mejoras: nichos mal medidos → nombre chileno sugerido
+  await colas.tendencias.upsertJobScheduler(
+    'vigia-mejoras',
+    { pattern: process.env.VIGIA_CRON || '15 11 * * *', tz: 'America/Santiago' },
+    { name: 'vigia-mejoras', data: {} },
+  )
   // el ranking oficial de más vendidos, una vez al día (gratis: API de ML).
   // 07:40, antes del radar de las 08:00, que lee lo que entró al top.
   await colas.tendencias.upsertJobScheduler(

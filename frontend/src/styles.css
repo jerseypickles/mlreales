@@ -7398,3 +7398,22 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .tallas-tabla td b { color: var(--tinta); }
 .tallas-tabla tr.chica td:first-child { color: var(--peligro); font-weight: 700; }
 .tallas-nota { margin: 8px 0 0; font-size: 11.5px; color: var(--tinta-3); }
+/* vigía de mejoras: ícono en la fila y tarjeta en el panel */
+.op-mejora-icono { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; font-style: normal; color: #7a5a00; background: #fff4cc; border: 1px solid #f0cf5a; white-space: nowrap; }
+.mejora { margin: 6px 0 14px; padding: 12px 14px; border: 1px solid #f0cf5a; border-radius: 12px; background: color-mix(in srgb, #fff4cc 55%, var(--superficie)); }
+.mejora-cab { display: flex; align-items: center; gap: 8px; color: var(--tinta); font-size: 14px; }
+.mejora-cab svg { color: #b8860b; }
+.mejora-motivo { margin: 6px 0 10px; font-size: 12.5px; color: var(--tinta-2); }
+.mejora-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.mejora-lista li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 10px; background: var(--superficie); border: 1px solid var(--borde); }
+.mejora-kw { font-weight: 600; color: var(--tinta); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mejora-vol { font-variant-numeric: tabular-nums; }
+.mejora-rel { font-size: 10.5px; font-style: normal; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+.mejora-rel.ok { color: var(--exito-tinta); background: color-mix(in srgb, var(--exito) 12%, transparent); }
+.mejora-rel.amplia { color: var(--avisa-tinta); background: color-mix(in srgb, var(--avisa-tinta) 12%, transparent); }
+.mejora-pie { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12.5px; }
+.mejora-error { color: var(--peligro); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .op-mejora-icono { color: #ffd966; background: #3a3000; border-color: #6b5800; } :root:not([data-theme="light"]) .mejora { background: color-mix(in srgb, #3a3000 40%, var(--superficie)); border-color: #6b5800; } }
+:root[data-theme="dark"] .op-mejora-icono { color: #ffd966; background: #3a3000; border-color: #6b5800; }
+:root[data-theme="dark"] .mejora { background: color-mix(in srgb, #3a3000 40%, var(--superficie)); border-color: #6b5800; }
+@media (max-width: 640px) { .mejora-lista li { grid-template-columns: 1fr auto; } }

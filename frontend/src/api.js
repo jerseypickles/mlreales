@@ -33,6 +33,8 @@ export const api = {
   productosNicho: (id, limite) => pedir(`/api/nichos/${id}/productos${limite ? `?limite=${limite}` : ''}`),
   escanear: (id) => pedir(`/api/nichos/${id}/scan`, { method: 'POST' }),
   ajustarNicho: (id, cambios) => pedir(`/api/nichos/${id}`, { ...json(cambios), method: 'PATCH' }),
+  aplicarMejoraMedicion: (id, keyword) => pedir(`/api/nichos/${id}/mejoras/medicion/aplicar`, { ...json({ keyword }), method: 'POST' }),
+  descartarMejora: (id, tipo) => pedir(`/api/nichos/${id}/mejoras/${tipo}/descartar`, { method: 'POST' }),
   historia: (sku) => pedir(`/api/productos/${sku}/historia`),
   analizarNicho: (id) => pedir(`/api/nichos/${id}/analisis`, { method: 'POST' }),
   medirJugada: (id) => pedir(`/api/nichos/${id}/medir-jugada`, { method: 'POST' }),

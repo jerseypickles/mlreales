@@ -175,6 +175,11 @@ router.post('/corregir-mediciones', async (_req, res) => {
   res.json({ revisados: sinCorreccion.length,
     corregidos: filas.filter((f) => f.keywordMedida).map((f) => ({ keyword: f.keyword, medidaComo: f.keywordMedida, antes: antes.get(f.keyword), ahora: f.volumenExacto })) })
 })
+// El vigía de mejoras: busca nichos mal medidos y sugiere su nombre chileno
+router.post('/vigia', async (_req, res) => {
+  const job = await obtenerColas().tendencias.add('vigia-mejoras', {}, { jobId: `vigia-manual-${Math.floor(Date.now() / 300000)}` })
+  res.status(202).json({ jobId: job.id })
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {

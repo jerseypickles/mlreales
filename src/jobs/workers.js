@@ -1132,6 +1132,7 @@ export function iniciarWorkers() {
       if (job.name === 'resenias-diarias') return import('../services/reseniasDiarias.js').then((m) => m.pasadaResenias())
       if (job.name === 'panorama-ml') return import('../services/panoramaMl.js').then((m) => m.pasadaPanorama())
       if (job.name === 'tiendas-ganadoras') return import('../services/tiendasGanadoras.js').then((m) => m.pasadaTiendas())
+      if (job.name === 'vigia-mejoras') return import('../services/vigiaMejoras.js').then((m) => m.pasadaVigia())
       if (job.name === 'nivel-busqueda') return procesarNivelBusqueda(job)
       if (job.name === 'refresco-curvas') return procesarRefrescoCurvas()
       return procesarTendencias(job)
