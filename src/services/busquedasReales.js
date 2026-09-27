@@ -8,7 +8,7 @@ import { fetchResidencial } from './proxyApify.js'
 const SITE_POR_DOMINIO = { CL: 'MLC' }
 
 // palabras que no cambian la búsqueda ("freidora de aire" ≡ "freidora aire")
-const STOPWORDS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'para', 'con', 'y', 'o', 'en'])
+const STOPWORDS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'para', 'con', 'y', 'o', 'en', 'al', 'a'])
 
 export function normalizarTexto(texto) {
   return String(texto)

@@ -50,6 +50,8 @@ test('corrección mecánica: purificador aire → purificador de aire, pero nunc
   assert.ok(candidatasMecanicas('olla presion').includes('olla a presion'))
   const vols = new Map([['purificador aire', 320], ['purificador de aire', 14800], ['purificador para aire', 50]])
   assert.equal(elegirCorreccion('purificador aire', vols).keyword, 'purificador de aire')
+  assert.equal(elegirCorreccion('selladora vacio', new Map([['selladora vacio', 110], ['selladora al vacio', 8100]])).keyword, 'selladora al vacio')
+  assert.equal(elegirCorreccion('olla presion', new Map([['olla presion', 1900], ['olla a presion', 18100]])).keyword, 'olla a presion')
   const sinonimo = new Map([['aspiradora escoba', 210], ['aspiradora vertical', 12100]])
   assert.equal(elegirCorreccion('aspiradora escoba', sinonimo), null, 'otro sustantivo: eso no se corrige solo')
 })
