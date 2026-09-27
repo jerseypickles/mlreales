@@ -16,3 +16,15 @@ test('panorama: búsquedas nuevas = las que no estaban en la captura anterior', 
   assert.deepEqual(terminosNuevos(['a', 'b', 'c'], ['b', 'x']), ['a', 'c'])
   assert.deepEqual(terminosNuevos(['a'], undefined), ['a'])
 })
+
+test('panorama: las grandes a diario, las chicas cada 3 días', async () => {
+  const { hojasQueTocan, DIARIAS } = await import('../src/services/panoramaMl.js')
+  const hojas = Array.from({ length: DIARIAS + 3 }, (_, i) => ({ id: `C${i}` }))
+  const ultima = new Map([['C0', '2026-09-27'], ['C1', '2026-09-26'], [`C${DIARIAS}`, '2026-09-26'], [`C${DIARIAS + 1}`, '2026-09-24']])
+  const tocan = new Set(hojasQueTocan(hojas, ultima, '2026-09-27').map((h) => h.id))
+  assert.equal(tocan.has('C0'), false, 'ya leída hoy')
+  assert.equal(tocan.has('C1'), true, 'grande: todos los días')
+  assert.equal(tocan.has(`C${DIARIAS}`), false, 'chica leída ayer: espera')
+  assert.equal(tocan.has(`C${DIARIAS + 1}`), true, 'chica leída hace 3 días: toca')
+  assert.equal(tocan.has(`C${DIARIAS + 2}`), true, 'chica nunca leída: toca')
+})

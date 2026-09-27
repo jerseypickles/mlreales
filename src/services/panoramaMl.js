@@ -85,7 +85,29 @@ export async function avanzarArbol({ ahora = new Date(), presupuestoMs = 150_000
 
 // Una pasada: ranking de hoy de las categorías finales con volumen que falten,
 // y las búsquedas que suben de las que tengan la captura vencida.
-export async function pasadaPanorama({ ahora = new Date(), porPasada = 120, presupuestoMs = 240_000, obtener = meliGet } = {}) {
+// El árbol resultó de 12.145 categorías y 6.029 hojas con volumen (27-sep): a
+// 120 por hora no alcanzaba ni la mitad al día, y las búsquedas que suben
+// quedaban sin tiempo (solo 13 capturas). Ahora: las 3.000 hojas más grandes a
+// diario, el resto cada 3 días, y un cupo FIJO de tendencias por pasada.
+export const DIARIAS = 3000
+export const CADA_DIAS_RESTO = 3
+export const TENDENCIAS_POR_PASADA = 40
+
+// Pura. Qué hojas tocan hoy: las grandes si no se leyeron hoy; las chicas si su
+// última lectura tiene 3 días o más. hojas: ordenadas por totalItems desc;
+// ultima: Map(categoriaId → día AAAA-MM-DD de su última captura).
+export function hojasQueTocan(hojas, ultima, dia) {
+  const limite = new Date(`${dia}T12:00:00Z`)
+  limite.setUTCDate(limite.getUTCDate() - CADA_DIAS_RESTO)
+  const corte = limite.toISOString().slice(0, 10)
+  return hojas.filter((h, i) => {
+    const u = ultima.get(h.id)
+    if (u === dia) return false
+    return i < DIARIAS || !u || u <= corte
+  })
+}
+
+export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, presupuestoMs = 240_000, obtener = meliGet } = {}) {
   const dia = diaChile(ahora)
   const inicio = Date.now()
   // mientras el árbol no esté completo, la pasada lo avanza primero
@@ -96,11 +118,14 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 120, pres
     ? await avanzarArbol({ ahora, presupuestoMs: presupuestoMs * (porLeer > 300 ? 0.85 : 0.5), obtener }) : null
   const hojas = await CategoriaMl.find({ hoja: true, totalItems: { $gte: MIN_ITEMS_CATEGORIA } }).select('id').sort({ totalItems: -1 }).lean()
   const hechas = new Set(await RankingMasVendidos.distinct('categoriaId', { dia }))
+  const ultima = new Map((await RankingMasVendidos.aggregate([{ $group: { _id: '$categoriaId', dia: { $max: '$dia' } } }])).map((x) => [x._id, x.dia]))
   const delTablero = await categoriasDelTablero().catch(() => new Map())
-  const pendientes = hojas.filter((h) => !hechas.has(h.id)).slice(0, porPasada)
+  const pendientes = hojasQueTocan(hojas, ultima, dia).slice(0, porPasada)
+  // el tiempo de las tendencias se reserva antes de que el ranking lo consuma
+  const presupuestoRanking = presupuestoMs * 0.8
   let capturadas = 0, frenos = 0, movidas = 0
   for (const { id } of pendientes) {
-    if (Date.now() - inicio > presupuestoMs) break
+    if (Date.now() - inicio > presupuestoRanking) break
     const r = await pedir(`/highlights/MLC/category/${id}`, obtener)
     if (r.frenado) { frenos++; await esperar(PAUSA_429_MS); continue }
     const items = normalizarDestacados(r.datos)
@@ -120,7 +145,7 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 120, pres
   const vencida = diaChile(+ahora - REFRESCO_TENDENCIAS_DIAS * DIA)
   const conTendencia = new Set(await TendenciaCategoria.distinct('categoriaId', { dia: { $gt: vencida } }))
   let tendencias = 0
-  for (const { id } of hojas.filter((h) => !conTendencia.has(h.id)).slice(0, Math.max(0, porPasada - pendientes.length))) {
+  for (const { id } of hojas.filter((h) => !conTendencia.has(h.id)).slice(0, TENDENCIAS_POR_PASADA)) {
     if (Date.now() - inicio > presupuestoMs) break
     const r = await pedir(`/trends/MLC/${id}`, obtener)
     if (r.frenado) { frenos++; await esperar(PAUSA_429_MS); continue }
