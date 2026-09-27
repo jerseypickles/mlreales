@@ -163,6 +163,10 @@ export function verificarGrupos(keyword, productos, grupos) {
   for (const g of grupos.filter((x) => !x.esDelNicho && x.frase?.trim())) {
     const frase = g.frase.trim().toLowerCase()
     if (tituloTraeFrase(keyword, frase)) continue // "carpa" sacaría el nicho entero
+    // una palabra corta y genérica ("mini") pasa la prueba de hoy y mañana saca
+    // un producto del nicho que la traiga: sola, tiene que ser específica
+    const ws = frase.split(/\s+/).filter(Boolean)
+    if (ws.length === 1 && ws[0].length < 5) continue
     const toca = productos.map((p, i) => (tituloTraeFrase(p.titulo, frase) ? i : -1)).filter((i) => i >= 0)
     if (toca.some((i) => delNicho.has(i))) continue // pisa un producto del nicho
     const propios = g.indices.filter((i) => productos[i])
@@ -173,10 +177,20 @@ export function verificarGrupos(keyword, productos, grupos) {
     const pctVendidos = vendidosTotal > 0 ? Math.round((vendidos / vendidosTotal) * 100) : null
     if (pctProductos < 8 && (pctVendidos ?? 0) < 10) continue
     salida.push({ nombre: g.nombre, frase, productos: toca.length, pctProductos, pctVendidos,
-      ejemplos: toca.slice(0, 3).map((i) => productos[i].titulo) })
+      ejemplos: toca.slice(0, 3).map((i) => productos[i].titulo), toca })
   }
-  // dos grupos con la misma frase son uno
-  return [...new Map(salida.map((x) => [x.frase, x])).values()].sort((a, b) => (b.pctVendidos ?? 0) - (a.pctVendidos ?? 0) || b.productos - a.productos)
+  // grupos que se pisan son uno: se queda el más grande y cae el que tiene
+  // la mayoría de sus productos ya cubiertos (en "aire acondicionado portátil"
+  // los calefactores de pared salían en tres grupos)
+  const cubiertos = new Set()
+  const finales = []
+  for (const g of salida.sort((a, b) => b.productos - a.productos)) {
+    if (g.toca.filter((i) => cubiertos.has(i)).length / g.toca.length >= 0.5) continue
+    g.toca.forEach((i) => cubiertos.add(i))
+    const { toca, ...resto } = g
+    finales.push(resto)
+  }
+  return finales.sort((a, b) => (b.pctVendidos ?? 0) - (a.pctVendidos ?? 0) || b.productos - a.productos)
 }
 
 async function productosDelScan(nicho) {

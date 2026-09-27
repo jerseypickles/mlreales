@@ -60,3 +60,22 @@ test('verificarGrupos: la frase tiene que describir al grupo que dice la IA', ()
   const grupos = [{ nombre: 'Lonas', esDelNicho: false, frase: 'cubre autos', indices: [0, 1, 4, 8] }]
   assert.deepEqual(verificarGrupos('carpa camping', productos, grupos), [])
 })
+
+test('verificarGrupos: grupos que se pisan quedan en uno, y una palabra corta sola no pasa', () => {
+  const titulos = [
+    'Aire Acondicionado Portátil 9000 BTU Frío', 'Aire Acondicionado Portátil 12000 BTU Frío Calor', 'Aire Acondicionado Portatil Midea 12000',
+    'Aire Acondicionado Calefactor De Pared Frio Calor Portátil', 'Calefactor Mini Acondicionado Portátil De Pared', 'Aire Acondicionado Calefactor De Pared B',
+    'Mini Enfriador Portátil Aire Acondicionado Ventilador', 'Ventilador mini aire acondicionado USB', 'Mini enfriador de aire USB escritorio',
+  ]
+  const productos = titulos.map((titulo) => ({ titulo, vendidos: 100 }))
+  const grupos = [
+    { nombre: 'Aires portátiles', esDelNicho: true, frase: '', indices: [0, 1, 2] },
+    { nombre: 'Calefactor de pared', esDelNicho: false, frase: 'calefactor', indices: [3, 4, 5] },
+    { nombre: 'Calefactor de pared', esDelNicho: false, frase: 'de pared', indices: [3, 4, 5] },
+    { nombre: 'Enfriador USB', esDelNicho: false, frase: 'mini', indices: [6, 7, 8] },
+    { nombre: 'Enfriador USB', esDelNicho: false, frase: 'ventilador', indices: [6, 7] },
+  ]
+  const r = verificarGrupos('aire acondicionado portatil', productos, grupos)
+  assert.deepEqual(r.map((g) => g.frase).sort(), ['calefactor'])
+  assert.equal('toca' in r[0], false)
+})
