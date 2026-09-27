@@ -163,7 +163,7 @@ async function serieTrends(keyword, { locationCode = CHILE, desde = '2021-08-01'
 // Mide una tanda de candidatas: volumen en UNA llamada (el precio es por
 // request, no por keyword) y crecimiento en una consulta por candidata, solo
 // para las que pasaron el piso de volumen.
-export async function medirAtractivo(keywords, { conCrecimiento = true } = {}) {
+export async function medirAtractivo(keywords, { conCrecimiento = true, buscarVariantes = true } = {}) {
   const lista = [...new Set((keywords ?? []).filter(Boolean))]
   if (!lista.length) return []
 
@@ -268,7 +268,7 @@ export async function medirAtractivo(keywords, { conCrecimiento = true } = {}) {
     }
     // sin dato exacto o bajo el piso: preguntar CÓMO SE LLAMA de verdad antes
     // de descartar. Se reportan como sugerencia, jamás se aplican solas.
-    if (fila.sinDatoExacto || !fila.suficiente) {
+    if (buscarVariantes && (fila.sinDatoExacto || !fila.suficiente)) {
       // si la semilla está muerta, Google tampoco genera ideas a partir de
       // ella (medido: "scooter niño" no expande nada). Se reintenta desde la
       // FAMILIA, que sí tiene vida, y el filtro sigue exigiendo que la variante
@@ -312,6 +312,28 @@ export async function medirAtractivo(keywords, { conCrecimiento = true } = {}) {
       fila.crecimiento = fila.suficiente ? 'sin-medir' : 'no-aplica'
     }
     salida.push(fila)
+  }
+
+  // LA CORRECCIÓN SE GUARDA EN LA CURVA DEL NICHO. Se calculaba y se botaba: la
+  // curva de "purificador aire" quedaba con 320 búsquedas y cada refresco la
+  // volvía a escribir cruda, cuando "purificador de aire" son 14.800 (27-sep-
+  // 2026: 46×; "selladora al vacío" 74×, "olla a presión" 9,5×). Solo aplica la
+  // corrección mecánica —mismas palabras de contenido, con la preposición o el
+  // plural restaurados—, nunca un sinónimo: eso lo decide quien mira.
+  try {
+    const { CurvaEstacional } = await import('../models/CurvaEstacional.js')
+    for (const f of salida) {
+      if (!f.keywordMedida) continue
+      const d = volumenes.get(f.keywordMedida)
+      if (!d || !Array.isArray(d.curva) || d.curva.length !== 12) continue
+      const { keyword: _k, _id, ...dato } = d
+      // contra la forma ORIGINAL (volumenExacto ya es el de la corregida)
+      const original = volumenes.get(f.keyword)?.busquedasMes
+      const factor = original > 0 && Number.isFinite(d.busquedasMes) ? Math.round(d.busquedasMes / original * 10) / 10 : null
+      await CurvaEstacional.updateOne({ keyword: f.keyword }, { $set: { ...dato, keyword: f.keyword, keywordMedida: f.keywordMedida, correccionFactor: factor } }, { upsert: true })
+    }
+  } catch (err) {
+    console.warn(`[atractivo] corrección no guardada: ${err.message}`)
   }
   return salida.sort((a, b) => puntaje(b) - puntaje(a))
 }

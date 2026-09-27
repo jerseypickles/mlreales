@@ -160,6 +160,21 @@ router.get('/fuentes-radar', async (_req, res) => {
   const { fuentesDelRadar } = await import('../../services/ml/fuentesRadar.js')
   res.json(await fuentesDelRadar())
 })
+// Mide de nuevo los nichos activos cuya curva no tiene corrección, probando la
+// forma con preposición y plural (una llamada en lote a DataForSEO, sin buscar
+// sinónimos). Devuelve lo que cambió.
+router.post('/corregir-mediciones', async (_req, res) => {
+  const { Nicho } = await import('../../models/Nicho.js')
+  const { CurvaEstacional } = await import('../../models/CurvaEstacional.js')
+  const { medirAtractivo } = await import('../../services/atractivoNicho.js')
+  const nichos = await Nicho.find({ estado: 'activo' }).select('keyword').lean()
+  const curvas = new Map((await CurvaEstacional.find({ keyword: { $in: nichos.map((n) => n.keyword) } }).select('keyword keywordMedida busquedasMes').lean()).map((c) => [c.keyword, c]))
+  const sinCorreccion = nichos.map((n) => n.keyword).filter((k) => !curvas.get(k)?.keywordMedida)
+  const antes = new Map(sinCorreccion.map((k) => [k, curvas.get(k)?.busquedasMes ?? null]))
+  const filas = await medirAtractivo(sinCorreccion, { conCrecimiento: false, buscarVariantes: false })
+  res.json({ revisados: sinCorreccion.length,
+    corregidos: filas.filter((f) => f.keywordMedida).map((f) => ({ keyword: f.keyword, medidaComo: f.keywordMedida, antes: antes.get(f.keyword), ahora: f.volumenExacto })) })
+})
 router.post('/entrenar', async (_req, res) => {
   if (!config.mlActivo) return res.status(409).json({ error: 'ML_ACTIVO=false' })
   const job = await obtenerColas().tendencias.add('entrenar-ml', {}, {

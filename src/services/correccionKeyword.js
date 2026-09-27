@@ -18,7 +18,9 @@ import { palabrasClave, normalizarTexto } from './busquedasReales.js'
 // ondulador es otra palabra y podría ser otro producto. Los sinónimos se
 // muestran aparte para que decida el humano.
 
-const CONECTORES = ['de', 'para', 'de la', 'del', 'con']
+// "al" y "a" faltaban (27-sep-2026): "selladora al vacío" (8.100/mes contra 110
+// de "selladora vacio") y "olla a presión" (18.100 contra 1.900) nunca se probaban
+const CONECTORES = ['de', 'para', 'de la', 'del', 'con', 'al', 'a']
 
 // LA Ñ NO ES UNA TILDE, ES OTRA LETRA — Y GOOGLE LO SABE.
 //

@@ -42,3 +42,14 @@ test('elegirCorreccion: no corrige cuando no vale la pena', () => {
   )
   assert.equal(elegirCorreccion('lo que sea', new Map()), null)
 })
+
+test('corrección mecánica: purificador aire → purificador de aire, pero nunca un sinónimo', async () => {
+  const { candidatasMecanicas, elegirCorreccion } = await import('../src/services/correccionKeyword.js')
+  assert.ok(candidatasMecanicas('purificador aire').includes('purificador de aire'))
+  assert.ok(candidatasMecanicas('selladora vacio').includes('selladora al vacio'))
+  assert.ok(candidatasMecanicas('olla presion').includes('olla a presion'))
+  const vols = new Map([['purificador aire', 320], ['purificador de aire', 14800], ['purificador para aire', 50]])
+  assert.equal(elegirCorreccion('purificador aire', vols).keyword, 'purificador de aire')
+  const sinonimo = new Map([['aspiradora escoba', 210], ['aspiradora vertical', 12100]])
+  assert.equal(elegirCorreccion('aspiradora escoba', sinonimo), null, 'otro sustantivo: eso no se corrige solo')
+})
