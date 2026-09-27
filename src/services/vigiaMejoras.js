@@ -227,6 +227,9 @@ export async function ajustarExclusiones(nichoId, { agregar = [], quitar = [] } 
   for (const f of frases) if (tituloTraeFrase(nicho.keyword, f)) return { error: `«${f}» sacaría el nicho entero: está en la keyword` }
   nicho.competenciaExcluida = frases.length ? frases : undefined
   await nicho.save()
+  // la sospecha de medición se juzgó con otros vendidos: se vuelve a mirar
+  // (en carpa camping sugería "carpa 4 personas" por los vendidos de las lonas)
+  await Nicho.updateOne({ _id: nicho._id }, { $pull: { mejoras: { tipo: 'medicion', estado: { $in: ['pendiente', 'sin-alternativa'] } } } })
   const { generarReporteNicho } = await import('./metricas.js')
   const r = await generarReporteNicho(nicho)
   if (r) {
@@ -244,7 +247,5 @@ export async function aplicarMejoraCompetencia(nichoId, frases) {
   const r = await ajustarExclusiones(nichoId, { agregar: validas })
   if (r.error) return r
   await Nicho.updateOne({ _id: nichoId, 'mejoras.tipo': 'competencia' }, { $set: { 'mejoras.$.estado': 'aplicada', 'mejoras.$.elegidas': validas, 'mejoras.$.decididoEl': new Date() } })
-  // la sospecha de medición se juzgó con los vendidos sucios: se vuelve a mirar
-  await Nicho.updateOne({ _id: nichoId }, { $pull: { mejoras: { tipo: 'medicion', estado: { $in: ['pendiente', 'sin-alternativa'] } } } })
   return r
 }
