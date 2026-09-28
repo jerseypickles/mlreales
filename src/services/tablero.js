@@ -340,6 +340,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
   }
 
   const oportunidades = []
+  const fisicoPorNicho = new Map() // caja del producto, para la tarifa de envío del plan de publicidad
   // el rango de precios del listado, para dibujar dónde cae el precio propio
   const preciosDe = (p) => (p && Number.isFinite(p.mediana) ? { min: p.min ?? null, p25: p.p25 ?? null, mediana: p.mediana, p75: p.p75 ?? null, max: p.max ?? null, banda: p.bandaDominante ?? null } : null)
   const fotoDe = (n) => (n.ultimos ?? []).flatMap((r) => r.imagenes ?? []).find((u) => typeof u === 'string' && u)?.replace(/^http:/, 'https:') ?? null
@@ -478,6 +479,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       Number.isFinite(precioGasto) && Number.isFinite(unidadesEfectivas)
         ? Math.round(precioGasto * unidadesEfectivas)
         : null
+    fisicoPorNicho.set(String(n._id), { volumenM3: n.volumenM3 ?? null, pesoKg: n.pesoKg ?? null, comisionPct })
     oportunidades.push({
       nichoId: n._id,
       keyword: n.keyword,
@@ -646,6 +648,32 @@ export async function tableroOportunidades({ todos = false } = {}) {
   oportunidades.sort(
     (a, b) => (b.score ?? -1) - (a.score ?? -1) || (b.ventasDia ?? 0) - (a.ventasDia ?? 0),
   )
+
+  // PLAN DE PUBLICIDAD ANTES DE ANUNCIAR (ml/publicidad.js): lo que la cuenta
+  // aprendió de sus anuncios aplicado al precio, costo y caja de cada producto
+  // que viene. Solo para los que se están comprando o tienen luz verde: la
+  // tarifa de envío es una consulta a ML por caja y tramo de precio.
+  try {
+    const { parametrosPublicidad, planPublicidad } = await import('./ml/publicidad.js')
+    const parametros = await parametrosPublicidad()
+    if (parametros) {
+      const { costoEnvioFull, DIMENSIONES_POR_DEFECTO } = await import('./envioFull.js')
+      for (const o of oportunidades) {
+        if (!['cotizando', 'pedido', 'vendiendo'].includes(o.etapaCompra) && o.veredicto !== 'entrar') continue
+        const precio = o.cotizacion?.precioObjetivoClp ?? o.precioVentaClp
+        if (!Number.isFinite(precio)) continue
+        const f = fisicoPorNicho.get(String(o.nichoId)) ?? {}
+        const lado = f.volumenM3 > 0 ? Math.max(1, Math.round(Math.cbrt(f.volumenM3) * 100)) : null
+        const dimensiones = lado ? { largoCm: lado, anchoCm: lado, altoCm: lado, gramos: Math.round((f.pesoKg ?? 0.3) * 1000) } : DIMENSIONES_POR_DEFECTO
+        const tarifa = await costoEnvioFull({ precioClp: precio, dimensiones }).catch(() => null)
+        const plan = planPublicidad({ precio, costoUnitario: o.cotizacion?.costoPuestoClp ?? o.cotizacion?.landedClp ?? null,
+          comisionPct: f.comisionPct ?? o.comisionMlPct, envioTarifa: tarifa?.clp ?? null }, parametros)
+        if (plan) o.planPublicidad = { ...plan, cajaSupuesta: !lado, precioEsPropio: Number.isFinite(o.cotizacion?.precioObjetivoClp) }
+      }
+    }
+  } catch (err) {
+    console.warn(`[tablero] plan de publicidad no calculado: ${err.message}`)
+  }
 
   // FAMILIAS: nichos que miden el mismo mercado (solape de SKUs del último
   // scan). El de mayor score lidera; los demás llevan familiaLider para que la

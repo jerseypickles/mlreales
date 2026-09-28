@@ -26,6 +26,7 @@ import {
   ArrowDownWideNarrow,
 } from 'lucide-react'
 import { BotonCopiar } from './Listing.jsx'
+import { PlanPublicidad } from './PlanPublicidad.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 
 const FACTOR_VENTAS = 25 // misma heurística del score: ~1 reseña por cada 25 ventas
@@ -722,6 +723,7 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
       </details>
 
       <GananciaUnidad p={p} onGuardarCosto={onGuardarCosto} onCambiarPrecio={onCambiarPrecio} />
+      <PlanPublicidad plan={p.planPublicidad} compacto />
 
       <div className="pc-optimizador">
         <span className="propio-optimizacion-marca">

@@ -8,6 +8,7 @@ import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 import { GraficoTemporada, GraficoPrecio, GraficoPronostico } from './PanelOportunidad.jsx'
 import { calzaConBusqueda } from '../lib/calzaConBusqueda.js'
 import { tituloTrae } from '../lib/tituloTrae.js'
+import { PlanPublicidad } from './PlanPublicidad.jsx'
 import { momentoDeCompra, compararPorMomento } from '../lib/momentoCompra.js'
 
 // LA MESA DE COMPRA. El orden es el mensaje: primero si la gente BUSCA eso
@@ -1079,6 +1080,7 @@ function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronos
 
         {o.titular ? <p className="op-titular">{o.titular}</p> : null}
         {o.mejoras?.length ? <MejorasNicho o={o} onRecargar={onRecargar} /> : null}
+        {o.planPublicidad ? <PlanPublicidad plan={o.planPublicidad} /> : null}
         {o.tallas ? <TallasChile t={o.tallas} /> : null}
         {/* repuestos: la compra es por pieza y por auto — sin modelo y años no se cotiza */}
         {o.planRepuestos?.length ? (

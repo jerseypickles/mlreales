@@ -159,6 +159,9 @@ router.get(
     const cargos = await cargosPorItem({ dias: 30 }).catch(() => new Map())
     const { envioRealPorItem } = await import('../../services/cargosMl.js')
     const envioReal = await envioRealPorItem({ dias: 60 }).catch(() => new Map())
+    // lo que la publicidad enseñó: el plan de cada producto antes de anunciarlo
+    const { parametrosPublicidad, planPublicidad } = await import('../../services/ml/publicidad.js')
+    const paramAds = await parametrosPublicidad().catch(() => null)
 
     const lista = []
     for (const p of propios) {
@@ -208,6 +211,10 @@ router.get(
         }
       }
 
+      const eu = await economiaUnidad(p, envioReal.get(p.itemIdMl ?? p.sku)
+        ? { envioClp: envioReal.get(p.itemIdMl ?? p.sku).cobrado, unidades: envioReal.get(p.itemIdMl ?? p.sku).unidades,
+            base: envioReal.get(p.itemIdMl ?? p.sku).base, pctOrdenesSobreBase: envioReal.get(p.itemIdMl ?? p.sku).pctOrdenesSobreBase }
+        : null).catch(() => null)
       lista.push({
         ...p,
         posicionReciente: posiciones.get(p.sku) ?? null,
@@ -218,10 +225,11 @@ router.get(
         cargosMl30d: cargosItem,
         // envío cruzado orden a orden (60 días), no el total de 30 días
         // dividido por ventas de 30 días: las ventanas no calzan
-        economiaUnidad: await economiaUnidad(p, envioReal.get(p.itemIdMl ?? p.sku)
-          ? { envioClp: envioReal.get(p.itemIdMl ?? p.sku).cobrado, unidades: envioReal.get(p.itemIdMl ?? p.sku).unidades,
-              base: envioReal.get(p.itemIdMl ?? p.sku).base, pctOrdenesSobreBase: envioReal.get(p.itemIdMl ?? p.sku).pctOrdenesSobreBase }
-          : null).catch(() => null),
+        economiaUnidad: eu,
+        planPublicidad: eu && paramAds
+          ? planPublicidad({ precio: eu.precioClp, costoUnitario: eu.costoClp, comisionPct: eu.comisionPct,
+              envioConocido: eu.envioBase === 'facturado' ? eu.envioClp : null, envioTarifa: eu.envioTarifarioClp }, paramAds)
+          : null,
         // REPOSICIÓN: cuánto aguanta y cuánto mandar (ver services/inventarioFull)
         reposicion: reposicionSegura(p, v30, v7, { primeraVenta: primeras.get(p.itemIdMl ?? p.sku) ?? null }),
         impacto: evaluarImpacto(p),

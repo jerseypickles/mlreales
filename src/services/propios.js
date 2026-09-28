@@ -304,6 +304,15 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     } catch (err) {
       console.warn('[ml] publicidad diaria no actualizada:', err.message)
     }
+    // y lo que esa publicidad enseña, una vez al día: es lo que arma el plan de
+    // publicidad de los productos que vienen (ml/publicidad.js)
+    try {
+      const { AprendizajePublicidad, actualizarAprendizajePublicidad } = await import('./ml/publicidad.js')
+      const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
+      if (!(await AprendizajePublicidad.exists({ dia: hoy }))) await actualizarAprendizajePublicidad()
+    } catch (err) {
+      console.warn('[ml] aprendizaje de publicidad no actualizado:', err.message)
+    }
   }
 
   // documento tributario de cada venta: es lo que hace que la posición de IVA

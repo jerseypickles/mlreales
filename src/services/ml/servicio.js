@@ -191,7 +191,7 @@ export async function estadoMl({ ahora = new Date() } = {}) {
     seriesActuales(), ObservacionProductoMl.find({ hasta: { $gte: new Date(+ahora - 730 * 86400e3), $lte: ahora } }).lean(),
     ModeloMl.aggregate([{ $sort: { creadoEl: -1 } }, { $group: { _id: '$objetivo', modelo: { $first: '$$ROOT' } } }]),
     PrediccionMl.countDocuments(), PrediccionMl.countDocuments({ evaluacion: { $ne: null } }),
-    estadoIntegracion({ ahora }), diagnosticoObservacionesPropias({ ahora }), resumenLibro({ ahora }), resumenAdsDiario({ ahora }), coberturaDeNichos(), fuentesEnEspera().catch(() => null),
+    estadoIntegracion({ ahora }), diagnosticoObservacionesPropias({ ahora }), resumenLibro({ ahora }), resumenAdsDiario({ ahora }).then(async (r) => ({ ...r, aprendizaje: await import('./publicidad.js').then((m) => m.parametrosPublicidad()).catch(() => null) })), coberturaDeNichos(), fuentesEnEspera().catch(() => null),
   ])
   const ventanas = ventanasIndependientes(observaciones)
   const mesActual = indiceMes(ahora.toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }).slice(0, 7))

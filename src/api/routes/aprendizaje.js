@@ -156,6 +156,16 @@ router.post('/tiendas', async (_req, res) => {
 })
 // Qué señal del radar descubre buenos nichos: fuente de cada nicho cruzada con
 // su veredicto, puntaje y si avanzó a cotización o compra.
+// lo que la publicidad enseñó (ROAS alcanzable, costo por venta, envío real)
+// y su evolución; POST lo recalcula ya
+router.get('/publicidad', async (_req, res) => {
+  const { estadoPublicidad } = await import('../../services/ml/publicidad.js')
+  res.json(await estadoPublicidad())
+})
+router.post('/publicidad', async (_req, res) => {
+  const { actualizarAprendizajePublicidad } = await import('../../services/ml/publicidad.js')
+  res.json(await actualizarAprendizajePublicidad())
+})
 router.get('/fuentes-radar', async (_req, res) => {
   const { fuentesDelRadar } = await import('../../services/ml/fuentesRadar.js')
   res.json(await fuentesDelRadar())
