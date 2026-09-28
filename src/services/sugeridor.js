@@ -76,7 +76,7 @@ const SYSTEM_SUGERIDOR = `Eres un scout de nichos para un importador chileno que
 Propones keywords de búsqueda para nichos que valga la pena INVESTIGAR con datos (el sistema luego los escanea y mide demanda real). Piensa en:
 - El calendario chileno: estaciones invertidas vs hemisferio norte, fiestas patrias (septiembre), navidad, vuelta a clases (marzo), CyberDay (mayo/octubre), verano (dic-feb), invierno (jun-ago).
 - El lead time es ELIMINATORIO Y YA VIENE CALCULADO. En cada pasada te paso el CALENDARIO DE IMPORTACIÓN con la fecha exacta de hoy: qué temporadas se alcanzan pagando ahora, cuáles ya no, y cuáles todavía no toca. NO saques tú la cuenta de los días ni de los meses — la regla vieja ("2,5 meses") dejaba pasar Navidad en septiembre, cuando el contenedor entra a mitad de noviembre o en diciembre y la temporada se acaba el 24. Un estacional SOLO puede pertenecer a una temporada que el calendario marque A TIEMPO o JUSTO. Las que dicen YA NO SE ALCANZAN o TODAVÍA NO TOCA están prohibidas, por buena que parezca la idea. Los nichos todo_el_año no tienen esta restricción.
-- Productos importables: livianos o de volumen razonable, ticket entre {{TICKET_MIN}} y $60.000 CLP (el mínimo lo aprendió el sistema con las ventas reales: bajo eso la comisión, la publicidad y el envío se comen la venta — ver ECONOMÍA POR PRECIO en lo aprendido). Prefiere lo que entra sin trámites, pero una oportunidad fuerte con certificación SEC (eléctricos 220V) o registro ISP (cosméticos) SÍ se puede proponer — deja el trámite explícito en el campo riesgo. Evita solo alimentos.
+- Productos importables: livianos o de volumen razonable, ticket hasta $60.000 CLP; el piso lo fijan los CRITERIOS DEL IMPORTADOR, y la ECONOMÍA POR PRECIO de lo aprendido muestra con ventas reales por qué (comisión y publicidad son % del precio, el envío es fijo, y en $19.990-$24.990 salta). Prefiere lo que entra sin trámites, pero una oportunidad fuerte con certificación SEC (eléctricos 220V) o registro ISP (cosméticos) SÍ se puede proponer — deja el trámite explícito en el campo riesgo. Evita solo alimentos.
 - Tendencias de producto que ya se ven en otros mercados y llegan a Chile con rezago.
 - La MARCA DOMINANTE NO VETA un nicho. Lo dice el criterio del importador y está probado: entró a brochas con 63% de Full y marcas arriba, y vende 35 u/semana ganando por precio ($2.690 contra una mediana de $7.364). La publicidad compra la posición que no se gana orgánicamente, y no todo Chile compra por logo — mucha gente busca lo económico que funcione. Lo que sí importa es que el producto se pueda diferenciar con ficha y fotos propias, y que el ticket aguante el CAC. Belleza y cuidado personal genéricos valen: ya vendió cosmético genérico y sabe tramitar el ISP.
 
@@ -182,10 +182,6 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   const historial = await armarHistorial()
   const pasillos = await pasillosProbados().catch(() => [])
   const lecciones = await leccionesAprendidas().catch(() => [])
-  // el ticket mínimo lo aprende ml/publicidad.js con las ventas reales; sin
-  // medición, el piso fijo de siempre
-  const minimo40 = await import('./ml/publicidad.js').then((m) => m.parametrosPublicidad()).then((p) => p?.ticket?.minimo40 ?? null).catch(() => null)
-  const ticketMinimo = minimo40 ? `$${minimo40.toLocaleString('es-CL')}` : '$5.000'
   const hermanas = await hermanasDeLoQueVende().catch(() => [])
   const criterios = await criteriosActivos().catch(() => [])
   // lo que ENTRÓ al top 20 de más vendidos de ML esta semana: demanda dicha por ML
@@ -258,7 +254,7 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
     .join('\n\n')
 
   const { datos } = await pedirJSON({
-    system: SYSTEM_SUGERIDOR.replace('{{TICKET_MIN}}', ticketMinimo),
+    system: SYSTEM_SUGERIDOR,
     user,
     schema: SCHEMA_SUGERENCIAS,
     // 8000 alcanzaba antes de los filtros de negocio; con ellos el modelo
