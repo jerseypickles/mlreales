@@ -124,6 +124,13 @@ test('medirTicket y curvaTicket: el envío fijo hace que el ticket bajo deje poc
 test('curvaTicket: si el envío salta en $9.990, el mínimo no puede caer justo antes del salto', () => {
   const m = { comisionPct: 17, publicidadPct: 29, envioMedio: 830 }
   const t = curvaTicket(m, [7990, 8990, 9990, 11990, 14990], (p) => (p >= 9990 ? 3000 : 830))
-  // a $8.990 queda 44,8%, a $9.990 cae a 24%: el mínimo del 40% es el que se sostiene hacia arriba
-  assert.ok(t.minimo40 === null || t.minimo40 > 9990)
+  // a $7.990 ya queda 43%; a $9.990 el envío salta y cae a 24%: eso es un valle, no sube el mínimo
+  assert.equal(t.minimo40, 7990)
+  assert.equal(t.valles.length, 1)
+  assert.equal(t.valles[0].desde, 9990)
+  const d = dejaAPrecio({ ...t, medido: m }, 9990)
+  assert.equal(d.enValle, true)
+  assert.equal(d.bajo, true)
+  assert.equal(dejaAPrecio({ ...t, medido: m }, 8990).bajo, false)
+  assert.equal(dejaAPrecio({ ...t, medido: m }, 0), null)
 })

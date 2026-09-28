@@ -469,21 +469,34 @@ export function curvaTicket(medido, precios, envioDe) {
     return { precio: p, envio: Math.round(envio), quedaSinAds: Math.round(sinAds), quedaConAds: Math.round(conAds),
       pctSinAds: Math.round((sinAds / p) * 100), pctConAds: Math.round((conAds / p) * 100) }
   })
-  // el precio desde el cual, CON publicidad, queda al menos ese % para producto y ganancia
-  const desde = (pct) => curva.find((c, i) => curva.slice(i).every((x) => x.pctConAds >= pct))?.precio ?? null
-  return { curva, minimo35: desde(35), minimo40: desde(40), minimo45: desde(45) }
+  // el primer precio desde el cual, CON publicidad, queda al menos ese %
+  const desde = (pct) => curva.find((c) => c.pctConAds >= pct)?.precio ?? null
+  // LOS VALLES: tramos sobre el mínimo donde el envío salta y vuelve a dejar
+  // poco. Medido el 28-sep: desde $19.990 el envío gratis es obligatorio y el
+  // vendedor paga ~$3.064 en vez de $803; de $19.990 a ~$24.990 queda 37-40%.
+  const min40 = desde(40)
+  const valles = []
+  for (const c of curva) {
+    if (min40 == null || c.precio <= min40 || c.pctConAds >= 40) continue
+    const ultimo = valles.at(-1)
+    if (ultimo && curva.find((x) => x.precio > ultimo.hasta && x.precio < c.precio && x.pctConAds >= 40) == null) ultimo.hasta = c.precio
+    else valles.push({ desde: c.precio, hasta: c.precio })
+  }
+  return { curva, minimo35: desde(35), minimo40: min40, minimo45: desde(45), valles }
 }
 
 // Pura. Lo que queda a un precio, leyendo la curva (el punto más cercano por abajo).
 export function dejaAPrecio(ticket, precio) {
-  if (!ticket?.curva?.length || !Number.isFinite(precio)) return null
+  if (!ticket?.curva?.length || !Number.isFinite(precio) || precio <= 0) return null
   const punto = [...ticket.curva].reverse().find((c) => c.precio <= precio) ?? ticket.curva[0]
   const medido = ticket.medido
   const envio = punto.envio
   const sinAds = precio * (1 - medido.comisionPct / 100) - envio
   const conAds = sinAds - precio * (medido.publicidadPct / 100)
-  return { precio, quedaConAds: Math.round(conAds), pctConAds: Math.round((conAds / precio) * 100), quedaSinAds: Math.round(sinAds), pctSinAds: Math.round((sinAds / precio) * 100),
-    bajo: ticket.minimo40 != null && precio < ticket.minimo40 }
+  const pctConAds = Math.round((conAds / precio) * 100)
+  // se juzga A SU PRECIO: un nicho de $12.990 deja 45% aunque $19.990 sea un valle
+  return { precio, quedaConAds: Math.round(conAds), pctConAds, quedaSinAds: Math.round(sinAds), pctSinAds: Math.round((sinAds / precio) * 100),
+    bajo: pctConAds < 40, enValle: (ticket.valles ?? []).some((v) => precio >= v.desde && precio <= v.hasta) }
 }
 
 const PRECIOS_CURVA = [2990, 3990, 4990, 5990, 6990, 7990, 8990, 9980, 9990, 11990, 13990, 15990, 17990, 19980, 19990, 24990, 29990, 39990]
@@ -536,5 +549,6 @@ function leccionTicket(t) {
     + `la publicidad cuesta ${String(m.publicidadPct).replace('.', ',')}% de lo vendido y el envío que pago es casi fijo (~$${m.envioMedio.toLocaleString('es-CL')} por venta). `
     + `Por eso lo que queda para pagar el producto y ganar, CON publicidad, depende del precio: ${ej.map((c) => `$${c.precio.toLocaleString('es-CL')} → ${c.pctConAds}% ($${c.quedaConAds.toLocaleString('es-CL')})`).join('; ')}. `
     + (t.minimo40 ? `Bajo $${t.minimo40.toLocaleString('es-CL')} queda menos del 40% del precio: un producto de ticket bajo que necesite publicidad para vender deja muy poco. ` : '')
+    + (t.valles?.length ? `Ojo con ${t.valles.map((v) => `$${v.desde.toLocaleString('es-CL')}-$${v.hasta.toLocaleString('es-CL')}`).join(' y ')}: ahí el envío gratis obligatorio sube lo que pago por envío y vuelve a quedar menos del 40%; conviene quedarse justo bajo el salto o bien por encima. ` : '')
     + `Prefiere tickets que dejen al menos 40% con publicidad; un ticket bajo solo se justifica si vende orgánico, sin anuncios.`
 }

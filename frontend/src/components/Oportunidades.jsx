@@ -495,8 +495,8 @@ function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
         <ChipSinFull o={o} />
         <ChipTendencia t={tendencia} />
         {o.ticket?.bajo ? (
-          <em className="op-ticket-bajo" title={`A ${fmtPrecio(o.ticket.precio)}, con publicidad queda ${fmtPrecio(o.ticket.quedaConAds)} (${o.ticket.pctConAds}%) para pagar el producto y ganar; sin publicidad ${fmtPrecio(o.ticket.quedaSinAds)} (${o.ticket.pctSinAds}%). Aprendido de tus ventas: bajo ${fmtPrecio(o.ticket.minimo40)} queda menos del 40%.`}>
-            ticket bajo · deja {o.ticket.pctConAds}% con publicidad
+          <em className="op-ticket-bajo" title={`A ${fmtPrecio(o.ticket.precio)}, con publicidad queda ${fmtPrecio(o.ticket.quedaConAds)} (${o.ticket.pctConAds}%) para pagar el producto y ganar; sin publicidad ${fmtPrecio(o.ticket.quedaSinAds)} (${o.ticket.pctSinAds}%). Aprendido de tus ventas: bajo ${fmtPrecio(o.ticket.minimo40)} queda menos del 40%.${o.ticket.enValle ? ' A este precio el envío gratis obligatorio sube lo que pagas por envío: conviene quedar justo bajo el salto o bien por encima.' : ''}`}>
+            {o.ticket.enValle ? 'salto de envío' : 'ticket bajo'} · deja {o.ticket.pctConAds}% con publicidad
           </em>
         ) : null}
         {o.mejoras?.length ? <em className="op-mejora-icono" title={`El sistema detectó ${o.mejoras.length === 1 ? 'una mejora' : `${o.mejoras.length} mejoras`}: ${o.mejoras.map((m) => m.motivo).join(' · ')}`}><Lightbulb size={12} aria-hidden="true" />mejora</em> : null}
