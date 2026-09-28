@@ -198,7 +198,7 @@ async function entrenarEfectoDesdeBase({ titulos, envio }) {
     const precios = dias.filter((d) => d.itemId === p.itemId && d.precio > 0).map((d) => d.precio).sort((a, b) => a - b)
     const precio = precios[Math.floor(precios.length / 2)] ?? null
     const prop = propios.get(p.itemId)
-    const com = precio ? await comisionMlExacta({ precioClp: precio, categoriaId: prop?.categoriaMl ?? null }).catch(() => null) : null
+    const com = precio ? await comisionMlExacta({ precioClp: precio, categoriaId: prop?.categoriaMl ?? null, tipoPublicacion: 'gold_pro' }).catch(() => null) : null
     const comision = precio ? (Number.isFinite(com?.pct) ? Math.round((com.pct / 100) * precio + (com.cargoFijoClp ?? 0)) : Math.round(precio * 0.16)) : null
     const env = envio.get(p.itemId)?.porUnidad ?? null
     const costo = Number.isFinite(prop?.costoUnitarioClp) ? prop.costoUnitarioClp : null

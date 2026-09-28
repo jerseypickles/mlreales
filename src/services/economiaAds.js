@@ -82,7 +82,7 @@ export async function economiaPorAnuncio(porItem, propios, { envioFacturado = ne
     if (Number.isFinite(precio) && precio > 0) {
       const [comision, envio] = await Promise.all([
         // pct + cargo fijo de la categoría real (listing_prices de la API oficial)
-        comisionMlExacta({ precioClp: precio, categoriaId: propio?.categoriaMl ?? null })
+        comisionMlExacta({ precioClp: precio, categoriaId: propio?.categoriaMl ?? null, tipoPublicacion: 'gold_pro' })
           .then((c) =>
             Number.isFinite(c?.pct)
               ? Math.round((c.pct / 100) * precio) + (c.cargoFijoClp ?? 0)

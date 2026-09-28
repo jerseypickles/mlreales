@@ -202,6 +202,7 @@ router.get(
           const com = await comisionMlExacta({
             precioClp: v30.ingresosClp / v30.unidades,
             categoriaId: p.categoriaMl,
+            tipoPublicacion: 'gold_pro',
           }).catch(() => null)
           if (Number.isFinite(com?.pct)) {
             const comisionClp = Math.round((com.pct / 100) * v30.ingresosClp + (com.cargoFijoClp ?? 0) * v30.unidades)

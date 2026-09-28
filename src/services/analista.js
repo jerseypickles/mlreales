@@ -323,7 +323,7 @@ export async function analizarNicho(nicho) {
   let comisionReal = null
   try {
     const categoria = await categoriaDominante(nicho.keyword)
-    comisionReal = await comisionMlExacta({ precioClp: reporte.metricas.precio?.mediana, categoriaId: categoria })
+    comisionReal = await comisionMlExacta({ precioClp: reporte.metricas.precio?.mediana, categoriaId: categoria, tipoPublicacion: 'gold_pro' })
   } catch {
     // sin comisión exacta: la tabla usa el default del config
   }
