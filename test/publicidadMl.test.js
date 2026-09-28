@@ -95,3 +95,35 @@ test('presupuestoOptimo: el gasto donde la próxima venta cuesta lo que deja', (
   assert.equal(presupuestoOptimo({ beta: 0.5, media: 1, contribucion: 1000 }), 0)
   assert.equal(presupuestoOptimo({ beta: -0.1, media: 4, contribucion: 2000 }), 0)
 })
+
+import { medirTicket, curvaTicket, dejaAPrecio } from '../src/services/ml/publicidad.js'
+
+test('medirTicket y curvaTicket: el envío fijo hace que el ticket bajo deje poco (ventas reales 28-sep)', () => {
+  const filas = [
+    { precio: 4034, comision: 686, envio: 889, adsPorVenta: 1028, unidades: 85 },
+    { precio: 3829, comision: 766, envio: 1175, adsPorVenta: 1290, unidades: 19 },
+    { precio: 3842, comision: 653, envio: 835, adsPorVenta: 1803, unidades: 10 },
+    { precio: 7462, comision: 1268, envio: 841, adsPorVenta: 2587, unidades: 7 },
+    { precio: 5000, comision: 850, envio: 800, adsPorVenta: 0, unidades: 2 }, // pocas ventas: no entra
+  ]
+  const m = medirTicket(filas)
+  assert.equal(m.productos, 4)
+  assert.ok(m.comisionPct > 16 && m.comisionPct < 19)
+  assert.ok(m.publicidadPct > 25 && m.publicidadPct < 35)
+  assert.ok(m.envioMedio > 850 && m.envioMedio < 1000)
+  const t = curvaTicket(m, [2990, 3990, 5990, 7990, 9990, 14990], () => 830)
+  const pct = t.curva.map((c) => c.pctConAds)
+  assert.ok(pct.every((v, i) => i === 0 || v >= pct[i - 1]), 'con envío fijo, a más precio más queda')
+  assert.ok(t.minimo40 > 3990)
+  const d = dejaAPrecio({ ...t, medido: m }, 4490)
+  assert.equal(d.bajo, true)
+  assert.ok(d.pctConAds < d.pctSinAds)
+  assert.equal(dejaAPrecio(null, 4490), null)
+})
+
+test('curvaTicket: si el envío salta en $9.990, el mínimo no puede caer justo antes del salto', () => {
+  const m = { comisionPct: 17, publicidadPct: 29, envioMedio: 830 }
+  const t = curvaTicket(m, [7990, 8990, 9990, 11990, 14990], (p) => (p >= 9990 ? 3000 : 830))
+  // a $8.990 queda 44,8%, a $9.990 cae a 24%: el mínimo del 40% es el que se sostiene hacia arriba
+  assert.ok(t.minimo40 === null || t.minimo40 > 9990)
+})

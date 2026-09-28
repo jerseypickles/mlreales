@@ -154,6 +154,18 @@ export async function actualizarAprendizajePublicidad({ ahora = new Date() } = {
   } catch (err) {
     efecto = { estado: 'error', motivo: err.message }
   }
+  let ticket = null
+  try {
+    ticket = await aprenderTicket({ envio })
+    if (ticket?.minimo40 != null || ticket?.curva) {
+      const { Aprendizaje } = await import('../../models/Aprendizaje.js')
+      await Aprendizaje.findOneAndUpdate({ tipo: 'formato-gana', keyword: '__ticket-publicidad__' },
+        { $set: { leccion: leccionTicket(ticket), evidencia: { medido: ticket.medido, minimo40: ticket.minimo40, minimo45: ticket.minimo45 }, actualizadoEl: ahora } }, { upsert: true })
+    }
+  } catch (err) {
+    console.warn(`[ml-publicidad] economía por precio no calculada: ${err.message}`)
+  }
+  parametros.ticket = ticket
   await AprendizajePublicidad.updateOne({ dia }, { $set: { parametros, porProducto, efecto, calculadoEl: ahora } }, { upsert: true })
   cache = null
   console.log(`[ml-publicidad] ${parametros.productosConMuestra}/${parametros.productos} anuncios con muestra · ROAS mediana ${parametros.roas.mediana}x (p75 ${parametros.roas.p75}x) · venta por anuncio $${parametros.costoPorVenta.mediana} · envío real ${parametros.factorEnvio}× la base`)
@@ -413,4 +425,107 @@ function ajustarEfecto(dias, { ajustar, predecir, remuestreos = 200, semilla = 7
 export function presupuestoOptimo({ beta, media, contribucion }) {
   if (!(beta > 0) || !(media > 0) || !(contribucion > 0)) return 0
   return Math.max(0, Math.round((beta * media * contribucion - 1000) / 100) * 100)
+}
+
+// ─── CUÁNTO DEJA UN PRODUCTO SEGÚN SU PRECIO ────────────────────────────────
+//
+// El importador, 28-sep-2026: "los productos que valen bajo $9.990 en
+// realidad no dejan mucho, se lo comen más si la publicidad está puesta". Lo
+// medido le da la razón y dice por qué: la comisión (~17%) y la publicidad
+// (~29% de lo vendido: el ROAS objetivo la fija como porcentaje) se llevan
+// una PARTE del precio, pero el envío es casi FIJO (~$830). En $4.000 el envío
+// es otro 21%; en $10.000, un 8%. Así que lo que queda para pagar el producto
+// y ganar sube con el ticket, y bajo cierto precio no alcanza.
+//
+// Se mide cada día con las ventas reales de 30 días y se guarda como lección:
+// el radar y el analista la leen al elegir qué traer.
+
+// Pura. filas: por producto { precio, comision, envio, adsPorVenta, unidades }
+export function medirTicket(filas) {
+  const ok = filas.filter((f) => f.unidades >= 3 && f.precio > 0)
+  if (ok.length < 2) return null
+  const u = ok.reduce((a, f) => a + f.unidades, 0)
+  const venta = ok.reduce((a, f) => a + f.precio * f.unidades, 0)
+  return {
+    productos: ok.length, unidades: u,
+    comisionPct: r2((ok.reduce((a, f) => a + f.comision * f.unidades, 0) / venta) * 100),
+    // la publicidad como parte de lo vendido (todas las ventas, no solo las
+    // atribuidas: el gasto se paga sobre el total)
+    publicidadPct: r2((ok.reduce((a, f) => a + f.adsPorVenta * f.unidades, 0) / venta) * 100),
+    envioMedio: Math.round(ok.reduce((a, f) => a + f.envio * f.unidades, 0) / u),
+    filas: ok.map((f) => ({ ...f, quedaConAds: Math.round(f.precio - f.comision - f.envio - f.adsPorVenta), quedaSinAds: Math.round(f.precio - f.comision - f.envio),
+      pctConAds: Math.round(((f.precio - f.comision - f.envio - f.adsPorVenta) / f.precio) * 100) })),
+  }
+}
+
+// Pura. La curva por precio con lo medido; `envioDe(precio)` es el envío que
+// pagaría el vendedor a ese precio (la tarifa cambia en $9.990 y $19.990).
+export function curvaTicket(medido, precios, envioDe) {
+  if (!medido) return null
+  const curva = precios.map((p) => {
+    const envio = envioDe(p) ?? medido.envioMedio
+    const sinAds = p * (1 - medido.comisionPct / 100) - envio
+    const conAds = sinAds - p * (medido.publicidadPct / 100)
+    return { precio: p, envio: Math.round(envio), quedaSinAds: Math.round(sinAds), quedaConAds: Math.round(conAds),
+      pctSinAds: Math.round((sinAds / p) * 100), pctConAds: Math.round((conAds / p) * 100) }
+  })
+  // el precio desde el cual, CON publicidad, queda al menos ese % para producto y ganancia
+  const desde = (pct) => curva.find((c, i) => curva.slice(i).every((x) => x.pctConAds >= pct))?.precio ?? null
+  return { curva, minimo35: desde(35), minimo40: desde(40), minimo45: desde(45) }
+}
+
+// Pura. Lo que queda a un precio, leyendo la curva (el punto más cercano por abajo).
+export function dejaAPrecio(ticket, precio) {
+  if (!ticket?.curva?.length || !Number.isFinite(precio)) return null
+  const punto = [...ticket.curva].reverse().find((c) => c.precio <= precio) ?? ticket.curva[0]
+  const medido = ticket.medido
+  const envio = punto.envio
+  const sinAds = precio * (1 - medido.comisionPct / 100) - envio
+  const conAds = sinAds - precio * (medido.publicidadPct / 100)
+  return { precio, quedaConAds: Math.round(conAds), pctConAds: Math.round((conAds / precio) * 100), quedaSinAds: Math.round(sinAds), pctSinAds: Math.round((sinAds / precio) * 100),
+    bajo: ticket.minimo40 != null && precio < ticket.minimo40 }
+}
+
+const PRECIOS_CURVA = [2990, 3990, 4990, 5990, 6990, 7990, 8990, 9980, 9990, 11990, 13990, 15990, 17990, 19980, 19990, 24990, 29990, 39990]
+
+async function aprenderTicket({ envio }) {
+  const { ProductoPropio } = await import('../../models/ProductoPropio.js')
+  const { ventasPorItem } = await import('../ventasMl.js')
+  const { comisionMlExacta } = await import('../comisionesMl.js')
+  const { costoEnvioFull } = await import('../envioFull.js')
+  const ventas = await ventasPorItem({ dias: 30 })
+  const desde = new Date(Date.now() - 30 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
+  const gasto = new Map((await AdsDiaMl.aggregate([{ $match: { itemId: { $ne: '*' }, dia: { $gte: desde } } }, { $group: { _id: '$itemId', costo: { $sum: '$costo' } } }])).map((g) => [g._id, g.costo]))
+  const filas = []
+  for (const p of await ProductoPropio.find().select('itemIdMl sku titulo categoriaMl').lean()) {
+    const id = p.itemIdMl ?? p.sku
+    const v = ventas.get(id)
+    if (!(v?.unidades > 0)) continue
+    const precio = Math.round(v.ingresosClp / v.unidades)
+    const com = await comisionMlExacta({ precioClp: precio, categoriaId: p.categoriaMl ?? null }).catch(() => null)
+    const comision = Number.isFinite(com?.pct) ? Math.round((com.pct / 100) * precio + (com.cargoFijoClp ?? 0)) : Math.round(precio * 0.17)
+    const env = envio.get(id)?.porUnidad
+    if (!Number.isFinite(env)) continue
+    filas.push({ itemId: id, titulo: p.titulo ?? null, precio, comision, envio: env, adsPorVenta: Math.round((gasto.get(id) ?? 0) / v.unidades), unidades: v.unidades })
+  }
+  const medido = medirTicket(filas)
+  if (!medido) return null
+  // lo que el envío real sube sobre la tarifa (hoy ~1: lo del comprador ya no se cuenta)
+  const tarifas = new Map()
+  for (const precio of PRECIOS_CURVA) tarifas.set(precio, (await costoEnvioFull({ precioClp: precio }).catch(() => null))?.clp ?? null)
+  const tarifaMedia = filas.reduce((a, f) => a + (tarifas.get(PRECIOS_CURVA.filter((x) => x <= f.precio).at(-1) ?? PRECIOS_CURVA[0]) ?? f.envio) * f.unidades, 0) / medido.unidades
+  const factor = tarifaMedia > 0 ? medido.envioMedio / tarifaMedia : 1
+  const c = curvaTicket(medido, PRECIOS_CURVA, (p) => (tarifas.get(p) != null ? tarifas.get(p) * factor : null))
+  return { medido: { ...medido, factorEnvio: r2(factor) }, ...c }
+}
+
+function leccionTicket(t) {
+  const m = t.medido
+  const punto = (p) => t.curva.find((c) => c.precio === p)
+  const ej = [3990, 5990, 9990, 19990].map(punto).filter(Boolean)
+  return `ECONOMÍA POR PRECIO MEDIDA en mis ventas reales (${m.unidades} ventas de ${m.productos} productos, 30 días): ML cobra ${String(m.comisionPct).replace('.', ',')}% de comisión, `
+    + `la publicidad cuesta ${String(m.publicidadPct).replace('.', ',')}% de lo vendido y el envío que pago es casi fijo (~$${m.envioMedio.toLocaleString('es-CL')} por venta). `
+    + `Por eso lo que queda para pagar el producto y ganar, CON publicidad, depende del precio: ${ej.map((c) => `$${c.precio.toLocaleString('es-CL')} → ${c.pctConAds}% ($${c.quedaConAds.toLocaleString('es-CL')})`).join('; ')}. `
+    + (t.minimo40 ? `Bajo $${t.minimo40.toLocaleString('es-CL')} queda menos del 40% del precio: un producto de ticket bajo que necesite publicidad para vender deja muy poco. ` : '')
+    + `Prefiere tickets que dejen al menos 40% con publicidad; un ticket bajo solo se justifica si vende orgánico, sin anuncios.`
 }

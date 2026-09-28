@@ -654,8 +654,18 @@ export async function tableroOportunidades({ todos = false } = {}) {
   // que viene. Solo para los que se están comprando o tienen luz verde: la
   // tarifa de envío es una consulta a ML por caja y tramo de precio.
   try {
-    const { parametrosPublicidad, planPublicidad } = await import('./ml/publicidad.js')
+    const { parametrosPublicidad, planPublicidad, dejaAPrecio } = await import('./ml/publicidad.js')
     const parametros = await parametrosPublicidad()
+    // CUÁNTO DEJA A SU PRECIO, con publicidad: aprendido de las ventas propias
+    // (bajo cierto ticket la comisión, la publicidad y el envío fijo se comen
+    // la venta). Va en todas las filas: es barato y decide qué traer.
+    if (parametros?.ticket) {
+      for (const o of oportunidades) {
+        const precio = o.cotizacion?.precioObjetivoClp ?? o.precioVentaClp
+        const d = dejaAPrecio(parametros.ticket, precio)
+        if (d) o.ticket = { ...d, minimo40: parametros.ticket.minimo40 }
+      }
+    }
     if (parametros) {
       const { costoEnvioFull, DIMENSIONES_POR_DEFECTO } = await import('./envioFull.js')
       for (const o of oportunidades) {
