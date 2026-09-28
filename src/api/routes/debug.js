@@ -191,7 +191,14 @@ router.get(
       porUnidadesEnOrden: Object.fromEntries(Object.entries(it.porUnidadesEnOrden).map(([k, g]) => [k, { ordenes: g.ordenes, promedio: Math.round(g.cobrado / g.ordenes) }])),
       anulacionesBFF: anulacionesEnvio.filter((a) => a.itemId === it.itemId).reduce((a, x) => a + (x.montoClp ?? 0), 0),
     }))
-    res.json({ dias, conceptos: [...new Set(lineas.map((l) => `${l.tipo}: ${l.concepto}`))].slice(0, 20), items })
+    // los cobros sobre la tarifa base: ¿qué tienen esas órdenes?
+    const caros = lineas.filter((l) => l.tipo === 'CFF' && !l.anulado && (l.montoClp ?? 0) > 1700).slice(0, 40).map((l) => {
+      const o = ordenes.get(l.orderId)
+      return { titulo: (l.tituloItem ?? '').slice(0, 30), fecha: l.fecha, monto: l.montoClp, sinDescuento: l.montoSinDescuentoClp, descuento: l.descuentoClp,
+        precioVenta: l.precioVentaClp, ordenTotal: o?.totalClp ?? null, itemsEnOrden: (o?.items ?? []).map((x) => `${x.cantidad}× ${(x.titulo ?? '').slice(0, 20)} $${x.precioUnitClp}`) }
+    })
+    const baratos = lineas.filter((l) => l.tipo === 'CFF' && !l.anulado && (l.montoClp ?? 0) < 900).slice(0, 5).map((l) => ({ monto: l.montoClp, sinDescuento: l.montoSinDescuentoClp, descuento: l.descuentoClp, ordenTotal: ordenes.get(l.orderId)?.totalClp ?? null }))
+    res.json({ dias, conceptos: [...new Set(lineas.map((l) => `${l.tipo}: ${l.concepto}`))].slice(0, 20), items, caros, baratos })
   }),
 )
 
