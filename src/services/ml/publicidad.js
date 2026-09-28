@@ -494,6 +494,10 @@ async function aprenderTicket({ envio }) {
   const { comisionMlExacta } = await import('../comisionesMl.js')
   const { costoEnvioFull } = await import('../envioFull.js')
   const ventas = await ventasPorItem({ dias: 30 })
+  // la comisión que ML FACTURÓ por item (las publicaciones propias son
+  // Premium, 17%; el tarifario sin tipo devolvía la Clásica, 13%)
+  const { cargosPorItem } = await import('../cargosMl.js')
+  const cargos = await cargosPorItem({ dias: 30 }).catch(() => new Map())
   const desde = new Date(Date.now() - 30 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
   const gasto = new Map((await AdsDiaMl.aggregate([{ $match: { itemId: { $ne: '*' }, dia: { $gte: desde } } }, { $group: { _id: '$itemId', costo: { $sum: '$costo' } } }])).map((g) => [g._id, g.costo]))
   const filas = []
@@ -502,8 +506,13 @@ async function aprenderTicket({ envio }) {
     const v = ventas.get(id)
     if (!(v?.unidades > 0)) continue
     const precio = Math.round(v.ingresosClp / v.unidades)
-    const com = await comisionMlExacta({ precioClp: precio, categoriaId: p.categoriaMl ?? null }).catch(() => null)
-    const comision = Number.isFinite(com?.pct) ? Math.round((com.pct / 100) * precio + (com.cargoFijoClp ?? 0)) : Math.round(precio * 0.17)
+    const facturada = cargos.get(id)?.comisionClp
+    let comision
+    if (facturada > 0 && v.ingresosClp > 0) comision = Math.round((facturada / v.ingresosClp) * precio)
+    else {
+      const com = await comisionMlExacta({ precioClp: precio, categoriaId: p.categoriaMl ?? null, tipoPublicacion: 'gold_pro' }).catch(() => null)
+      comision = Number.isFinite(com?.pct) ? Math.round((com.pct / 100) * precio + (com.cargoFijoClp ?? 0)) : Math.round(precio * 0.17)
+    }
     const env = envio.get(id)?.porUnidad
     if (!Number.isFinite(env)) continue
     filas.push({ itemId: id, titulo: p.titulo ?? null, precio, comision, envio: env, adsPorVenta: Math.round((gasto.get(id) ?? 0) / v.unidades), unidades: v.unidades })
