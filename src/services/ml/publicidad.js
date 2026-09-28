@@ -285,7 +285,46 @@ const coefCrudo = (m, j) => m.coeficientes[j + 1] / m.escalas[j]
 
 // Pura. Entrena con toda la historia, valida con los últimos días y estima el
 // efecto por producto. El ajuste lo recibe hecho (ridge) para poder probarlo.
-export function entrenarEfecto(dias, { ajustar, predecir, remuestreos = 200, semilla = 7 } = {}) {
+export function entrenarEfecto(dias, opciones = {}) {
+  // TRES LECTURAS DEL MISMO EFECTO. El stock diario se mide desde el 1-sep; antes,
+  // un día sin gasto puede ser un día con el producto pausado o quebrado (ML
+  // detiene el anuncio sin stock), y el modelo le cargaría a "apagar la
+  // publicidad" una caída que fue "no había producto". Por eso:
+  //   todos         — toda la historia
+  //   stockConocido — solo días con stock medido: sin la trampa, menos datos
+  //   soloConGasto  — solo días con anuncio encendido: gasto alto contra bajo,
+  //                   nunca confunde quiebre con publicidad apagada
+  // Si coinciden, el efecto es real. El principal es la lectura más limpia
+  // que tenga datos suficientes.
+  const variantes = {
+    todos: dias,
+    stockConocido: dias.filter((d) => d.stockFraccion != null),
+    soloConGasto: dias.filter((d) => d.gasto > 0),
+  }
+  const lecturas = {}
+  for (const [k, ds] of Object.entries(variantes)) {
+    const r = ajustarEfecto(ds, { ...opciones, remuestreos: k === 'todos' ? 0 : opciones.remuestreos })
+    lecturas[k] = r
+  }
+  const limpia = lecturas.stockConocido
+  const principal = limpia.filas >= 150 && limpia.productosEntrenados >= 3 ? 'stockConocido' : 'todos'
+  const elegido = principal === 'todos' ? ajustarEfecto(dias, opciones) : limpia
+  const betas = Object.entries(lecturas).filter(([, r]) => r.beta != null).map(([k, r]) => ({ lectura: k, beta: r.beta, filas: r.filas, productos: r.productosEntrenados, mejoraPct: r.validacion?.mejoraPct ?? null }))
+  const positivas = betas.filter((b) => b.beta > 0)
+  const rango = positivas.length ? Math.max(...positivas.map((b) => b.beta)) / Math.min(...positivas.map((b) => b.beta)) : null
+  return {
+    ...elegido,
+    lectura: principal,
+    robustez: {
+      lecturas: betas,
+      // las tres dicen lo mismo si todas son positivas y la mayor no pasa el doble de la menor
+      coinciden: betas.length === 3 && positivas.length === 3 && rango <= 2,
+      nota: principal === 'todos' ? 'stock conocido solo desde el 1-sep: pocos días todavía; el principal usa toda la historia' : 'el principal usa solo días con stock medido',
+    },
+  }
+}
+
+function ajustarEfecto(dias, { ajustar, predecir, remuestreos = 200, semilla = 7 } = {}) {
   const items = filasEfecto(dias)
   if (items.length < 2) return { estado: 'sin-datos', motivo: 'menos de 2 productos con 20+ días y publicidad' }
   const todosDias = [...new Set(items.flatMap((i) => i.dias.map((d) => d.dia)))].sort()
