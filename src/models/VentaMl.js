@@ -19,6 +19,14 @@ const ventaMlSchema = new mongoose.Schema({
   // el carrito: órdenes del mismo envío. El envío del comprador se paga en
   // UNA de ellas y ML lo cobra en otra, así que se netea por carrito.
   packId: { type: String, default: null },
+  // EL ENVÍO LEÍDO DEL ENVÍO (/shipments/{id}), que es la fuente que no falla:
+  // shipping_option.cost = lo que pagó el comprador; list_cost = el cobro
+  // completo de la factura; la diferencia es lo que paga el vendedor. En los
+  // carritos el pago del comprador no aparece en la orden, pero sí acá.
+  // Medido el 28-sep-2026 en 3 órdenes del Set 8: siempre $799,4 para el vendedor.
+  shipmentId: { type: String, default: null },
+  envioTotalClp: { type: Number, default: null },
+  envioVendedorClp: { type: Number, default: null },
   items: [
     {
       _id: false,

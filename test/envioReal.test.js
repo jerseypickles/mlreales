@@ -41,3 +41,13 @@ test('envioDelComprador: suma el envío de los pagos aprobados', () => {
   assert.equal(envioDelComprador({ payments: [], shipping_cost: 1200 }), 1200)
   assert.equal(envioDelComprador({}), null)
 })
+
+import { envioDesdeShipment } from '../src/services/ventasMl.js'
+test('envioDesdeShipment: total, comprador y vendedor (envío real del 28-sep)', () => {
+  assert.deepEqual(envioDesdeShipment({ shipping_option: { cost: 5490, list_cost: 6289.4 } }), { envioTotalClp: 6289.4, envioCompradorClp: 5490, envioVendedorClp: 799.4 })
+  assert.deepEqual(envioDesdeShipment({ shipping_option: { cost: 0, list_cost: 799.4 } }), { envioTotalClp: 799.4, envioCompradorClp: 0, envioVendedorClp: 799.4 })
+  assert.equal(envioDesdeShipment({}), null)
+})
+test('envioDelComprador: si el pago no marca el envío, lo pagado de más es el envío', () => {
+  assert.equal(envioDelComprador({ total_amount: 4490, paid_amount: 7669, payments: [{ status: 'approved', shipping_cost: 0 }, { status: 'approved', shipping_cost: 0 }] }), 3179)
+})

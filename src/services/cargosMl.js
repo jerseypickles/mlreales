@@ -308,7 +308,7 @@ export async function envioRealPorItem({ dias = 60 } = {}) {
     const o = vigentes.get(b.bonificaA)
     if (o) o.montoClp = Math.max(0, (o.montoClp ?? 0) - Math.abs(b.montoClp ?? 0))
   }
-  const ordenes = new Map((await VentaMl.find({ orderId: { $in: [...new Set(lineas.map((l) => l.orderId).filter(Boolean))] } }).select('orderId items packId envioCompradorClp').lean()).map((o) => [o.orderId, o]))
+  const ordenes = new Map((await VentaMl.find({ orderId: { $in: [...new Set(lineas.map((l) => l.orderId).filter(Boolean))] } }).select('orderId items packId shipmentId envioCompradorClp envioVendedorClp').lean()).map((o) => [o.orderId, o]))
   // el envío del comprador se suma por carrito: puede estar pagado en otra
   // orden del mismo envío que no tiene línea CFF propia
   const packs = [...new Set([...ordenes.values()].map((o) => o.packId).filter(Boolean))]
@@ -323,6 +323,8 @@ export async function envioRealPorItem({ dias = 60 } = {}) {
     (orderId) => {
       const o = ordenes.get(orderId)
       if (!o) return null
+      // leído del envío: es exacto y ya es de ese envío, carrito incluido
+      if (o.envioVendedorClp != null && o.shipmentId) return { clave: `envio:${o.shipmentId}`, clp: o.envioCompradorClp ?? 0 }
       return o.packId ? { clave: `pack:${o.packId}`, clp: porPack.get(o.packId) ?? 0 } : { clave: `orden:${orderId}`, clp: o.envioCompradorClp ?? 0 }
     })
 }

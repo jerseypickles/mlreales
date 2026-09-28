@@ -4,8 +4,23 @@ import { meliGet, hayCuentaMeli } from './meli.js'
 // Pura. Lo que el comprador pagó de envío en esta orden (pagos aprobados).
 export function envioDelComprador(orden) {
   const pagos = (orden?.payments ?? []).filter((p) => !p.status || p.status === 'approved')
-  if (!pagos.length) return Number.isFinite(orden?.shipping_cost) ? orden.shipping_cost : null
-  return pagos.reduce((a, p) => a + (Number.isFinite(p.shipping_cost) ? p.shipping_cost : 0), 0)
+  const declarado = pagos.length
+    ? pagos.reduce((a, p) => a + (Number.isFinite(p.shipping_cost) ? p.shipping_cost : 0), 0)
+    : Number.isFinite(orden?.shipping_cost) ? orden.shipping_cost : null
+  // a veces el pago no marca el envío pero cobra de más: $7.669 por una brocha
+  // de $4.490 (orden 2000018621155242), la diferencia es el envío
+  const sobre = Number.isFinite(orden?.paid_amount) && Number.isFinite(orden?.total_amount) ? Math.max(0, orden.paid_amount - orden.total_amount) : null
+  if (declarado == null) return sobre
+  return Math.max(declarado, sobre ?? 0)
+}
+
+// Pura. Las tres partes del envío según ML: el total que cobra en la factura,
+// lo que pagó el comprador y lo que queda para el vendedor.
+export function envioDesdeShipment(e) {
+  const op = e?.shipping_option
+  if (!Number.isFinite(op?.list_cost)) return null
+  const comprador = Number.isFinite(op.cost) ? op.cost : 0
+  return { envioTotalClp: op.list_cost, envioCompradorClp: comprador, envioVendedorClp: Math.max(0, Math.round((op.list_cost - comprador) * 10) / 10) }
 }
 
 // Sincroniza las órdenes pagadas de la cuenta conectada (idempotente por
@@ -39,8 +54,8 @@ export async function sincronizarOrdenes({ dias = 90 } = {}) {
             fecha,
             estado: o.status ?? null,
             totalClp: Number.isFinite(o.total_amount) ? o.total_amount : null,
-            envioCompradorClp: envioDelComprador(o),
             packId: o.pack_id ? String(o.pack_id) : null,
+            shipmentId: o.shipping?.id ? String(o.shipping.id) : null,
             items: (o.order_items ?? []).map((oi) => ({
               itemId: oi.item?.id ?? null,
               titulo: oi.item?.title ?? null,
@@ -51,10 +66,27 @@ export async function sincronizarOrdenes({ dias = 90 } = {}) {
         },
         { upsert: true },
       )
+      // respaldo mientras no se lea el envío: lo pagado por encima del producto
+      await VentaMl.updateOne({ orderId: String(o.id), envioVendedorClp: null }, { $set: { envioCompradorClp: envioDelComprador(o) } })
       if (r.upsertedCount) nuevas++
       else vistas++
     }
     if (fueraDeVentana || resultados.length < 50) { completa = true; break }
+  }
+  // el envío de cada orden, leído del envío: un llamado por orden, una sola
+  // vez (las ya leídas no se repiten), con tope por pasada para no gastar cuota
+  let enviosLeidos = 0
+  try {
+    const faltan = await VentaMl.find({ shipmentId: { $ne: null }, envioVendedorClp: null, fecha: { $gte: desde } }).sort({ fecha: -1 }).limit(150).select('orderId shipmentId').lean()
+    for (const v of faltan) {
+      const e = await meliGet(`/shipments/${v.shipmentId}`).catch(() => null)
+      const partes = envioDesdeShipment(e)
+      if (!partes) continue
+      await VentaMl.updateOne({ orderId: v.orderId }, { $set: partes })
+      enviosLeidos++
+    }
+  } catch (err) {
+    console.warn(`[ventas] envíos no leídos: ${err.message}`)
   }
   // UNA ORDEN PAGADA PUEDE DEJAR DE SERLO. La búsqueda de arriba solo trae las
   // que HOY están pagadas: la que se reembolsa desaparece de ahí y acá seguía
@@ -77,7 +109,7 @@ export async function sincronizarOrdenes({ dias = 90 } = {}) {
   } catch (err) {
     console.warn(`[ventas] no se pudieron leer las órdenes anuladas: ${err.message}`)
   }
-  return { nuevas, vistas, completa, desde, anuladas }
+  return { nuevas, vistas, completa, desde, anuladas, enviosLeidos }
 }
 
 // Ventas reales por item en una ventana: Map itemId → {unidades, ingresosClp,
