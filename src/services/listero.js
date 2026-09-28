@@ -13,6 +13,7 @@ const SCHEMA_LISTING = {
     'titulos',
     'categoriaSugerida',
     'precioVentaClp',
+    'razonPrecio',
     'tipoPublicacion',
     'atributos',
     'bullets',
@@ -28,7 +29,8 @@ const SCHEMA_LISTING = {
       items: { type: 'string' },
     },
     categoriaSugerida: { type: 'string', description: 'Ruta de categoría ML, ej: Hogar > Climatización > Ventiladores' },
-    precioVentaClp: { type: 'integer', description: 'Precio de publicación sugerido, coherente con el análisis del nicho' },
+    precioVentaClp: { type: 'integer', description: 'Precio de publicación sugerido: el objetivo del importador si lo hay; si no, coherente con el análisis y con lo que deja (economiaPorPrecio)' },
+    razonPrecio: { type: 'string', description: 'Una frase: por qué ese precio, citando qué deja con publicidad y contra qué precios compite' },
     tipoPublicacion: {
       type: 'object',
       additionalProperties: false,
@@ -93,6 +95,8 @@ TALLAS (si viene guiaTallasChile): la tabla del proveedor ya viene convertida a 
 
 FICHA TÉCNICA: los atributos que ML exige al publicar en la categoría (Marca, Modelo, y los específicos). Si el producto es genérico importado, Marca = "Genérica" y Modelo inventado corto.
 
+PRECIO: te paso "precios" con todo lo que se sabe. Manda el objetivoDelImportador si viene (es su decisión; si cae en un valle de envío, dilo en la razón y propón el precio justo bajo el salto). Si no viene, parte de recomendadoPorElAnalisis y contrástalo con deLosQueVendenAhora (lo que el comprador de verdad paga) y con economiaPorPrecio: prefiere un precio que deje 40% o más con publicidad, nunca uno dentro de un valle de envío (desde $19.990 el envío gratis obligatorio sube lo que paga el vendedor: $19.980 deja más que $21.990). Si hay costoPuestoClp, lo que queda menos el costo es la ganancia por venta: dila en la razón. Terminaciones chilenas: 990.
+
 TIPO DE PUBLICACIÓN: clásica (menos comisión) vs premium (+3-4 pts de comisión, cuotas sin interés — conviene en tickets altos donde las cuotas destraban la compra).
 
 Todo en español de Chile. El comprador objetivo compra por el buscador de ML: cada palabra del título es una puerta de entrada.`
@@ -104,6 +108,11 @@ export async function generarListing(nicho) {
   if (!vista) throw Object.assign(new Error('el nicho no tiene snapshots; corre un scan primero'), { status: 409 })
 
   const reporte = await Reporte.findOne({ nichoId: nicho._id }).sort({ fecha: -1 }).lean()
+  // el análisis vive en el reporte donde corrió, que casi nunca es el del
+  // último scan: leer solo el último dejaba el listing sin recomendación ni
+  // veredicto (28-sep-2026)
+  const conAnalisis = reporte?.analisis ? reporte : await Reporte.findOne({ nichoId: nicho._id, analisis: { $ne: null } }).sort({ fecha: -1 }).lean()
+  const analisis = conAnalisis?.analisis ?? null
 
   const ganadores = [...vista.productos]
     .filter((p) => p.titulo)
@@ -133,14 +142,51 @@ export async function generarListing(nicho) {
     ...new Set(vista.productos.flatMap((p) => (p.preguntas ?? []).map((q) => q?.texto)).filter(Boolean)),
   ].slice(0, 15)
 
+  // PRECIOS: los del nicho, los de quienes venden de verdad, el objetivo y el
+  // costo del importador, y lo que queda a cada precio según lo aprendido con
+  // las ventas propias (comisión y publicidad son % del precio, el envío es
+  // fijo y salta en $19.990)
+  const precioM = reporte?.metricas?.precio ?? {}
+  const queVenden = [...vista.productos]
+    .filter((p) => Number.isFinite(p.precio) && (p.resenasNuevasDia > 0 || p.ventaStock?.unidades > 0))
+    .sort((a, b) => (b.resenasNuevasDia ?? 0) - (a.resenasNuevasDia ?? 0))
+    .slice(0, 10)
+    .map((p) => p.precio)
+    .sort((a, b) => a - b)
+  const precioAnalisis = analisis?.recomendacion?.precioVentaClp ?? null
+  const precioObjetivo = Number.isFinite(nicho.precioVentaObjetivoClp) ? nicho.precioVentaObjetivoClp : null
+  let economiaPorPrecio
+  try {
+    const { parametrosPublicidad, dejaAPrecio } = await import('./ml/publicidad.js')
+    const t = (await parametrosPublicidad())?.ticket
+    if (t) {
+      const candidatos = [...new Set([precioObjetivo, precioAnalisis, precioM.p25, precioM.mediana, precioM.p75].filter((x) => Number.isFinite(x) && x > 0).map(Math.round))]
+      economiaPorPrecio = {
+        nota: 'Lo que queda para pagar el producto y ganar, CON publicidad, medido con las ventas propias',
+        aPrecio: candidatos.map((p) => dejaAPrecio(t, p)).filter(Boolean).map(({ precio, quedaConAds, pctConAds, quedaSinAds, enValle }) => ({ precio, quedaConAds, pctConAds, quedaSinAds, enValleDeEnvio: enValle || undefined })),
+        vallesDeEnvio: (t.valles ?? []).map((v) => ({ desde: v.desde, hasta: Number.isFinite(v.hasta) ? v.hasta : null })),
+      }
+    }
+  } catch {
+    // sin lo aprendido el listing sale igual
+  }
+  const precios = {
+    delNicho: { p25: precioM.p25 ?? null, mediana: precioM.mediana ?? null, p75: precioM.p75 ?? null, bandaDominante: precioM.bandaDominante ?? null, pctConDescuento: precioM.pctConDescuento ?? null },
+    deLosQueVendenAhora: queVenden.length ? { min: queVenden[0], mediana: queVenden[Math.floor(queVenden.length / 2)], max: queVenden.at(-1), n: queVenden.length } : null,
+    recomendadoPorElAnalisis: precioAnalisis,
+    objetivoDelImportador: precioObjetivo,
+    costoPuestoClp: Number.isFinite(nicho.costoPuestoClp) ? nicho.costoPuestoClp : null,
+    economiaPorPrecio,
+  }
+
   const entrada = {
     keyword: nicho.keyword,
+    precios,
     busquedasReales,
     preguntasRealesDeCompradores: preguntasCompradores,
     categoriasMLObservadas: categoriasML,
-    medianaPrecioNicho: reporte?.metricas?.precio?.mediana ?? null,
-    recomendacionDelAnalisis: reporte?.analisis?.recomendacion ?? null,
-    veredicto: reporte?.analisis?.veredicto ?? null,
+    recomendacionDelAnalisis: analisis?.recomendacion ?? null,
+    veredicto: analisis?.veredicto ?? null,
     titulosGanadores: ganadores,
     // ropa: la tabla del proveedor YA convertida a talla chilena por cm
     guiaTallasChile: nicho.tablaTallasProveedor?.length ? equivalenciaChilena(nicho.tablaTallasProveedor) : undefined,

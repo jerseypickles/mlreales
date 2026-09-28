@@ -97,6 +97,7 @@ export function Listing({ nichoId, listingInicial }) {
           <span className="tile-texto sin-corte">{listing.tipoPublicacion?.tipo === 'premium' ? 'Premium' : 'Clásica'}</span>
         </div>
       </div>
+      {listing.razonPrecio ? <p className="vacio listing-razon"><strong>Precio:</strong> {listing.razonPrecio}</p> : null}
       {listing.tipoPublicacion?.razon ? <p className="vacio listing-razon">{listing.tipoPublicacion.razon}</p> : null}
 
       <section className="fila-2col">
