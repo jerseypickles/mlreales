@@ -150,6 +150,51 @@ router.get(
   }),
 )
 
+// ¿CUÁNTO COBRA ML DE ENVÍO FULL POR PRODUCTO, DE VERDAD? (28-sep-2026)
+// Cada línea CFF de la factura cruzada con SU orden: cuántas unidades llevaba
+// la orden, cuánto se cobró, y si el cobro es por envío o por unidad. Dividir
+// el total de envío por las unidades de otra ventana mezcla períodos. Solo lee.
+router.get(
+  '/envios-full',
+  autorizado,
+  manejar(async (req, res) => {
+    const dias = Math.min(120, Math.max(7, Number(req.query.dias) || 60))
+    const { CargoMl } = await import('../../models/CargoMl.js')
+    const { VentaMl } = await import('../../models/VentaMl.js')
+    const desde = new Date(Date.now() - dias * 86400e3)
+    const lineas = await CargoMl.find({ fecha: { $gte: desde }, itemId: { $ne: null }, $or: [{ tipo: 'CFF' }, { tipo: /^B/ }] })
+      .select('detalleId tipo concepto montoClp montoSinDescuentoClp descuentoClp anulado esAnulacion bonificaA itemId tituloItem orderId precioVentaClp fecha').lean()
+    const ordenes = new Map((await VentaMl.find({ orderId: { $in: [...new Set(lineas.map((l) => l.orderId).filter(Boolean))] } }).select('orderId items anuladaEl').lean()).map((o) => [o.orderId, o]))
+    const porItem = new Map()
+    for (const l of lineas.filter((x) => x.tipo === 'CFF')) {
+      const it = porItem.get(l.itemId) ?? { itemId: l.itemId, titulo: l.tituloItem, lineas: 0, anuladas: 0, cobrado: 0, unidades: 0, sinOrden: 0, porUnidadesEnOrden: {}, montos: {} }
+      it.lineas++
+      if (l.anulado) { it.anuladas++; porItem.set(l.itemId, it); continue }
+      it.cobrado += l.montoClp ?? 0
+      it.montos[l.montoClp] = (it.montos[l.montoClp] ?? 0) + 1
+      const o = ordenes.get(l.orderId)
+      const u = o ? (o.items ?? []).filter((x) => x.itemId === l.itemId).reduce((a, x) => a + (x.cantidad ?? 0), 0) : null
+      if (!u) it.sinOrden++
+      else {
+        it.unidades += u
+        const k = String(u)
+        const g = it.porUnidadesEnOrden[k] ?? { ordenes: 0, cobrado: 0 }
+        g.ordenes++; g.cobrado += l.montoClp ?? 0
+        it.porUnidadesEnOrden[k] = g
+      }
+      porItem.set(l.itemId, it)
+    }
+    const anulacionesEnvio = lineas.filter((x) => x.esAnulacion && x.tipo === 'BFF')
+    const items = [...porItem.values()].map((it) => ({ ...it,
+      porUnidad: it.unidades ? Math.round(it.cobrado / it.unidades) : null,
+      montos: Object.entries(it.montos).sort((a, b) => b[1] - a[1]).slice(0, 8),
+      porUnidadesEnOrden: Object.fromEntries(Object.entries(it.porUnidadesEnOrden).map(([k, g]) => [k, { ordenes: g.ordenes, promedio: Math.round(g.cobrado / g.ordenes) }])),
+      anulacionesBFF: anulacionesEnvio.filter((a) => a.itemId === it.itemId).reduce((a, x) => a + (x.montoClp ?? 0), 0),
+    }))
+    res.json({ dias, conceptos: [...new Set(lineas.map((l) => `${l.tipo}: ${l.concepto}`))].slice(0, 20), items })
+  }),
+)
+
 // ¿Pueden las reseñas salir gratis por la API oficial, usando el id de catálogo
 // que el nivel 1 por Zyte ahora entrega? Ver services/sondaReviewsCatalogo.js.
 // Solo lee: un listado, la API de reseñas y una muestra de fichas.
