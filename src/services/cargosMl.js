@@ -245,3 +245,49 @@ export async function cargosSinItem({ dias = 30 } = {}) {
   ])
   return filas.map((f) => ({ concepto: f._id, montoClp: Math.round(f.monto), lineas: f.lineas }))
 }
+
+// EL ENVÍO FULL QUE SE PAGA DE VERDAD, POR PRODUCTO (28-sep-2026).
+//
+// Cada línea CFF se cruza con SU orden para saber cuántas unidades llevaba.
+// Antes se dividía el envío facturado de 30 días por las unidades vendidas en
+// 30 días, y las dos ventanas no calzan (la factura llega con atraso): Set 18
+// salía a $1.837 por unidad cuando cruzado orden a orden paga $1.329.
+//
+// Lo que se midió: la base es $799,4 ($1.142 menos el 30% por reputación) en
+// el 70-85% de las órdenes, y el resto cobra $2.100-7.200 aunque lleve una
+// sola unidad de $1.890 — ahí ML cobra el despacho real. El costo esperado
+// por unidad es el promedio de todo, porque esas órdenes caras también se pagan.
+export function envioPorUnidadDeLineas(lineas, unidadesDeOrden) {
+  const porItem = new Map()
+  for (const l of lineas) {
+    if (l.tipo !== 'CFF' || l.anulado || !l.itemId) continue
+    const u = unidadesDeOrden(l.orderId, l.itemId)
+    if (!(u > 0)) continue
+    const it = porItem.get(l.itemId) ?? { cobrado: 0, unidades: 0, ordenes: 0, porUnidad: [] }
+    it.cobrado += l.montoClp ?? 0
+    it.unidades += u
+    it.ordenes++
+    it.porUnidad.push(Math.round((l.montoClp ?? 0) / u)) // una orden de 2 a $1.598 es base
+    porItem.set(l.itemId, it)
+  }
+  const salida = new Map()
+  for (const [itemId, it] of porItem) {
+    // la base es el cobro por unidad más frecuente; "sobre la base" lo que la pasa por 2×
+    const cuenta = new Map()
+    for (const m of it.porUnidad) cuenta.set(m, (cuenta.get(m) ?? 0) + 1)
+    const base = [...cuenta].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+    const sobreBase = it.porUnidad.filter((m) => base && m > base * 2).length
+    salida.set(itemId, { porUnidad: Math.round(it.cobrado / it.unidades), base, unidades: it.unidades, ordenes: it.ordenes,
+      cobrado: Math.round(it.cobrado), pctOrdenesSobreBase: Math.round((sobreBase / it.ordenes) * 100) })
+  }
+  return salida
+}
+
+export async function envioRealPorItem({ dias = 60 } = {}) {
+  const { VentaMl } = await import('../models/VentaMl.js')
+  const lineas = await CargoMl.find({ fecha: { $gte: new Date(Date.now() - dias * 86400e3) }, tipo: 'CFF', itemId: { $ne: null } })
+    .select('tipo anulado itemId orderId montoClp').lean()
+  const ordenes = new Map((await VentaMl.find({ orderId: { $in: [...new Set(lineas.map((l) => l.orderId).filter(Boolean))] } }).select('orderId items').lean()).map((o) => [o.orderId, o]))
+  return envioPorUnidadDeLineas(lineas, (orderId, itemId) =>
+    (ordenes.get(orderId)?.items ?? []).filter((x) => x.itemId === itemId).reduce((a, x) => a + (x.cantidad ?? 0), 0))
+}

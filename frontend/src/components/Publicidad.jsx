@@ -316,6 +316,12 @@ function Productos({ economia, campanas }) {
                     {f.resultado != null ? `${f.resultado > 0 ? '+' : ''}${fmtPrecio(f.resultado)}` : '—'}
                   </b>
                 </div>
+                {f.costoMaximoParaPagar != null ? (
+                  <div className="ads-techo" title={`Cada venta deja ${fmtPrecio(f.contribucion + (f.costoUnitario ?? 0))} después de comisión y envío (${f.envioBase === 'facturado' ? 'envío facturado' : 'tarifa'} ${fmtPrecio(f.envio)}), y conseguirla por anuncio costó ${fmtPrecio(f.costoPorVentaAds)}. Si el producto puesto en bodega cuesta más que esto, cada venta por anuncio pierde plata.`}>
+                    <span>el producto puede costar hasta</span>
+                    <b className={f.costoMaximoParaPagar <= 0 ? 'res-mal' : ''}>{f.costoMaximoParaPagar <= 0 ? 'pierde igual' : fmtPrecio(f.costoMaximoParaPagar)}</b>
+                  </div>
+                ) : null}
                 <span className={`ad-veredicto ${v.clase}`} title={f.veredicto?.texto}>
                   {v.texto}
                 </span>
@@ -330,8 +336,8 @@ function Productos({ economia, campanas }) {
         <div>
           <p>
             El <strong>equilibrio</strong> (el segundo número de la columna ROAS) es el retorno bajo el cual ese
-            anuncio destruye margen. Sale del precio real, la comisión exacta de su categoría y la tarifa Full
-            escalonada, todo consultado en vivo.
+            anuncio destruye margen. Sale del precio cobrado, la comisión exacta de su categoría y el envío Full
+            que ML facturó de verdad por ese producto (cobro por cobro con su orden); sin facturación, la tarifa.
           </p>
           <p>
             El <strong>resultado</strong> es la contribución generada menos el gasto — lo más cerca de la ganancia

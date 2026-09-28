@@ -39,7 +39,11 @@ export function veredictoAnuncio({ roasReal, roasEquilibrio: eq, unidades }) {
 // Economía real de cada anuncio: cruza las métricas de Product Ads con el
 // precio del producto propio, la comisión exacta de su categoría y la tarifa
 // Full escalonada. Todo sondeado en vivo, nada estimado.
-export async function economiaPorAnuncio(porItem, propios) {
+// `envioFacturado`: itemId → CLP por unidad que ML FACTURÓ de envío (cargos
+// CFF). La tarifa Full dice $799 y lo facturado fue $1.000-2.200 (28-sep-2026):
+// con la tarifa, Set 18 y la escopeta salían "escalar" y pierden con cada venta
+// por anuncio. Sin facturación del item se cae a la tarifa.
+export async function economiaPorAnuncio(porItem, propios, { envioFacturado = new Map() } = {}) {
   const porId = new Map()
   for (const p of propios ?? []) {
     const id = p.itemIdMl ?? p.sku
@@ -85,18 +89,21 @@ export async function economiaPorAnuncio(porItem, propios) {
               : Math.round(precio * 0.13),
           )
           .catch(() => Math.round(precio * 0.13)),
-        // tarifa Full escalonada, con el descuento por nivel de vendedor ya aplicado
-        costoEnvioFull({
+        // lo facturado manda; la tarifa Full escalonada es el respaldo
+        Number.isFinite(envioFacturado.get(itemId)) ? Promise.resolve(envioFacturado.get(itemId)) : costoEnvioFull({
           precioClp: precio,
           dimensiones: dimensionesDeItem(propio?.oficial) ?? DIMENSIONES_POR_DEFECTO,
         })
           .then((e) => (Number.isFinite(e?.clp) ? e.clp : 799))
           .catch(() => 799),
       ])
-      eco = roasEquilibrio({ precio, comision, envio })
+      const costoUnitario = Number.isFinite(propio?.costoUnitarioClp) ? propio.costoUnitarioClp : 0
+      eco = roasEquilibrio({ precio, comision, envio, costoUnitario })
       if (eco) {
         eco.comision = comision
         eco.envio = envio
+        eco.envioBase = Number.isFinite(envioFacturado.get(itemId)) ? 'facturado' : 'tarifa'
+        eco.costoUnitario = costoUnitario || null
       }
     }
 
@@ -129,6 +136,12 @@ export async function economiaPorAnuncio(porItem, propios) {
       resultado:
         eco?.contribucion != null ? Math.round(eco.contribucion * unidades - gasto) : null,
       veredicto: veredictoAnuncio({ roasReal, roasEquilibrio: eco?.roas ?? null, unidades }),
+      // LO QUE PUEDE COSTAR EL PRODUCTO PARA QUE EL ANUNCIO PAGUE: lo que deja
+      // cada venta antes del costo, menos lo que costó conseguirla por anuncio.
+      // Se calcula sin conocer el costo, y el importador lo compara con el suyo.
+      costoMaximoParaPagar:
+        eco?.contribucion != null && unidades > 0 ? Math.round(eco.contribucion + (eco.costoUnitario ?? 0) - gasto / unidades) : null,
+      costoPorVentaAds: unidades > 0 ? Math.round(gasto / unidades) : null,
     }
   }
   return salida

@@ -232,19 +232,21 @@ function GananciaUnidad({ p, onGuardarCosto, onCambiarPrecio }) {
         </li>
         {e.esFull ? (
           <li>
-            {/* El envío facturado le gana a la tarifa: sobre los propios de
-                agosto el tarifario decía $799 donde ML cobró $2.487, y con eso
-                la ganancia salía optimista justo en los de ticket bajo. */}
+            {/* El envío facturado le gana a la tarifa, cruzado orden a orden:
+                la mayoría paga la base ($799) y una parte paga el despacho
+                real ($2.100-7.200), y el promedio es lo que cuesta vender. */}
             <span
               title={
                 e.envioBase === 'facturado'
-                  ? `Promedio de lo que ML facturó por envío en los últimos 30 días.${
+                  ? `Promedio por unidad de lo que ML facturó de envío en 60 días, cobro por cobro con su orden.${
+                      e.envioBaseClp != null ? ` La mayoría de las órdenes paga ${fmtPrecio(e.envioBaseClp)}; ${e.envioPctOrdenesSobreBase ?? 0}% paga más del doble (ML cobra el despacho real).` : ''
+                    }${
                       e.envioTarifarioClp != null ? ` El tarifario estimaba ${fmtPrecio(e.envioTarifarioClp)}.` : ''
                     }`
                   : 'Estimado del tarifario de ML: todavía no hay envíos facturados de este producto.'
               }
             >
-              envío Full{e.envioBase === 'facturado' ? ' (facturado)' : e.envioSupuesto ? ' (caja estimada)' : ''}
+              envío Full{e.envioBase === 'facturado' ? (e.envioBaseClp != null ? ` (base ${fmtPrecio(e.envioBaseClp)}, promedio)` : ' (facturado)') : e.envioSupuesto ? ' (caja estimada)' : ''}
             </span>
             <b>{e.envioClp != null ? `−${fmtPrecio(e.envioClp)}` : 'sin dato'}</b>
           </li>

@@ -47,8 +47,8 @@ async function tipoPublicacionDe(propio) {
   return valor
 }
 
-// `medido` es lo que ML FACTURÓ por este item en los últimos 30 días, con las
-// unidades vendidas en la misma ventana: { envioClp, unidades }.
+// `medido` es lo que ML FACTURÓ de envío por este item, cruzado orden a orden
+// (cargosMl.envioRealPorItem): { envioClp, unidades, base, pctOrdenesSobreBase }.
 async function economiaUnidad(propio, medido = null) {
   const ultima = (propio.mediciones ?? []).at(-1) ?? null
   const precioClp = propio.promoMl?.activa?.precio ?? ultima?.precioEfectivo ?? ultima?.precio ?? null
@@ -102,6 +102,9 @@ async function economiaUnidad(propio, medido = null) {
     // de dónde salió el envío: lo facturado por ML o la tarifa estimada
     envioBase: envioMedidoClp != null ? 'facturado' : 'tarifario',
     envioTarifarioClp: delTarifario,
+    // lo que cobra la mayoría de las órdenes, y cuántas cobran más del doble
+    envioBaseClp: envioMedidoClp != null ? medido.base ?? null : null,
+    envioPctOrdenesSobreBase: envioMedidoClp != null ? medido.pctOrdenesSobreBase ?? null : null,
     // sin dimensiones declaradas la tarifa sale de una caja chica supuesta: el
     // tramo de precio manda, pero conviene decirlo en pantalla. Con envío
     // facturado el supuesto ya no aplica.
@@ -154,6 +157,8 @@ router.get(
     // del detalle de facturación y cableado por item
     const { cargosPorItem, cargosSinItem } = await import('../../services/cargosMl.js')
     const cargos = await cargosPorItem({ dias: 30 }).catch(() => new Map())
+    const { envioRealPorItem } = await import('../../services/cargosMl.js')
+    const envioReal = await envioRealPorItem({ dias: 60 }).catch(() => new Map())
 
     const lista = []
     for (const p of propios) {
@@ -211,10 +216,12 @@ router.get(
         conversion7d,
         margen30d,
         cargosMl30d: cargosItem,
-        economiaUnidad: await economiaUnidad(p, {
-          envioClp: cargosItem?.envioClp ?? null,
-          unidades: v30?.unidades ?? null,
-        }).catch(() => null),
+        // envío cruzado orden a orden (60 días), no el total de 30 días
+        // dividido por ventas de 30 días: las ventanas no calzan
+        economiaUnidad: await economiaUnidad(p, envioReal.get(p.itemIdMl ?? p.sku)
+          ? { envioClp: envioReal.get(p.itemIdMl ?? p.sku).cobrado, unidades: envioReal.get(p.itemIdMl ?? p.sku).unidades,
+              base: envioReal.get(p.itemIdMl ?? p.sku).base, pctOrdenesSobreBase: envioReal.get(p.itemIdMl ?? p.sku).pctOrdenesSobreBase }
+          : null).catch(() => null),
         // REPOSICIÓN: cuánto aguanta y cuánto mandar (ver services/inventarioFull)
         reposicion: reposicionSegura(p, v30, v7, { primeraVenta: primeras.get(p.itemIdMl ?? p.sku) ?? null }),
         impacto: evaluarImpacto(p),

@@ -163,7 +163,17 @@ async function construirResumenAds({ dias = 30 } = {}) {
       import('../models/ProductoPropio.js'),
     ])
     const propios = await ProductoPropio.find().lean()
-    economia = await economiaPorAnuncio(porItem, propios)
+    // envío FACTURADO por unidad
+    // (cada cobro cruzado con su orden; ventana mínima de 60 días para que
+    // las órdenes caras, que son 15-30%, pesen lo que pesan)
+    const envioFacturado = new Map()
+    try {
+      const { envioRealPorItem } = await import('./cargosMl.js')
+      for (const [itemId, e] of await envioRealPorItem({ dias: Math.max(60, dias) })) envioFacturado.set(itemId, e.porUnidad)
+    } catch (err) {
+      console.warn(`[ads] envío facturado no disponible, se usa la tarifa: ${err.message}`)
+    }
+    economia = await economiaPorAnuncio(porItem, propios, { envioFacturado })
   } catch (err) {
     console.warn(`[ads] economía por anuncio no disponible: ${err.message}`)
   }
