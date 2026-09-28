@@ -19,3 +19,25 @@ test('envioPorUnidadDeLineas: cada cobro con las unidades de SU orden, base y ó
   assert.equal(r.porUnidad, Math.round((799.4 * 8 + 4789.4 + 1598.8) / 11))
   assert.equal(r.pctOrdenesSobreBase, 10)
 })
+
+test('envioPorUnidadDeLineas: lo que pagó el comprador de envío no es costo, y se descuenta una vez por carrito', () => {
+  const lineas = [
+    { tipo: 'CFF', itemId: 'A', orderId: 'o1', montoClp: 4789.4 }, // comprador pagó $3.990
+    { tipo: 'CFF', itemId: 'A', orderId: 'o2', montoClp: 799.4 },
+    { tipo: 'CFF', itemId: 'A', orderId: 'p1a', montoClp: 6289.4 }, // carrito: el comprador pagó $5.490 en otra orden
+    { tipo: 'CFF', itemId: 'A', orderId: 'p1b', montoClp: 799.4 }, // misma caja: ya no queda nada que descontar
+  ]
+  const comprador = (o) => ({ o1: { clave: 'orden:o1', clp: 3990 }, o2: { clave: 'orden:o2', clp: 0 }, p1a: { clave: 'pack:1', clp: 5490 }, p1b: { clave: 'pack:1', clp: 5490 } })[o]
+  const r = envioPorUnidadDeLineas(lineas, () => 1, comprador).get('A')
+  assert.equal(r.base, 799)
+  assert.equal(r.porUnidad, 799)
+  assert.equal(r.pctOrdenesSobreBase, 0)
+})
+
+import { envioDelComprador } from '../src/services/ventasMl.js'
+test('envioDelComprador: suma el envío de los pagos aprobados', () => {
+  assert.equal(envioDelComprador({ payments: [{ status: 'approved', shipping_cost: 3990 }] }), 3990)
+  assert.equal(envioDelComprador({ payments: [{ status: 'approved', shipping_cost: 0 }, { status: 'rejected', shipping_cost: 3990 }] }), 0)
+  assert.equal(envioDelComprador({ payments: [], shipping_cost: 1200 }), 1200)
+  assert.equal(envioDelComprador({}), null)
+})

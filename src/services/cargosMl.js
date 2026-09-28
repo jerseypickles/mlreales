@@ -257,17 +257,30 @@ export async function cargosSinItem({ dias = 30 } = {}) {
 // el 70-85% de las órdenes, y el resto cobra $2.100-7.200 aunque lleve una
 // sola unidad de $1.890 — ahí ML cobra el despacho real. El costo esperado
 // por unidad es el promedio de todo, porque esas órdenes caras también se pagan.
-export function envioPorUnidadDeLineas(lineas, unidadesDeOrden) {
+// `envioComprador(orderId)` → { clave, clp }: lo que el comprador pagó de
+// envío en el carrito de esa orden. Se descuenta del cobro, una sola vez por
+// carrito: ML cobra en la factura el envío entero, incluida la parte que pagó
+// el comprador y que ya entró con la venta.
+export function envioPorUnidadDeLineas(lineas, unidadesDeOrden, envioComprador = () => null) {
   const porItem = new Map()
+  const restante = new Map() // carrito → envío del comprador aún no descontado
   for (const l of lineas) {
     if (l.tipo !== 'CFF' || l.anulado || !l.itemId) continue
     const u = unidadesDeOrden(l.orderId, l.itemId)
     if (!(u > 0)) continue
+    const c = envioComprador(l.orderId)
+    let neto = l.montoClp ?? 0
+    if (c?.clave != null) {
+      if (!restante.has(c.clave)) restante.set(c.clave, c.clp ?? 0)
+      const descuenta = Math.min(neto, restante.get(c.clave))
+      neto -= descuenta
+      restante.set(c.clave, restante.get(c.clave) - descuenta)
+    }
     const it = porItem.get(l.itemId) ?? { cobrado: 0, unidades: 0, ordenes: 0, porUnidad: [] }
-    it.cobrado += l.montoClp ?? 0
+    it.cobrado += neto
     it.unidades += u
     it.ordenes++
-    it.porUnidad.push(Math.round((l.montoClp ?? 0) / u)) // una orden de 2 a $1.598 es base
+    it.porUnidad.push(Math.round(neto / u)) // una orden de 2 a $1.598 es base
     porItem.set(l.itemId, it)
   }
   const salida = new Map()
@@ -295,7 +308,21 @@ export async function envioRealPorItem({ dias = 60 } = {}) {
     const o = vigentes.get(b.bonificaA)
     if (o) o.montoClp = Math.max(0, (o.montoClp ?? 0) - Math.abs(b.montoClp ?? 0))
   }
-  const ordenes = new Map((await VentaMl.find({ orderId: { $in: [...new Set(lineas.map((l) => l.orderId).filter(Boolean))] } }).select('orderId items').lean()).map((o) => [o.orderId, o]))
-  return envioPorUnidadDeLineas(lineas, (orderId, itemId) =>
-    (ordenes.get(orderId)?.items ?? []).filter((x) => x.itemId === itemId).reduce((a, x) => a + (x.cantidad ?? 0), 0))
+  const ordenes = new Map((await VentaMl.find({ orderId: { $in: [...new Set(lineas.map((l) => l.orderId).filter(Boolean))] } }).select('orderId items packId envioCompradorClp').lean()).map((o) => [o.orderId, o]))
+  // el envío del comprador se suma por carrito: puede estar pagado en otra
+  // orden del mismo envío que no tiene línea CFF propia
+  const packs = [...new Set([...ordenes.values()].map((o) => o.packId).filter(Boolean))]
+  const porPack = new Map()
+  if (packs.length) {
+    for (const o of await VentaMl.find({ packId: { $in: packs } }).select('packId envioCompradorClp').lean()) {
+      porPack.set(o.packId, (porPack.get(o.packId) ?? 0) + (o.envioCompradorClp ?? 0))
+    }
+  }
+  return envioPorUnidadDeLineas(lineas,
+    (orderId, itemId) => (ordenes.get(orderId)?.items ?? []).filter((x) => x.itemId === itemId).reduce((a, x) => a + (x.cantidad ?? 0), 0),
+    (orderId) => {
+      const o = ordenes.get(orderId)
+      if (!o) return null
+      return o.packId ? { clave: `pack:${o.packId}`, clp: porPack.get(o.packId) ?? 0 } : { clave: `orden:${orderId}`, clp: o.envioCompradorClp ?? 0 }
+    })
 }

@@ -1,6 +1,13 @@
 import { VentaMl } from '../models/VentaMl.js'
 import { meliGet, hayCuentaMeli } from './meli.js'
 
+// Pura. Lo que el comprador pagó de envío en esta orden (pagos aprobados).
+export function envioDelComprador(orden) {
+  const pagos = (orden?.payments ?? []).filter((p) => !p.status || p.status === 'approved')
+  if (!pagos.length) return Number.isFinite(orden?.shipping_cost) ? orden.shipping_cost : null
+  return pagos.reduce((a, p) => a + (Number.isFinite(p.shipping_cost) ? p.shipping_cost : 0), 0)
+}
+
 // Sincroniza las órdenes pagadas de la cuenta conectada (idempotente por
 // orderId; corta al salir de la ventana). Corre con cada scan de propios:
 // diario + "Medir ahora". Sin cuenta, no hace nada.
@@ -32,6 +39,8 @@ export async function sincronizarOrdenes({ dias = 90 } = {}) {
             fecha,
             estado: o.status ?? null,
             totalClp: Number.isFinite(o.total_amount) ? o.total_amount : null,
+            envioCompradorClp: envioDelComprador(o),
+            packId: o.pack_id ? String(o.pack_id) : null,
             items: (o.order_items ?? []).map((oi) => ({
               itemId: oi.item?.id ?? null,
               titulo: oi.item?.title ?? null,
@@ -83,6 +92,9 @@ export async function ventasPorItem({ dias = 30 } = {}) {
         _id: '$items.itemId',
         unidades: { $sum: '$items.cantidad' },
         ingresosClp: { $sum: { $multiply: ['$items.cantidad', '$items.precioUnitClp'] } },
+        // el envío que pagó el comprador, repartido por lo que pesa el item en la orden
+        envioCompradorClp: { $sum: { $multiply: [{ $ifNull: ['$envioCompradorClp', 0] },
+          { $divide: [{ $multiply: ['$items.cantidad', '$items.precioUnitClp'] }, { $max: ['$totalClp', 1] }] }] } },
         ultimaVenta: { $max: '$fecha' },
       },
     },
@@ -92,7 +104,7 @@ export async function ventasPorItem({ dias = 30 } = {}) {
       .filter((f) => f._id)
       .map((f) => [
         f._id,
-        { unidades: f.unidades ?? 0, ingresosClp: Math.round(f.ingresosClp ?? 0), ultimaVenta: f.ultimaVenta },
+        { unidades: f.unidades ?? 0, ingresosClp: Math.round(f.ingresosClp ?? 0), envioCompradorClp: Math.round(f.envioCompradorClp ?? 0), ultimaVenta: f.ultimaVenta },
       ]),
   )
 }

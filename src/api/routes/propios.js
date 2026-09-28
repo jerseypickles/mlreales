@@ -182,11 +182,15 @@ router.get(
       if (v30?.unidades > 0 && p.costoUnitarioClp != null) {
         const costoClp = Math.round(p.costoUnitarioClp * v30.unidades)
         if (cargosItem) {
+          // el envío que pagó el comprador entró con la venta y ML lo cobra de
+          // vuelta en la factura: se descuenta del cargo, no es costo
+          const dePaso = Math.min(cargosItem.envioClp ?? 0, v30.envioCompradorClp ?? 0)
           margen30d = {
-            margenClp: v30.ingresosClp - cargosItem.totalClp - costoClp,
-            cargosMlClp: cargosItem.totalClp,
+            margenClp: v30.ingresosClp - (cargosItem.totalClp - dePaso) - costoClp,
+            cargosMlClp: cargosItem.totalClp - dePaso,
             comisionClp: cargosItem.comisionClp,
-            envioClp: cargosItem.envioClp,
+            envioClp: (cargosItem.envioClp ?? 0) - dePaso,
+            envioPagadoPorCompradorClp: dePaso,
             adsClp: cargosItem.adsClp,
             colectaClp: cargosItem.colectaClp,
             almacenajeClp: cargosItem.almacenajeClp,

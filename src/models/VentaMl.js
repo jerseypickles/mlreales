@@ -10,6 +10,15 @@ const ventaMlSchema = new mongoose.Schema({
   // una orden pagada que ML después reembolsó: deja de contar como venta
   anuladaEl: { type: Date, default: null },
   totalClp: Number,
+  // LO QUE EL COMPRADOR PAGÓ DE ENVÍO (payments[].shipping_cost). Entra a la
+  // cuenta con la venta y ML lo cobra de vuelta en la línea CFF de la factura:
+  // es plata de paso, no costo. Orden 2000018640413256 (25-sep-2026): Set 8 a
+  // $4.490 + $3.990 de envío del comprador = $8.480 pagados; ML cobró $4.789
+  // de envío, o sea $799 de costo real. Sin este campo el envío salía $1.322.
+  envioCompradorClp: { type: Number, default: null },
+  // el carrito: órdenes del mismo envío. El envío del comprador se paga en
+  // UNA de ellas y ML lo cobra en otra, así que se netea por carrito.
+  packId: { type: String, default: null },
   items: [
     {
       _id: false,
