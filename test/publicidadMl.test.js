@@ -128,9 +128,17 @@ test('curvaTicket: si el envío salta en $9.990, el mínimo no puede caer justo 
   assert.equal(t.minimo40, 7990)
   assert.equal(t.valles.length, 1)
   assert.equal(t.valles[0].desde, 9990)
+  assert.equal(t.valles[0].hasta, Infinity) // en esta curva nunca vuelve al 40%
   const d = dejaAPrecio({ ...t, medido: m }, 9990)
   assert.equal(d.enValle, true)
   assert.equal(d.bajo, true)
   assert.equal(dejaAPrecio({ ...t, medido: m }, 8990).bajo, false)
   assert.equal(dejaAPrecio({ ...t, medido: m }, 0), null)
+})
+
+test('curvaTicket: el valle cubre los precios entre puntos hasta que vuelve al 40%', () => {
+  const m = { comisionPct: 17, publicidadPct: 29, envioMedio: 830 }
+  const t = curvaTicket(m, [9990, 19990, 24990], (p) => (p >= 19990 ? 3064 : 1004))
+  assert.deepEqual(t.valles, [{ desde: 19990, hasta: 24989 }])
+  assert.equal(dejaAPrecio({ ...t, medido: m }, 22990).enValle, true)
 })

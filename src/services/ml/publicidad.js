@@ -482,6 +482,12 @@ export function curvaTicket(medido, precios, envioDe) {
     if (ultimo && curva.find((x) => x.precio > ultimo.hasta && x.precio < c.precio && x.pctConAds >= 40) == null) ultimo.hasta = c.precio
     else valles.push({ desde: c.precio, hasta: c.precio })
   }
+  // un valle llega hasta justo antes del siguiente precio que vuelve al 40%
+  // (la curva es de puntos: $21.990 cae entre $19.990 y $24.990)
+  for (const v of valles) {
+    const sale = curva.find((x) => x.precio > v.hasta && x.pctConAds >= 40)
+    v.hasta = sale ? sale.precio - 1 : Infinity
+  }
   return { curva, minimo35: desde(35), minimo40: min40, minimo45: desde(45), valles }
 }
 
@@ -549,6 +555,6 @@ function leccionTicket(t) {
     + `la publicidad cuesta ${String(m.publicidadPct).replace('.', ',')}% de lo vendido y el envío que pago es casi fijo (~$${m.envioMedio.toLocaleString('es-CL')} por venta). `
     + `Por eso lo que queda para pagar el producto y ganar, CON publicidad, depende del precio: ${ej.map((c) => `$${c.precio.toLocaleString('es-CL')} → ${c.pctConAds}% ($${c.quedaConAds.toLocaleString('es-CL')})`).join('; ')}. `
     + (t.minimo40 ? `Bajo $${t.minimo40.toLocaleString('es-CL')} queda menos del 40% del precio: un producto de ticket bajo que necesite publicidad para vender deja muy poco. ` : '')
-    + (t.valles?.length ? `Ojo con ${t.valles.map((v) => `$${v.desde.toLocaleString('es-CL')}-$${v.hasta.toLocaleString('es-CL')}`).join(' y ')}: ahí el envío gratis obligatorio sube lo que pago por envío y vuelve a quedar menos del 40%; conviene quedarse justo bajo el salto o bien por encima. ` : '')
+    + (t.valles?.length ? `Ojo con ${t.valles.map((v) => (Number.isFinite(v.hasta) ? `$${v.desde.toLocaleString('es-CL')}-$${v.hasta.toLocaleString('es-CL')}` : `$${v.desde.toLocaleString('es-CL')} en adelante`)).join(' y ')}: ahí el envío gratis obligatorio sube lo que pago por envío y vuelve a quedar menos del 40%; conviene quedarse justo bajo el salto o bien por encima. ` : '')
     + `Prefiere tickets que dejen al menos 40% con publicidad; un ticket bajo solo se justifica si vende orgánico, sin anuncios.`
 }
