@@ -192,9 +192,9 @@ router.get(
       anulacionesBFF: anulacionesEnvio.filter((a) => a.itemId === it.itemId).reduce((a, x) => a + (x.montoClp ?? 0), 0),
     }))
     // los cobros sobre la tarifa base: ¿qué tienen esas órdenes?
-    const caros = lineas.filter((l) => l.tipo === 'CFF' && !l.anulado && (l.montoClp ?? 0) > 1700).slice(0, 40).map((l) => {
+    const caros = lineas.filter((l) => l.tipo === 'CFF' && !l.anulado && (l.montoClp ?? 0) > 1700 && (!req.query.item || l.itemId === req.query.item)).slice(-40).map((l) => {
       const o = ordenes.get(l.orderId)
-      return { titulo: (l.tituloItem ?? '').slice(0, 30), fecha: l.fecha, monto: l.montoClp, sinDescuento: l.montoSinDescuentoClp, descuento: l.descuentoClp,
+      return { orderId: l.orderId, detalleId: l.detalleId, titulo: (l.tituloItem ?? '').slice(0, 30), fecha: l.fecha, monto: l.montoClp, sinDescuento: l.montoSinDescuentoClp, descuento: l.descuentoClp,
         precioVenta: l.precioVentaClp, ordenTotal: o?.totalClp ?? null, itemsEnOrden: (o?.items ?? []).map((x) => `${x.cantidad}× ${(x.titulo ?? '').slice(0, 20)} $${x.precioUnitClp}`) }
     })
     const baratos = lineas.filter((l) => l.tipo === 'CFF' && !l.anulado && (l.montoClp ?? 0) < 900).slice(0, 5).map((l) => ({ monto: l.montoClp, sinDescuento: l.montoSinDescuentoClp, descuento: l.descuentoClp, ordenTotal: ordenes.get(l.orderId)?.totalClp ?? null }))

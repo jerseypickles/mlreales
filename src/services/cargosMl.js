@@ -286,7 +286,15 @@ export function envioPorUnidadDeLineas(lineas, unidadesDeOrden) {
 export async function envioRealPorItem({ dias = 60 } = {}) {
   const { VentaMl } = await import('../models/VentaMl.js')
   const lineas = await CargoMl.find({ fecha: { $gte: new Date(Date.now() - dias * 86400e3) }, tipo: 'CFF', itemId: { $ne: null } })
-    .select('tipo anulado itemId orderId montoClp').lean()
+    .select('detalleId tipo anulado itemId orderId montoClp').lean()
+  // una devolución de envío (BFF) cuyo original NO quedó marcado anulado es
+  // plata que ML devolvió: se descuenta de ese cobro (mismo criterio que
+  // cargosPorItem). Si el original ya está anulado, no se toca.
+  const vigentes = new Map(lineas.filter((l) => !l.anulado).map((l) => [l.detalleId, l]))
+  for (const b of await CargoMl.find({ tipo: 'BFF', esAnulacion: true, bonificaA: { $in: [...vigentes.keys()] } }).select('bonificaA montoClp').lean()) {
+    const o = vigentes.get(b.bonificaA)
+    if (o) o.montoClp = Math.max(0, (o.montoClp ?? 0) - Math.abs(b.montoClp ?? 0))
+  }
   const ordenes = new Map((await VentaMl.find({ orderId: { $in: [...new Set(lineas.map((l) => l.orderId).filter(Boolean))] } }).select('orderId items').lean()).map((o) => [o.orderId, o]))
   return envioPorUnidadDeLineas(lineas, (orderId, itemId) =>
     (ordenes.get(orderId)?.items ?? []).filter((x) => x.itemId === itemId).reduce((a, x) => a + (x.cantidad ?? 0), 0))
