@@ -43,3 +43,55 @@ test('planPublicidad: sin costo dice hasta cuánto puede costar; con costo, ROAS
   assert.equal(caro.envioOrigen, 'medido')
   assert.equal(planPublicidad({ precio: 5000 }, null), null)
 })
+
+import { entrenarEfecto, presupuestoOptimo, filasEfecto } from '../src/services/ml/publicidad.js'
+import { ajustarRidge, predecirRidge } from '../src/services/ml/regresion.js'
+
+// dos productos, 60 días; la publicidad agrega ventas con rendimiento
+// decreciente (log), y un producto madura solo (tendencia)
+function historia({ efecto = 0.6 } = {}) {
+  const dias = []
+  let s = 11
+  const azar = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648)
+  for (const [itemId, base, crece] of [['A', 2, 0.01], ['B', 1, 0]]) {
+    for (let t = 0; t < 60; t++) {
+      const dia = new Date(Date.UTC(2026, 6, 1) + t * 86400e3).toISOString().slice(0, 10)
+      const gasto = t % 3 === 0 ? 0 : 1000 + Math.round(azar() * 4000)
+      const esperado = base * (1 + crece * t) * (1 + efecto * Math.log1p(gasto / 1000))
+      const unidades = Math.max(0, Math.round(esperado + (azar() - 0.5)))
+      dias.push({ itemId, dia, unidades, gasto, precio: 4000, promo: null, stockFraccion: null, unidadesAds: gasto ? Math.round(unidades * 0.8) : 0 })
+    }
+  }
+  return dias
+}
+
+test('entrenarEfecto: recupera un efecto real de la publicidad y le gana a no usarla', () => {
+  const r = entrenarEfecto(historia({ efecto: 0.6 }), { ajustar: ajustarRidge, predecir: predecirRidge, remuestreos: 40 })
+  assert.equal(r.estado, 'aprendido')
+  assert.ok(r.beta > 0.2, `beta ${r.beta}`)
+  assert.ok(r.betaP10 > 0)
+  assert.ok(r.validacion.mejoraPct > 0)
+  assert.equal(r.productosEntrenados, 2)
+  const a = r.productos.find((p) => p.itemId === 'A')
+  assert.ok(a.costoVentaMarginal > 0 && a.costoPorVentaIncremental > 0)
+})
+
+test('entrenarEfecto: sin efecto real no inventa uno', () => {
+  const r = entrenarEfecto(historia({ efecto: 0 }), { ajustar: ajustarRidge, predecir: predecirRidge, remuestreos: 40 })
+  assert.notEqual(r.estado, 'aprendido')
+})
+
+test('filasEfecto: sin stock no cuenta, y un producto sin publicidad o con pocos días no entra', () => {
+  const dias = historia()
+  dias.push(...Array.from({ length: 30 }, (_, t) => ({ itemId: 'C', dia: `2026-07-${String(t + 1).padStart(2, '0')}`, unidades: 1, gasto: 0 })))
+  dias[5].stockFraccion = 0.1
+  const items = filasEfecto(dias)
+  assert.deepEqual(items.map((i) => i.itemId).sort(), ['A', 'B'])
+  assert.equal(items.find((i) => i.itemId === 'A').dias.length, 59)
+})
+
+test('presupuestoOptimo: el gasto donde la próxima venta cuesta lo que deja', () => {
+  assert.equal(presupuestoOptimo({ beta: 0.5, media: 4, contribucion: 2000 }), 3000)
+  assert.equal(presupuestoOptimo({ beta: 0.5, media: 1, contribucion: 1000 }), 0)
+  assert.equal(presupuestoOptimo({ beta: -0.1, media: 4, contribucion: 2000 }), 0)
+})

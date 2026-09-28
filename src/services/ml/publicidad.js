@@ -24,6 +24,8 @@ const schema = new mongoose.Schema({
   dia: { type: String, required: true, unique: true },
   parametros: { type: mongoose.Schema.Types.Mixed, required: true },
   porProducto: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  // el efecto real de la publicidad sobre las ventas totales (entrenarEfecto)
+  efecto: { type: mongoose.Schema.Types.Mixed, default: null },
   calculadoEl: { type: Date, required: true },
 }, { versionKey: false })
 export const AprendizajePublicidad = mongoose.models.AprendizajePublicidad ?? mongoose.model('AprendizajePublicidad', schema)
@@ -146,10 +148,58 @@ export async function actualizarAprendizajePublicidad({ ahora = new Date() } = {
   const titulos = new Map((await ProductoPropio.find().select('itemIdMl sku titulo').lean()).map((p) => [p.itemIdMl ?? p.sku, p.titulo]))
   const { parametros, porProducto } = aprenderDeAnuncios(filas.map((f) => ({ ...f, itemId: f._id, titulo: titulos.get(f._id) ?? null })), envio)
   const dia = new Date(ahora).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
-  await AprendizajePublicidad.updateOne({ dia }, { $set: { parametros, porProducto, calculadoEl: ahora } }, { upsert: true })
+  let efecto = null
+  try {
+    efecto = await entrenarEfectoDesdeBase({ titulos, envio })
+  } catch (err) {
+    efecto = { estado: 'error', motivo: err.message }
+  }
+  await AprendizajePublicidad.updateOne({ dia }, { $set: { parametros, porProducto, efecto, calculadoEl: ahora } }, { upsert: true })
   cache = null
   console.log(`[ml-publicidad] ${parametros.productosConMuestra}/${parametros.productos} anuncios con muestra · ROAS mediana ${parametros.roas.mediana}x (p75 ${parametros.roas.p75}x) · venta por anuncio $${parametros.costoPorVenta.mediana} · envío real ${parametros.factorEnvio}× la base`)
   return { dia, parametros }
+}
+
+// Toda la historia: publicidad por producto y día (AdsDiaMl, día de Chile)
+// contra el libro diario (DiaProductoMl, día UTC: hasta 4 horas de desfase,
+// aceptable en series diarias). Después, el budget óptimo con la economía real.
+async function entrenarEfectoDesdeBase({ titulos, envio }) {
+  const { DiaProductoMl } = await import('../../models/DiaProductoMl.js')
+  const { ajustarRidge, predecirRidge } = await import('./regresion.js')
+  const ads = await AdsDiaMl.find({ itemId: { $ne: '*' } }).select('itemId dia costo unidadesAds').lean()
+  const itemsConAds = [...new Set(ads.filter((a) => a.costo > 0).map((a) => a.itemId))]
+  const libro = await DiaProductoMl.find({ itemId: { $in: itemsConAds } }).select('itemId dia unidades precio promo stockFraccion').lean()
+  const adsPorDia = new Map(ads.map((a) => [`${a.itemId}|${a.dia}`, a]))
+  const dias = libro.map((d) => {
+    const a = adsPorDia.get(`${d.itemId}|${d.dia}`)
+    return { itemId: d.itemId, dia: d.dia, unidades: d.unidades, precio: d.precio, promo: d.promo, stockFraccion: d.stockFraccion, gasto: a?.costo ?? 0, unidadesAds: a?.unidadesAds ?? 0 }
+  })
+  const efecto = entrenarEfecto(dias, { ajustar: ajustarRidge, predecir: predecirRidge })
+  if (!efecto.productos) return efecto
+  // economía de cada producto: lo que deja una venta ANTES del costo de
+  // mercadería (que no está cargado): precio mediano − comisión − envío real
+  const { ProductoPropio } = await import('../../models/ProductoPropio.js')
+  const { comisionMlExacta } = await import('../comisionesMl.js')
+  const propios = new Map((await ProductoPropio.find({}).select('itemIdMl sku categoriaMl costoUnitarioClp').lean()).map((p) => [p.itemIdMl ?? p.sku, p]))
+  for (const p of efecto.productos) {
+    p.titulo = titulos.get(p.itemId) ?? null
+    const precios = dias.filter((d) => d.itemId === p.itemId && d.precio > 0).map((d) => d.precio).sort((a, b) => a - b)
+    const precio = precios[Math.floor(precios.length / 2)] ?? null
+    const prop = propios.get(p.itemId)
+    const com = precio ? await comisionMlExacta({ precioClp: precio, categoriaId: prop?.categoriaMl ?? null }).catch(() => null) : null
+    const comision = precio ? (Number.isFinite(com?.pct) ? Math.round((com.pct / 100) * precio + (com.cargoFijoClp ?? 0)) : Math.round(precio * 0.16)) : null
+    const env = envio.get(p.itemId)?.porUnidad ?? null
+    const costo = Number.isFinite(prop?.costoUnitarioClp) ? prop.costoUnitarioClp : null
+    p.precio = precio
+    p.quedaTrasMl = precio && env != null ? precio - comision - env : null
+    p.costoUnitario = costo
+    const contribucion = p.quedaTrasMl != null ? p.quedaTrasMl - (costo ?? 0) : null
+    p.contribucion = contribucion
+    // con el costo sin cargar, el budget óptimo es un TECHO (mercadería gratis)
+    p.presupuestoOptimo = presupuestoOptimo({ beta: efecto.beta, media: p.ventasPorDia, contribucion })
+    p.presupuestoEsTecho = costo == null
+  }
+  return efecto
 }
 
 let cache = null
@@ -163,6 +213,160 @@ export async function parametrosPublicidad() {
 export async function estadoPublicidad() {
   const serie = await AprendizajePublicidad.find().sort({ dia: -1 }).limit(30).lean()
   if (!serie.length) return { vacio: true }
-  return { ultimo: { dia: serie[0].dia, parametros: serie[0].parametros, porProducto: serie[0].porProducto },
+  return { ultimo: { dia: serie[0].dia, parametros: serie[0].parametros, porProducto: serie[0].porProducto, efecto: serie[0].efecto ?? null },
     evolucion: serie.map((s) => ({ dia: s.dia, roasMediana: s.parametros.roas?.mediana, costoPorVenta: s.parametros.costoPorVenta?.mediana, factorEnvio: s.parametros.factorEnvio, productos: s.parametros.productosConMuestra })).reverse() }
+}
+
+// ─── EL EFECTO REAL DE LA PUBLICIDAD, APRENDIDO DE TODA LA HISTORIA ──────────
+//
+// Pedido del importador (28-sep-2026): "necesito que tome la data de todo el
+// tiempo corriendo publicidad sin que el learning machine aprenda". ML dice
+// cuántas ventas le atribuye al anuncio, pero parte de esas iban a llegar
+// solas. Esto cruza, producto por producto y día por día, lo gastado en
+// anuncios con las VENTAS TOTALES del libro diario, controlando precio,
+// promoción, días sin stock y la tendencia de cada producto (que madura sola
+// mientras la publicidad sube: sin la tendencia, todo se lo lleva el anuncio).
+//
+// Modelo: ventas del día / promedio del producto = efecto del producto +
+// tendencia del producto + β·log(1 + gasto/1000) + precio + promo. El log hace
+// que cada peso extra venda menos que el anterior, y de ahí sale el budget
+// óptimo: el gasto donde la siguiente venta cuesta lo mismo que lo que deja.
+// Se valida con los últimos días, que el modelo no ve al entrenar.
+
+const MIN_DIAS_PRODUCTO = 20
+const FRACCION_PRUEBA = 0.25
+
+const logGasto = (g) => Math.log1p(Math.max(0, g) / 1000)
+
+// Pura. dias: { itemId, dia, unidades, gasto, precio, promo, stockFraccion, unidadesAds }
+export function filasEfecto(dias) {
+  const porItem = new Map()
+  for (const d of dias) {
+    if (d.stockFraccion != null && d.stockFraccion < 0.5) continue // sin stock no vende, con o sin anuncio
+    porItem.set(d.itemId, [...(porItem.get(d.itemId) ?? []), d])
+  }
+  const items = []
+  for (const [itemId, ds] of porItem) {
+    const o = ds.sort((a, b) => a.dia.localeCompare(b.dia))
+    // desde el primer día con venta o anuncio: antes el producto no existía
+    const inicio = o.findIndex((d) => d.unidades > 0 || d.gasto > 0)
+    if (inicio < 0) continue
+    const vivos = o.slice(inicio)
+    if (vivos.length < MIN_DIAS_PRODUCTO || !vivos.some((d) => d.gasto > 0)) continue
+    const precios = vivos.map((d) => d.precio).filter((p) => p > 0).sort((a, b) => a - b)
+    items.push({ itemId, dias: vivos, precioMediano: precios[Math.floor(precios.length / 2)] ?? null })
+  }
+  return items
+}
+
+function disenar(items, { conAds = true, medias }) {
+  const ids = items.map((i) => i.itemId)
+  const filas = []
+  for (const it of items) {
+    const t0 = +new Date(it.dias[0].dia)
+    const media = medias.get(it.itemId)
+    if (!(media > 0)) continue
+    for (const d of it.dias) {
+      const tendencia = (+new Date(d.dia) - t0) / (30 * 86400e3)
+      const xs = [
+        ...(conAds ? [logGasto(d.gasto)] : []),
+        d.precio > 0 && it.precioMediano ? Math.log(d.precio / it.precioMediano) : 0,
+        d.promo ? 1 : 0,
+        ...ids.map((id) => (id === it.itemId ? 1 : 0)),
+        ...ids.map((id) => (id === it.itemId ? tendencia : 0)),
+      ]
+      filas.push({ xs, y: d.unidades / media, grupo: it.itemId, fin: 0, itemId: it.itemId, dia: d.dia, media, unidades: d.unidades, gasto: d.gasto, unidadesAds: d.unidadesAds ?? 0 })
+    }
+  }
+  return filas
+}
+
+const coefCrudo = (m, j) => m.coeficientes[j + 1] / m.escalas[j]
+
+// Pura. Entrena con toda la historia, valida con los últimos días y estima el
+// efecto por producto. El ajuste lo recibe hecho (ridge) para poder probarlo.
+export function entrenarEfecto(dias, { ajustar, predecir, remuestreos = 200, semilla = 7 } = {}) {
+  const items = filasEfecto(dias)
+  if (items.length < 2) return { estado: 'sin-datos', motivo: 'menos de 2 productos con 20+ días y publicidad' }
+  const todosDias = [...new Set(items.flatMap((i) => i.dias.map((d) => d.dia)))].sort()
+  const corte = todosDias[Math.floor(todosDias.length * (1 - FRACCION_PRUEBA))]
+  const mediasDe = (filtro) => new Map(items.map((i) => {
+    const ds = i.dias.filter(filtro)
+    return [i.itemId, ds.length ? ds.reduce((a, d) => a + d.unidades, 0) / ds.length : 0]
+  }))
+  // VALIDACIÓN: entrenar hasta el corte, predecir después, con y sin publicidad
+  const mediasEntreno = mediasDe((d) => d.dia < corte)
+  const error = (conAds) => {
+    const f = disenar(items, { conAds, medias: mediasEntreno })
+    const entreno = f.filter((x) => x.dia < corte), prueba = f.filter((x) => x.dia >= corte)
+    if (entreno.length < 30 || prueba.length < 10) return null
+    const m = ajustar(entreno, { lambda: 1 })
+    return prueba.reduce((a, x) => a + Math.abs(predecir(m, x.xs) * x.media - x.unidades), 0) / prueba.length
+  }
+  const errorCon = error(true), errorSin = error(false)
+
+  // EL MODELO: toda la historia
+  const medias = mediasDe(() => true)
+  const filas = disenar(items, { conAds: true, medias })
+  const modelo = ajustar(filas, { lambda: 1 })
+  const beta = coefCrudo(modelo, 0)
+  // incertidumbre: remuestreo por DÍAS (un día malo mueve a todos los productos)
+  let s = semilla
+  const azar = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648)
+  const porDia = new Map()
+  for (const f of filas) porDia.set(f.dia, [...(porDia.get(f.dia) ?? []), f])
+  const listaDias = [...porDia.keys()]
+  const betas = []
+  for (let r = 0; r < remuestreos; r++) {
+    const muestra = []
+    for (let k = 0; k < listaDias.length; k++) muestra.push(...porDia.get(listaDias[Math.floor(azar() * listaDias.length)]))
+    try { betas.push(coefCrudo(ajustar(muestra, { lambda: 1 }), 0)) } catch { /* muestra degenerada */ }
+  }
+  betas.sort((a, b) => a - b)
+  const q = (p) => betas[Math.floor(p * (betas.length - 1))] ?? null
+
+  // por producto: ventas que el modelo le da a la publicidad contra las que ML
+  // le atribuye. Lo incremental es β·media·log(1+gasto/1000) de cada día.
+  const productos = items.map((it) => {
+    const media = medias.get(it.itemId)
+    const conGasto = it.dias.filter((d) => d.gasto > 0)
+    const gasto = conGasto.reduce((a, d) => a + d.gasto, 0)
+    const incrementales = it.dias.reduce((a, d) => a + beta * media * logGasto(d.gasto), 0)
+    const atribuidas = it.dias.reduce((a, d) => a + (d.unidadesAds ?? 0), 0)
+    const gastoDiario = conGasto.length ? gasto / conGasto.length : 0
+    return {
+      itemId: it.itemId, dias: it.dias.length, diasConGasto: conGasto.length, ventasPorDia: r2(media),
+      gasto: Math.round(gasto), gastoDiarioPromedio: Math.round(gastoDiario),
+      ventasAtribuidasMl: atribuidas, ventasIncrementales: Math.round(incrementales * 10) / 10,
+      // cuánto costó de verdad cada venta que la publicidad agregó
+      costoPorVentaIncremental: incrementales > 0.5 ? Math.round(gasto / incrementales) : null,
+      // lo que cuesta la PRÓXIMA venta al gasto diario de hoy: con el log, es
+      // (1000 + gasto) / (β · media)
+      costoVentaMarginal: beta > 0 && media > 0 ? Math.round((1000 + gastoDiario) / (beta * media)) : null,
+      // el gasto diario donde la próxima venta cuesta exactamente `c` (lo que
+      // deja la venta): se rellena afuera con la economía del producto
+      beta, media,
+    }
+  })
+  const incrementalesTotal = productos.reduce((a, p) => a + p.ventasIncrementales, 0)
+  const atribuidasTotal = productos.reduce((a, p) => a + p.ventasAtribuidasMl, 0)
+  const mejora = errorCon != null && errorSin != null ? Math.round((1 - errorCon / errorSin) * 1000) / 10 : null
+  const estado = beta <= 0 || (q(0.1) ?? 0) <= 0 ? 'efecto-incierto' : mejora != null && mejora <= 0 ? 'no-predice-mejor' : 'aprendido'
+  return {
+    estado,
+    productos: productos.map(({ beta: _b, media: _m, ...resto }) => resto),
+    beta: r2(beta * 1000) / 1000, betaP10: q(0.1) != null ? Math.round(q(0.1) * 1000) / 1000 : null, betaP90: q(0.9) != null ? Math.round(q(0.9) * 1000) / 1000 : null,
+    // ventas que la publicidad trajo de verdad por cada una que ML se atribuye
+    incrementalidad: atribuidasTotal > 0 ? r2(incrementalesTotal / atribuidasTotal) : null,
+    ventasIncrementales: Math.round(incrementalesTotal), ventasAtribuidasMl: atribuidasTotal,
+    validacion: { corte, errorConPublicidad: r2(errorCon), errorSinPublicidad: r2(errorSin), mejoraPct: mejora },
+    filas: filas.length, productosEntrenados: items.length, dias: todosDias.length, desde: todosDias[0], hasta: todosDias.at(-1),
+  }
+}
+
+// Pura. Budget óptimo: el gasto diario donde la próxima venta por anuncio
+// cuesta lo mismo que deja (contribución). Con el log: S* = β·media·c − 1000.
+export function presupuestoOptimo({ beta, media, contribucion }) {
+  if (!(beta > 0) || !(media > 0) || !(contribucion > 0)) return 0
+  return Math.max(0, Math.round((beta * media * contribucion - 1000) / 100) * 100)
 }
