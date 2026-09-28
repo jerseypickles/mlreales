@@ -7460,3 +7460,22 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .plan-ads-cifras dd { margin: 0; font-size: 13.5px; font-variant-numeric: tabular-nums; color: var(--tinta); }
 .plan-ads-cifras dd.bien { color: var(--exito-tinta); }
 .plan-ads-cifras dd.mal { color: var(--peligro); }
+
+/* lo que el learning machine aprendió de la publicidad */
+.ads-aprendido { margin: 18px 0; }
+.ads-aprendido-nota { font-size: 12.5px; color: var(--tinta-2); }
+.ads-aprendido-lista { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.ads-aprendido-lista li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--borde); background: var(--superficie); }
+.ads-aprendido-lista li.sobra { border-color: color-mix(in srgb, var(--peligro) 35%, var(--borde)); }
+.ads-aprendido-lista img, .ads-aprendido-lista .ads-foto-vacia { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; }
+.ads-aprendido-ficha { display: grid; gap: 3px; min-width: 0; }
+.ads-aprendido-ficha strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ads-aprendido-ficha span { font-size: 11.5px; color: var(--tinta-2); }
+.ads-barra { position: relative; height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--tinta-2) 12%, transparent); margin-top: 3px; }
+.ads-barra .hoy { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--avisa-tinta); }
+.ads-aprendido-lista li.falta .ads-barra .hoy { background: var(--exito-tinta); }
+.ads-barra .optimo { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--tinta); }
+.ads-aprendido-lista dl { display: grid; grid-template-columns: repeat(4, auto); gap: 4px 16px; margin: 0; text-align: right; }
+.ads-aprendido-lista dt { font-size: 10.5px; color: var(--tinta-2); }
+.ads-aprendido-lista dd { margin: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .ads-aprendido-lista li { grid-template-columns: 44px minmax(0, 1fr); } .ads-aprendido-lista dl { grid-column: 1 / -1; grid-template-columns: repeat(2, 1fr); text-align: left; } }

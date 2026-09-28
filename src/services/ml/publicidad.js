@@ -306,9 +306,13 @@ export function entrenarEfecto(dias, opciones = {}) {
     const r = ajustarEfecto(ds, { ...opciones, remuestreos: k === 'todos' ? 0 : opciones.remuestreos })
     lecturas[k] = r
   }
-  const limpia = lecturas.stockConocido
-  const principal = limpia.filas >= 150 && limpia.productosEntrenados >= 3 ? 'stockConocido' : 'todos'
-  const elegido = principal === 'todos' ? ajustarEfecto(dias, opciones) : limpia
+  // la primera lectura LIMPIA que tenga datos y valide (predice mejor los días
+  // que no vio); toda la historia solo si ninguna limpia alcanza. Medido el
+  // 28-sep: toda la historia daba β 1,00 y las dos limpias 0,75 — el quiebre
+  // de stock inflaba el efecto un tercio.
+  const sirve = (r) => r.filas >= 150 && r.productosEntrenados >= 3 && (r.validacion?.mejoraPct ?? -1) > 0
+  const principal = sirve(lecturas.stockConocido) ? 'stockConocido' : sirve(lecturas.soloConGasto) ? 'soloConGasto' : 'todos'
+  const elegido = ajustarEfecto(variantes[principal], opciones)
   const betas = Object.entries(lecturas).filter(([, r]) => r.beta != null).map(([k, r]) => ({ lectura: k, beta: r.beta, filas: r.filas, productos: r.productosEntrenados, mejoraPct: r.validacion?.mejoraPct ?? null }))
   const positivas = betas.filter((b) => b.beta > 0)
   const rango = positivas.length ? Math.max(...positivas.map((b) => b.beta)) / Math.min(...positivas.map((b) => b.beta)) : null
@@ -319,7 +323,8 @@ export function entrenarEfecto(dias, opciones = {}) {
       lecturas: betas,
       // las tres dicen lo mismo si todas son positivas y la mayor no pasa el doble de la menor
       coinciden: betas.length === 3 && positivas.length === 3 && rango <= 2,
-      nota: principal === 'todos' ? 'stock conocido solo desde el 1-sep: pocos días todavía; el principal usa toda la historia' : 'el principal usa solo días con stock medido',
+      nota: { todos: 'ninguna lectura limpia alcanza todavía: el principal usa toda la historia y puede estar inflado por días sin stock',
+        stockConocido: 'el principal usa solo días con stock medido', soloConGasto: 'el principal compara días de gasto alto contra gasto bajo: no confunde quiebre de stock con publicidad apagada' }[principal],
     },
   }
 }

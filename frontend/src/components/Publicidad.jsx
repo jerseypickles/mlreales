@@ -413,6 +413,65 @@ function OpinionAds({ dato, corriendo, err, onAnalizar }) {
   )
 }
 
+// LO QUE EL LEARNING MACHINE APRENDIÓ DE TODA LA HISTORIA DE PUBLICIDAD
+// (src/services/ml/publicidad.js → entrenarEfecto): ventas TOTALES contra
+// gasto diario, no la atribución de ML. Por producto: cuántas ventas agregó de
+// verdad, cuánto cuesta la próxima, y el gasto diario donde deja de pagar.
+function AprendidoAds({ fotos }) {
+  const [d, setD] = useState(null)
+  useEffect(() => { api.aprendizajePublicidad().then(setD).catch(() => setD(null)) }, [])
+  const e = d?.ultimo?.efecto
+  if (!e?.productos?.length) return null
+  const val = e.validacion ?? {}
+  const lectura = { soloConGasto: 'días con anuncio encendido', stockConocido: 'días con stock medido', todos: 'toda la historia' }[e.lectura] ?? e.lectura
+  const productos = [...e.productos].filter((p) => p.ventasAtribuidasMl > 0 || p.gasto > 0).sort((a, b) => b.gasto - a.gasto)
+  const escala = Math.max(1, ...productos.map((p) => Math.max(p.gastoDiarioPromedio, p.presupuestoOptimo)))
+  return (
+    <section className="ads-aprendido">
+      <div className="ads-seccion-cabeza">
+        <h3>Lo que aprendió el learning machine</h3>
+        <p>
+          Entrenado con {e.dias} días ({e.desde} → {e.hasta}), {e.productosEntrenados} productos, ventas <strong>totales</strong> contra gasto diario, con precio,
+          promo, stock y la tendencia de cada producto controlados. Lectura: {lectura}.{' '}
+          {e.estado === 'aprendido' ? (
+            <>Con la publicidad predice <strong>{val.mejoraPct}% mejor</strong> los días que no vio al entrenar ({val.errorConPublicidad} vs {val.errorSinPublicidad} ventas/día de error).</>
+          ) : <strong>Todavía no hay un efecto confiable: estos números son orientativos.</strong>}
+        </p>
+        <p className="ads-aprendido-nota">
+          Por cada venta que ML le atribuye al anuncio, la publicidad trajo <strong>{String(e.incrementalidad).replace('.', ',')}</strong> ventas en total
+          ({e.ventasIncrementales} contra {e.ventasAtribuidasMl}): la publicidad también empuja lo orgánico.
+          {e.robustez?.coinciden ? ' Las tres lecturas del efecto coinciden.' : ' Las lecturas del efecto no coinciden del todo: tomar con cuidado.'}
+          {' '}El budget óptimo supone la mercadería gratis mientras no cargues el costo: es un techo.
+        </p>
+      </div>
+      <ul className="ads-aprendido-lista">
+        {productos.map((p) => {
+          const sobra = p.gastoDiarioPromedio > p.presupuestoOptimo
+          return (
+            <li key={p.itemId} className={sobra ? 'sobra' : 'falta'}>
+              {fotos.get(p.itemId) ? <img src={fotos.get(p.itemId)} alt="" width="44" height="44" loading="lazy" /> : <span className="ads-foto-vacia" aria-hidden="true" />}
+              <div className="ads-aprendido-ficha">
+                <strong>{p.titulo ?? p.itemId}</strong>
+                <span>{String(p.ventasPorDia).replace('.', ',')} ventas/día · deja {p.contribucion != null ? fmtPrecio(p.contribucion) : '—'} por venta antes del costo</span>
+                <div className="ads-barra" title="Gasto diario de hoy contra el budget óptimo aprendido">
+                  <i className="hoy" style={{ width: `${(p.gastoDiarioPromedio / escala) * 100}%` }} />
+                  <i className="optimo" style={{ left: `${(p.presupuestoOptimo / escala) * 100}%` }} />
+                </div>
+              </div>
+              <dl>
+                <div><dt>ML atribuye / trajo de verdad</dt><dd>{p.ventasAtribuidasMl} / {Math.round(p.ventasIncrementales)}</dd></div>
+                <div title="Gasto total ÷ ventas que la publicidad agregó"><dt>costo real por venta</dt><dd>{p.costoPorVentaIncremental ? fmtPrecio(p.costoPorVentaIncremental) : '—'}</dd></div>
+                <div title="Lo que cuesta la PRÓXIMA venta al gasto de hoy: cada peso extra vende menos que el anterior"><dt>la próxima venta cuesta</dt><dd className={p.contribucion != null && p.costoVentaMarginal > p.contribucion ? 'res-mal' : ''}>{p.costoVentaMarginal ? fmtPrecio(p.costoVentaMarginal) : '—'}</dd></div>
+                <div><dt>gasto hoy → óptimo</dt><dd><b>{fmtPrecio(p.gastoDiarioPromedio)} → {fmtPrecio(p.presupuestoOptimo)}</b>/día</dd></div>
+              </dl>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
 export function Publicidad() {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
@@ -539,6 +598,7 @@ export function Publicidad() {
 
       <OpinionAds dato={analisis} corriendo={analizando} err={errAnalisis} onAnalizar={pedirAnalisis} />
 
+      <AprendidoAds fotos={new Map(Object.entries(datos.economia ?? {}).map(([id, x]) => [id, x.foto]))} />
       <Campanas campanas={datos.campanas ?? []} dias={dias} recomendaciones={analisis?.recomendaciones} />
       <Productos economia={datos.economia} campanas={datos.campanas} />
     </main>
