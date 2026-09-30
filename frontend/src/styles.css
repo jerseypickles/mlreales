@@ -7819,3 +7819,5 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .f29d-docs li .mal { color: var(--peligro); }
 .f29d-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cont-detalle summary { cursor: pointer; font-weight: 600; }
+.f29m-alerta.medio { background: color-mix(in srgb, var(--avisa-tinta) 8%, var(--superficie)); border-color: color-mix(in srgb, var(--avisa-tinta) 35%, var(--borde)); }
+.f29m-alerta.medio svg { color: var(--avisa-tinta); }

@@ -282,16 +282,17 @@ function Nota({ titulo, tono, children }) {
 // mes desde el inicio de actividades con su total, su vencimiento y su estado.
 const ESTADO = {
   atrasado: { t: 'atrasado', c: 'mal' }, 'vence-pronto': { t: 'vence pronto', c: 'medio' }, 'por-declarar': { t: 'por declarar', c: 'medio' },
-  'mes-en-curso': { t: 'mes en curso', c: 'neutro' }, declarado: { t: 'declarado', c: 'bien' },
+  'mes-en-curso': { t: 'mes en curso', c: 'neutro' }, declarado: { t: 'declarado y pagado', c: 'bien' },
+  'giro-por-pagar': { t: 'declarado · giro por pagar', c: 'medio' },
 }
 const fechaCorta = (iso) => (iso ? `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}` : '—')
 const nombreMes = (p) => ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'][Number(p.slice(5, 7)) - 1] + ' ' + p.slice(0, 4)
 
-function MarcarDeclarado({ m, onListo }) {
+function MarcarDeclarado({ m, onListo, pagar = false }) {
   const [abierto, setAbierto] = useState(false)
-  const [f, setF] = useState({ declaradoEl: new Date().toISOString().slice(0, 10), pagadoClp: m.totalAPagar ?? '', remanenteClp: m.remanente || '', folio: '' })
+  const [f, setF] = useState({ declaradoEl: m.declaracion?.declaradoEl ?? new Date().toISOString().slice(0, 10), pagadoClp: pagar ? '' : m.totalAPagar ?? '', remanenteClp: m.remanente || '', folio: m.declaracion?.folio ?? '', notas: m.declaracion?.notas ?? '' })
   const [error, setError] = useState(null)
-  if (!abierto) return <button type="button" className="boton-secundario boton-chico" onClick={(e) => { e.stopPropagation(); setAbierto(true) }}>ya lo declaré</button>
+  if (!abierto) return <button type="button" className="boton-secundario boton-chico" onClick={(e) => { e.stopPropagation(); setAbierto(true) }}>{pagar ? 'ya lo pagué' : 'ya lo declaré'}</button>
   const guardar = async (e) => {
     e.preventDefault()
     try { await api.contabilidadDeclarar({ periodo: m.periodo, ...f }); setAbierto(false); onListo() } catch (err) { setError(err.message) }
@@ -314,6 +315,12 @@ function TusF29({ resumen, sel, onSel, onRecargar }) {
   return (
     <section className="f29m">
       <h3>Tus F29</h3>
+      {resumen.girosPorPagar ? (
+        <p className="f29m-alerta medio">
+          <Clock size={16} aria-hidden="true" /> <b>{resumen.girosPorPagar} {resumen.girosPorPagar === 1 ? 'giro' : 'giros'} por pagar</b>: {fmtPrecio(resumen.deudaGiros)} más el recargo del día en que pagues.
+          Se paga en sii.cl → Servicios online → Impuestos mensuales → Consultar y pagar giros. Al pagarlo, márcalo con lo que pagaste.
+        </p>
+      ) : null}
       {resumen.atrasados ? (
         <p className="f29m-alerta">
           <TriangleAlert size={16} aria-hidden="true" /> <b>{resumen.atrasados} {resumen.atrasados === 1 ? 'F29 atrasado' : 'F29 atrasados'}</b> por {fmtPrecio(resumen.deudaAtrasada)} (sin multa ni intereses).
@@ -330,15 +337,15 @@ function TusF29({ resumen, sel, onSel, onRecargar }) {
                 <em className={`f29m-estado ${e.c}`}>{e.t}{m.estado === 'atrasado' ? ` · ${m.diasAtraso} días` : ''}</em>
               </div>
               <div className="f29m-total">
-                <span>{m.estado === 'declarado' ? 'pagaste' : m.estado === 'mes-en-curso' ? 'va en' : 'a pagar'}</span>
+                <span>{m.estado === 'declarado' ? 'pagaste' : m.estado === 'mes-en-curso' ? 'va en' : m.estado === 'giro-por-pagar' ? 'giro por pagar' : 'a pagar'}</span>
                 <b>{fmtPrecio(m.estado === 'declarado' && m.declaracion?.pagadoClp != null ? m.declaracion.pagadoClp : m.totalAPagar)}</b>
                 <small>IVA {fmtPrecio(m.ivaAPagar)} + PPM {fmtPrecio(m.ppm)}{m.remanente ? ` · remanente ${fmtPrecio(m.remanente)}` : ''}</small>
               </div>
               <div className="f29m-pie">
-                <small>{m.estado === 'declarado' ? `declarado el ${fechaCorta(m.declaradoEl)}` : `vence el ${fechaCorta(m.vence)}`}</small>
+                <small>{m.estado === 'declarado' || m.estado === 'giro-por-pagar' ? `declarado el ${fechaCorta(m.declaradoEl)}${m.declaracion?.folio ? ` · ${m.declaracion.folio}` : ''}` : `vence el ${fechaCorta(m.vence)}`}</small>
                 <small className={m.facturaMl ? 'ok' : ''}>{m.facturaMl ? 'factura de ML ✓' : 'sin factura de ML aún'}</small>
               </div>
-              {m.estado !== 'declarado' && m.estado !== 'mes-en-curso' ? <MarcarDeclarado m={m} onListo={onRecargar} /> : null}
+              {m.estado !== 'declarado' && m.estado !== 'mes-en-curso' ? <MarcarDeclarado m={m} onListo={onRecargar} pagar={m.estado === 'giro-por-pagar'} /> : null}
             </div>
           )
         })}

@@ -155,11 +155,15 @@ export async function resumenF29({ hoy = new Date() } = {}) {
     const f = f29DesdeDatos(periodo, datos, { remanenteAnterior: remanente })
     const decl = declaraciones.get(periodo) ?? null
     const estado = estadoF29(periodo, { declaracion: decl, hoy })
+    // declarado con "pago con giro": la declaración vale, pero la plata se debe
+    if (estado.estado === 'declarado' && decl?.pagadoClp == null && f.totalAPagar > 0) estado.estado = 'giro-por-pagar'
     meses.push({ periodo, ...estado, totalAPagar: f.totalAPagar, ivaAPagar: f.ivaAPagar, ppm: f.ppm, remanente: f.remanente, debito: f.debitoTotal, credito: f.creditoTotal,
       declaracion: decl, facturaMl: datos.ml.facturas > 0, dins: datos.dins.length })
     // lo declarado manda sobre lo calculado para el remanente que se arrastra
     remanente = decl?.remanenteClp != null ? decl.remanenteClp : f.remanente
   }
   const atrasados = meses.filter((m) => m.estado === 'atrasado')
-  return { meses: meses.reverse(), atrasados: atrasados.length, deudaAtrasada: atrasados.reduce((a, m) => a + m.totalAPagar, 0) }
+  const giros = meses.filter((m) => m.estado === 'giro-por-pagar')
+  return { meses: meses.reverse(), atrasados: atrasados.length, deudaAtrasada: atrasados.reduce((a, m) => a + m.totalAPagar, 0),
+    girosPorPagar: giros.length, deudaGiros: giros.reduce((a, m) => a + m.totalAPagar, 0) }
 }
