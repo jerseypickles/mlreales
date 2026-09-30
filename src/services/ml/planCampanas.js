@@ -27,7 +27,7 @@ const PESO_PREVIO = 30
 const MIN_TRANSICIONES = 12
 const r2 = (x) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null)
 const redondear500 = (x) => Math.max(1000, Math.ceil(x / 500) * 500)
-const plata = (x) => `$${Math.round(x).toLocaleString('es-CL')}`
+const plata = (x) => `${x < 0 ? '−' : ''}$${Math.abs(Math.round(x)).toLocaleString('es-CL')}`
 
 const schema = new mongoose.Schema({
   itemId: { type: String, required: true },
@@ -93,7 +93,7 @@ export function planDeArranque(eco, p) {
 
 // Pura. Revisión de una campaña en curso. `dias`: filas diarias del producto
 // desde el primer gasto { dia, gasto, unidadesAds, ventaAds, unidades }.
-export function revisarCampana(dias, eco, p, { beta = null, diasCorriendo = dias.length, umbral = UMBRAL_INICIAL } = {}) {
+export function revisarCampana(dias, eco, p, { beta = null, diasCorriendo = dias.length, umbral = UMBRAL_INICIAL, umbralAprendido = false } = {}) {
   const conGasto = dias.filter((d) => d.gasto > 0)
   if (!conGasto.length) return null
   const ult7 = dias.slice(-7)
@@ -135,7 +135,7 @@ export function revisarCampana(dias, eco, p, { beta = null, diasCorriendo = dias
     if (holgada && (optimo == null || gastoDiario < optimo)) {
       const nuevo = optimo ? Math.min(optimo, redondear500(gastoDiario * 1.4)) : redondear500(gastoDiario * 1.4)
       return { ...base, accion: 'subir', budgetDiario: nuevo,
-        texto: `Deja plata con aire: ${plata(resultado7)} en 7 días, ROAS ${roas7}x contra un empate de ${eco.roasEmpate}x (subir conviene sobre ${r2(eco.roasEmpate * umbral)}x, aprendido). Sube a ${plata(nuevo)}/día.${optimo ? ` El techo aprendido es ${plata(optimo)}/día.` : ''}` }
+        texto: `Deja plata con aire: ${plata(resultado7)} en 7 días, ROAS ${roas7}x contra un empate de ${eco.roasEmpate}x (subir conviene sobre ${r2(eco.roasEmpate * umbral)}x, ${umbralAprendido ? 'aprendido' : 'regla inicial'}). Sube a ${plata(nuevo)}/día.${optimo ? ` El techo aprendido es ${plata(optimo)}/día.` : ''}` }
     }
     // deja plata EN PROMEDIO, pero si gasta bastante sobre el óptimo, los
     // últimos pesos pierden: bajar hacia el óptimo deja más plata total
@@ -297,7 +297,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       // la fase cuenta desde que el producto está en su campaña ACTUAL: si se
       // lo pasó a una campaña propia, arranca su prueba de 2 semanas ahí
       const enCampana = fila.desdeCampana ? fila._dias.filter((d) => d.dia >= fila.desdeCampana).length : fila._dias.length
-      const r = revisarCampana(fila._dias, fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral })
+      const r = revisarCampana(fila._dias, fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral, umbralAprendido: decision.estado === 'aprendido' })
       if (r && fila.desdeCampana && enCampana < fila._dias.length && enCampana <= 21) r.texto = `En su campaña nueva desde ${fila.desdeCampana}. ${r.texto}`
       delete fila.pendiente
       delete fila.desdeCampana
@@ -450,7 +450,7 @@ export function nombreCorto(titulo) {
 // budgetDiario, roasObjetivo, economia: { roasEmpate } }].
 export function estructuraCampanas({ campanas = [], porItem = {}, planes = [] }) {
   const corto = nombreCorto
-  const plata = (x) => `$${Math.round(x).toLocaleString('es-CL')}`
+  const plata = (x) => `${x < 0 ? '−' : ''}$${Math.abs(Math.round(x)).toLocaleString('es-CL')}`
   const plan = new Map(planes.map((p) => [p.itemId, p]))
   const acciones = []
   const resumen = []
