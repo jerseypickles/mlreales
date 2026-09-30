@@ -147,7 +147,31 @@ export function revisarCampana(dias, eco, p, { beta = null, diasCorriendo = dias
     return { ...base, accion: 'mantener', budgetDiario: gastoDiario,
       texto: `Deja plata: ${plata(resultado7)} en 7 días con ROAS ${roas7}x. Mantén ${plata(gastoDiario)}/día.` }
   }
-  // pierde plata
+  // pierde plata en la semana. ¿Alcanzó el gasto para juzgarlo? Con el gasto
+  // de dos ventas al empate (2 × lo que deja una venta) se esperan ~2 ventas;
+  // con menos, una semana en cero es casi azar. Caso 30-sep: Set 10, Set 18 y
+  // escopeta gastaban $150-330/día dentro de la campaña mixta (ML le daba casi
+  // todo al Set 8), vendieron 0 esa semana y la regla decía "apagar" — cuando
+  // en 30 días los tres dejaban plata (+$6.244, +$4.349, +$931).
+  const muestra7 = gasto7 >= 2 * eco.deja
+  if (!muestra7) {
+    const ult30 = dias.slice(-30)
+    const gasto30 = suma(ult30, 'gasto'), ventasAds30 = suma(ult30, 'unidadesAds'), venta30 = suma(ult30, 'ventaAds')
+    const resultado30 = Math.round(dejaronDe(venta30, ventasAds30, eco) - gasto30)
+    metricas.resultado30 = resultado30
+    metricas.gasto30 = Math.round(gasto30)
+    if (gasto30 < 2 * eco.deja) {
+      return { ...base, accion: 'esperar', budgetDiario: Math.max(gastoDiario, 1000),
+        texto: `Gasta tan poco (${plata(gastoDiario)}/día) que ni en 30 días alcanza para juzgarlo. Dale una campaña propia de ${plata(Math.max(gastoDiario, 1000))}/día por 2 semanas para saber si rinde.` }
+    }
+    if (resultado30 >= 0) {
+      return { ...base, accion: 'mantener', budgetDiario: gastoDiario,
+        texto: `Semana floja (${plata(resultado7)}) pero con muy poco gasto para juzgar: en 30 días deja ${plata(resultado30)}. Mantén; en una campaña propia se mide mejor.` }
+    }
+    // en 30 días también pierde: se juzga con esa ventana
+    return { ...base, accion: fase === 'ajuste' || fase === 'regular' ? 'apagar' : 'bajar', budgetDiario: fase === 'ajuste' || fase === 'regular' ? 0 : redondear500(gastoDiario / 2),
+      texto: `En 30 días pierde ${plata(-resultado30)} con ${plata(gasto30)} de gasto. ${fase === 'ajuste' || fase === 'regular' ? 'Apágalo y deja que venda orgánico.' : `Baja a ${plata(redondear500(gastoDiario / 2))}/día.`}` }
+  }
   if (roas7 != null && eco.roasEmpate && roas7 >= eco.roasEmpate * 0.8) {
     const nuevoRoas = Math.ceil(eco.roasEmpate * MARGEN_OBJETIVO * 10) / 10
     return { ...base, accion: 'subir-roas', budgetDiario: gastoDiario, roasObjetivo: nuevoRoas,
@@ -273,7 +297,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       // la fase cuenta desde que el producto está en su campaña ACTUAL: si se
       // lo pasó a una campaña propia, arranca su prueba de 2 semanas ahí
       const enCampana = fila.desdeCampana ? fila._dias.filter((d) => d.dia >= fila.desdeCampana).length : fila._dias.length
-      const r = revisarCampana(fila._dias.slice(-21), fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral })
+      const r = revisarCampana(fila._dias, fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral })
       if (r && fila.desdeCampana && enCampana < fila._dias.length && enCampana <= 21) r.texto = `En su campaña nueva desde ${fila.desdeCampana}. ${r.texto}`
       delete fila.pendiente
       delete fila.desdeCampana

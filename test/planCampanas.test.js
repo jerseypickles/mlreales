@@ -171,3 +171,20 @@ test('diaDeCampanaActual: detecta el paso a una campaña nueva', () => {
   assert.equal(diaDeCampanaActual(f.slice(0, 2)), '2026-09-01')
   assert.equal(diaDeCampanaActual([]), null)
 })
+
+test('revisarCampana: una semana en cero con poco gasto no apaga si en 30 días deja plata', () => {
+  const eco = economiaVenta({ precio: 3990, envio: 800 }) // deja ~2.512
+  const dias = Array.from({ length: 40 }, (_, i) => ({ dia: `2026-08-${String((i % 28) + 1).padStart(2, '0')}`, gasto: 200, unidadesAds: i < 33 && i % 6 === 0 ? 1 : 0, ventaAds: i < 33 && i % 6 === 0 ? 3990 : 0, unidades: 1 }))
+  const r = revisarCampana(dias, eco, P, { diasCorriendo: 60 })
+  assert.ok(r.metricas.resultado7 < 0)
+  assert.ok(r.metricas.resultado30 > 0)
+  assert.equal(r.accion, 'mantener')
+})
+
+test('revisarCampana: con poco gasto y 30 días también en rojo, ahí sí apaga', () => {
+  const eco = economiaVenta({ precio: 3990, envio: 800 })
+  const dias = Array.from({ length: 40 }, (_, i) => ({ dia: `2026-08-${String((i % 28) + 1).padStart(2, '0')}`, gasto: 400, unidadesAds: 0, ventaAds: 0, unidades: 1 }))
+  const r = revisarCampana(dias, eco, P, { diasCorriendo: 60 })
+  assert.equal(r.accion, 'apagar')
+  assert.ok(r.metricas.resultado30 < 0)
+})
