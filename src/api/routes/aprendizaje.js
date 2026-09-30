@@ -172,6 +172,15 @@ router.get('/campanas', async (_req, res) => {
   ])
   res.json({ ...vivo, historial })
 })
+// vuelve a calcular y GUARDAR las recomendaciones de hoy (reemplaza las del
+// día): cuando se corrige una regla, la recomendación guardada con la regla
+// vieja no debe quedar para evaluarse 7 días después
+router.post('/campanas', async (_req, res) => {
+  const { planesDeCampana } = await import('../../services/ml/planCampanas.js')
+  const r = await planesDeCampana({ guardar: true })
+  res.json({ dia: r.dia, guardadas: r.productos?.length ?? 0, acciones: (r.productos ?? []).map((p) => `${p.titulo?.slice(0, 30)}: ${p.accion}`) })
+})
+
 // la serie diaria de cada producto y de la cuenta, para los gráficos
 router.get('/publicidad/serie', async (req, res) => {
   const { serieAdsPorProducto } = await import('../../services/ml/adsDiario.js')
