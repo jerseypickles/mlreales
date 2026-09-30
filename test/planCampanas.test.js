@@ -154,3 +154,12 @@ test('estructuraCampanas: una campaña con todo mezclado → pausar lo que pierd
   assert.ok(!tipos.some((t) => t.includes('lampara'))) // sin stock (hold): no se toca
   assert.equal(e.acciones[0].tipo, 'pausar-anuncio')
 })
+
+import { nombreCorto } from '../src/services/ml/planCampanas.js'
+test('nombreCorto: distingue productos que empiezan igual', () => {
+  assert.equal(nombreCorto('Brochas Maquillaje Profesionales Set 8 + Organizador Rosa'), 'Brochas Maquillaje Set 8')
+  assert.equal(nombreCorto('Brochas Maquillaje Profesionales Set 18 Pcs Makeup Cosmetico Gris'), 'Brochas Maquillaje Set 18')
+  assert.equal(nombreCorto('Brochas Maquillaje Set 10 Profesionales Estuche'), 'Brochas Maquillaje Set 10')
+  assert.equal(nombreCorto('Pistola Juguete Lanzador Dardos Set Tiro'), 'Pistola Juguete Lanzador Dardos Set')
+  assert.equal(nombreCorto('Pistola Juguete Dardos Y Balines Tipo Escopeta'), 'Pistola Juguete Dardos Y Balines')
+})

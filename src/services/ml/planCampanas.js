@@ -395,11 +395,21 @@ const ACTIVOS = new Set(['subir', 'mantener', 'bajar', 'esperar', 'subir-roas', 
 const FUERA = new Set(['apagar', 'organico', 'no-anunciar'])
 const BUDGET_MINIMO_SOLO = 1000 // bajo esto una campaña propia no junta datos: se agrupa
 
+// Pura. Un nombre corto que distinga: "Brochas Maquillaje Profesionales Set 8
+// + Organizador Rosa" → "Brochas Maquillaje Set 8". Las 4 primeras palabras
+// dejaban tres productos como "Brochas Maquillaje Profesionales Set".
+export function nombreCorto(titulo) {
+  const w = String(titulo ?? '').split(/\s+/).filter(Boolean)
+  const i = w.findIndex((x, k) => k >= 2 && /\d/.test(x))
+  if (i < 0) return w.slice(0, 5).join(' ')
+  return [...w.slice(0, 2), ...(i - 1 >= 2 ? [w[i - 1]] : []), w[i]].join(' ')
+}
+
 // Pura. campanas: [{ id, nombre, estado, presupuestoDiario, roasObjetivo }];
 // porItem: itemId → { campanaId, estado }; planes: [{ itemId, titulo, accion,
 // budgetDiario, roasObjetivo, economia: { roasEmpate } }].
 export function estructuraCampanas({ campanas = [], porItem = {}, planes = [] }) {
-  const corto = (t) => String(t ?? '').split(/\s+/).slice(0, 4).join(' ')
+  const corto = nombreCorto
   const plata = (x) => `$${Math.round(x).toLocaleString('es-CL')}`
   const plan = new Map(planes.map((p) => [p.itemId, p]))
   const acciones = []
