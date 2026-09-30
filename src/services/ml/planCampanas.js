@@ -47,8 +47,17 @@ export function economiaVenta({ precio, comisionPct = 17, envio = 800, costo = n
   if (!Number.isFinite(precio) || precio <= 0) return null
   const comision = Math.round(precio * (comisionPct / 100))
   const deja = precio - comision - (Number.isFinite(envio) ? envio : 800) - (Number.isFinite(costo) ? costo : 0)
-  return { precio, comision, envio: Math.round(envio ?? 800), costo: Number.isFinite(costo) ? costo : null, deja: Math.round(deja), esTecho: !Number.isFinite(costo),
+  return { precio, comision, comisionPct, envio: Math.round(envio ?? 800), costo: Number.isFinite(costo) ? costo : null, deja: Math.round(deja), esTecho: !Number.isFinite(costo),
     roasEmpate: deja > 0 ? r2(precio / deja) : null }
+}
+
+// Pura. Lo que dejaron unas ventas por anuncio, con el precio que SE COBRÓ
+// (ventaAds trae los descuentos y promociones; el precio de lista no): la
+// venta menos comisión, menos envío y costo por unidad.
+export function dejaronDe(ventaAds, unidadesAds, eco) {
+  if (!eco || !(unidadesAds > 0)) return 0
+  const venta = ventaAds > 0 ? ventaAds : eco.precio * unidadesAds
+  return venta * (1 - (eco.comisionPct ?? 17) / 100) - unidadesAds * ((eco.envio ?? 800) + (eco.costo ?? 0))
 }
 
 // Pura. El plan de arranque. `p` son los parámetros aprendidos (roas.mediana,
@@ -80,16 +89,15 @@ export function planDeArranque(eco, p) {
 
 // Pura. Revisión de una campaña en curso. `dias`: filas diarias del producto
 // desde el primer gasto { dia, gasto, unidadesAds, ventaAds, unidades }.
-export function revisarCampana(dias, eco, p, { beta = null } = {}) {
+export function revisarCampana(dias, eco, p, { beta = null, diasCorriendo = dias.length } = {}) {
   const conGasto = dias.filter((d) => d.gasto > 0)
   if (!conGasto.length) return null
-  const diasCorriendo = dias.length
   const ult7 = dias.slice(-7)
   const suma = (xs, k) => xs.reduce((a, d) => a + (d[k] ?? 0), 0)
   const gasto7 = suma(ult7, 'gasto'), ventasAds7 = suma(ult7, 'unidadesAds'), venta7 = suma(ult7, 'ventaAds'), unidades7 = suma(ult7, 'unidades')
   const roas7 = gasto7 > 0 ? r2(venta7 / gasto7) : null
   // LA PLATA: lo que dejaron las ventas por anuncio menos lo que costaron
-  const resultado7 = eco ? Math.round(ventasAds7 * eco.deja - gasto7) : null
+  const resultado7 = eco ? Math.round(dejaronDe(venta7, ventasAds7, eco) - gasto7) : null
   const gastoDiario = Math.round(gasto7 / Math.max(1, ult7.length))
   const fase = diasCorriendo <= 7 ? 'semana-1' : diasCorriendo <= 14 ? 'semana-2' : diasCorriendo <= 21 ? 'ajuste' : 'regular'
   const metricas = { diasCorriendo, gasto7, ventasAds7, unidades7, roas7, resultado7, gastoDiario, dejaPorVenta: eco?.deja ?? null, esTecho: eco?.esTecho ?? true }
@@ -98,8 +106,11 @@ export function revisarCampana(dias, eco, p, { beta = null } = {}) {
 
   // con la venta de cada día a la vista (media) y el efecto aprendido, el
   // gasto donde la próxima venta cuesta lo que deja
+  // (solo si el producto vende al menos 1 al día: con menos, el efecto común
+  // aplicado a una venta ínfima da "óptimo $0" contra un ROAS que dice otra cosa)
   const media = unidades7 / Math.max(1, ult7.length)
-  const optimo = beta > 0 && media > 0 && eco.deja > 0 ? Math.max(0, Math.round((beta * media * eco.deja - 1000) / 500) * 500) : null
+  const dejaReal = ventasAds7 > 0 ? dejaronDe(venta7, ventasAds7, eco) / ventasAds7 : eco.deja
+  const optimo = beta > 0 && media >= 1 && dejaReal > 0 ? Math.max(0, Math.round((beta * media * dejaReal - 1000) / 500) * 500) : null
   metricas.budgetOptimoAprendido = optimo
 
   if (diasCorriendo < 5 && !(gasto7 >= 3 * eco.deja && ventasAds7 === 0)) {
@@ -121,8 +132,15 @@ export function revisarCampana(dias, eco, p, { beta = null } = {}) {
       return { ...base, accion: 'subir', budgetDiario: nuevo,
         texto: `Deja plata con aire: ${plata(resultado7)} en 7 días, ROAS ${roas7}x contra un empate de ${eco.roasEmpate}x. Sube a ${plata(nuevo)}/día.${optimo ? ` El techo aprendido es ${plata(optimo)}/día.` : ''}` }
     }
+    // deja plata EN PROMEDIO, pero si gasta bastante sobre el óptimo, los
+    // últimos pesos pierden: bajar hacia el óptimo deja más plata total
+    if (optimo != null && optimo > 0 && gastoDiario > optimo * 1.3) {
+      const nuevo = Math.max(optimo, redondear500(gastoDiario * 0.7))
+      return { ...base, accion: 'bajar', budgetDiario: nuevo,
+        texto: `Deja plata en promedio (${plata(resultado7)} en 7 días), pero gasta sobre lo que conviene: pasado ${plata(optimo)}/día la próxima venta cuesta más de lo que deja. Baja a ${plata(nuevo)}/día y deja más plata total.` }
+    }
     return { ...base, accion: 'mantener', budgetDiario: gastoDiario,
-      texto: `Deja plata: ${plata(resultado7)} en 7 días con ROAS ${roas7}x. Mantén ${plata(gastoDiario)}/día.${optimo != null && gastoDiario > optimo ? ` Ojo: sobre ${plata(optimo)}/día la próxima venta cuesta más de lo que deja.` : ''}` }
+      texto: `Deja plata: ${plata(resultado7)} en 7 días con ROAS ${roas7}x. Mantén ${plata(gastoDiario)}/día.` }
   }
   // pierde plata
   if (roas7 != null && eco.roasEmpate && roas7 >= eco.roasEmpate * 0.8) {
@@ -150,7 +168,7 @@ export function marcadorSemanal(porProducto) {
       const s = semanas.get(lunes) ?? { semana: lunes, gasto: 0, ventasAds: 0, dejaron: 0 }
       s.gasto += d.gasto ?? 0
       s.ventasAds += d.unidadesAds ?? 0
-      s.dejaron += (d.unidadesAds ?? 0) * eco.deja
+      s.dejaron += dejaronDe(d.ventaAds ?? 0, d.unidadesAds ?? 0, eco)
       semanas.set(lunes, s)
     }
   }
@@ -186,7 +204,12 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     const precio = prop.promoMl?.activa?.precio ?? ult?.precioEfectivo ?? ult?.precio ?? null
     let envio = envioReal.get(id)?.porUnidad ?? null
     if (envio == null && Number.isFinite(precio)) envio = (await costoEnvioFull({ precioClp: precio }).catch(() => null))?.clp ?? null
-    const eco = economiaVenta({ precio, envio, costo: prop.costoUnitarioClp ?? null })
+    // el precio que SE COBRA (con promociones) de las ventas por anuncio de las
+    // últimas 2 semanas; sin ventas, el de lista
+    const recientes = ads.filter((a) => a.itemId === id && a.unidadesAds > 0 && a.dia >= new Date(+ahora - 14 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }))
+    const u14 = recientes.reduce((a, x) => a + x.unidadesAds, 0)
+    const precioCobrado = u14 >= 2 ? Math.round(recientes.reduce((a, x) => a + x.ventaAds, 0) / u14) : null
+    const eco = economiaVenta({ precio: precioCobrado ?? precio, envio, costo: prop.costoUnitarioClp ?? null })
     // la serie desde el primer día con gasto (o vacía si nunca se anunció)
     const susAds = ads.filter((a) => a.itemId === id)
     const primer = susAds.filter((a) => a.costo > 0).map((a) => a.dia).sort()[0] ?? null
@@ -203,13 +226,13 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       // una campaña apagada hace más de 7 días ya no se revisa como en curso
       const ultimoGasto = susAds.filter((a) => a.costo > 0).map((a) => a.dia).sort().at(-1)
       if (ultimoGasto && +new Date(hoy) - +new Date(ultimoGasto) > 7 * DIA) plan = { fase: 'apagada', accion: 'apagada', budgetDiario: 0, texto: `Sin gasto desde ${ultimoGasto}.` }
-      else plan = revisarCampana(dias.slice(-21), eco, p, { beta: betaUsable })
+      else plan = revisarCampana(dias.slice(-21), eco, p, { beta: betaUsable, diasCorriendo: dias.length })
       paraMarcador.push({ dias, eco })
     } else {
       plan = planDeArranque(eco, p)
     }
     if (!plan) continue
-    const fila = { itemId: id, titulo: prop.titulo ?? null, precio, economia: eco, ...plan }
+    const fila = { itemId: id, titulo: prop.titulo ?? null, precio: precioCobrado ?? precio, precioLista: precio, economia: eco, ...plan }
     salida.push(fila)
     if (guardar) {
       await RecomendacionAds.updateOne({ itemId: id, dia: hoy }, { $set: { titulo: fila.titulo, fase: plan.fase, accion: plan.accion, texto: plan.texto,
