@@ -61,6 +61,7 @@ function veredictoCampana(p, acciones, ticket) {
   const m = p.metricas ?? {}
   if (m.resultado30 != null) razones.push(`En 30 días la publicidad dejó ${conSigno(m.resultado30)}.`)
   else if (m.resultado7 != null) razones.push(`En los últimos 7 días dejó ${conSigno(m.resultado7)} con ROAS ${x(m.roas7)}.`)
+  if (p.accion === 'apagada') return { tipo: 'pausado', titulo: 'Hoy no tiene anuncio (sin stock o pausado)', razones: [...razones, 'Sin gasto en la última semana. Cuando vuelva el stock, el learning machine lo revisa de nuevo.'] }
   if (suyas.some((a) => a.tipo === 'pausar-anuncio') || ['apagar', 'organico', 'no-anunciar'].includes(p.accion)) {
     return { tipo: 'no', titulo: 'No: que venda orgánico', razones }
   }
@@ -72,7 +73,7 @@ function veredictoCampana(p, acciones, ticket) {
     const a = suyas.find((y) => y.tipo === 'agrupar-chicos')
     return { tipo: 'agrupada', titulo: `Sí, pero agrupado: campaña de prueba de ${fmtPrecio(a.budgetDiario ?? 1000)}/día`, razones: [...razones, 'Vende poco para una campaña propia; junto a productos de economía parecida se prueba 2 semanas fuera de la sombra del que más gasta.'] }
   }
-  if (p.accion === 'apagada') return { tipo: 'no', titulo: 'Hoy no tiene anuncio', razones: [...razones, 'Sin gasto en la última semana (sin stock o pausado).'] }
+  if (p.accion === 'apagada') return { tipo: 'pausado', titulo: 'Hoy no tiene anuncio (sin stock o pausado)', razones: [...razones, 'Sin gasto en la última semana. Cuando vuelva el stock, el learning machine lo revisa de nuevo.'] }
   return { tipo: 'ya', titulo: p.campana ? `Sí: sigue en «${p.campana}»` : 'Sí', razones }
 }
 
@@ -396,7 +397,7 @@ function Productos({ plan, datos, aprendido, serie, fotos, sel, onSel }) {
   const actual = productos.find((p) => p.itemId === sel) ?? productos[0]
   if (!actual) return <p className="pub-vacio">Sin productos propios.</p>
   const veredictos = new Map(productos.map((p) => [p.itemId, veredictoCampana(p, acciones, ticketDe(p.precio))]))
-  const ETIQUETA = { propia: 'campaña propia', agrupada: 'campaña agrupada', no: 'sin campaña', ya: 'con campaña' }
+  const ETIQUETA = { propia: 'campaña propia', agrupada: 'campaña agrupada', no: 'sin campaña', ya: 'con campaña', pausado: 'sin stock / pausado' }
   return (
     <div className="pub-productos-vista">
       <nav className="pub-lista" aria-label="Productos">
