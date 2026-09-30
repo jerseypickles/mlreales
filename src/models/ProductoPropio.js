@@ -21,6 +21,11 @@ const productoPropioSchema = new mongoose.Schema({
   // costo real por unidad puesto en bodega (lo ingresa el usuario): habilita
   // el margen real por venta — sin esto, ingresos ≠ ganancia
   costoUnitarioClp: { type: Number, default: null },
+  // de dónde salió el costo: 'manual' (lo escribió el importador) o
+  // 'cotizacion' (se copió del costo puesto del nicho al llegar el producto,
+  // para que el learning machine decida con costo desde el día 1; se confirma)
+  costoOrigen: { type: String, default: null },
+  costoEl: { type: Date, default: null },
   // categoría ML del item (la trae la API oficial en el scan): permite calcular
   // la comisión exacta para el margen
   categoriaMl: { type: String, default: null },

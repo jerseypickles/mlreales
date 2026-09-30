@@ -10,6 +10,8 @@ import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
 import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
 import { reviewsOficialesSeguro, fullOficialSeguro } from '../services/meli.js'
 import { generarReporteNicho } from '../services/metricas.js'
+let ultimoCableadoAuto = 0 // el vínculo automático de productos nuevos, con IA: no más de cada 12 h
+let ultimoCostoAuto = 0 // la copia del costo de la cotización (lee el tablero): no más de cada 12 h
 import { scoring } from '../config/scoring.js'
 import { analizarNicho } from '../services/analista.js'
 import { sugerirNichos, palabrasSaturadas } from '../services/sugeridor.js'
@@ -942,11 +944,33 @@ export async function procesarScanPropios(job) {
   // la pasada completa diaria además reconoce sola publicaciones nuevas del
   // vendedor (el botón Importar queda solo para forzarlo a mano)
   if (!soloOficial) {
+    let imp = null
     try {
-      const imp = await importarMisItems()
+      imp = await importarMisItems()
       if (imp.importados) console.log(`[scan-propios] auto-import: ${imp.importados} publicación(es) nueva(s)`)
     } catch (err) {
       console.warn(`[scan-propios] auto-import omitido: ${err.message}`)
+    }
+    // el producto nuevo se vincula a su nicho EL MISMO DÍA (antes esperaba al
+    // optimizador de los martes) y hereda el costo de la cotización: así el
+    // learning machine decide budget y campaña con costo desde el primer día
+    try {
+      const { ProductoPropio } = await import('../models/ProductoPropio.js')
+      // con IA: al llegar algo nuevo, o cada 12 h si quedó alguno sin calzar
+      const tocaCablear = (imp?.importados ?? 0) > 0 || Date.now() - ultimoCableadoAuto > 12 * 3600e3
+      if (tocaCablear && (await ProductoPropio.exists({ estado: 'activo', nichoId: null }))) {
+        ultimoCableadoAuto = Date.now()
+        const { cablearPropiosAuto } = await import('../services/cableador.js')
+        await cablearPropiosAuto()
+      }
+      // el tablero es pesado: al llegar algo nuevo, o cada 12 h
+      if ((imp?.importados ?? 0) > 0 || Date.now() - ultimoCostoAuto > 12 * 3600e3) {
+        ultimoCostoAuto = Date.now()
+        const { costoDesdeCotizacion } = await import('../services/propios.js')
+        await costoDesdeCotizacion()
+      }
+    } catch (err) {
+      console.warn(`[scan-propios] vínculo o costo de productos nuevos omitido: ${err.message}`)
     }
   }
   return escanearPropios({ soloOficial })

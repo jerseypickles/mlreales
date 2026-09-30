@@ -7776,3 +7776,5 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .pub-forma-barra i.bien { background: var(--exito-tinta); }
 .pub-forma-barra i.mal { background: var(--peligro); }
 @media (max-width: 640px) { .pub-formas > div { grid-template-columns: 1fr; } .pub-formas small { grid-column: 1; } }
+
+.gan-origen { margin: 4px 0 0; font-size: 11.5px; color: var(--avisa-tinta); }

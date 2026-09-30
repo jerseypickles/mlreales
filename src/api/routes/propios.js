@@ -525,6 +525,8 @@ router.patch(
         return res.status(400).json({ error: 'costoUnitarioClp debe ser un número ≥ 0 (o null para borrarlo)' })
       }
       propio.costoUnitarioClp = costo
+      propio.costoOrigen = costo === null ? null : 'manual'
+      propio.costoEl = costo === null ? null : new Date()
       await propio.save()
     }
     // lo que ya salió hacia Full: {unidades} para anotarlo, null para borrarlo.

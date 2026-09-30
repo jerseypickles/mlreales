@@ -279,6 +279,9 @@ function GananciaUnidad({ p, onGuardarCosto, onCambiarPrecio }) {
           {guardando ? '…' : 'guardar'}
         </button>
       </form>
+      {p.costoOrigen === 'cotizacion' ? (
+        <p className="gan-origen">Costo copiado de la cotización del nicho: confírmalo o corrígelo con el real puesto en bodega.</p>
+      ) : null}
       {g === null ? (
         <p className="gan-vacio">
           Escribe en cuánto te llegó puesto en bodega de ML (producto + flete + internación + despacho).

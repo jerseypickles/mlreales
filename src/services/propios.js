@@ -66,6 +66,32 @@ export async function importarMisItems() {
   return { total: ids.length, importados, yaSeguidos }
 }
 
+// EL COSTO LLEGA CON EL PRODUCTO (30-sep-2026). Los productos nuevos traen
+// su costo puesto en la cotización del nicho; sin esto nacían sin costo y el
+// learning machine decidía budget y campañas "antes del costo" hasta que
+// alguien lo volviera a escribir. Se copia solo si el producto no tiene costo
+// y su nicho tiene UN costo claro (el puesto en Chile, o el calculado desde la
+// cotización cuando el nicho cotizó un solo producto). Queda marcado como
+// 'cotizacion' para confirmarlo; lo que escriba el importador manda siempre.
+export async function costoDesdeCotizacion() {
+  const sinCosto = await ProductoPropio.find({ estado: 'activo', nichoId: { $ne: null }, costoUnitarioClp: null }).select('_id nichoId').lean()
+  if (!sinCosto.length) return { copiados: 0 }
+  const { tableroOportunidades } = await import('./tablero.js')
+  const { oportunidades } = await tableroOportunidades({ todos: true })
+  const cot = new Map(oportunidades.map((o) => [String(o.nichoId), o.cotizacion]))
+  let copiados = 0
+  for (const p of sinCosto) {
+    const c = cot.get(String(p.nichoId))
+    if (!c || c.productos?.length > 1) continue // varios productos cotizados: no se adivina cuál es
+    const costo = Number.isFinite(c.costoPuestoClp) ? c.costoPuestoClp : Number.isFinite(c.landedClp) ? Math.round(c.landedClp) : null
+    if (!(costo > 0)) continue
+    await ProductoPropio.updateOne({ _id: p._id, costoUnitarioClp: null }, { $set: { costoUnitarioClp: costo, costoOrigen: 'cotizacion', costoEl: new Date() } })
+    copiados++
+  }
+  if (copiados) console.log(`[propios] costo copiado de la cotización a ${copiados} producto(s)`)
+  return { copiados }
+}
+
 export function extraerSkuDeUrl(url) {
   const m = String(url ?? '').match(/MLCU?-?\d{6,}/)
   return m ? m[0].replace('-', '') : null
