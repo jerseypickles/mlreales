@@ -163,3 +163,11 @@ test('nombreCorto: distingue productos que empiezan igual', () => {
   assert.equal(nombreCorto('Pistola Juguete Lanzador Dardos Set Tiro'), 'Pistola Juguete Lanzador Dardos Set')
   assert.equal(nombreCorto('Pistola Juguete Dardos Y Balines Tipo Escopeta'), 'Pistola Juguete Dardos Y Balines')
 })
+
+import { diaDeCampanaActual } from '../src/services/ml/planCampanas.js'
+test('diaDeCampanaActual: detecta el paso a una campaña nueva', () => {
+  const f = [{ dia: '2026-09-01', costo: 100, campanaId: 1 }, { dia: '2026-09-20', costo: 100, campanaId: 1 }, { dia: '2026-10-02', costo: 100, campanaId: 9 }, { dia: '2026-10-03', costo: 0, campanaId: 9 }, { dia: '2026-10-04', costo: 80, campanaId: 9 }]
+  assert.equal(diaDeCampanaActual(f), '2026-10-02')
+  assert.equal(diaDeCampanaActual(f.slice(0, 2)), '2026-09-01')
+  assert.equal(diaDeCampanaActual([]), null)
+})

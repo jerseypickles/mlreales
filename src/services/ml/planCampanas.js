@@ -161,6 +161,17 @@ export function revisarCampana(dias, eco, p, { beta = null, diasCorriendo = dias
     texto: `Pierde ${plata(-resultado7)} en 7 días (ROAS ${roas7}x, empate ${eco.roasEmpate}x). Baja a ${plata(redondear500(gastoDiario / 2))}/día; si la próxima semana sigue en rojo, apágalo.` }
 }
 
+// Pura. Desde qué día el producto gasta en su campaña ACTUAL (la del último
+// día con gasto). Si siempre estuvo en la misma, su primer día de gasto.
+export function diaDeCampanaActual(filas) {
+  const conGasto = filas.filter((a) => a.costo > 0 && a.campanaId != null).sort((a, b) => a.dia.localeCompare(b.dia))
+  if (!conGasto.length) return null
+  const actual = conGasto.at(-1).campanaId
+  let desde = conGasto.at(-1).dia
+  for (let i = conGasto.length - 1; i >= 0 && conGasto[i].campanaId === actual; i--) desde = conGasto[i].dia
+  return desde
+}
+
 // Pura. El marcador: cuánto dejó la publicidad por semana, sumando productos.
 export function marcadorSemanal(porProducto) {
   const semanas = new Map()
@@ -200,7 +211,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const ids = propios.map((x) => x.itemIdMl ?? x.sku)
   // toda la historia que ML retiene de publicidad (~100 días)
   const desde = new Date(+ahora - 120 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
-  const ads = await AdsDiaMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia costo unidadesAds ventaAds').lean()
+  const ads = await AdsDiaMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia costo unidadesAds ventaAds campanaId').lean()
   const libro = await DiaProductoMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia unidades').lean()
   const hoy = new Date(ahora).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
   const salida = []
@@ -239,7 +250,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       // una campaña apagada hace más de 7 días ya no se revisa como en curso
       const ultimoGasto = susAds.filter((a) => a.costo > 0).map((a) => a.dia).sort().at(-1)
       if (ultimoGasto && +new Date(hoy) - +new Date(ultimoGasto) > 7 * DIA) plan = { fase: 'apagada', accion: 'apagada', budgetDiario: 0, texto: `Sin gasto desde ${ultimoGasto}.` }
-      else plan = { pendiente: true }
+      else plan = { pendiente: true, desdeCampana: diaDeCampanaActual(susAds) }
       paraMarcador.push({ dias, eco })
       transiciones.push(...transicionesSemanales(dias, eco).map((t) => ({ ...t, itemId: id })))
       diasPorItem.set(id, dias)
@@ -259,8 +270,13 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const evaluacion = evaluarRecomendaciones(recsViejas, diasPorItem, ecoPorItem, { hoy })
   for (const fila of salida) {
     if (fila.pendiente) {
-      const r = revisarCampana(fila._dias.slice(-21), fila.economia, p, { beta: betaUsable, diasCorriendo: fila._dias.length, umbral: decision.umbral })
+      // la fase cuenta desde que el producto está en su campaña ACTUAL: si se
+      // lo pasó a una campaña propia, arranca su prueba de 2 semanas ahí
+      const enCampana = fila.desdeCampana ? fila._dias.filter((d) => d.dia >= fila.desdeCampana).length : fila._dias.length
+      const r = revisarCampana(fila._dias.slice(-21), fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral })
+      if (r && fila.desdeCampana && enCampana < fila._dias.length && enCampana <= 21) r.texto = `En su campaña nueva desde ${fila.desdeCampana}. ${r.texto}`
       delete fila.pendiente
+      delete fila.desdeCampana
       Object.assign(fila, r ?? { accion: 'sin-datos', texto: 'Sin datos suficientes.' })
     }
     delete fila._dias
