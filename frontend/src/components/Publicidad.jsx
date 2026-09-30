@@ -443,6 +443,15 @@ function PlanLearningMachine({ fotos }) {
           {d.sinCosto ? <> <strong>{d.sinCosto} sin costo cargado</strong>: su plata es antes de pagar el producto.</> : null}
         </p>
       </div>
+      {d.reglas ? (
+        <p className="ads-reglas">
+          <strong>Regla aprendida:</strong>{' '}
+          {d.reglas.estado === 'aprendido'
+            ? <>subir el budget deja más plata cuando el ROAS supera <b>{String(d.reglas.umbral).replace('.', ',')}×</b> el empate (lo aprendido, {String(d.reglas.aprendido).replace('.', ',')}×, pesa {Math.round(d.reglas.peso * 100)}% con {d.reglas.n} cambios de gasto medidos; el resto es la regla inicial de 1,3×).</>
+            : <>todavía usa la regla inicial (subir sobre 1,3× el empate): {d.reglas.estado === 'pocos-casos' ? `lleva ${d.reglas.n} cambios de gasto medidos y necesita 12` : 'los cambios de gasto medidos todavía no muestran un corte claro'}.</>}
+          {d.evaluacion?.evaluadas ? <> <strong>Sus recomendaciones:</strong> {d.evaluacion.seguidas} seguidas, {d.evaluacion.tasaAcierto ?? '—'}% dejaron más plata{d.evaluacion.tasaSinSeguir != null ? ` (las no seguidas: ${d.evaluacion.tasaSinSeguir}%)` : ''}.</> : <> Sus recomendaciones se empiezan a evaluar 7 días después de hacerlas.</>}
+        </p>
+      ) : null}
       {semanas.length ? (
         <div className="ads-marcador" title="Por semana: lo que dejaron las ventas por anuncio menos el gasto">
           {semanas.map((s) => (

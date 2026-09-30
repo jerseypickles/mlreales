@@ -77,3 +77,55 @@ test('revisarCampana: con menos de 1 venta al día no usa el óptimo aprendido',
   assert.equal(r.metricas.budgetOptimoAprendido, null)
   assert.notEqual(r.accion, 'bajar')
 })
+
+import { transicionesSemanales, aprenderUmbral, evaluarRecomendaciones } from '../src/services/ml/planCampanas.js'
+import { ajustarRidge } from '../src/services/ml/regresion.js'
+
+// historia sintética: subir el gasto deja más plata SOLO cuando el ROAS está
+// sobre 1,6× el empate (el umbral "verdadero" que el modelo debe encontrar)
+function historia({ umbralVerdadero = 1.6, semanas = 40, productos = 3 } = {}) {
+  let s = 5
+  const azar = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648)
+  const trans = []
+  for (let k = 0; k < productos * semanas; k++) {
+    const ratio = 0.8 + azar() * 2
+    const dlog = (azar() - 0.5) * 1.6
+    const dplata = dlog * (ratio - umbralVerdadero) * 3 + (azar() - 0.5) * 0.5
+    trans.push({ desde: `2026-${String(7 + (k % 3)).padStart(2, '0')}-${String(1 + (k % 28)).padStart(2, '0')}`, ratio, dlog, dplata })
+  }
+  return trans
+}
+
+test('aprenderUmbral: encuentra el ROAS sobre el cual subir deja plata, y lo mezcla con la regla inicial según la muestra', () => {
+  const r = aprenderUmbral(historia(), { ajustar: ajustarRidge })
+  assert.equal(r.estado, 'aprendido')
+  assert.ok(Math.abs(r.aprendido - 1.6) < 0.2, `aprendido ${r.aprendido}`)
+  assert.ok(r.peso > 0.7)
+  assert.ok(r.umbral > 1.3 && r.umbral <= r.aprendido + 0.01)
+  const pocos = aprenderUmbral(historia().slice(0, 8), { ajustar: ajustarRidge })
+  assert.equal(pocos.estado, 'pocos-casos')
+  assert.equal(pocos.umbral, 1.3)
+})
+
+test('transicionesSemanales: la semana sin stock (sin ventas ni gasto) no enseña', () => {
+  const eco = { precio: 4000, comisionPct: 17, envio: 800, costo: null }
+  const d = (i, gasto, unidades, extra) => ({ dia: `2026-08-${String(i + 1).padStart(2, '0')}`, gasto, unidadesAds: unidades / 2, ventaAds: unidades / 2 * 4000, unidades, precio: 4000, ...extra })
+  const dias = [
+    ...Array.from({ length: 7 }, (_, i) => d(i, 2000, 2)),
+    ...Array.from({ length: 7 }, (_, i) => d(i + 7, 4000, 3)),
+    ...Array.from({ length: 7 }, (_, i) => d(i + 14, 0, 0)),
+  ]
+  const t = transicionesSemanales(dias, eco)
+  assert.equal(t.length, 1)
+  assert.ok(t[0].dlog > 0)
+})
+
+test('evaluarRecomendaciones: cuenta si se siguió y si la plata mejoró', () => {
+  const eco = { deja: 2000 }
+  const dias = Array.from({ length: 20 }, (_, i) => ({ dia: `2026-10-${String(i + 1).padStart(2, '0')}`, gasto: i < 7 ? 1000 : 2000, unidades: i < 7 ? 1 : 2 }))
+  const e = evaluarRecomendaciones([{ itemId: 'A', dia: '2026-10-07', accion: 'subir' }], new Map([['A', dias]]), new Map([['A', eco]]), { hoy: '2026-10-30' })
+  assert.equal(e.evaluadas, 1)
+  assert.equal(e.seguidas, 1)
+  assert.equal(e.aciertos, 1)
+  assert.equal(e.tasaAcierto, 100)
+})

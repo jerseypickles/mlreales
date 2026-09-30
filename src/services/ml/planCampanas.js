@@ -21,6 +21,10 @@ import { AdsDiaMl } from '../../models/AdsDiaMl.js'
 
 const DIA = 86400e3
 const MARGEN_OBJETIVO = 1.2 // el ROAS objetivo deja 20% de aire sobre el empate
+// la regla inicial de subir (ROAS/empate) y cuánto pesa frente a lo aprendido
+const UMBRAL_INICIAL = 1.3
+const PESO_PREVIO = 30
+const MIN_TRANSICIONES = 12
 const r2 = (x) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null)
 const redondear500 = (x) => Math.max(1000, Math.ceil(x / 500) * 500)
 const plata = (x) => `$${Math.round(x).toLocaleString('es-CL')}`
@@ -89,7 +93,7 @@ export function planDeArranque(eco, p) {
 
 // Pura. Revisión de una campaña en curso. `dias`: filas diarias del producto
 // desde el primer gasto { dia, gasto, unidadesAds, ventaAds, unidades }.
-export function revisarCampana(dias, eco, p, { beta = null, diasCorriendo = dias.length } = {}) {
+export function revisarCampana(dias, eco, p, { beta = null, diasCorriendo = dias.length, umbral = UMBRAL_INICIAL } = {}) {
   const conGasto = dias.filter((d) => d.gasto > 0)
   if (!conGasto.length) return null
   const ult7 = dias.slice(-7)
@@ -121,7 +125,8 @@ export function revisarCampana(dias, eco, p, { beta = null, diasCorriendo = dias
       texto: `Gastó ${plata(gasto7)} en 7 días sin vender por anuncio. Baja a ${plata(redondear500(gastoDiario / 2))}/día y revisa fotos y precio: el clic llega y no compra.` }
   }
   if (resultado7 >= 0) {
-    const holgada = roas7 != null && eco.roasEmpate && roas7 >= eco.roasEmpate * 1.3
+    // el umbral lo aprende aprenderUmbral con la plata de cada cambio de gasto
+    const holgada = roas7 != null && eco.roasEmpate && roas7 >= eco.roasEmpate * umbral
     // en la semana 1 el plan manda doblar para aprender; después, subir solo si hay aire
     if (fase === 'semana-1') {
       return { ...base, accion: 'subir', budgetDiario: redondear500(gastoDiario * 2),
@@ -130,7 +135,7 @@ export function revisarCampana(dias, eco, p, { beta = null, diasCorriendo = dias
     if (holgada && (optimo == null || gastoDiario < optimo)) {
       const nuevo = optimo ? Math.min(optimo, redondear500(gastoDiario * 1.4)) : redondear500(gastoDiario * 1.4)
       return { ...base, accion: 'subir', budgetDiario: nuevo,
-        texto: `Deja plata con aire: ${plata(resultado7)} en 7 días, ROAS ${roas7}x contra un empate de ${eco.roasEmpate}x. Sube a ${plata(nuevo)}/día.${optimo ? ` El techo aprendido es ${plata(optimo)}/día.` : ''}` }
+        texto: `Deja plata con aire: ${plata(resultado7)} en 7 días, ROAS ${roas7}x contra un empate de ${eco.roasEmpate}x (subir conviene sobre ${r2(eco.roasEmpate * umbral)}x, aprendido). Sube a ${plata(nuevo)}/día.${optimo ? ` El techo aprendido es ${plata(optimo)}/día.` : ''}` }
     }
     // deja plata EN PROMEDIO, pero si gasta bastante sobre el óptimo, los
     // últimos pesos pierden: bajar hacia el óptimo deja más plata total
@@ -190,14 +195,22 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const beta = (await AprendizajePublicidad.findOne().sort({ dia: -1 }).select('efecto.beta efecto.estado').lean())?.efecto
   const betaUsable = beta?.estado === 'aprendido' ? beta.beta : null
   const envioReal = await envioRealPorItem({ dias: 60 }).catch(() => new Map())
-  const propios = await ProductoPropio.find({ estado: 'activo' }).lean()
+  // todos: los pausados no llevan plan, pero su historia de publicidad enseña
+  const propios = await ProductoPropio.find({}).lean()
   const ids = propios.map((x) => x.itemIdMl ?? x.sku)
-  const desde = new Date(+ahora - 60 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
+  // toda la historia que ML retiene de publicidad (~100 días)
+  const desde = new Date(+ahora - 120 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
   const ads = await AdsDiaMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia costo unidadesAds ventaAds').lean()
   const libro = await DiaProductoMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia unidades').lean()
   const hoy = new Date(ahora).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
   const salida = []
   const paraMarcador = []
+  const transiciones = []
+  const diasPorItem = new Map()
+  const ecoPorItem = new Map()
+  const libroPrecio = await DiaProductoMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia precio stockFraccion').lean()
+  const precioDia = new Map(libroPrecio.map((l) => [`${l.itemId}|${l.dia}`, l.precio]))
+  const stockDia = new Map(libroPrecio.map((l) => [`${l.itemId}|${l.dia}`, l.stockFraccion]))
   for (const prop of propios) {
     const id = prop.itemIdMl ?? prop.sku
     const ult = [...(prop.mediciones ?? [])].sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha)).at(-1)
@@ -221,24 +234,137 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       for (let t = +new Date(`${primer}T12:00:00Z`); new Date(t).toISOString().slice(0, 10) < hoy; t += DIA) {
         const dia = new Date(t).toISOString().slice(0, 10)
         const a = porDia.get(dia)
-        dias.push({ dia, gasto: a?.costo ?? 0, unidadesAds: a?.unidadesAds ?? 0, ventaAds: a?.ventaAds ?? 0, unidades: ventas.get(dia) ?? 0 })
+        dias.push({ dia, gasto: a?.costo ?? 0, unidadesAds: a?.unidadesAds ?? 0, ventaAds: a?.ventaAds ?? 0, unidades: ventas.get(dia) ?? 0, precio: precioDia.get(`${id}|${dia}`) ?? null, stockFraccion: stockDia.get(`${id}|${dia}`) ?? null })
       }
       // una campaña apagada hace más de 7 días ya no se revisa como en curso
       const ultimoGasto = susAds.filter((a) => a.costo > 0).map((a) => a.dia).sort().at(-1)
       if (ultimoGasto && +new Date(hoy) - +new Date(ultimoGasto) > 7 * DIA) plan = { fase: 'apagada', accion: 'apagada', budgetDiario: 0, texto: `Sin gasto desde ${ultimoGasto}.` }
-      else plan = revisarCampana(dias.slice(-21), eco, p, { beta: betaUsable, diasCorriendo: dias.length })
+      else plan = { pendiente: true }
       paraMarcador.push({ dias, eco })
+      transiciones.push(...transicionesSemanales(dias, eco).map((t) => ({ ...t, itemId: id })))
+      diasPorItem.set(id, dias)
+      ecoPorItem.set(id, eco)
     } else {
       plan = planDeArranque(eco, p)
     }
-    if (!plan) continue
-    const fila = { itemId: id, titulo: prop.titulo ?? null, precio: precioCobrado ?? precio, precioLista: precio, economia: eco, ...plan }
-    salida.push(fila)
+    if (!plan || prop.estado !== 'activo') continue
+    salida.push({ itemId: id, titulo: prop.titulo ?? null, precio: precioCobrado ?? precio, precioLista: precio, economia: eco, _dias: dias, ...plan })
+  }
+
+  // LAS REGLAS: el umbral de subir sale de los cambios de gasto de toda la
+  // historia, y las recomendaciones pasadas se evalúan contra la plata
+  const { ajustarRidge } = await import('./regresion.js')
+  const decision = aprenderUmbral(transiciones, { ajustar: ajustarRidge })
+  const recsViejas = await RecomendacionAds.find({ dia: { $lt: hoy } }).select('itemId dia accion').lean()
+  const evaluacion = evaluarRecomendaciones(recsViejas, diasPorItem, ecoPorItem, { hoy })
+  for (const fila of salida) {
+    if (fila.pendiente) {
+      const r = revisarCampana(fila._dias.slice(-21), fila.economia, p, { beta: betaUsable, diasCorriendo: fila._dias.length, umbral: decision.umbral })
+      delete fila.pendiente
+      Object.assign(fila, r ?? { accion: 'sin-datos', texto: 'Sin datos suficientes.' })
+    }
+    delete fila._dias
+    const id = fila.itemId, plan = fila
     if (guardar) {
       await RecomendacionAds.updateOne({ itemId: id, dia: hoy }, { $set: { titulo: fila.titulo, fase: plan.fase, accion: plan.accion, texto: plan.texto,
-        budgetDiario: plan.budgetDiario ?? null, roasObjetivo: plan.roasObjetivo ?? null, metricas: { ...(plan.metricas ?? {}), economia: eco }, calculadoEl: ahora } }, { upsert: true })
+        budgetDiario: plan.budgetDiario ?? null, roasObjetivo: plan.roasObjetivo ?? null, metricas: { ...(plan.metricas ?? {}), economia: plan.economia, umbral: decision.umbral }, calculadoEl: ahora } }, { upsert: true })
     }
   }
   const marcador = marcadorSemanal(paraMarcador)
-  return { dia: hoy, productos: salida, marcador, sinCosto: salida.filter((x) => x.economia?.esTecho).length }
+  return { dia: hoy, productos: salida, marcador, sinCosto: salida.filter((x) => x.economia?.esTecho).length,
+    reglas: { ...decision, transiciones: transiciones.length, ultimas: transiciones.slice(-12) }, evaluacion }
+}
+
+// ─── LAS REGLAS TAMBIÉN SE APRENDEN ─────────────────────────────────────────
+//
+// El importador, 30-sep-2026: "no sirve con umbral razonable, eso es un
+// learning machine en observación; necesitamos que aprenda". La regla de
+// "subir si el ROAS supera el empate en 30%" la puse yo. Ahora sale de la
+// plata: cada cambio de gasto de una semana a la siguiente, en cualquier
+// producto, es un experimento natural. Si subió el gasto, ¿la plata TOTAL del
+// producto (todas sus ventas por lo que deja cada una, menos la publicidad)
+// subió o bajó? ¿Y a qué ROAS estaba cuando eso pasó?
+//
+// Modelo: Δplata = a·Δlog(gasto) + b·Δlog(gasto)·(ROAS/empate − 1) + c. Subir
+// el gasto deja más plata cuando a + b·(r − 1) > 0, o sea sobre r* = 1 − a/b.
+// Ese r* es el umbral aprendido. Con pocos casos se mezcla con la regla
+// inicial (1,3), pesando lo aprendido n/(n+30); con muchos, manda lo aprendido.
+
+
+// Pura. semanas por producto desde su primer gasto; `dias` trae
+// { dia, gasto, unidadesAds, ventaAds, unidades, precio }.
+export function transicionesSemanales(dias, eco) {
+  if (!eco || !dias.length) return []
+  const semanas = []
+  for (let i = 0; i + 7 <= dias.length; i += 7) {
+    const w = dias.slice(i, i + 7)
+    const suma = (k) => w.reduce((a, d) => a + (d[k] ?? 0), 0)
+    const unidades = suma('unidades'), gasto = suma('gasto'), ventaAds = suma('ventaAds')
+    const conPrecio = w.filter((d) => d.precio > 0)
+    const precio = conPrecio.length ? conPrecio.reduce((a, d) => a + d.precio, 0) / conPrecio.length : eco.precio
+    const dejaUnidad = precio * (1 - (eco.comisionPct ?? 17) / 100) - (eco.envio ?? 800) - (eco.costo ?? 0)
+    // SIN STOCK NO ES "APAGAR LA PUBLICIDAD": stock medido bajo 50%, o una
+    // semana entera sin ventas y sin gasto (el producto pausado o quebrado;
+    // el stock diario solo se mide desde el 1-sep)
+    const conStock = w.filter((d) => d.stockFraccion != null)
+    const sinStock = (conStock.length && conStock.reduce((a, d) => a + d.stockFraccion, 0) / conStock.length < 0.5) || (unidades === 0 && gasto === 0)
+    semanas.push({ desde: w[0].dia, sinStock, gasto, unidades, roas: gasto > 0 ? ventaAds / gasto : null, empate: dejaUnidad > 0 ? precio / dejaUnidad : null,
+      plata: unidades * dejaUnidad - gasto, escala: Math.max(1, Math.abs(dejaUnidad)) })
+  }
+  const salida = []
+  for (let t = 0; t + 1 < semanas.length; t++) {
+    const a = semanas[t], b = semanas[t + 1]
+    if (a.sinStock || b.sinStock || !(a.gasto > 0) || a.roas == null || !a.empate) continue
+    salida.push({ desde: a.desde, ratio: a.roas / a.empate, dlog: Math.log((b.gasto + 500) / (a.gasto + 500)),
+      // la plata en "ventas equivalentes" para poder juntar productos de precios distintos
+      dplata: (b.plata - a.plata) / a.escala, gastoAntes: Math.round(a.gasto), gastoDespues: Math.round(b.gasto), plataAntes: Math.round(a.plata), plataDespues: Math.round(b.plata) })
+  }
+  return salida
+}
+
+// Pura. El umbral de ROAS/empate sobre el cual subir el gasto dejó más plata.
+export function aprenderUmbral(transiciones, { ajustar, previo = UMBRAL_INICIAL } = {}) {
+  const utiles = transiciones.filter((t) => Math.abs(t.dlog) >= 0.1 && Number.isFinite(t.ratio) && Number.isFinite(t.dplata))
+  const n = utiles.length
+  const base = { previo, n, umbral: previo, peso: 0 }
+  if (n < MIN_TRANSICIONES || !ajustar) return { ...base, estado: 'pocos-casos' }
+  const filas = utiles.map((t) => ({ xs: [t.dlog, t.dlog * (Math.min(t.ratio, 4) - 1)], y: t.dplata, grupo: t.desde, fin: 0 }))
+  let m
+  try { m = ajustar(filas, { lambda: 1 }) } catch { return { ...base, estado: 'no-ajusta' } }
+  const a = m.coeficientes[1] / m.escalas[0], b = m.coeficientes[2] / m.escalas[1]
+  // b > 0: mientras más aire de ROAS, más rinde subir. Si no, los datos no
+  // dicen dónde está el corte y se queda la regla previa
+  if (!(b > 0)) return { ...base, a: r2(a), b: r2(b), estado: 'sin-patron' }
+  const aprendido = Math.min(3, Math.max(0.8, 1 - a / b))
+  const peso = n / (n + PESO_PREVIO)
+  return { ...base, a: r2(a), b: r2(b), aprendido: r2(aprendido), peso: r2(peso), umbral: r2(peso * aprendido + (1 - peso) * previo), estado: 'aprendido' }
+}
+
+// Pura. ¿Sirvieron las recomendaciones? Siete días después de cada una: si el
+// gasto se movió en la dirección recomendada (la siguió) y si la plata total
+// del producto mejoró. `recs`: { itemId, dia, accion, metricas.gastoDiario };
+// `diasPorItem`: itemId → filas diarias.
+export function evaluarRecomendaciones(recs, diasPorItem, ecoPorItem, { hoy }) {
+  const evaluadas = []
+  for (const r of recs) {
+    const dias = diasPorItem.get(r.itemId) ?? []
+    const eco = ecoPorItem.get(r.itemId)
+    const i = dias.findIndex((d) => d.dia > r.dia)
+    if (i < 0 || !eco) continue
+    const despues = dias.slice(i, i + 7)
+    if (despues.length < 7 || despues.at(-1).dia >= hoy) continue
+    const antes = dias.slice(Math.max(0, i - 7), i)
+    const plataDe = (w) => w.reduce((a, d) => a + (d.unidades ?? 0), 0) * eco.deja - w.reduce((a, d) => a + (d.gasto ?? 0), 0)
+    const gAntes = antes.reduce((a, d) => a + d.gasto, 0) / Math.max(1, antes.length), gDespues = despues.reduce((a, d) => a + d.gasto, 0) / 7
+    const cambio = gAntes > 0 ? gDespues / gAntes : gDespues > 0 ? 2 : 1
+    const siguio = { subir: cambio >= 1.15, bajar: cambio <= 0.85, apagar: gDespues < 100, mantener: cambio > 0.85 && cambio < 1.15, esperar: cambio > 0.85 && cambio < 1.15 }[r.accion]
+    if (siguio == null) continue
+    evaluadas.push({ itemId: r.itemId, dia: r.dia, accion: r.accion, siguio, plataAntes: Math.round(plataDe(antes)), plataDespues: Math.round(plataDe(despues)), mejoro: plataDe(despues) > plataDe(antes) })
+  }
+  const seguidas = evaluadas.filter((e) => e.siguio)
+  return { evaluadas: evaluadas.length, seguidas: seguidas.length, aciertos: seguidas.filter((e) => e.mejoro).length,
+    tasaAcierto: seguidas.length ? Math.round((seguidas.filter((e) => e.mejoro).length / seguidas.length) * 100) : null,
+    // lo mismo para las que NO se siguieron: la comparación que dice si seguirlas sirve
+    tasaSinSeguir: evaluadas.length - seguidas.length ? Math.round((evaluadas.filter((e) => !e.siguio && e.mejoro).length / (evaluadas.length - seguidas.length)) * 100) : null,
+    detalle: evaluadas.slice(-20) }
 }
