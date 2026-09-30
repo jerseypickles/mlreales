@@ -7761,3 +7761,6 @@ a.op-plan-sello:hover { text-decoration: underline; }
   .pub-hist-fila { grid-template-columns: 1fr; }
   .pub-diales div { text-align: left; }
 }
+/* la regla global `header` (la barra fija de la app) no aplica a las cabeceras
+   internas de Publicidad: sin esto quedaban pegadas arriba tapando el contenido */
+.pub header { position: static; z-index: auto; margin: 0; padding: 0; background: none; border: 0; }
