@@ -73,7 +73,6 @@ function veredictoCampana(p, acciones, ticket) {
     const a = suyas.find((y) => y.tipo === 'agrupar-chicos')
     return { tipo: 'agrupada', titulo: `Sí, pero agrupado: campaña de prueba de ${fmtPrecio(a.budgetDiario ?? 1000)}/día`, razones: [...razones, 'Vende poco para una campaña propia; junto a productos de economía parecida se prueba 2 semanas fuera de la sombra del que más gasta.'] }
   }
-  if (p.accion === 'apagada') return { tipo: 'pausado', titulo: 'Hoy no tiene anuncio (sin stock o pausado)', razones: [...razones, 'Sin gasto en la última semana. Cuando vuelva el stock, el learning machine lo revisa de nuevo.'] }
   return { tipo: 'ya', titulo: p.campana ? `Sí: sigue en «${p.campana}»` : 'Sí', razones }
 }
 
@@ -244,7 +243,10 @@ function Resumen({ datos, plan, serieTotal, fotos, onIr }) {
 
 // ── pestaña Campañas ─────────────────────────────────────────────────────────
 function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
-  const campanas = [...(datos.campanas ?? [])].sort((a, b) => (a.estado === 'active' ? -1 : 1) - (b.estado === 'active' ? -1 : 1) || (b.metricas?.cost ?? 0) - (a.metricas?.cost ?? 0))
+  // las pausadas sin productos no aportan: van a una línea al final
+  const conProductos = (c) => Object.values(datos.porItem ?? {}).some((a) => a.campanaId === c.id)
+  const vacias = (datos.campanas ?? []).filter((c) => c.estado !== 'active' && !conProductos(c))
+  const campanas = [...(datos.campanas ?? [])].filter((c) => !vacias.includes(c)).sort((a, b) => (a.estado === 'active' ? -1 : 1) - (b.estado === 'active' ? -1 : 1) || (b.metricas?.cost ?? 0) - (a.metricas?.cost ?? 0))
   const gastoHoy = new Map((hoy?.campanas ?? []).map((c) => [c.id, c.metricas?.cost ?? 0]))
   const planDe = new Map((plan?.productos ?? []).map((p) => [p.itemId, p]))
   return (
@@ -302,6 +304,7 @@ function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
           </section>
         )
       })}
+      {vacias.length ? <p className="pub-vacio">{vacias.length} {vacias.length === 1 ? 'campaña pausada' : 'campañas pausadas'} sin productos: {vacias.map((c) => `«${c.nombre}»`).join(', ')}.</p> : null}
     </div>
   )
 }
