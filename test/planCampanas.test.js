@@ -188,3 +188,59 @@ test('revisarCampana: con poco gasto y 30 días también en rojo, ahí sí apaga
   assert.equal(r.accion, 'apagar')
   assert.ok(r.metricas.resultado30 < 0)
 })
+
+import { observacionesEstructura, aprenderEstructura } from '../src/services/ml/planCampanas.js'
+
+test('observacionesEstructura: la forma de la campaña de cada producto por semana', () => {
+  const eco = { precio: 4000, comisionPct: 17, envio: 800 }
+  const ecoDe = new Map([['A', eco], ['B', eco], ['C', eco]])
+  const filas = [
+    { itemId: 'A', dia: '2026-09-01', campanaId: 1, costo: 3000, unidadesAds: 2, ventaAds: 8000 },
+    { itemId: 'B', dia: '2026-09-02', campanaId: 1, costo: 1000, unidadesAds: 0, ventaAds: 0 },
+    { itemId: 'C', dia: '2026-09-02', campanaId: 2, costo: 1000, unidadesAds: 1, ventaAds: 4000 },
+    { itemId: 'C', dia: '2026-09-03', campanaId: 2, costo: 200, unidadesAds: 0, ventaAds: 0 },
+  ]
+  const o = observacionesEstructura(filas, ecoDe, new Map([['A', 'n1'], ['B', 'n1']]))
+  const a = o.find((x) => x.itemId === 'A'), c = o.find((x) => x.itemId === 'C')
+  assert.equal(a.forma, 'chica')
+  assert.equal(a.mismoNicho, true)
+  assert.equal(a.partGasto, 75)
+  assert.equal(c.forma, 'sola')
+  assert.equal(c.mismoNicho, null)
+})
+
+test('aprenderEstructura: compara al mismo producto consigo mismo; un producto fuerte no se confunde con la forma', () => {
+  // 4 productos; cada uno rinde +0,3 por peso más cuando está solo que agrupado,
+  // y el producto "fuerte" P0 rinde +2 siempre (eso no es de la forma)
+  const obs = []
+  for (let p = 0; p < 4; p++) {
+    for (let s = 0; s < 4; s++) {
+      const base = p === 0 ? 2 : 0.2
+      obs.push({ itemId: `P${p}`, semana: `s${s}`, forma: 'sola', mismoNicho: null, rinde: base + 0.3 })
+      obs.push({ itemId: `P${p}`, semana: `g${s}`, forma: 'grande', mismoNicho: false, rinde: base })
+    }
+  }
+  // un producto que solo estuvo en campaña grande no informa la comparación
+  for (let s = 0; s < 5; s++) obs.push({ itemId: 'SOLO_GRANDE', semana: `x${s}`, forma: 'grande', mismoNicho: false, rinde: 5 })
+  const r = aprenderEstructura(obs)
+  assert.equal(r.estado, 'aprendido')
+  assert.equal(r.productosComparables, 4)
+  assert.ok(Math.abs(r.solaVsGrupo - 0.3) < 0.01, `sola vs grupo ${r.solaVsGrupo}`)
+  const pocos = aprenderEstructura(obs.filter((o) => o.itemId === 'P0'))
+  assert.equal(pocos.estado, 'pocos-casos')
+})
+
+test('estructuraCampanas: si lo aprendido dice que solos rinden más, hasta los chicos van solos', () => {
+  const campanas = [{ id: 1, nombre: 'Campaña 1', estado: 'active', presupuestoDiario: 3500, roasObjetivo: 2.6 }]
+  const porItem = { a: { campanaId: 1, estado: 'active' }, b: { campanaId: 1, estado: 'active' }, c: { campanaId: 1, estado: 'active' } }
+  const planes = [
+    { itemId: 'a', titulo: 'Producto Grande A', accion: 'mantener', budgetDiario: 2000, roasObjetivo: 2.7, economia: { roasEmpate: 1.5 } },
+    { itemId: 'b', titulo: 'Producto Chico B', accion: 'mantener', budgetDiario: 600, roasObjetivo: 2.7, economia: { roasEmpate: 1.6 } },
+    { itemId: 'c', titulo: 'Producto Chico C', accion: 'mantener', budgetDiario: 700, roasObjetivo: 2.7, economia: { roasEmpate: 1.6 } },
+  ]
+  const sinAprender = estructuraCampanas({ campanas, porItem, planes })
+  assert.ok(sinAprender.acciones.some((a) => a.tipo === 'agrupar-chicos'))
+  const aprendido = estructuraCampanas({ campanas, porItem, planes, formas: { solaVsGrupo: 0.3, porNicho: {} } })
+  assert.ok(!aprendido.acciones.some((a) => a.tipo === 'agrupar-chicos'))
+  assert.equal(aprendido.acciones.filter((a) => a.tipo === 'campana-propia').length, 2)
+})

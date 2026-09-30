@@ -290,6 +290,9 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   // historia, y las recomendaciones pasadas se evalúan contra la plata
   const { ajustarRidge } = await import('./regresion.js')
   const decision = aprenderUmbral(transiciones, { ajustar: ajustarRidge })
+  // la forma de campaña que rinde más, aprendida de toda la historia
+  const nichoDe = new Map(propios.filter((x) => x.nichoId).map((x) => [x.itemIdMl ?? x.sku, String(x.nichoId)]))
+  const formas = aprenderEstructura(observacionesEstructura(ads, ecoPorItem, nichoDe))
   const recsViejas = await RecomendacionAds.find({ dia: { $lt: hoy } }).select('itemId dia accion').lean()
   const evaluacion = evaluarRecomendaciones(recsViejas, diasPorItem, ecoPorItem, { hoy })
   for (const fila of salida) {
@@ -317,7 +320,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     const { resumenAds } = await import('../ads.js')
     const r = await resumenAds({ dias: 7 })
     if (r) {
-      estructura = estructuraCampanas({ campanas: r.campanas ?? [], porItem: r.porItem ?? {}, planes: salida })
+      estructura = estructuraCampanas({ campanas: r.campanas ?? [], porItem: r.porItem ?? {}, planes: salida, formas, nichoDe })
       const campanaDe = new Map(Object.entries(r.porItem ?? {}).map(([id, a]) => [id, (r.campanas ?? []).find((c) => c.id === a.campanaId)?.nombre ?? null]))
       for (const f of salida) f.campana = campanaDe.get(f.itemId) ?? null
     }
@@ -325,7 +328,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     console.warn(`[plan-campanas] estructura de campañas no leída: ${err.message}`)
   }
   return { dia: hoy, productos: salida, marcador, estructura, sinCosto: salida.filter((x) => x.economia?.esTecho).length,
-    reglas: { ...decision, transiciones: transiciones.length, ultimas: transiciones.slice(-12) }, evaluacion }
+    reglas: { ...decision, transiciones: transiciones.length, ultimas: transiciones.slice(-12) }, evaluacion, formas }
 }
 
 // ─── LAS REGLAS TAMBIÉN SE APRENDEN ─────────────────────────────────────────
@@ -448,7 +451,14 @@ export function nombreCorto(titulo) {
 // Pura. campanas: [{ id, nombre, estado, presupuestoDiario, roasObjetivo }];
 // porItem: itemId → { campanaId, estado }; planes: [{ itemId, titulo, accion,
 // budgetDiario, roasObjetivo, economia: { roasEmpate } }].
-export function estructuraCampanas({ campanas = [], porItem = {}, planes = [] }) {
+export function estructuraCampanas({ campanas = [], porItem = {}, planes = [], formas = null, nichoDe = new Map() }) {
+  // LO APRENDIDO MANDA SOBRE LA REGLA INICIAL: si las campañas solas rinden
+  // claramente más por peso, hasta los chicos van solos (piso $500); si rinden
+  // claramente menos, solo el que pide $2.000+ se separa.
+  const minimoSolo = formas?.solaVsGrupo == null ? BUDGET_MINIMO_SOLO : formas.solaVsGrupo >= 0.15 ? 500 : formas.solaVsGrupo <= -0.15 ? 2000 : BUDGET_MINIMO_SOLO
+  const porNichoAprendido = formas?.porNicho?.['mismo-nicho'] && formas?.porNicho?.mezclado && formas.porNicho['mismo-nicho'].productos >= 3 && formas.porNicho.mezclado.productos >= 3
+    ? formas.porNicho['mismo-nicho'].vsPromedio - formas.porNicho.mezclado.vsPromedio : null
+  const notaAprendida = formas?.solaVsGrupo != null ? ` (aprendido: sola rinde ${formas.solaVsGrupo >= 0 ? '+' : ''}${Math.round(formas.solaVsGrupo * 100)} centavos por peso frente a agrupada)` : ''
   const corto = nombreCorto
   const plata = (x) => `${x < 0 ? '−' : ''}$${Math.abs(Math.round(x)).toLocaleString('es-CL')}`
   const plan = new Map(planes.map((p) => [p.itemId, p]))
@@ -475,8 +485,8 @@ export function estructuraCampanas({ campanas = [], porItem = {}, planes = [] })
     // 2. varios productos que siguen anunciándose en la misma campaña: los que
     // tienen budget propio suficiente van a su campaña; los chicos se agrupan
     // solo si empatan en un ROAS parecido
-    const solos = siguen.filter((y) => (y.plan.budgetDiario ?? 0) >= BUDGET_MINIMO_SOLO)
-    const chicos = siguen.filter((y) => (y.plan.budgetDiario ?? 0) < BUDGET_MINIMO_SOLO)
+    const solos = siguen.filter((y) => (y.plan.budgetDiario ?? 0) >= minimoSolo)
+    const chicos = siguen.filter((y) => (y.plan.budgetDiario ?? 0) < minimoSolo)
     const empates = siguen.map((y) => y.plan.economia?.roasEmpate).filter(Number.isFinite)
     const dispares = empates.length > 1 && Math.max(...empates) / Math.min(...empates) > 1.25
     const motivo = dispares
@@ -491,9 +501,13 @@ export function estructuraCampanas({ campanas = [], porItem = {}, planes = [] })
     }
     for (const x of salen) {
       acciones.push({ prioridad: 2, tipo: 'campana-propia', campana: c.nombre, itemId: x.id,
-        texto: `Crea una campaña solo para ${corto(x.plan.titulo)}: ${plata(x.plan.budgetDiario)}/día y ROAS objetivo ${String(x.plan.roasObjetivo ?? '—').replace('.', ',')}x, y saca su anuncio de «${c.nombre}».` })
+        texto: `Crea una campaña solo para ${corto(x.plan.titulo)}: ${plata(x.plan.budgetDiario)}/día y ROAS objetivo ${String(x.plan.roasObjetivo ?? '—').replace('.', ',')}x, y saca su anuncio de «${c.nombre}»${notaAprendida}.` })
     }
-    if (chicos.length) {
+    // si juntar por nicho rindió más, los chicos se agrupan por nicho
+    const gruposChicos = porNichoAprendido != null && porNichoAprendido >= 0.1
+      ? [...chicos.reduce((m, y) => m.set(nichoDe.get(y.id) ?? y.id, [...(m.get(nichoDe.get(y.id) ?? y.id) ?? []), y]), new Map()).values()]
+      : [chicos]
+    for (const chicos of gruposChicos) if (chicos.length) {
       const budget = Math.max(1000, chicos.reduce((a, y) => a + (y.plan.budgetDiario ?? 0), 0))
       const roas = Math.max(...chicos.map((y) => y.plan.roasObjetivo ?? 0))
       acciones.push({ prioridad: 3, tipo: 'agrupar-chicos', campana: c.nombre, itemIds: chicos.map((y) => y.id), budgetDiario: budget, roasObjetivo: roas || null,
@@ -507,4 +521,90 @@ export function estructuraCampanas({ campanas = [], porItem = {}, planes = [] })
     acciones.push({ prioridad: 2, tipo: 'crear', itemId: p.itemId, texto: `Crea una campaña solo para ${corto(p.titulo)}: ${plata(p.budgetDiario)}/día y ROAS objetivo ${String(p.roasObjetivo).replace('.', ',')}x (prueba de 2 semanas; la segunda al doble).` })
   }
   return { campanas: resumen, acciones: acciones.sort((a, b) => a.prioridad - b.prioridad) }
+}
+
+// ─── QUÉ FORMA DE CAMPAÑA RINDE MÁS, APRENDIDO ───────────────────────────────
+//
+// El importador, 30-sep-2026: "¿el learning machine aprenderá con el tiempo si
+// las campañas individuales, o de cierta cantidad de productos, o de productos
+// del mismo nicho, funcionan mejor?". La regla de estructura (campaña propia
+// desde $1.000/día, agrupar los chicos) la escribí yo; esto la aprende.
+//
+// Cada semana y producto con gasto queda anotado con la FORMA de su campaña:
+// cuántos productos gastaron en ella esa semana (solo, 2-3, 4+) y si eran todos
+// del mismo nicho. La medida es la plata por peso de publicidad: lo que
+// dejaron sus ventas por anuncio menos el gasto, sobre el gasto. Y se compara
+// EL MISMO PRODUCTO consigo mismo en formas distintas: el Set 8 rinde más que
+// el Set 18 esté donde esté, y eso no dice nada de la forma de la campaña.
+
+export const FORMAS = ['sola', 'chica', 'grande']
+const formaDe = (n) => (n <= 1 ? 'sola' : n <= 3 ? 'chica' : 'grande')
+
+// Pura. filas: AdsDiaMl de productos { itemId, dia, campanaId, costo,
+// unidadesAds, ventaAds }; ecoDe: itemId → economía; nichoDe: itemId → nicho.
+export function observacionesEstructura(filas, ecoDe, nichoDe = new Map()) {
+  const lunes = (dia) => { const t = new Date(`${dia}T12:00:00Z`); return new Date(+t - ((t.getUTCDay() + 6) % 7) * DIA).toISOString().slice(0, 10) }
+  const porSemana = new Map() // semana|campaña → Map(itemId → acumulado)
+  for (const f of filas) {
+    if (!(f.costo > 0) || f.campanaId == null) continue
+    const k = `${lunes(f.dia)}|${f.campanaId}`
+    const m = porSemana.get(k) ?? new Map()
+    const a = m.get(f.itemId) ?? { gasto: 0, unidadesAds: 0, ventaAds: 0 }
+    a.gasto += f.costo; a.unidadesAds += f.unidadesAds ?? 0; a.ventaAds += f.ventaAds ?? 0
+    m.set(f.itemId, a)
+    porSemana.set(k, m)
+  }
+  const obs = []
+  for (const [k, m] of porSemana) {
+    const [semana, campanaId] = k.split('|')
+    const ids = [...m.keys()]
+    const nichos = new Set(ids.map((id) => nichoDe.get(id) ?? `sin-${id}`))
+    const gastoCampana = [...m.values()].reduce((a, x) => a + x.gasto, 0)
+    for (const [itemId, a] of m) {
+      const eco = ecoDe.get(itemId)
+      if (!eco || a.gasto < 500) continue // una semana con $300 de gasto no enseña
+      obs.push({ semana, campanaId, itemId, productos: ids.length, forma: formaDe(ids.length),
+        mismoNicho: ids.length > 1 ? nichos.size === 1 : null, partGasto: Math.round((a.gasto / gastoCampana) * 100),
+        gasto: Math.round(a.gasto), rinde: r2((dejaronDe(a.ventaAds, a.unidadesAds, eco) - a.gasto) / a.gasto) })
+    }
+  }
+  return obs
+}
+
+// Pura. Por forma: cuánto rinde cada peso comparado con el promedio del mismo
+// producto. Solo cuentan los productos que pasaron por 2+ formas distintas.
+export function aprenderEstructura(obs, { minProductos = 3, minSemanas = 6 } = {}) {
+  const porItem = new Map()
+  for (const o of obs) porItem.set(o.itemId, [...(porItem.get(o.itemId) ?? []), o])
+  const comparables = [...porItem.values()].filter((xs) => new Set(xs.map((o) => o.forma)).size >= 2)
+  const delta = (clave) => {
+    const grupos = new Map()
+    for (const xs of comparables) {
+      const media = xs.reduce((a, o) => a + o.rinde, 0) / xs.length
+      for (const o of xs) {
+        const g = clave(o)
+        if (g == null) continue
+        const acc = grupos.get(g) ?? { suma: 0, n: 0, productos: new Set() }
+        acc.suma += o.rinde - media; acc.n++; acc.productos.add(o.itemId)
+        grupos.set(g, acc)
+      }
+    }
+    return Object.fromEntries([...grupos].map(([g, a]) => [g, { semanas: a.n, productos: a.productos.size, vsPromedio: r2(a.suma / a.n) }]))
+  }
+  const porForma = delta((o) => o.forma)
+  const porNicho = delta((o) => (o.mismoNicho == null ? null : o.mismoNicho ? 'mismo-nicho' : 'mezclado'))
+  const conEvidencia = (g) => g && g.productos >= minProductos && g.semanas >= minSemanas
+  const solaVsGrupo = conEvidencia(porForma.sola) && (conEvidencia(porForma.chica) || conEvidencia(porForma.grande))
+    ? r2(porForma.sola.vsPromedio - Math.max(porForma.chica?.vsPromedio ?? -Infinity, porForma.grande?.vsPromedio ?? -Infinity))
+    : null
+  return {
+    observaciones: obs.length, productosComparables: comparables.length,
+    // cuánto rinde cada forma frente al promedio del mismo producto (plata por peso)
+    porForma, porNicho,
+    // plata por peso que gana la campaña sola sobre la mejor forma agrupada
+    solaVsGrupo,
+    estado: solaVsGrupo != null ? 'aprendido' : 'pocos-casos',
+    // la historia por forma, sin comparar productos: lo que se ve hoy
+    crudo: Object.fromEntries(FORMAS.map((f) => { const xs = obs.filter((o) => o.forma === f); return [f, { semanas: xs.length, productos: new Set(xs.map((o) => o.itemId)).size, rinde: xs.length ? r2(xs.reduce((a, o) => a + o.rinde, 0) / xs.length) : null }] })),
+  }
 }

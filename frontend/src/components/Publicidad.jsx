@@ -491,6 +491,8 @@ function LearningMachine({ plan, aprendido, fotos }) {
         ) : <p className="pub-vacio">Todavía no hay días guardados.</p>}
       </section>
 
+      <FormasCampana formas={plan?.formas} />
+
       <div className="pub-aprende-tarjetas">
         <div>
           <strong>Sus aciertos</strong>
@@ -516,6 +518,40 @@ function LearningMachine({ plan, aprendido, fotos }) {
         ) : null}
       </div>
     </div>
+  )
+}
+
+// QUÉ FORMA DE CAMPAÑA RINDE MÁS: solo, de 2-3, de 4+, mismo nicho o
+// mezclado. Plata por peso de publicidad, comparando cada producto consigo mismo.
+function FormasCampana({ formas }) {
+  if (!formas) return null
+  const NOMBRE = { sola: 'solo en su campaña', chica: 'con 1-2 productos más', grande: 'con 3 o más productos' }
+  const crudo = formas.crudo ?? {}
+  const max = Math.max(0.01, ...Object.values(crudo).map((c) => Math.abs(c.rinde ?? 0)))
+  return (
+    <section className="pub-caja">
+      <h3>Qué forma de campaña rinde más <small>{formas.estado === 'aprendido' ? 'aprendido' : 'aprendiendo'}</small></h3>
+      <p className="pub-texto">
+        {formas.estado === 'aprendido'
+          ? <>Comparando cada producto consigo mismo: en campaña propia cada peso de publicidad deja <b className={formas.solaVsGrupo >= 0 ? 'bien' : 'mal'}>{formas.solaVsGrupo >= 0 ? '+' : ''}{Math.round(formas.solaVsGrupo * 100)} centavos</b> {formas.solaVsGrupo >= 0 ? 'más' : 'menos'} que agrupado. Las recomendaciones de estructura ya usan esto.</>
+          : <>Todavía no puede decirlo: necesita al menos 3 productos que hayan pasado por campaña propia y por campaña agrupada ({formas.productosComparables} hasta hoy). Casi toda la historia es una sola campaña mezclada; cuando separes campañas empieza a comparar.</>}
+      </p>
+      <div className="pub-formas">
+        {['sola', 'chica', 'grande'].map((f) => {
+          const c = crudo[f] ?? {}
+          return (
+            <div key={f}>
+              <span>{NOMBRE[f]}</span>
+              <div className="pub-forma-barra"><i className={(c.rinde ?? 0) >= 0 ? 'bien' : 'mal'} style={{ width: `${(Math.abs(c.rinde ?? 0) / max) * 100}%` }} /></div>
+              <small>{c.semanas ? <>cada peso deja <b>{c.rinde >= 0 ? '+' : ''}{Math.round((c.rinde ?? 0) * 100)} ¢</b> · {c.semanas} semanas, {c.productos} productos</> : 'sin semanas todavía'}</small>
+            </div>
+          )
+        })}
+      </div>
+      {formas.porNicho?.['mismo-nicho'] || formas.porNicho?.mezclado ? (
+        <p className="pub-ley">Agrupados del mismo nicho: {formas.porNicho['mismo-nicho'] ? `${formas.porNicho['mismo-nicho'].semanas} semanas` : 'sin casos'} · mezclados: {formas.porNicho.mezclado ? `${formas.porNicho.mezclado.semanas} semanas` : 'sin casos'}. Se compara cuando haya 3+ productos en cada uno.</p>
+      ) : null}
+    </section>
   )
 }
 

@@ -7766,3 +7766,13 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .pub header { position: static; z-index: auto; margin: 0; padding: 0; background: none; border: 0; }
 .pub-veredicto.pausado { background: color-mix(in srgb, var(--tinta-2) 6%, var(--superficie)); }
 .pub-veredicto.pausado strong { color: var(--tinta-2); }
+
+.pub-formas { display: grid; gap: 10px; }
+.pub-formas > div { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 4px 12px; align-items: center; }
+.pub-formas span { font-size: 13px; color: var(--tinta); }
+.pub-formas small { grid-column: 2; font-size: 11.5px; color: var(--tinta-2); }
+.pub-forma-barra { height: 10px; border-radius: 999px; background: color-mix(in srgb, var(--tinta-2) 10%, transparent); overflow: hidden; }
+.pub-forma-barra i { display: block; height: 100%; border-radius: 999px; }
+.pub-forma-barra i.bien { background: var(--exito-tinta); }
+.pub-forma-barra i.mal { background: var(--peligro); }
+@media (max-width: 640px) { .pub-formas > div { grid-template-columns: 1fr; } .pub-formas small { grid-column: 1; } }
