@@ -1982,7 +1982,8 @@ section {
 .app > header .secciones[hidden] { display: none; }
 @media (max-width: 1050px) {
   .app > header { flex-wrap: wrap; }
-  .app > header .secciones { order: 3; width: 100%; overflow-x: auto; }
+  /* min-width 0: sin eso el nav no se achica bajo su contenido y empuja la página de lado */
+  .app > header .secciones { order: 3; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; overflow-x: auto; }
 }
 
 .seccion {
