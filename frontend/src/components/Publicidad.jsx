@@ -413,6 +413,74 @@ function OpinionAds({ dato, corriendo, err, onAnalizar }) {
   )
 }
 
+// EL PLAN DEL LEARNING MACHINE (src/services/ml/planCampanas.js): "comienza
+// con esto y vamos analizando". Arranque para lo que no se anuncia, revisión
+// contra la plata para lo que sí, y el marcador de cuánto dejó la publicidad.
+const ACCIONES = {
+  arrancar: { t: 'arrancar', c: 'bien' }, 'arrancar-con-cuidado': { t: 'arrancar con cuidado', c: 'medio' },
+  organico: { t: 'vender orgánico', c: 'mal' }, 'no-anunciar': { t: 'no anunciar', c: 'mal' },
+  esperar: { t: 'esperar', c: 'neutro' }, mantener: { t: 'mantener', c: 'bien' }, subir: { t: 'subir budget', c: 'bien' },
+  'subir-roas': { t: 'subir ROAS objetivo', c: 'medio' }, bajar: { t: 'bajar budget', c: 'medio' }, apagar: { t: 'apagar', c: 'mal' },
+  apagada: { t: 'apagada', c: 'neutro' }, 'sin-economia': { t: 'sin precio', c: 'neutro' },
+}
+const FASES = { arranque: 'antes de anunciar', 'semana-1': 'semana 1 de prueba', 'semana-2': 'semana 2 de prueba', ajuste: 'semana 3: ajuste', regular: 'en régimen', apagada: 'sin anuncio' }
+
+function PlanLearningMachine({ fotos }) {
+  const [d, setD] = useState(null)
+  useEffect(() => { api.aprendizajeCampanas().then(setD).catch(() => setD(null)) }, [])
+  if (!d?.productos?.length) return null
+  const semanas = (d.marcador ?? []).slice(-8)
+  const escala = Math.max(1, ...semanas.map((s) => Math.abs(s.resultado)))
+  const orden = ['bajar', 'apagar', 'subir-roas', 'subir', 'arrancar', 'arrancar-con-cuidado', 'esperar', 'mantener', 'organico', 'no-anunciar', 'apagada', 'sin-economia']
+  const productos = [...d.productos].sort((a, b) => orden.indexOf(a.accion) - orden.indexOf(b.accion))
+  return (
+    <section className="ads-plan">
+      <div className="ads-seccion-cabeza">
+        <h3>Plan del learning machine</h3>
+        <p>
+          Recomendaciones, no órdenes: arranca con esto y cada día lo revisa contra la <strong>plata que dejó</strong> (lo que dejan las ventas por anuncio menos lo que costó
+          conseguirlas). La prueba de cada producto nuevo son 2 semanas con dos niveles de budget, para aprender cuál deja más.
+          {d.sinCosto ? <> <strong>{d.sinCosto} sin costo cargado</strong>: su plata es antes de pagar el producto.</> : null}
+        </p>
+      </div>
+      {semanas.length ? (
+        <div className="ads-marcador" title="Por semana: lo que dejaron las ventas por anuncio menos el gasto">
+          {semanas.map((s) => (
+            <div key={s.semana} className={s.resultado >= 0 ? 'gana' : 'pierde'}>
+              <i style={{ height: `${Math.max(4, (Math.abs(s.resultado) / escala) * 56)}px` }} />
+              <b>{s.resultado >= 0 ? '+' : '−'}{fmtPrecio(Math.abs(s.resultado))}</b>
+              <span>sem. {s.semana.slice(8, 10)}/{s.semana.slice(5, 7)}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <ul className="ads-plan-lista">
+        {productos.map((x) => {
+          const a = ACCIONES[x.accion] ?? { t: x.accion, c: 'neutro' }
+          return (
+            <li key={x.itemId}>
+              {fotos.get(x.itemId) ? <img src={fotos.get(x.itemId)} alt="" width="44" height="44" loading="lazy" /> : <span className="ads-foto-vacia" aria-hidden="true" />}
+              <div className="ads-plan-ficha">
+                <div className="ads-plan-cab">
+                  <strong>{x.titulo ?? x.itemId}</strong>
+                  <em className={`ads-plan-accion ${a.c}`}>{a.t}</em>
+                  <small>{FASES[x.fase] ?? x.fase}</small>
+                </div>
+                <p>{x.texto}</p>
+              </div>
+              <dl>
+                <div><dt>budget</dt><dd>{x.budgetDiario ? `${fmtPrecio(x.budgetDiario)}/día` : '—'}</dd></div>
+                <div><dt>ROAS objetivo</dt><dd>{x.roasObjetivo ? `${String(x.roasObjetivo).replace('.', ',')}x` : '—'}</dd></div>
+                {x.metricas?.resultado7 != null ? <div><dt>plata 7 días</dt><dd className={x.metricas.resultado7 >= 0 ? 'res-bien' : 'res-mal'}>{x.metricas.resultado7 >= 0 ? '+' : ''}{fmtPrecio(x.metricas.resultado7)}</dd></div> : null}
+              </dl>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
 // LO QUE EL LEARNING MACHINE APRENDIÓ DE TODA LA HISTORIA DE PUBLICIDAD
 // (src/services/ml/publicidad.js → entrenarEfecto): ventas TOTALES contra
 // gasto diario, no la atribución de ML. Por producto: cuántas ventas agregó de
@@ -598,6 +666,7 @@ export function Publicidad() {
 
       <OpinionAds dato={analisis} corriendo={analizando} err={errAnalisis} onAnalizar={pedirAnalisis} />
 
+      <PlanLearningMachine fotos={new Map(Object.entries(datos.economia ?? {}).map(([id, x]) => [id, x.foto]))} />
       <AprendidoAds fotos={new Map(Object.entries(datos.economia ?? {}).map(([id, x]) => [id, x.foto]))} />
       <Campanas campanas={datos.campanas ?? []} dias={dias} recomendaciones={analisis?.recomendaciones} />
       <Productos economia={datos.economia} campanas={datos.campanas} />

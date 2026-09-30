@@ -56,6 +56,7 @@ export const api = {
   aprendizaje: (opciones) => pedir('/api/aprendizaje', opciones),
   aprendizajePerfiles: (opciones) => pedir('/api/aprendizaje/perfiles', opciones),
   aprendizajePublicidad: () => pedir('/api/aprendizaje/publicidad'),
+  aprendizajeCampanas: () => pedir('/api/aprendizaje/campanas'),
   aprendizajePronosticos: (opciones) => pedir('/api/aprendizaje/pronosticos', opciones),
   seguimiento: (nicho, opciones) => pedir(`/api/seguimiento${nicho ? `?nicho=${encodeURIComponent(nicho)}` : ''}`, opciones),
   masVendidos: (nicho, opciones) => pedir(`/api/mas-vendidos${nicho ? `?nicho=${encodeURIComponent(nicho)}` : ''}`, opciones),

@@ -7482,3 +7482,32 @@ a.op-plan-sello:hover { text-decoration: underline; }
 
 /* ticket bajo: con publicidad deja poco (aprendido de las ventas propias) */
 .op-ticket-bajo { display: inline-flex; align-items: center; font-style: normal; font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; color: var(--peligro); background: color-mix(in srgb, var(--peligro) 10%, transparent); border: 1px solid color-mix(in srgb, var(--peligro) 30%, transparent); white-space: nowrap; }
+
+/* plan del learning machine: marcador de plata y qué hacer con cada producto */
+.ads-plan { margin: 18px 0; }
+.ads-marcador { display: flex; align-items: flex-end; gap: 10px; padding: 12px 14px; margin: 8px 0 12px; border-radius: 12px; border: 1px solid var(--borde); background: var(--superficie); overflow-x: auto; }
+.ads-marcador > div { display: grid; justify-items: center; gap: 3px; min-width: 64px; }
+.ads-marcador i { display: block; width: 26px; border-radius: 6px 6px 2px 2px; }
+.ads-marcador .gana i { background: var(--exito-tinta); }
+.ads-marcador .pierde i { background: var(--peligro); }
+.ads-marcador b { font-size: 12px; font-variant-numeric: tabular-nums; }
+.ads-marcador .gana b { color: var(--exito-tinta); }
+.ads-marcador .pierde b { color: var(--peligro); }
+.ads-marcador span { font-size: 10.5px; color: var(--tinta-2); }
+.ads-plan-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ads-plan-lista li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--borde); background: var(--superficie); }
+.ads-plan-lista img, .ads-plan-lista .ads-foto-vacia { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; }
+.ads-plan-ficha { min-width: 0; }
+.ads-plan-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ads-plan-cab strong { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.ads-plan-cab small { font-size: 11px; color: var(--tinta-2); }
+.ads-plan-ficha p { margin: 4px 0 0; font-size: 12.5px; color: var(--tinta-2); }
+.ads-plan-accion { font-style: normal; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.ads-plan-accion.bien { color: var(--exito-tinta); background: color-mix(in srgb, var(--exito) 14%, transparent); }
+.ads-plan-accion.medio { color: var(--avisa-tinta); background: color-mix(in srgb, var(--avisa-tinta) 14%, transparent); }
+.ads-plan-accion.mal { color: var(--peligro); background: color-mix(in srgb, var(--peligro) 12%, transparent); }
+.ads-plan-accion.neutro { color: var(--tinta-2); background: color-mix(in srgb, var(--tinta-2) 12%, transparent); }
+.ads-plan-lista dl { display: grid; grid-template-columns: repeat(3, auto); gap: 4px 16px; margin: 0; text-align: right; }
+.ads-plan-lista dt { font-size: 10.5px; color: var(--tinta-2); }
+.ads-plan-lista dd { margin: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .ads-plan-lista li { grid-template-columns: 44px minmax(0, 1fr); } .ads-plan-lista dl { grid-column: 1 / -1; text-align: left; } }

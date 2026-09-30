@@ -313,6 +313,19 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     } catch (err) {
       console.warn('[ml] aprendizaje de publicidad no actualizado:', err.message)
     }
+    // y con lo aprendido, el plan de campaña de cada producto: arranque para
+    // los que no se anuncian, revisión contra la plata para los que sí. Una
+    // fila por producto y día queda guardada (ml/planCampanas.js)
+    try {
+      const { RecomendacionAds, planesDeCampana } = await import('./ml/planCampanas.js')
+      const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
+      if (!(await RecomendacionAds.exists({ dia: hoy }))) {
+        const r = await planesDeCampana({ guardar: true })
+        console.log(`[ml] plan de campañas: ${r.productos?.length ?? 0} productos · ${(r.productos ?? []).map((x) => x.accion).join(', ')}`)
+      }
+    } catch (err) {
+      console.warn('[ml] plan de campañas no calculado:', err.message)
+    }
   }
 
   // documento tributario de cada venta: es lo que hace que la posición de IVA

@@ -162,6 +162,16 @@ router.get('/publicidad', async (_req, res) => {
   const { estadoPublicidad } = await import('../../services/ml/publicidad.js')
   res.json(await estadoPublicidad())
 })
+// "comienza con esto y vamos analizando": el plan de campaña de cada producto,
+// en vivo, más lo recomendado los días anteriores y el marcador de plata
+router.get('/campanas', async (_req, res) => {
+  const { planesDeCampana, RecomendacionAds } = await import('../../services/ml/planCampanas.js')
+  const [vivo, historial] = await Promise.all([
+    planesDeCampana(),
+    RecomendacionAds.find().sort({ dia: -1 }).limit(200).select('itemId dia fase accion budgetDiario roasObjetivo metricas.resultado7 -_id').lean(),
+  ])
+  res.json({ ...vivo, historial })
+})
 router.post('/publicidad', async (_req, res) => {
   const { actualizarAprendizajePublicidad } = await import('../../services/ml/publicidad.js')
   res.json(await actualizarAprendizajePublicidad())
