@@ -150,6 +150,35 @@ router.get(
   }),
 )
 
+// ¿QUÉ ESTÁ HACIENDO CADA COLA? (30-sep-2026) Reseñas, panorama, tiendas y
+// vigía comparten la cola `tendencias`, que corre un trabajo a la vez: si uno
+// se traba, los horarios de los demás pasan de largo. Sin esto no se veía.
+// Solo lee: contadores, lo activo, lo que espera y lo último terminado/fallido.
+router.get(
+  '/colas',
+  autorizado,
+  manejar(async (req, res) => {
+    const { obtenerColas } = await import('../../jobs/queues.js')
+    const colas = obtenerColas()
+    const soloUna = typeof req.query.cola === 'string' ? req.query.cola : null
+    const resumen = (j) => ({ id: j.id, nombre: j.name, creado: j.timestamp ? new Date(j.timestamp).toISOString() : null,
+      inicio: j.processedOn ? new Date(j.processedOn).toISOString() : null, fin: j.finishedOn ? new Date(j.finishedOn).toISOString() : null,
+      minutos: j.processedOn ? Math.round(((j.finishedOn ?? Date.now()) - j.processedOn) / 6000) / 10 : null,
+      error: j.failedReason ? String(j.failedReason).slice(0, 200) : undefined })
+    const salida = {}
+    for (const [nombre, cola] of Object.entries(colas)) {
+      if (nombre === 'connection' || (soloUna && nombre !== soloUna)) continue
+      const [cuentas, activos, esperando, terminados, fallidos] = await Promise.all([
+        cola.getJobCounts('active', 'waiting', 'delayed', 'completed', 'failed', 'prioritized'),
+        cola.getJobs(['active']), cola.getJobs(['waiting', 'prioritized'], 0, 9), cola.getJobs(['completed'], 0, 24), cola.getJobs(['failed'], 0, 9),
+      ])
+      salida[nombre] = { cuentas, activos: activos.map(resumen), esperando: esperando.map(resumen),
+        terminados: terminados.map(resumen).sort((a, b) => (b.fin ?? '').localeCompare(a.fin ?? '')), fallidos: fallidos.map(resumen) }
+    }
+    res.json(salida)
+  }),
+)
+
 // ¿CUÁNTO COBRA ML DE ENVÍO FULL POR PRODUCTO, DE VERDAD? (28-sep-2026)
 // Cada línea CFF de la factura cruzada con SU orden: cuántas unidades llevaba
 // la orden, cuánto se cobró, y si el cobro es por envío o por unidad. Dividir
