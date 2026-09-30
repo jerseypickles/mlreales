@@ -443,6 +443,19 @@ function PlanLearningMachine({ fotos }) {
           {d.sinCosto ? <> <strong>{d.sinCosto} sin costo cargado</strong>: su plata es antes de pagar el producto.</> : null}
         </p>
       </div>
+      {d.estructura?.acciones?.length ? (
+        <div className="ads-estructura">
+          <strong>Cómo armar tus campañas</strong>
+          {d.estructura.campanas.map((c) => (
+            <p key={c.id} className="ads-estructura-hoy">
+              Hoy: «{c.nombre}» · {fmtPrecio(c.presupuestoDiario ?? 0)}/día · ROAS {String(c.roasObjetivo ?? '—').replace('.', ',')}x · {c.productos.length} productos{c.compartida ? ' mezclados' : ''}: {c.productos.join(', ')}
+            </p>
+          ))}
+          <ol>
+            {d.estructura.acciones.map((x, i) => <li key={i} className={`prio-${x.prioridad}`}>{x.texto}</li>)}
+          </ol>
+        </div>
+      ) : null}
       {d.reglas ? (
         <p className="ads-reglas">
           <strong>Regla aprendida:</strong>{' '}
@@ -473,7 +486,7 @@ function PlanLearningMachine({ fotos }) {
                 <div className="ads-plan-cab">
                   <strong>{x.titulo ?? x.itemId}</strong>
                   <em className={`ads-plan-accion ${a.c}`}>{a.t}</em>
-                  <small>{FASES[x.fase] ?? x.fase}</small>
+                  <small>{FASES[x.fase] ?? x.fase}{x.campana ? ` · en «${x.campana}»` : ''}</small>
                 </div>
                 <p>{x.texto}</p>
               </div>

@@ -129,3 +129,28 @@ test('evaluarRecomendaciones: cuenta si se siguió y si la plata mejoró', () =>
   assert.equal(e.aciertos, 1)
   assert.equal(e.tasaAcierto, 100)
 })
+
+import { estructuraCampanas } from '../src/services/ml/planCampanas.js'
+test('estructuraCampanas: una campaña con todo mezclado → pausar lo que pierde, separar el grande, agrupar los chicos', () => {
+  const campanas = [{ id: 1, nombre: 'Campaña 1', estado: 'active', presupuestoDiario: 3500, roasObjetivo: 2.6 }, { id: 2, nombre: 'Vieja', estado: 'paused' }]
+  const porItem = { set8: { campanaId: 1, estado: 'active' }, tiro: { campanaId: 1, estado: 'active' }, set18: { campanaId: 1, estado: 'active' }, lampara: { campanaId: 1, estado: 'hold' }, set10: { campanaId: 1, estado: 'active' } }
+  const planes = [
+    { itemId: 'set8', titulo: 'Brochas Maquillaje Set 8 Organizador', accion: 'bajar', budgetDiario: 2000, roasObjetivo: 2.7, economia: { roasEmpate: 1.53 } },
+    { itemId: 'tiro', titulo: 'Pistola Juguete Lanzador Dardos', accion: 'subir', budgetDiario: 1000, roasObjetivo: 2.7, economia: { roasEmpate: 1.53 } },
+    { itemId: 'set18', titulo: 'Brochas Set 18', accion: 'apagar', budgetDiario: 0, economia: { roasEmpate: 1.49 } },
+    { itemId: 'set10', titulo: 'Brochas Set 10', accion: 'esperar', budgetDiario: 500, roasObjetivo: 2.7, economia: { roasEmpate: 1.66 } },
+    { itemId: 'lampara', titulo: 'Lampara Uñas', accion: 'apagada', budgetDiario: 0, economia: { roasEmpate: 1.34 } },
+    { itemId: 'nuevo', titulo: 'Mochila Nueva', accion: 'arrancar', budgetDiario: 3000, roasObjetivo: 2.4, economia: { roasEmpate: 1.9 } },
+  ]
+  const e = estructuraCampanas({ campanas, porItem, planes })
+  assert.equal(e.campanas.length, 1)
+  assert.equal(e.campanas[0].compartida, true)
+  const tipos = e.acciones.map((a) => `${a.tipo}:${a.itemId ?? ''}`)
+  assert.ok(tipos.includes('pausar-anuncio:set18'))
+  assert.ok(tipos.includes('separar:set8'))
+  assert.ok(tipos.includes('campana-propia:tiro'))
+  assert.ok(tipos.includes('agrupar-chicos:'))
+  assert.ok(tipos.includes('crear:nuevo'))
+  assert.ok(!tipos.some((t) => t.includes('lampara'))) // sin stock (hold): no se toca
+  assert.equal(e.acciones[0].tipo, 'pausar-anuncio')
+})

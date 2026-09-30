@@ -271,7 +271,20 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     }
   }
   const marcador = marcadorSemanal(paraMarcador)
-  return { dia: hoy, productos: salida, marcador, sinCosto: salida.filter((x) => x.economia?.esTecho).length,
+  // la estructura real de las campañas contra lo que recomienda el plan
+  let estructura = null
+  try {
+    const { resumenAds } = await import('../ads.js')
+    const r = await resumenAds({ dias: 7 })
+    if (r) {
+      estructura = estructuraCampanas({ campanas: r.campanas ?? [], porItem: r.porItem ?? {}, planes: salida })
+      const campanaDe = new Map(Object.entries(r.porItem ?? {}).map(([id, a]) => [id, (r.campanas ?? []).find((c) => c.id === a.campanaId)?.nombre ?? null]))
+      for (const f of salida) f.campana = campanaDe.get(f.itemId) ?? null
+    }
+  } catch (err) {
+    console.warn(`[plan-campanas] estructura de campañas no leída: ${err.message}`)
+  }
+  return { dia: hoy, productos: salida, marcador, estructura, sinCosto: salida.filter((x) => x.economia?.esTecho).length,
     reglas: { ...decision, transiciones: transiciones.length, ultimas: transiciones.slice(-12) }, evaluacion }
 }
 
@@ -367,4 +380,81 @@ export function evaluarRecomendaciones(recs, diasPorItem, ecoPorItem, { hoy }) {
     // lo mismo para las que NO se siguieron: la comparación que dice si seguirlas sirve
     tasaSinSeguir: evaluadas.length - seguidas.length ? Math.round((evaluadas.filter((e) => !e.siguio && e.mejoro).length / (evaluadas.length - seguidas.length)) * 100) : null,
     detalle: evaluadas.slice(-20) }
+}
+
+// ─── CÓMO ESTÁN ARMADAS LAS CAMPAÑAS ─────────────────────────────────────────
+//
+// El importador, 30-sep-2026: "hay una sola campaña activa y están todos los
+// productos; eso también debería detectarlo e indicar: haz la campaña
+// independiente". En una campaña compartida ML reparte el gasto a su criterio
+// (el Set 8 se llevaba 46%), hay un solo ROAS objetivo para productos que
+// empatan en ROAS distintos, y el learning machine no puede separar qué rinde
+// cada uno. Esto mira la estructura real y dice qué mover.
+
+const ACTIVOS = new Set(['subir', 'mantener', 'bajar', 'esperar', 'subir-roas', 'arrancar', 'arrancar-con-cuidado'])
+const FUERA = new Set(['apagar', 'organico', 'no-anunciar'])
+const BUDGET_MINIMO_SOLO = 1000 // bajo esto una campaña propia no junta datos: se agrupa
+
+// Pura. campanas: [{ id, nombre, estado, presupuestoDiario, roasObjetivo }];
+// porItem: itemId → { campanaId, estado }; planes: [{ itemId, titulo, accion,
+// budgetDiario, roasObjetivo, economia: { roasEmpate } }].
+export function estructuraCampanas({ campanas = [], porItem = {}, planes = [] }) {
+  const corto = (t) => String(t ?? '').split(/\s+/).slice(0, 4).join(' ')
+  const plata = (x) => `$${Math.round(x).toLocaleString('es-CL')}`
+  const plan = new Map(planes.map((p) => [p.itemId, p]))
+  const acciones = []
+  const resumen = []
+  for (const c of campanas.filter((x) => x.estado === 'active')) {
+    const suyos = Object.entries(porItem).filter(([, a]) => a?.campanaId === c.id && a?.estado !== 'paused').map(([id, a]) => ({ id, anuncio: a.estado, plan: plan.get(id) })).filter((x) => x.plan)
+    const conStock = suyos.filter((x) => x.anuncio !== 'hold')
+    resumen.push({ id: c.id, nombre: c.nombre, presupuestoDiario: c.presupuestoDiario ?? null, roasObjetivo: c.roasObjetivo ?? null, productos: suyos.map((x) => corto(x.plan.titulo)), compartida: conStock.length > 1 })
+    // 1. lo que el plan manda sacar de la publicidad y sigue anunciándose acá
+    for (const x of conStock.filter((y) => FUERA.has(y.plan.accion))) {
+      acciones.push({ prioridad: 1, tipo: 'pausar-anuncio', itemId: x.id, campana: c.nombre,
+        texto: `Pausa el anuncio de ${corto(x.plan.titulo)} dentro de «${c.nombre}»: ${x.plan.accion === 'apagar' ? 'pierde plata' : 'no le conviene publicidad a su precio'}. Sigue vendiendo orgánico.` })
+    }
+    const siguen = conStock.filter((y) => ACTIVOS.has(y.plan.accion))
+    if (siguen.length < 2) {
+      // una campaña con un solo producto: solo ajustar budget y ROAS si no calzan
+      const x = siguen[0]
+      if (x && Number.isFinite(x.plan.budgetDiario) && Number.isFinite(c.presupuestoDiario) && Math.abs(c.presupuestoDiario - x.plan.budgetDiario) > Math.max(500, 0.25 * x.plan.budgetDiario)) {
+        acciones.push({ prioridad: 3, tipo: 'ajustar-budget', campana: c.nombre, texto: `Ajusta el presupuesto de «${c.nombre}» de ${plata(c.presupuestoDiario)} a ${plata(x.plan.budgetDiario)}/día (lo que recomienda el plan de ${corto(x.plan.titulo)}).` })
+      }
+      continue
+    }
+    // 2. varios productos que siguen anunciándose en la misma campaña: los que
+    // tienen budget propio suficiente van a su campaña; los chicos se agrupan
+    // solo si empatan en un ROAS parecido
+    const solos = siguen.filter((y) => (y.plan.budgetDiario ?? 0) >= BUDGET_MINIMO_SOLO)
+    const chicos = siguen.filter((y) => (y.plan.budgetDiario ?? 0) < BUDGET_MINIMO_SOLO)
+    const empates = siguen.map((y) => y.plan.economia?.roasEmpate).filter(Number.isFinite)
+    const dispares = empates.length > 1 && Math.max(...empates) / Math.min(...empates) > 1.25
+    const motivo = dispares
+      ? `sus productos empatan en ROAS muy distintos (${Math.min(...empates).toString().replace('.', ',')}x a ${Math.max(...empates).toString().replace('.', ',')}x) y «${c.nombre}» les pone a todos ${String(c.roasObjetivo ?? '—').replace('.', ',')}x`
+      : `ML reparte el gasto a su criterio entre ${siguen.length} productos y el learning machine no puede medir qué rinde cada uno`
+    // el que se queda en la campaña actual es el que más budget pide; el resto sale
+    const orden = [...solos].sort((a, b) => (b.plan.budgetDiario ?? 0) - (a.plan.budgetDiario ?? 0))
+    const [queda, ...salen] = orden
+    if (queda) {
+      acciones.push({ prioridad: 2, tipo: 'separar', campana: c.nombre, itemId: queda.id,
+        texto: `Deja «${c.nombre}» solo para ${corto(queda.plan.titulo)}: ${plata(queda.plan.budgetDiario)}/día y ROAS objetivo ${String(queda.plan.roasObjetivo ?? c.roasObjetivo ?? '—').replace('.', ',')}x. Hoy ${motivo}.` })
+    }
+    for (const x of salen) {
+      acciones.push({ prioridad: 2, tipo: 'campana-propia', campana: c.nombre, itemId: x.id,
+        texto: `Crea una campaña solo para ${corto(x.plan.titulo)}: ${plata(x.plan.budgetDiario)}/día y ROAS objetivo ${String(x.plan.roasObjetivo ?? '—').replace('.', ',')}x, y saca su anuncio de «${c.nombre}».` })
+    }
+    if (chicos.length) {
+      const budget = Math.max(1000, chicos.reduce((a, y) => a + (y.plan.budgetDiario ?? 0), 0))
+      const roas = Math.max(...chicos.map((y) => y.plan.roasObjetivo ?? 0))
+      acciones.push({ prioridad: 3, tipo: 'agrupar-chicos', campana: c.nombre,
+        texto: chicos.length === 1 && !queda
+          ? `Deja ${corto(chicos[0].plan.titulo)} en «${c.nombre}» con ${plata(budget)}/día: vende poco para una campaña propia.`
+          : `Agrupa ${chicos.map((y) => corto(y.plan.titulo)).join(', ')} en una campaña aparte de ${plata(budget)}/día con ROAS ${String(roas || '—').replace('.', ',')}x: venden poco para tener campaña propia cada uno.` })
+    }
+  }
+  // 3. productos con plan de arranque que no tienen anuncio: campaña nueva
+  for (const p of planes.filter((x) => ['arrancar', 'arrancar-con-cuidado'].includes(x.accion) && !porItem[x.itemId]?.campanaId)) {
+    acciones.push({ prioridad: 2, tipo: 'crear', itemId: p.itemId, texto: `Crea una campaña solo para ${corto(p.titulo)}: ${plata(p.budgetDiario)}/día y ROAS objetivo ${String(p.roasObjetivo).replace('.', ',')}x (prueba de 2 semanas; la segunda al doble).` })
+  }
+  return { campanas: resumen, acciones: acciones.sort((a, b) => a.prioridad - b.prioridad) }
 }
