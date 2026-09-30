@@ -614,6 +614,26 @@ export async function posicionIva({ periodo = mesActual() } = {}) {
   // los tres relojes y si el mes se puede cerrar (ver cierreDelPeriodo)
   f29.cierre = cierreDelPeriodo({ periodo, rcv, credito, periodoMl })
 
+  // EL F29 COMPLETO (services/f29.js): débito, crédito de la factura de ML
+  // leída de su XML, notas de crédito, DIN, remanente, PPM y total a pagar,
+  // con su vencimiento. Usa el RCV cuando hay sesión; si no, lo que se lee solo.
+  try {
+    const { datosDelMes, f29DesdeDatos, estadoF29, resumenF29 } = await import('./f29.js')
+    const { DeclaracionF29 } = await import('../models/DeclaracionF29.js')
+    const datos = await datosDelMes(periodo)
+    const resumen = await resumenF29().catch(() => null)
+    const [a, m] = periodo.split('-').map(Number)
+    const anterior = m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`
+    const prev = resumen?.meses?.find((x) => x.periodo === anterior)
+    const remanenteAnterior = prev ? (prev.declaracion?.remanenteClp ?? prev.remanente ?? 0) : 0
+    f29.completo = f29DesdeDatos(periodo, datos, { rcv: rcvSirve ? rcv : null, comprasRcv: credito, remanenteAnterior })
+    f29.estado = estadoF29(periodo, { declaracion: await DeclaracionF29.findOne({ periodo }).lean() })
+    f29.facturasMl = datos.ml
+    f29.documentosManuales = [...datos.dins, ...datos.facturasManuales]
+  } catch (err) {
+    console.warn(`[contabilidad] F29 completo no armado: ${err.message}`)
+  }
+
 
 
   // la DIN no aplica hasta que llegue la primera carga (ver importacionesEnJuego)

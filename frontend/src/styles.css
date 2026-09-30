@@ -7778,3 +7778,44 @@ a.op-plan-sello:hover { text-decoration: underline; }
 @media (max-width: 640px) { .pub-formas > div { grid-template-columns: 1fr; } .pub-formas small { grid-column: 1; } }
 
 .gan-origen { margin: 4px 0 0; font-size: 11.5px; color: var(--avisa-tinta); }
+
+/* ─── Contabilidad: tus F29 mes a mes (30-sep) ─────────────────────────── */
+.cont-sii { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+.cont-sii.ok { color: var(--exito-tinta); background: color-mix(in srgb, var(--exito) 14%, transparent); }
+.cont-sii.off { color: var(--avisa-tinta); background: color-mix(in srgb, var(--avisa-tinta) 12%, transparent); }
+.f29m { display: grid; gap: 10px; margin-bottom: 16px; }
+.f29m h3 { margin: 0; }
+.f29m-alerta { margin: 0; display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; font-size: 13px; color: var(--tinta); background: color-mix(in srgb, var(--peligro) 8%, var(--superficie)); border: 1px solid color-mix(in srgb, var(--peligro) 35%, var(--borde)); }
+.f29m-alerta svg { color: var(--peligro); flex: none; margin-top: 2px; }
+.f29m-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.f29m-mes { display: grid; gap: 8px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--borde); background: var(--superficie); cursor: pointer; text-align: left; }
+.f29m-mes.activo { border-color: var(--acento); box-shadow: 0 0 0 1px var(--acento); }
+.f29m-mes.mal { border-left: 4px solid var(--peligro); }
+.f29m-mes.medio { border-left: 4px solid var(--avisa-tinta); }
+.f29m-mes.bien { border-left: 4px solid var(--exito-tinta); }
+.f29m-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.f29m-cab strong { font-size: 14px; text-transform: capitalize; }
+.f29m-estado { font-style: normal; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.f29m-estado.mal { color: var(--peligro); background: color-mix(in srgb, var(--peligro) 12%, transparent); }
+.f29m-estado.medio { color: var(--avisa-tinta); background: color-mix(in srgb, var(--avisa-tinta) 14%, transparent); }
+.f29m-estado.bien { color: var(--exito-tinta); background: color-mix(in srgb, var(--exito) 14%, transparent); }
+.f29m-estado.neutro { color: var(--tinta-2); background: color-mix(in srgb, var(--tinta-2) 12%, transparent); }
+.f29m-total { display: grid; gap: 1px; }
+.f29m-total span { font-size: 11px; color: var(--tinta-2); }
+.f29m-total b { font-size: 22px; font-variant-numeric: tabular-nums; color: var(--tinta); }
+.f29m-total small, .f29m-pie small { font-size: 11px; color: var(--tinta-2); }
+.f29m-pie { display: flex; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.f29m-pie small.ok { color: var(--exito-tinta); }
+.f29m-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; font-size: 11.5px; }
+.f29m-form label { display: grid; gap: 2px; color: var(--tinta-2); }
+.f29m-form input, .f29d-form input, .f29d-form select { font: inherit; font-size: 12.5px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--borde); background: var(--superficie); color: var(--tinta); max-width: 150px; }
+.f29-fuente { display: block; font-size: 10.5px; color: var(--tinta-2); margin-top: 2px; }
+.f29d-bloque { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--borde); }
+.f29d-bloque h4 { margin: 0; font-size: 13.5px; }
+.f29d-bloque h4 small { font-weight: 400; color: var(--tinta-2); }
+.f29d-docs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.f29d-docs li { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--tinta-2) 5%, var(--superficie)); font-size: 12.5px; }
+.f29d-docs li span { color: var(--tinta-2); }
+.f29d-docs li .mal { color: var(--peligro); }
+.f29d-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cont-detalle summary { cursor: pointer; font-weight: 600; }

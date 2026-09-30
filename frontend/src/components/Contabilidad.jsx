@@ -61,6 +61,7 @@ function Casillero({ c }) {
         ) : null}
       </b>
       <span className="f29-que">{c.que}</span>
+      {c.fuente ? <span className="f29-fuente">{c.fuente}</span> : null}
       {c.falta ? <span className="f29-falta">falta: {c.falta}</span> : null}
     </div>
   )
@@ -274,153 +275,229 @@ function Nota({ titulo, tono, children }) {
   )
 }
 
+// ── TUS F29, MES A MES (services/f29.js) ────────────────────────────────────
+// El importador, 30-sep-2026: "muchas cosas están desactualizadas y viven
+// manuales; este es el tercer mes que entramos sin pagar impuestos". La página
+// mostraba un solo mes y no decía si estaba atrasado. Ahora arriba va cada
+// mes desde el inicio de actividades con su total, su vencimiento y su estado.
+const ESTADO = {
+  atrasado: { t: 'atrasado', c: 'mal' }, 'vence-pronto': { t: 'vence pronto', c: 'medio' }, 'por-declarar': { t: 'por declarar', c: 'medio' },
+  'mes-en-curso': { t: 'mes en curso', c: 'neutro' }, declarado: { t: 'declarado', c: 'bien' },
+}
+const fechaCorta = (iso) => (iso ? `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}` : '—')
+const nombreMes = (p) => ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'][Number(p.slice(5, 7)) - 1] + ' ' + p.slice(0, 4)
+
+function MarcarDeclarado({ m, onListo }) {
+  const [abierto, setAbierto] = useState(false)
+  const [f, setF] = useState({ declaradoEl: new Date().toISOString().slice(0, 10), pagadoClp: m.totalAPagar ?? '', remanenteClp: m.remanente || '', folio: '' })
+  const [error, setError] = useState(null)
+  if (!abierto) return <button type="button" className="boton-secundario boton-chico" onClick={(e) => { e.stopPropagation(); setAbierto(true) }}>ya lo declaré</button>
+  const guardar = async (e) => {
+    e.preventDefault()
+    try { await api.contabilidadDeclarar({ periodo: m.periodo, ...f }); setAbierto(false); onListo() } catch (err) { setError(err.message) }
+  }
+  return (
+    <form className="f29m-form" onClick={(e) => e.stopPropagation()} onSubmit={guardar}>
+      <label>declarado el <input type="date" value={f.declaradoEl} onChange={(e) => setF({ ...f, declaradoEl: e.target.value })} required /></label>
+      <label>pagaste <input type="number" min="0" value={f.pagadoClp} onChange={(e) => setF({ ...f, pagadoClp: e.target.value })} placeholder="con multa e intereses" /></label>
+      <label>remanente [77] <input type="number" min="0" value={f.remanenteClp} onChange={(e) => setF({ ...f, remanenteClp: e.target.value })} placeholder="si quedó crédito" /></label>
+      <label>folio <input value={f.folio} onChange={(e) => setF({ ...f, folio: e.target.value })} placeholder="opcional" /></label>
+      <button type="submit" className="boton-secundario boton-chico">guardar</button>
+      <button type="button" className="enlace-boton" onClick={() => setAbierto(false)}>cancelar</button>
+      {error ? <span className="mejora-error">{error}</span> : null}
+    </form>
+  )
+}
+
+function TusF29({ resumen, sel, onSel, onRecargar }) {
+  if (!resumen?.meses?.length) return null
+  return (
+    <section className="f29m">
+      <h3>Tus F29</h3>
+      {resumen.atrasados ? (
+        <p className="f29m-alerta">
+          <TriangleAlert size={16} aria-hidden="true" /> <b>{resumen.atrasados} {resumen.atrasados === 1 ? 'F29 atrasado' : 'F29 atrasados'}</b> por {fmtPrecio(resumen.deudaAtrasada)} (sin multa ni intereses).
+          El SII suma multa e intereses por cada mes de atraso: declarar cuanto antes, aunque sea sin pago, corta la multa mayor por no declarar.
+        </p>
+      ) : null}
+      <div className="f29m-lista">
+        {resumen.meses.map((m) => {
+          const e = ESTADO[m.estado] ?? { t: m.estado, c: 'neutro' }
+          return (
+            <div key={m.periodo} role="button" tabIndex={0} className={`f29m-mes ${e.c}${sel === m.periodo ? ' activo' : ''}`} onClick={() => onSel(m.periodo)} onKeyDown={(ev) => ev.key === 'Enter' && onSel(m.periodo)}>
+              <div className="f29m-cab">
+                <strong>{nombreMes(m.periodo)}</strong>
+                <em className={`f29m-estado ${e.c}`}>{e.t}{m.estado === 'atrasado' ? ` · ${m.diasAtraso} días` : ''}</em>
+              </div>
+              <div className="f29m-total">
+                <span>{m.estado === 'declarado' ? 'pagaste' : m.estado === 'mes-en-curso' ? 'va en' : 'a pagar'}</span>
+                <b>{fmtPrecio(m.estado === 'declarado' && m.declaracion?.pagadoClp != null ? m.declaracion.pagadoClp : m.totalAPagar)}</b>
+                <small>IVA {fmtPrecio(m.ivaAPagar)} + PPM {fmtPrecio(m.ppm)}{m.remanente ? ` · remanente ${fmtPrecio(m.remanente)}` : ''}</small>
+              </div>
+              <div className="f29m-pie">
+                <small>{m.estado === 'declarado' ? `declarado el ${fechaCorta(m.declaradoEl)}` : `vence el ${fechaCorta(m.vence)}`}</small>
+                <small className={m.facturaMl ? 'ok' : ''}>{m.facturaMl ? 'factura de ML ✓' : 'sin factura de ML aún'}</small>
+              </div>
+              {m.estado !== 'declarado' && m.estado !== 'mes-en-curso' ? <MarcarDeclarado m={m} onListo={onRecargar} /> : null}
+            </div>
+          )
+        })}
+      </div>
+      <p className="f29-pie">Vence el día 20 del mes siguiente (si cae fin de semana, el lunes; los feriados también lo corren). No existe API del SII para declarar: lo presentas en sii.cl y lo marcas acá.</p>
+    </section>
+  )
+}
+
+function FacturasMl({ f }) {
+  if (!f) return null
+  return (
+    <div className="f29d-bloque">
+      <h4>Facturas de Mercado Libre <small>leídas de su XML</small></h4>
+      {f.detalle?.length ? (
+        <ul className="f29d-docs">
+          {f.detalle.map((d) => (
+            <li key={`${d.tipoDte}-${d.folio}`}>
+              <b>{d.tipoDte === 61 ? 'Nota de crédito' : 'Factura'} {d.folio}</b>
+              <span>emitida {fechaCorta(d.fechaEmision)}{d.ventana ? ` · cargos del ${d.ventana}` : ''}</span>
+              <span>neto {fmtPrecio(d.netoClp)} · <b>IVA {fmtPrecio(d.ivaClp)}</b> · total {fmtPrecio(d.totalClp)}</span>
+              {d.impagoClp ? <span className="mal">{fmtPrecio(d.impagoClp)} sin pagar a ML · vence {fechaCorta(d.vence)}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="pub-vacio">ML todavía no emite la factura con fecha de este mes{f.sinLeer ? ` (${f.sinLeer} documento(s) por leer)` : ''}. La emite al cerrar su período, cerca del 25.</p>}
+    </div>
+  )
+}
+
+function DocumentosManuales({ docs, periodo, onCambio }) {
+  const [f, setF] = useState({ tipo: 'din', fecha: `${periodo}-15`, folio: '', proveedor: '', netoClp: '', ivaClp: '', notas: '' })
+  const [error, setError] = useState(null)
+  const guardar = async (e) => {
+    e.preventDefault()
+    try { await api.contabilidadDocumento(f); setF({ ...f, folio: '', proveedor: '', netoClp: '', ivaClp: '', notas: '' }); onCambio() } catch (err) { setError(err.message) }
+  }
+  return (
+    <div className="f29d-bloque">
+      <h4>DIN de importación y facturas cargadas a mano</h4>
+      {docs?.length ? (
+        <ul className="f29d-docs">
+          {docs.map((d) => (
+            <li key={d._id}>
+              <b>{d.tipo === 'din' ? 'DIN' : 'Factura'} {d.folio ?? ''}</b>
+              <span>{fechaCorta(d.fecha)}{d.proveedor ? ` · ${d.proveedor}` : ''}</span>
+              <span>neto {fmtPrecio(d.netoClp)} · <b>IVA {fmtPrecio(d.ivaClp)}</b></span>
+              <button type="button" className="enlace-boton" onClick={async () => { await api.contabilidadBorrarDocumento(d._id); onCambio() }}>borrar</button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <form className="f29d-form" onSubmit={guardar}>
+        <select value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value })}>
+          <option value="din">DIN (importación)</option>
+          <option value="factura">Factura (fuera del RCV)</option>
+        </select>
+        <input type="date" value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} required />
+        <input placeholder={f.tipo === 'din' ? 'N° de la DIN' : 'folio'} value={f.folio} onChange={(e) => setF({ ...f, folio: e.target.value })} />
+        <input placeholder={f.tipo === 'din' ? 'agente de aduana' : 'proveedor'} value={f.proveedor} onChange={(e) => setF({ ...f, proveedor: e.target.value })} />
+        <input type="number" min="0" placeholder="neto (CIF)" value={f.netoClp} onChange={(e) => setF({ ...f, netoClp: e.target.value })} />
+        <input type="number" min="0" placeholder="IVA pagado" value={f.ivaClp} onChange={(e) => setF({ ...f, ivaClp: e.target.value })} required />
+        <button type="submit" className="boton-secundario boton-chico">agregar</button>
+        {error ? <span className="mejora-error">{error}</span> : null}
+      </form>
+      <p className="f29-pie">La DIN va al F29 en [534]/[535] y al Registro de Compras como documento no electrónico <b>código 914</b>. Es el crédito de IVA más grande de cada importación: no entra solo.</p>
+    </div>
+  )
+}
+
 export function Contabilidad() {
+  const [resumen, setResumen] = useState(null)
+  const [periodo, setPeriodo] = useState(null)
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [sii, setSii] = useState(null)
-
-  const cargar = () => {
-    api.contabilidad().then(setDatos).catch((e) => setError(e.message))
-    api.siiEstado().then(setSii).catch(() => setSii({ conectada: false, motivo: 'no se pudo consultar' }))
-  }
+  const [version, setVersion] = useState(0)
+  const recargar = () => setVersion((v) => v + 1)
 
   useEffect(() => {
-    let vigente = true
-    api
-      .contabilidad()
-      .then((d) => vigente && setDatos(d))
-      .catch((e) => vigente && setError(e.message))
-    api
-      .siiEstado()
-      .then((e) => vigente && setSii(e))
-      .catch(() => vigente && setSii({ conectada: false, motivo: 'no se pudo consultar' }))
-    return () => {
-      vigente = false
-    }
-  }, [])
+    api.contabilidadF29().then((r) => {
+      setResumen(r)
+      // por defecto el mes más urgente: el atrasado más viejo, o el último cerrado
+      setPeriodo((actual) => actual ?? (r.meses.filter((m) => m.estado === 'atrasado').at(-1) ?? r.meses.find((m) => m.estado !== 'mes-en-curso') ?? r.meses[0])?.periodo)
+    }).catch((e) => setError(e.message))
+    api.siiEstado().then(setSii).catch(() => setSii({ conectada: false, motivo: 'no se pudo consultar' }))
+  }, [version])
+  useEffect(() => {
+    if (!periodo) return
+    setDatos(null)
+    api.contabilidad(periodo).then(setDatos).catch((e) => setError(e.message))
+  }, [periodo, version])
 
-  // al conectar hay que releer la posición: los casilleros cambian de fuente
-  const conectarSii = async (cookies) => {
-    await api.siiConectar(cookies)
-    cargar()
-  }
+  const conectarSii = async (cookies) => { await api.siiConectar(cookies); recargar() }
 
   if (error) return <main className="contabilidad"><p className="error-bloque">Error: {error}</p></main>
-  if (!datos) return <main className="contabilidad"><Cargando texto="Cargando la posición del mes…" /></main>
-
-  const { periodo, ventas, cargosMl, resultado: res, periodoMl, debito, creditoMl, emision, f29, importaciones } = datos
-  const familias = cargosMl.familias ?? []
-  const rango = res && res.ivaAPagar !== res.ivaAPagarSiNeto
+  if (!resumen) return <main className="contabilidad"><Cargando texto="Armando tus F29…" /></main>
 
   return (
     <main className="contabilidad">
       <header className="cont-cabeza">
-        <h2>
-          <Landmark aria-hidden="true" /> Posición de IVA
-        </h2>
-        <span className="cont-periodo">
-          {periodo}
-          {cargosMl.sincronizadoEl ? ` · cargos al ${fmtFecha(cargosMl.sincronizadoEl)}` : ''}
+        <h2><Landmark aria-hidden="true" /> Contabilidad</h2>
+        <span className={`cont-sii ${sii?.conectada ? 'ok' : 'off'}`} title={sii?.conectada ? 'Con sesión del SII el débito sale del RCV' : 'Sin sesión del SII el débito se estima de las boletas; el crédito de ML se lee igual de su factura'}>
+          SII {sii?.conectada ? 'conectado' : `sin sesión${sii?.motivo ? ` (${sii.motivo})` : ''}`}
         </span>
       </header>
 
-      {/* LA RESPUESTA PRIMERO */}
-      {res ? (
-        <section className="cta-respuestas">
-          <div className="cta-respuesta">
-            <span>IVA a pagar este mes</span>
-            <strong>{fmtPrecio(res.ivaAPagar)}</strong>
-            {rango ? (
-              <em>
-                entre {fmtPrecio(res.ivaAPagarSiNeto)} y {fmtPrecio(res.ivaAPagar)} — se define cuando ML emita su
-                factura
-              </em>
-            ) : null}
-          </div>
-          <div className="cta-respuesta cta-respuesta-caja">
-            <span>Lo que queda en caja</span>
-            <strong className={res.quedaEnCaja > 0 ? 'res-bien' : 'res-mal'}>{fmtPrecio(res.quedaEnCaja)}</strong>
-            <em>antes del costo de la mercadería, que no está cargado</em>
-          </div>
-        </section>
-      ) : null}
+      <TusF29 resumen={resumen} sel={periodo} onSel={setPeriodo} onRecargar={recargar} />
 
-      {/* DE DÓNDE SALE */}
-      {res ? (
-        <section className="cta-caja">
-          <h3>De dónde sale</h3>
-          <div className="cta-cuenta">
-            <Linea etiqueta="Vendiste" detalle={`${debito.documentos} documentos emitidos`} valor={fmtPrecio(res.vendido)} />
-            <Linea
-              etiqueta="ML te cobró"
-              detalle={`${cargosMl.lineas} líneas · publicidad ${fmtPrecio(res.publicidad)}`}
-              valor={fmtPrecio(res.cobradoPorMl)}
-              signo="-"
-            />
-            <Linea etiqueta="IVA a pagar" valor={fmtPrecio(res.ivaAPagar)} signo="-" />
-            <Linea etiqueta="Queda" valor={fmtPrecio(res.quedaEnCaja)} fuerte />
+      {!datos ? <Cargando texto={`Cargando ${periodo ?? ''}…`} /> : <DetalleMes datos={datos} sii={sii} onConectarSii={conectarSii} onCambio={recargar} />}
+    </main>
+  )
+}
+
+function DetalleMes({ datos, sii, onConectarSii, onCambio }) {
+  const { periodo, ventas, cargosMl, resultado: res, periodoMl, debito, creditoMl, emision, f29, importaciones } = datos
+  const familias = cargosMl.familias ?? []
+  const completo = f29?.completo
+  const est = ESTADO[f29?.estado?.estado] ?? null
+  return (
+    <>
+      <section className="cta-caja f29">
+        <h3>F29 de {nombreMes(periodo)} {est ? <em className={`f29m-estado ${est.c}`}>{est.t}{f29.estado.diasAtraso ? ` · ${f29.estado.diasAtraso} días` : ''}</em> : null}</h3>
+        {completo ? (
+          <div className="cta-respuestas">
+            <div className="cta-respuesta">
+              <span>{completo.remanente ? 'IVA: queda crédito a favor' : 'Total a pagar'}</span>
+              <strong>{fmtPrecio(completo.totalAPagar)}</strong>
+              <em>IVA {fmtPrecio(completo.ivaAPagar)} + PPM {fmtPrecio(completo.ppm)}{completo.remanente ? ` · remanente ${fmtPrecio(completo.remanente)} para el mes siguiente` : ''} · vence el {fechaCorta(f29.estado?.vence)}</em>
+            </div>
+            <div className="cta-respuesta cta-respuesta-caja">
+              <span>Lo que queda en caja</span>
+              <strong className={res.quedaEnCaja > 0 ? 'res-bien' : 'res-mal'}>{fmtPrecio(res.quedaEnCaja)}</strong>
+              <em>vendido menos lo que cobró ML menos el IVA, antes del costo de la mercadería</em>
+            </div>
           </div>
-        </section>
-      ) : null}
+        ) : null}
+        <div className="f29-grid">
+          {(completo?.codigos ?? f29?.codigos ?? []).map((c) => <Casillero key={c.codigo} c={{ ...c, falta: c.falta ?? null }} />)}
+        </div>
+        <p className="f29-pie">Cada casillero dice de dónde salió. Con sesión del SII el débito [500]/[501] sale del RCV; sin ella, de las boletas que ML emite por tu cuenta (una liquidación por semana). El crédito de ML sale de su factura, leída del XML.</p>
+        <FacturasMl f={f29?.facturasMl} />
+        <DocumentosManuales docs={f29?.documentosManuales} periodo={periodo} onCambio={onCambio} />
+        <ConexionSii estado={sii} onConectar={onConectarSii} />
+        <Liquidaciones rcv={f29?.rcv} />
+      </section>
 
       <Cierre cierre={f29?.cierre} />
 
-      {/* PARA EL FORMULARIO — aviso del SII del 25-ago-2026 sobre el mandato */}
-      {f29 ? (
-        <section className="cta-caja f29">
-          <h3>
-            Para el F29 de {periodo}
-            {f29.ventana ? (
-              <small>
-                {' '}
-                · la ventana de ML es {f29.ventana.desde} a {f29.ventana.hasta}, no el mes
-              </small>
-            ) : null}
-          </h3>
-          <ConexionSii estado={sii} onConectar={conectarSii} />
-          <div className="f29-grid">
-            {(f29.codigos ?? []).map((c) => (
-              <Casillero key={c.codigo} c={c} />
-            ))}
-          </div>
-          <Liquidaciones rcv={f29.rcv} />
-          <p className="f29-pie">
-            ML vende <b>por mandato</b>: el débito de esas ventas es tuyo y se declara desde la liquidación factura
-            que ML te emite, no desde tus boletas. El <b>[519] y [520] son la línea general de facturas recibidas</b>
-            (línea 28 del formulario), no una línea del mandato: la comisión de ML entra ahí como una factura más,
-            junto con envíos, publicidad y cualquier otro proveedor. Mientras ML no emita esa factura, ese lado del
-            formulario queda en cero aunque las liquidaciones ya estén registradas.
-          </p>
-        </section>
-      ) : null}
-
-      <div className="cont-grid">
-        <section className="cta-caja">
-          <h3>Débito · lo que cobraste</h3>
-          <div className="cta-cuenta">
-            <Linea etiqueta="Bruto documentado" valor={fmtPrecio(debito.brutoClp)} />
-            <Linea etiqueta="Neto" valor={fmtPrecio(debito.netoClp)} />
-            <Linea etiqueta="IVA débito" valor={fmtPrecio(debito.clp)} fuerte />
-          </div>
-        </section>
-
-        <section className="cta-caja">
-          <h3>Crédito · lo que descuentas</h3>
-          <div className="cta-cuenta">
-            <Linea etiqueta="Cargos de ML" valor={fmtPrecio(cargosMl.totalClp)} />
-            {familias.map((f) => (
-              <Linea key={f.familia} etiqueta={f.etiqueta} valor={fmtPrecio(f.clp)} detalle=" " />
-            ))}
-            <Linea etiqueta="IVA de esos cargos" valor={fmtPrecio(creditoMl.clp)} fuerte />
-            {/* la DIN solo aparece cuando hay importaciones en juego: hasta que
-                llegue la primera carga es una fila vacía que no dice nada */}
-            {importaciones?.enJuego ? (
-              <Linea etiqueta="Importaciones (DIN)" detalle="requiere el RCV" valor="—" />
-            ) : null}
-            <Linea etiqueta="Gastos de la empresa" detalle="requiere el RCV" valor="—" />
-          </div>
-        </section>
-      </div>
+      <details className="cta-caja cont-detalle">
+        <summary>De dónde sale lo que queda en caja</summary>
+        <div className="cta-cuenta">
+          <Linea etiqueta="Vendiste" detalle={`${debito.documentos} documentos emitidos`} valor={fmtPrecio(res.vendido)} />
+          <Linea etiqueta="ML te cobró" detalle={`${cargosMl.lineas} líneas · publicidad ${fmtPrecio(res.publicidad)}`} valor={fmtPrecio(res.cobradoPorMl)} signo="-" />
+          {familias.map((f) => <Linea key={f.familia} etiqueta={f.etiqueta} valor={fmtPrecio(f.clp)} detalle=" " />)}
+          <Linea etiqueta="IVA a pagar" valor={fmtPrecio(completo?.ivaAPagar ?? res.ivaAPagar)} signo="-" />
+          <Linea etiqueta="Queda" valor={fmtPrecio(res.quedaEnCaja)} fuerte />
+        </div>
+      </details>
 
       {/* EL PORQUÉ, AL FINAL Y PLEGADO */}
       <section className="cta-notas">
@@ -499,7 +576,7 @@ export function Contabilidad() {
           </p>
         </Nota>
       </section>
-    </main>
+    </>
   )
 }
 

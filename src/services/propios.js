@@ -278,6 +278,19 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     } catch (err) {
       console.warn(`[scan-propios] cargos de ML no sincronizados: ${err.message}`)
     }
+    // la factura mensual de ML (y sus notas de crédito) con el DTE leído del
+    // XML: es el crédito fiscal exacto del F29. Una vez al día basta —ML emite
+    // un documento al mes— y el endpoint acepta 5 pedidos por minuto
+    try {
+      const { FacturaMl } = await import('../models/FacturaMl.js')
+      const ultima = await FacturaMl.findOne().sort({ actualizadoEl: -1 }).select('actualizadoEl').lean()
+      if (!ultima?.actualizadoEl || Date.now() - +new Date(ultima.actualizadoEl) > 20 * 3600e3) {
+        const { sincronizarFacturasMl } = await import('./facturasMl.js')
+        await sincronizarFacturasMl()
+      }
+    } catch (err) {
+      console.warn(`[scan-propios] facturas de ML no sincronizadas: ${err.message}`)
+    }
   }
 
   // LO QUE SE APRENDIÓ VENDIENDO vuelve al cerebro. Con las mediciones recién

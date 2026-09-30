@@ -83,6 +83,61 @@ export function crearApp() {
     }
   })
 
+  // EL F29 DE CADA MES y lo que no llega solo (ver services/f29.js)
+  app.get('/api/contabilidad/f29', async (_req, res, next) => {
+    try {
+      const { resumenF29 } = await import('../services/f29.js')
+      res.json(await resumenF29())
+    } catch (err) { next(err) }
+  })
+  // lo que se declaró en el SII: { periodo, declaradoEl, folio?, pagadoClp?, remanenteClp?, notas? }
+  app.post('/api/contabilidad/declaraciones', express.json(), async (req, res, next) => {
+    try {
+      const { DeclaracionF29 } = await import('../models/DeclaracionF29.js')
+      const b = req.body ?? {}
+      if (!/^\d{4}-\d{2}$/.test(b.periodo ?? '') || !/^\d{4}-\d{2}-\d{2}$/.test(b.declaradoEl ?? '')) return res.status(400).json({ error: 'periodo AAAA-MM y declaradoEl AAAA-MM-DD' })
+      const num = (v) => (v === '' || v == null ? null : Number.isFinite(Number(v)) ? Math.round(Number(v)) : null)
+      const d = await DeclaracionF29.findOneAndUpdate({ periodo: b.periodo }, { $set: { declaradoEl: b.declaradoEl, folio: b.folio || null, pagadoClp: num(b.pagadoClp), remanenteClp: num(b.remanenteClp), notas: b.notas || null, actualizadoEl: new Date() } }, { upsert: true, new: true })
+      res.json(d)
+    } catch (err) { next(err) }
+  })
+  app.delete('/api/contabilidad/declaraciones/:periodo', async (req, res, next) => {
+    try {
+      const { DeclaracionF29 } = await import('../models/DeclaracionF29.js')
+      res.json({ ok: (await DeclaracionF29.deleteOne({ periodo: req.params.periodo })).deletedCount > 0 })
+    } catch (err) { next(err) }
+  })
+  // documentos que no llegan solos: la DIN de importación y facturas fuera del RCV
+  app.get('/api/contabilidad/documentos', async (_req, res, next) => {
+    try {
+      const { DocumentoCompra } = await import('../models/DocumentoCompra.js')
+      res.json({ documentos: await DocumentoCompra.find().sort({ fecha: -1 }).lean() })
+    } catch (err) { next(err) }
+  })
+  app.post('/api/contabilidad/documentos', express.json(), async (req, res, next) => {
+    try {
+      const { DocumentoCompra } = await import('../models/DocumentoCompra.js')
+      const b = req.body ?? {}
+      if (!['din', 'factura'].includes(b.tipo) || !/^\d{4}-\d{2}-\d{2}$/.test(b.fecha ?? '') || !(Number(b.ivaClp) >= 0)) return res.status(400).json({ error: 'tipo din|factura, fecha AAAA-MM-DD e ivaClp ≥ 0' })
+      const n = (v) => (v === '' || v == null ? null : Math.round(Number(v)))
+      res.status(201).json(await DocumentoCompra.create({ tipo: b.tipo, fecha: b.fecha, folio: b.folio || null, proveedor: b.proveedor || null, netoClp: n(b.netoClp) ?? 0, ivaClp: n(b.ivaClp), totalClp: n(b.totalClp), notas: b.notas || null }))
+    } catch (err) { next(err) }
+  })
+  app.delete('/api/contabilidad/documentos/:id', async (req, res, next) => {
+    try {
+      const { DocumentoCompra } = await import('../models/DocumentoCompra.js')
+      res.json({ ok: (await DocumentoCompra.deleteOne({ _id: req.params.id })).deletedCount > 0 })
+    } catch (err) { next(err) }
+  })
+  // leer ya las facturas de ML (tarda: el endpoint acepta 5 pedidos por minuto)
+  app.post('/api/contabilidad/facturas-ml', async (_req, res, next) => {
+    try {
+      const { sincronizarFacturasMl } = await import('../services/facturasMl.js')
+      sincronizarFacturasMl().catch((e) => console.warn(`[facturas-ml] ${e.message}`))
+      res.status(202).json({ iniciado: true })
+    } catch (err) { next(err) }
+  })
+
   app.use('/api/nichos', rutasNichos)
   app.use('/api/productos', rutasProductos)
   app.use('/api/propios', rutasPropios)
