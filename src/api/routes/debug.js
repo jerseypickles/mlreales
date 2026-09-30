@@ -150,6 +150,20 @@ router.get(
   }),
 )
 
+// Un documento legal de facturación de ML, crudo (XML): para ver el DTE que
+// ML emite por sus cargos antes de parsearlo. Solo lee.
+router.get(
+  '/meli-documento',
+  autorizado,
+  manejar(async (req, res) => {
+    const id = String(req.query.file ?? '').replace(/[^\w-]/g, '')
+    if (!id) return res.status(400).json({ error: 'falta ?file=' })
+    const { meliGetTexto } = await import('../../services/meli.js')
+    const r = await meliGetTexto(`/billing/integration/legal_document/${id}`)
+    res.json({ tipo: r.tipo, bytes: r.bytes, esXml: /^\s*<\?xml/.test(r.texto), inicio: /^\s*</.test(r.texto) ? r.texto.slice(0, 8000) : null })
+  }),
+)
+
 // ¿QUÉ ESTÁ HACIENDO CADA COLA? (30-sep-2026) Reseñas, panorama, tiendas y
 // vigía comparten la cola `tendencias`, que corre un trabajo a la vez: si uno
 // se traba, los horarios de los demás pasan de largo. Sin esto no se veía.

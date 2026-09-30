@@ -141,6 +141,23 @@ export async function meliGet(ruta, { headers } = {}) {
   return meliFetch(ruta, { headers })
 }
 
+// Un archivo crudo (XML o PDF) en vez de JSON: los documentos legales de
+// facturación (/billing/integration/legal_document/{file_id}) vienen así.
+export async function meliGetTexto(ruta) {
+  let cuenta = await cuentaConTokenFresco()
+  const pedir = (token) => fetch(`${API_BASE}${ruta}`, { headers: { Authorization: `Bearer ${token}` } })
+  let resp = await pedir(cuenta.accessToken)
+  if (resp.status === 401) {
+    cuenta = await refrescar(cuenta)
+    resp = await pedir(cuenta.accessToken)
+  }
+  if (!resp.ok) throw new Error(`${ruta} → ${resp.status}`)
+  const buf = Buffer.from(await resp.arrayBuffer())
+  // los DTE del SII vienen en ISO-8859-1; leerlos como UTF-8 rompe las tildes
+  const cabeza = buf.subarray(0, 200).toString('latin1')
+  return { tipo: resp.headers.get('content-type') ?? null, texto: /encoding="ISO-8859-1"/i.test(cabeza) ? buf.toString('latin1') : buf.toString('utf8'), bytes: buf.length }
+}
+
 // Escrituras sobre items PROPIOS (scope Publicación): título, descripción, etc.
 export async function meliPut(ruta, body) {
   return meliFetch(ruta, { method: 'PUT', body })
