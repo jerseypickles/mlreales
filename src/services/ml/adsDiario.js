@@ -66,3 +66,32 @@ export async function resumenAdsDiario({ ahora = new Date(), diasSerie = 42 } = 
   return { dias: t.dias, diasConGasto: t.diasConGasto, desde: t.desde, hasta: t.hasta, costo: Math.round(t.costo), clicks: t.clicks, unidadesAds: t.unidadesAds,
     serie: serie.map((d) => ({ dia: d.dia, costo: Math.round(d.costo), clicks: d.clicks, unidadesAds: d.unidadesAds })) }
 }
+
+// La serie diaria de cada producto para los gráficos de Publicidad: lo de ML
+// (gasto, impresiones, clics, ventas por anuncio) al lado de lo que pasó con el
+// producto entero (ventas totales y visitas del libro). Y el total de la cuenta.
+export async function serieAdsPorProducto({ ahora = new Date(), dias = 60 } = {}) {
+  const desde = diaChile(+ahora - dias * DIA)
+  const filas = await AdsDiaMl.find({ dia: { $gte: desde } }).select('-_id itemId dia campanaId estado prints clicks costo unidadesAds unidadesDirectas unidadesIndirectas unidadesOrganicas ventaAds').sort({ dia: 1 }).lean()
+  const { DiaProductoMl } = await import('../../models/DiaProductoMl.js')
+  const libro = await DiaProductoMl.find({ dia: { $gte: desde } }).select('-_id itemId dia unidades visitas precio').lean()
+  const porProducto = {}
+  const clave = (f) => `${f.itemId}|${f.dia}`
+  const libroDe = new Map(libro.map((l) => [clave(l), l]))
+  const items = new Set([...filas.filter((f) => f.itemId !== '*').map((f) => f.itemId), ...libro.map((l) => l.itemId)])
+  const adsDe = new Map(filas.map((f) => [clave(f), f]))
+  const todosLosDias = []
+  for (let t = +new Date(`${desde}T12:00:00Z`); diaChile(t) < diaChile(ahora); t += DIA) todosLosDias.push(new Date(t).toISOString().slice(0, 10))
+  for (const id of items) {
+    porProducto[id] = todosLosDias.map((dia) => {
+      const a = adsDe.get(`${id}|${dia}`), l = libroDe.get(`${id}|${dia}`)
+      return { dia, gasto: Math.round(a?.costo ?? 0), prints: a?.prints ?? 0, clicks: a?.clicks ?? 0, unidadesAds: a?.unidadesAds ?? 0, ventaAds: Math.round(a?.ventaAds ?? 0),
+        organicas: a?.unidadesOrganicas ?? 0, campanaId: a?.campanaId ?? null, unidades: l?.unidades ?? null, visitas: l?.visitas ?? null, precio: l?.precio ?? null }
+    })
+  }
+  const total = todosLosDias.map((dia) => {
+    const a = adsDe.get(`*|${dia}`)
+    return { dia, gasto: Math.round(a?.costo ?? 0), prints: a?.prints ?? 0, clicks: a?.clicks ?? 0, unidadesAds: a?.unidadesAds ?? 0, ventaAds: Math.round(a?.ventaAds ?? 0) }
+  })
+  return { desde, dias: todosLosDias.length, total, porProducto }
+}

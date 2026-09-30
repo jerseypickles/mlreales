@@ -168,9 +168,14 @@ router.get('/campanas', async (_req, res) => {
   const { planesDeCampana, RecomendacionAds } = await import('../../services/ml/planCampanas.js')
   const [vivo, historial] = await Promise.all([
     planesDeCampana(),
-    RecomendacionAds.find().sort({ dia: -1 }).limit(200).select('itemId dia fase accion budgetDiario roasObjetivo metricas.resultado7 -_id').lean(),
+    RecomendacionAds.find().sort({ dia: -1 }).limit(300).select('itemId dia fase accion texto budgetDiario roasObjetivo metricas.resultado7 metricas.gastoDiario -_id').lean(),
   ])
   res.json({ ...vivo, historial })
+})
+// la serie diaria de cada producto y de la cuenta, para los gráficos
+router.get('/publicidad/serie', async (req, res) => {
+  const { serieAdsPorProducto } = await import('../../services/ml/adsDiario.js')
+  res.json(await serieAdsPorProducto({ dias: Math.min(100, Math.max(7, Number(req.query.dias) || 60)) }))
 })
 router.post('/publicidad', async (_req, res) => {
   const { actualizarAprendizajePublicidad } = await import('../../services/ml/publicidad.js')

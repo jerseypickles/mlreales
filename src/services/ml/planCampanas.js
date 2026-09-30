@@ -496,7 +496,7 @@ export function estructuraCampanas({ campanas = [], porItem = {}, planes = [] })
     if (chicos.length) {
       const budget = Math.max(1000, chicos.reduce((a, y) => a + (y.plan.budgetDiario ?? 0), 0))
       const roas = Math.max(...chicos.map((y) => y.plan.roasObjetivo ?? 0))
-      acciones.push({ prioridad: 3, tipo: 'agrupar-chicos', campana: c.nombre,
+      acciones.push({ prioridad: 3, tipo: 'agrupar-chicos', campana: c.nombre, itemIds: chicos.map((y) => y.id), budgetDiario: budget, roasObjetivo: roas || null,
         texto: chicos.length === 1 && !queda
           ? `Deja ${corto(chicos[0].plan.titulo)} en «${c.nombre}» con ${plata(budget)}/día: vende poco para una campaña propia.`
           : `Agrupa ${chicos.map((y) => corto(y.plan.titulo)).join(', ')} en una campaña aparte de ${plata(budget)}/día con ROAS ${String(roas || '—').replace('.', ',')}x: venden poco para tener campaña propia cada uno.` })
