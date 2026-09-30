@@ -20,6 +20,15 @@ export const VENTANA_NUEVO_DIAS = 30
 const DESPUES_DEL_PRIMER_SCAN_DIAS = 7
 export const NUEVO_MAX_RESENIAS = 30
 
+// Reseñas de una serie con UNA sola fuente de punta a punta: la API oficial si
+// la trae en los dos extremos; si no, la ficha. ML cerró la API para
+// publicaciones ajenas el 29-sep-2026, así que las series nuevas vienen de la
+// ficha. Mezclar fuentes inventa saltos (la ficha cuenta el catálogo entero).
+function campoResenias(orden) {
+  const ok = (c) => Number.isFinite(orden[0][c]) && Number.isFinite(orden.at(-1)[c])
+  return ok('numReviewsApi') ? 'numReviewsApi' : ok('numReviews') ? 'numReviews' : null
+}
+
 // Pura. snaps: lecturas del panel; productos: Producto (para foto, Full, etc).
 export function nuevosQueDespegan(snaps, productos, { ahora = new Date(), max = 30 } = {}) {
   const ficha = new Map(productos.map((p) => [p.sku, p]))
@@ -38,8 +47,9 @@ export function nuevosQueDespegan(snaps, productos, { ahora = new Date(), max = 
   const trayectoria = new Map()
   for (const [, lista] of serie) {
     const o = [...lista].sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha))
-    if (!Number.isFinite(o[0].numReviewsApi) || !Number.isFinite(o.at(-1).numReviewsApi) || o.at(-1).numReviewsApi < 10) continue
-    const t = `${o[0].keyword}|${o[0].numReviewsApi}|${o.at(-1).numReviewsApi}`
+    const c = campoResenias(o)
+    if (!c || o.at(-1)[c] < 10) continue
+    const t = `${o[0].keyword}|${c}|${o[0][c]}|${o.at(-1)[c]}`
     trayectoria.set(t, [...(trayectoria.get(t) ?? []), o[0].sku])
   }
   const compartida = new Set([...trayectoria.values()].filter((xs) => xs.length > 1).flatMap((xs) => xs.slice(1)))
@@ -55,13 +65,14 @@ export function nuevosQueDespegan(snaps, productos, { ahora = new Date(), max = 
     if (compartida.has(primera.sku)) continue
     // un producto nuevo de verdad no llega con cientos de reseñas: eso es una
     // publicación nueva de algo que ya existía (catálogo, republicación)
-    if (Number.isFinite(primera.numReviewsApi) && primera.numReviewsApi > NUEVO_MAX_RESENIAS) continue
+    const campo = campoResenias(orden)
+    if (campo && primera[campo] > NUEVO_MAX_RESENIAS) continue
     const organicas = orden.filter((s) => Number.isFinite(s.posicion) && s.esAnuncio !== true)
     if (organicas.length < 2) continue // la posición comprada no dice nada
     const subida = organicas[0].posicion - organicas.at(-1).posicion
     const dias = (+new Date(ultima.fecha) - t0) / DIA
-    let resenias = Number.isFinite(primera.numReviewsApi) && Number.isFinite(ultima.numReviewsApi) ? ultima.numReviewsApi - primera.numReviewsApi : null
-    if (resenias != null && (resenias < 0 || (resenias > 50 && resenias > primera.numReviewsApi * 0.5))) resenias = null
+    let resenias = campo ? ultima[campo] - primera[campo] : null
+    if (resenias != null && (resenias < 0 || (resenias > 50 && resenias > primera[campo] * 0.5))) resenias = null
     const baldeSubio = Number.isFinite(primera.vendidos) && Number.isFinite(ultima.vendidos) && ultima.vendidos > primera.vendidos
     const posicion = organicas.at(-1).posicion
     // LA POSICIÓN SOLA ES RUIDO: ML baraja fuerte más allá del puesto 100 (un
@@ -89,7 +100,7 @@ let cache = null
 export async function productosNuevosQueDespegan({ ahora = new Date(), max = 30 } = {}) {
   if (cache && +ahora - cache.en < 30 * 60e3) return cache.valor.slice(0, max)
   const snaps = await Snapshot.find({ fecha: { $gte: new Date(+ahora - 75 * DIA) } })
-    .select('sku fecha keyword posicion esAnuncio numReviewsApi vendidos precio -_id').lean()
+    .select('sku fecha keyword posicion esAnuncio numReviewsApi numReviews vendidos precio -_id').lean()
   const skus = [...new Set(snaps.map((s) => s.sku))]
   const productos = await Producto.find({ sku: { $in: skus } }).select('sku titulo imagen url esFull vendedor -_id').lean()
   const valor = nuevosQueDespegan(snaps, productos, { ahora, max: 60 })

@@ -51,3 +51,15 @@ test('envioDesdeShipment: total, comprador y vendedor (envío real del 28-sep)',
 test('envioDelComprador: si el pago no marca el envío, lo pagado de más es el envío', () => {
   assert.equal(envioDelComprador({ total_amount: 4490, paid_amount: 7669, payments: [{ status: 'approved', shipping_cost: 0 }, { status: 'approved', shipping_cost: 0 }] }), 3179)
 })
+
+import { conteosPorItem } from '../src/services/reviewsApi.js'
+test('conteosPorItem: si ML niega todas las de muestra (403), para y no insiste', async () => {
+  let llamadas = 0
+  const contar = async () => { llamadas++; return { denegado: true, error: '403: access denied' } }
+  const r = await conteosPorItem(Array.from({ length: 50 }, (_, i) => `MLC${i}`), { contar })
+  assert.equal(r.size, 0)
+  assert.equal(llamadas, 8)
+  const r2 = await conteosPorItem(['MLC1', 'MLC2', 'MLC3'], { contar })
+  assert.equal(r2.size, 0)
+  assert.equal(llamadas, 8) // bloqueado: ni pregunta
+})

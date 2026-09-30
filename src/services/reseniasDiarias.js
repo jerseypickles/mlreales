@@ -95,6 +95,8 @@ export async function pasadaResenias({ ahora = new Date(), porPasada = POR_PASAD
 
 export async function estadoResenias({ ahora = new Date() } = {}) {
   const dia = diaChile(ahora)
+  const { estadoBloqueoReviews } = await import('./reviewsApi.js')
+  const bloqueoMl = estadoBloqueoReviews()
   const [porDia, leidasHoy] = await Promise.all([
     LecturaResenia.aggregate([{ $group: { _id: '$dia', lecturas: { $sum: 1 } } }, { $sort: { _id: -1 } }, { $limit: 14 }]),
     LecturaResenia.countDocuments({ dia }),
@@ -129,5 +131,5 @@ export async function estadoResenias({ ahora = new Date() } = {}) {
       reseniasNuevasLimpias: limpias,
       mayoresSaltos: saltos.slice(0, 10).map((x) => ({ ...x, descartada: fuera.get(x.itemId) ?? null })) }
   }
-  return { dia, leidasHoy, porDia: porDia.map((d) => ({ dia: d._id, lecturas: d.lecturas })), comparacion }
+  return { dia, leidasHoy, bloqueoMl, porDia: porDia.map((d) => ({ dia: d._id, lecturas: d.lecturas })), comparacion }
 }

@@ -45,14 +45,40 @@ async function contarUna(id) {
     const { resumenReviewsOficiales } = await import('./meli.js')
     return { numReviews: resumenReviewsOficiales(await meliGet(`/reviews/item/${id}`))?.numReviews ?? null }
   } catch (err) {
-    return { frenado: /\b429\b|too many/i.test(err.message), error: err.message }
+    return { frenado: /\b429\b|too many/i.test(err.message), denegado: /\b403\b|access denied|forbidden/i.test(err.message), error: err.message }
   }
+}
+
+// ML CERRÓ LAS RESEÑAS DE OTROS VENDEDORES EL 29-SEP-2026. Con el token de la
+// cuenta, `/reviews/item/{id}` responde 403 "access denied" para toda
+// publicación ajena (las propias siguen respondiendo), igual que `/items` ajeno
+// desde julio. Seguir preguntando quemaba 3 minutos por hora de la cola
+// compartida y minutos en cada scan. Si una tanda arranca con puros 403, se
+// deja de preguntar 24 horas; pasado eso se reprueba con unas pocas.
+const MUESTRA_BLOQUEO = 8
+const BLOQUEO_MS = 24 * 3600e3
+let bloqueo = null // { desde, hasta, ejemplo }
+export function estadoBloqueoReviews() {
+  return bloqueo && Date.now() < bloqueo.hasta ? { ...bloqueo, desde: new Date(bloqueo.desde), hasta: new Date(bloqueo.hasta) } : null
 }
 
 export async function conteosPorItem(itemIds, { concurrencia = CONCURRENCIA, presupuestoMs = PRESUPUESTO_MS, contar = contarUna, pausaMs = PAUSA_429_MS } = {}) {
   const pendientes = [...new Set((itemIds ?? []).filter(Boolean))].map((id) => ({ id, intentos: 0 }))
   const porItem = new Map()
   if (!pendientes.length) return porItem
+
+  // bloqueado: ni se intenta hasta que venza; vencido, se reprueba con una muestra
+  if (bloqueo && Date.now() < bloqueo.hasta) return porItem
+  const muestra = pendientes.slice(0, MUESTRA_BLOQUEO)
+  const pruebas = await Promise.all(muestra.map((t) => contar(t.id)))
+  muestra.forEach((t, i) => { if (Number.isFinite(pruebas[i]?.numReviews)) porItem.set(t.id, pruebas[i].numReviews) })
+  if (muestra.length >= 3 && pruebas.every((r) => r?.denegado)) {
+    bloqueo = { desde: Date.now(), hasta: Date.now() + BLOQUEO_MS, ejemplo: String(pruebas[0]?.error ?? '').slice(0, 120) }
+    console.warn(`[reviews-api] ML niega las reseñas de publicaciones ajenas (${muestra.length}/${muestra.length} con 403): pausa de 24 h`)
+    return porItem
+  }
+  bloqueo = null
+  pendientes.splice(0, muestra.length, ...muestra.filter((t) => !porItem.has(t.id) && !pruebas[muestra.indexOf(t)]?.denegado))
 
   const limite = Date.now() + presupuestoMs
   let agotado = false
