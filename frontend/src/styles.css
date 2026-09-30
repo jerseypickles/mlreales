@@ -4857,6 +4857,8 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
 
 @media (max-width: 720px) {
   .app.con-riel { padding-right: 0; padding-bottom: 68px; }
+  /* la cabecera se estira -22px para cubrir el padding; sin padding derecho, se salía 22px */
+  .app.con-riel > header { margin-right: 0; }
   .riel {
     top: auto;
     left: 0;
