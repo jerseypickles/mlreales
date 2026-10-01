@@ -244,3 +244,12 @@ test('estructuraCampanas: si lo aprendido dice que solos rinden más, hasta los 
   assert.ok(!aprendido.acciones.some((a) => a.tipo === 'agrupar-chicos'))
   assert.equal(aprendido.acciones.filter((a) => a.tipo === 'campana-propia').length, 2)
 })
+
+test('estructuraCampanas: una campaña recién creada no se corrige con el gasto que el producto tenía antes', () => {
+  const planes = [{ itemId: 'a', titulo: 'Brochas Set 10', accion: 'mantener', budgetDiario: 152, roasObjetivo: 2.7, economia: { roasEmpate: 1.6 } }]
+  const porItem = { a: { campanaId: 9, estado: 'active' } }
+  const nueva = estructuraCampanas({ campanas: [{ id: 9, nombre: 'Campaña', estado: 'active', presupuestoDiario: 1000, creadaEl: new Date().toISOString() }], porItem, planes })
+  assert.equal(nueva.acciones.length, 0)
+  const vieja = estructuraCampanas({ campanas: [{ id: 9, nombre: 'Campaña', estado: 'active', presupuestoDiario: 1000, creadaEl: '2026-07-01T00:00:00Z' }], porItem, planes })
+  assert.equal(vieja.acciones[0].tipo, 'ajustar-budget')
+})

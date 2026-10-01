@@ -477,7 +477,12 @@ export function estructuraCampanas({ campanas = [], porItem = {}, planes = [], f
     if (siguen.length < 2) {
       // una campaña con un solo producto: solo ajustar budget y ROAS si no calzan
       const x = siguen[0]
-      if (x && Number.isFinite(x.plan.budgetDiario) && Number.isFinite(c.presupuestoDiario) && Math.abs(c.presupuestoDiario - x.plan.budgetDiario) > Math.max(500, 0.25 * x.plan.budgetDiario)) {
+      // una campaña recién creada ES la prueba: su budget de partida no se
+      // corrige con lo que el producto gastaba antes, mezclado en otra (caso
+      // 1-oct-2026: el Set 10 pasó a su campaña de $1.000 y el plan pedía
+      // bajarla a $152, lo que le tocaba dentro de la Campaña 1)
+      const recienCreada = c.creadaEl && Date.now() - +new Date(c.creadaEl) < 14 * 86400e3
+      if (x && !recienCreada && Number.isFinite(x.plan.budgetDiario) && Number.isFinite(c.presupuestoDiario) && Math.abs(c.presupuestoDiario - x.plan.budgetDiario) > Math.max(500, 0.25 * x.plan.budgetDiario)) {
         acciones.push({ prioridad: 3, tipo: 'ajustar-budget', campana: c.nombre, texto: `Ajusta el presupuesto de «${c.nombre}» de ${plata(c.presupuestoDiario)} a ${plata(x.plan.budgetDiario)}/día (lo que recomienda el plan de ${corto(x.plan.titulo)}).` })
       }
       continue
