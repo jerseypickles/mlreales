@@ -46,19 +46,57 @@ export function resumirMetodo(casos) {
 }
 
 // Pura. MÉTODO 1: propios. ventasPorItem: Map itemId → unidades pagadas.
-export function casosPropios(propios, ventasPorItem) {
+//
+// LAS RESEÑAS LLEGAN TARDE. Medido el 1-oct-2026 en las 21 reseñas propias con
+// fecha de compra: mediana 5 días entre compra y reseña, y 1 de cada 4 tarda
+// más de 3 semanas (hasta 41 días). Contar todas las ventas contra las reseñas
+// de hoy mete en el denominador las compras del último mes, que todavía no
+// alcanzan a reseñar: el factor sale inflado. Con `maduras` (unidades vendidas
+// antes del corte) y `resenias` (total de la API + fechas de compra de las que
+// se pueden paginar) se cuentan solo las compras de hace más de DIAS_MADURAS
+// días y la fracción de reseñas que vino de ellas.
+export const DIAS_MADURAS = 30
+export function casosPropios(propios, ventasPorItem, { maduras = null, resenias = null, corte = null } = {}) {
   const vistos = new Set()
   const casos = []
   for (const p of propios) {
     const id = p.itemIdMl ?? p.sku
     if (!id || vistos.has(id)) continue
     vistos.add(id)
+    const api = resenias?.get(id)
+    if (maduras && api && corte) {
+      const unidades = maduras.get(id) ?? 0
+      if (unidades < MINIMOS.propiosUnidades) continue
+      const fechas = api.fechasCompra ?? []
+      const antes = fechas.filter((f) => f && new Date(f) <= corte).length
+      // sin fechas paginables: todas cuentan como maduras (cota alta)
+      const resMaduras = fechas.length ? api.total * antes / fechas.length : api.total
+      casos.push({ itemId: id, titulo: p.titulo, categoria: p.categoriaMl ?? null, unidades, unidadesTotales: ventasPorItem.get(id) ?? 0,
+        resenias: Math.round(resMaduras * 10) / 10, reseniasTotales: api.total, maduras: true, reseniasPorVenta: resMaduras / unidades })
+      continue
+    }
     const unidades = ventasPorItem.get(id) ?? 0
     const ultima = [...(p.mediciones ?? [])].filter((m) => Number.isFinite(m.numReviews)).sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha)).at(-1)
     if (unidades < MINIMOS.propiosUnidades || !ultima) continue
     casos.push({ itemId: id, titulo: p.titulo, categoria: p.categoriaMl ?? null, unidades, resenias: ultima.numReviews, reseniasPorVenta: ultima.numReviews / unidades })
   }
   return casos
+}
+
+// Pura. Días entre compra y reseña: cuánto hay que esperar antes de contar.
+export function demoraResenias(pares) {
+  const dias = pares.map(([compra, resenia]) => (+new Date(resenia) - +new Date(compra)) / DIA).filter((x) => Number.isFinite(x) && x >= 0)
+  if (!dias.length) return null
+  return { casos: dias.length, mediana: Math.round(cuantil(dias, 0.5)), p75: Math.round(cuantil(dias, 0.75)), max: Math.round(Math.max(...dias)),
+    pctMas21: Math.round(dias.filter((x) => x > 21).length / dias.length * 100) }
+}
+
+// Pura. Agrupado: suma de reseñas / suma de unidades. La mediana por producto
+// esconde que unos productos reseñan y otros no (juguete y gadget: 0 de 62).
+export function agrupado(casos) {
+  const u = casos.reduce((a, c) => a + c.unidades, 0), r = casos.reduce((a, c) => a + c.resenias, 0)
+  return u ? { unidades: u, resenias: Math.round(r * 10) / 10, reseniasPorVenta: r3(r / u), ventasPorResenia: r > 0 ? Math.round(u / r * 10) / 10 : null,
+    sinResenias: casos.filter((c) => c.resenias === 0).length } : null
 }
 
 // Pura. MÉTODO 2: balde de vendidos. snaps: lecturas del panel; productos:
@@ -68,9 +106,15 @@ export function casosBalde(snaps, productos) {
   const ficha = new Map(productos.map((p) => [p.sku, p]))
   // reseñas compartidas: mismo valor de API en otra publicación del mismo scan
   const valores = new Map()
+  // ML cerró la API para ajenos el 29-sep-2026: en publicaciones SUELTAS la
+  // ficha da el mismo conteo que la API (11 de 11 medidas), así que sigue
+  // calibrando con la ficha. En catálogo no: ahí la ficha suma a todos los
+  // vendedores, y el catálogo ya está fuera de este método.
+  const conteo = (s) => (Number.isFinite(s.numReviewsApi) ? s.numReviewsApi : Number.isFinite(s.numReviews) ? s.numReviews : null)
+  const fuenteDe = (s) => (Number.isFinite(s.numReviewsApi) ? 'api' : 'ficha')
   for (const s of snaps) {
-    if (!(s.numReviewsApi >= 10)) continue
-    const k = `${s.keyword}|${+new Date(s.fecha)}|${s.numReviewsApi}`
+    if (!(conteo(s) >= 10)) continue
+    const k = `${s.keyword}|${+new Date(s.fecha)}|${conteo(s)}`
     valores.set(k, (valores.get(k) ?? 0) + 1)
   }
   const porSku = new Map()
@@ -87,13 +131,14 @@ export function casosBalde(snaps, productos) {
       // el primer cruce decide; los siguientes no se miran
       if (f?.tipoListing === 'catalogo') { descartes.catalogo++; break }
       if (b.vendidos < MINIMOS.balde) { descartes.baldeChico++; break }
-      if (!Number.isFinite(b.numReviewsApi)) { descartes.sinApi++; break }
-      if (b.numReviewsApi >= 10 && (valores.get(`${b.keyword}|${+new Date(b.fecha)}|${b.numReviewsApi}`) ?? 0) > 1) { descartes.compartida++; break }
+      const n = conteo(b)
+      if (!Number.isFinite(n)) { descartes.sinApi++; break }
+      if (n >= 10 && (valores.get(`${b.keyword}|${+new Date(b.fecha)}|${n}`) ?? 0) > 1) { descartes.compartida++; break }
       const id = f?.itemId ?? sku
       if (vistos.has(id)) { descartes.repetida++; break }
       vistos.add(id)
       casos.push({ itemId: id, sku, keyword: b.keyword, categoria: f?.categoriaML ?? null, balde: b.vendidos, baldeAntes: a.vendidos,
-        dias: (+new Date(b.fecha) - +new Date(a.fecha)) / DIA, resenias: b.numReviewsApi, reseniasPorVenta: b.numReviewsApi / b.vendidos })
+        dias: (+new Date(b.fecha) - +new Date(a.fecha)) / DIA, resenias: n, fuente: fuenteDe(b), reseniasPorVenta: n / b.vendidos })
       break
     }
   }
@@ -156,9 +201,28 @@ export async function calibracionResenias({ ahora = new Date() } = {}) {
   const ventas = await VentaMl.find({ estado: 'paid', 'items.itemId': { $in: ids } }).select('items').lean()
   const ventasPorItem = new Map()
   for (const v of ventas) for (const it of v.items ?? []) if (ids.includes(it.itemId) && it.cantidad > 0) ventasPorItem.set(it.itemId, (ventasPorItem.get(it.itemId) ?? 0) + it.cantidad)
-  const propiosCasos = casosPropios(propios, ventasPorItem)
+  // las reseñas PROPIAS siguen abiertas en la API: total + fechas de compra
+  const corte = new Date(+ahora - DIAS_MADURAS * DIA)
+  const maduras = new Map()
+  const ventasMaduras = await VentaMl.find({ estado: 'paid', 'items.itemId': { $in: ids }, fecha: { $lte: corte } }).select('items').lean()
+  for (const v of ventasMaduras) for (const it of v.items ?? []) if (ids.includes(it.itemId) && it.cantidad > 0) maduras.set(it.itemId, (maduras.get(it.itemId) ?? 0) + it.cantidad)
+  const resenias = new Map()
+  const pares = []
+  try {
+    const { meliGet } = await import('../meli.js')
+    for (const id of ids.filter((i) => (ventasPorItem.get(i) ?? 0) >= MINIMOS.propiosUnidades)) {
+      const r = await meliGet(`/reviews/item/${id}?limit=50`).catch(() => null)
+      if (!Number.isFinite(r?.paging?.total)) continue
+      const lista = r.reviews ?? []
+      resenias.set(id, { total: r.paging.total, fechasCompra: lista.map((x) => x.buying_date).filter(Boolean) })
+      for (const x of lista) if (x.buying_date && x.date_created) pares.push([x.buying_date, x.date_created])
+    }
+  } catch {
+    // sin API propia queda el método crudo
+  }
+  const propiosCasos = casosPropios(propios, ventasPorItem, resenias.size ? { maduras, resenias, corte } : {})
   // 2. balde
-  const snaps = await Snapshot.find({ fecha: { $gte: new Date(+ahora - 120 * DIA) }, vendidos: { $ne: null } }).select('sku fecha keyword vendidos numReviewsApi -_id').lean()
+  const snaps = await Snapshot.find({ fecha: { $gte: new Date(+ahora - 120 * DIA) }, vendidos: { $ne: null } }).select('sku fecha keyword vendidos numReviewsApi numReviews -_id').lean()
   const productos = await Producto.find({ sku: { $in: [...new Set(snaps.map((s) => s.sku))] } }).select('sku itemId tipoListing categoriaML -_id').lean()
   const balde = casosBalde(snaps, productos)
   // 3. stock
@@ -179,6 +243,9 @@ export async function calibracionResenias({ ahora = new Date() } = {}) {
   const valor = {
     modo: 'auditoria', usaLaApp: false, factorActual: { ventasPorResenia: 25, origen: 'fijo, sin calibrar' },
     metodos, veredicto: veredictoCalibracion(metodos),
+    propiosAgrupado: agrupado(propiosCasos),
+    demoraResenias: demoraResenias(pares),
+    baldePorFuente: { api: balde.casos.filter((c) => c.fuente === 'api').length, ficha: balde.casos.filter((c) => c.fuente === 'ficha').length },
     notas: { balde: 'cota: al cruzar el balde lleva un poco más que el balde vendido, así que reseñas/venta real es un poco menor (y ventas/reseña un poco mayor)', stock: 'solo stock exacto del mismo vendedor, sin reposición; las reseñas llegan días después de la compra' },
     descartesBalde: balde.descartes,
     porCategoriaBalde: [...porCategoria].filter(([, cs]) => cs.length >= MINIMOS.casosMetodo).map(([categoria, cs]) => ({ categoria, ...resumirMetodo(cs) })).sort((a, b) => b.casos - a.casos),

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { casosPropios, casosBalde, casosStock, resumirMetodo, veredictoCalibracion } from '../src/services/ml/calibracionResenias.js'
+import { casosPropios, casosBalde, casosStock, resumirMetodo, veredictoCalibracion, demoraResenias, agrupado } from '../src/services/ml/calibracionResenias.js'
 
 const d = (n) => new Date(Date.UTC(2026, 8, 1 + n, 12))
 
@@ -51,4 +51,37 @@ test('veredicto: el factor solo sale si dos métodos con casos suficientes coinc
   assert.equal(veredictoCalibracion({ propios: m(10, 0.05), balde: m(200, 0.055) }).estado, 'coinciden')
   assert.equal(veredictoCalibracion({ propios: m(10, 0.02), balde: m(200, 0.06) }).estado, 'no-coinciden')
   assert.equal(resumirMetodo([{ reseniasPorVenta: 0.05 }, { reseniasPorVenta: 0.1 }]).casos, 2)
+})
+
+test('propios maduros: solo compras de hace más de 30 días y la fracción de reseñas que vino de ellas', () => {
+  const corte = d(0)
+  const propios = [{ itemIdMl: 'MLC1' }, { itemIdMl: 'MLC2' }]
+  const ventas = new Map([['MLC1', 100], ['MLC2', 40]])
+  const maduras = new Map([['MLC1', 60], ['MLC2', 30]])
+  // MLC1: 10 reseñas en total; de las 4 con fecha, 3 son de compras antes del corte → 7,5 maduras
+  const resenias = new Map([['MLC1', { total: 10, fechasCompra: [d(-20), d(-10), d(-5), d(3)] }], ['MLC2', { total: 0, fechasCompra: [] }]])
+  const casos = casosPropios(propios, ventas, { maduras, resenias, corte })
+  assert.equal(casos.length, 2)
+  assert.equal(casos[0].unidades, 60)
+  assert.equal(casos[0].resenias, 7.5)
+  assert.equal(casos[1].reseniasPorVenta, 0)
+  const ag = agrupado(casos)
+  assert.equal(ag.unidades, 90)
+  assert.equal(ag.sinResenias, 1)
+  assert.equal(ag.ventasPorResenia, 12)
+})
+
+test('balde: sin API (cerrada a ajenos) calibra con el conteo de la ficha', () => {
+  const snaps = [
+    { sku: 'S', keyword: 'k', fecha: d(0), vendidos: 100, numReviews: 8 },
+    { sku: 'S', keyword: 'k', fecha: d(7), vendidos: 500, numReviews: 45 },
+  ]
+  const { casos } = casosBalde(snaps, [{ sku: 'S', itemId: 'MLC-S' }])
+  assert.deepEqual(casos.map((c) => [c.resenias, c.fuente]), [[45, 'ficha']])
+})
+
+test('demora de reseñas: mediana y cola larga', () => {
+  const r = demoraResenias([[d(0), d(2)], [d(0), d(5)], [d(0), d(30)]])
+  assert.equal(r.mediana, 5)
+  assert.equal(r.pctMas21, 33)
 })

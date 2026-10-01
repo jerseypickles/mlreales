@@ -1285,13 +1285,17 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
         'metricas.demanda.resenasNuevasPorDia': { $ne: null },
       })
         .sort({ fecha: -1 })
-        .select('fecha metricas.demanda.resenasNuevasPorDia')
+        .select('fecha metricas.demanda.resenasNuevasPorDia metricas.demanda.fuenteResenas metricas.demanda.reviewsFicha.porDia')
         .lean()
-      if (anterior) {
+      // con la fuente cambiada (API → ficha desde el 29-sep) la caída es de
+      // canasta, no de demanda: se juzga ficha contra ficha
+      const { tasasComparables } = await import('./oportunidades.js')
+      const [actualComparable, anteriorComparable] = anterior ? tasasComparables({ metricas }, anterior) : []
+      if (anterior && Number.isFinite(actualComparable) && Number.isFinite(anteriorComparable)) {
         const curva = await CurvaEstacional.findOne({ keyword: nicho.keyword }).select('curva').lean()
         const veredicto = saltoEsCreible({
-          anterior: anterior.metricas.demanda.resenasNuevasPorDia,
-          actual: previo,
+          anterior: anteriorComparable,
+          actual: actualComparable,
           curva: curva?.curva?.length === 12 ? curva.curva : null,
           mesActual: new Date(ultimoSnap.fecha).getMonth() + 1,
           mesAnterior: new Date(anterior.fecha).getMonth() + 1,
@@ -1299,7 +1303,7 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
         if (veredicto?.creible === false) {
           metricas.demanda.saltoSospechoso = {
             valorCrudo: previo,
-            contra: anterior.metricas.demanda.resenasNuevasPorDia,
+            contra: anteriorComparable,
             salto: veredicto.salto,
             motivo: veredicto.motivo,
           }

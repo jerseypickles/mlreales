@@ -125,3 +125,14 @@ test('parsearRevisarEn: AAAA-MM al día 1, AAAA-MM-DD exacto, basura → null', 
   assert.equal(parsearRevisarEn('enero 2027'), null)
   assert.equal(parsearRevisarEn(null), null)
 })
+
+test('tendencia: con la fuente cambiada (API → ficha) compara ficha contra ficha, no canasta contra canasta', () => {
+  const r = (fuente, porDia, ficha) => ({ metricas: { demanda: { fuenteResenas: fuente, resenasNuevasPorDia: porDia, reviewsFicha: ficha == null ? null : { porDia: ficha } } } })
+  // la API medía 150 productos (40/día); la ficha, el top (10/día) en ambos scans
+  assert.equal(tendenciaVentas(r('ficha', 10, 10), r('api', 40, 10)), 'estable')
+  assert.equal(tendenciaVentas(r('ficha', 14, 14), r('api', 40, 10)), 'sube')
+  // sin ficha en el anterior no hay con qué comparar
+  assert.equal(tendenciaVentas(r('ficha', 10, 10), r('api', 40, null)), null)
+  // misma fuente: como siempre
+  assert.equal(tendenciaVentas(r('api', 30, 5), r('api', 40, 5)), 'baja')
+})

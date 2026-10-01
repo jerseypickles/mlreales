@@ -60,10 +60,23 @@ export function confirmacionVeredicto(scansConDemanda, tendencia) {
   return scansConDemanda >= 3 && tendencia !== 'baja' ? 'confirmado' : 'preliminar'
 }
 
+// Pura. Las tasas de reseñas de dos reportes, MEDIDAS CON LA MISMA FUENTE.
+//
+// El 29-sep-2026 ML cerró `/reviews/item` para publicaciones ajenas y todos los
+// scans pasaron de la canasta de la API (127-164 productos) a la de la ficha
+// (4-26): comparar una contra otra daba "baja" en la mitad de los nichos sin
+// que la demanda se moviera. Con fuentes distintas se compara la ficha, que se
+// guarda siempre en `reviewsFicha`; sin ficha en ambos, no hay comparación.
+export function tasasComparables(ultimo, anterior) {
+  const da = ultimo?.metricas?.demanda, db = anterior?.metricas?.demanda
+  const fa = da?.fuenteResenas ?? 'ficha', fb = db?.fuenteResenas ?? 'ficha'
+  if (fa === fb) return [da?.resenasNuevasPorDia, db?.resenasNuevasPorDia]
+  return [da?.reviewsFicha?.porDia, db?.reviewsFicha?.porDia]
+}
+
 // Dirección de la demanda entre los dos últimos reportes (±15% = ruido).
 export function tendenciaVentas(ultimo, anterior) {
-  const a = ultimo?.metricas?.demanda?.resenasNuevasPorDia
-  const b = anterior?.metricas?.demanda?.resenasNuevasPorDia
+  const [a, b] = tasasComparables(ultimo, anterior)
   if (!Number.isFinite(a) || !Number.isFinite(b) || b <= 0) return null
   const cambio = (a - b) / b
   if (cambio >= 0.15) return 'sube'
