@@ -107,6 +107,7 @@ export function hojasQueTocan(hojas, ultima, dia) {
   })
 }
 
+let ultimaPasada = null
 export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, presupuestoMs = 240_000, obtener = meliGet } = {}) {
   const dia = diaChile(ahora)
   const inicio = Date.now()
@@ -144,16 +145,21 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, pres
   // búsquedas que suben: una vez por semana por categoría
   const vencida = diaChile(+ahora - REFRESCO_TENDENCIAS_DIAS * DIA)
   const conTendencia = new Set(await TendenciaCategoria.distinct('categoriaId', { dia: { $gt: vencida } }))
-  let tendencias = 0
+  let tendencias = 0, erroresTendencia = 0, vaciasTendencia = 0, ultimoErrorTendencia = null
+  const candidatasTendencia = hojas.filter((h) => !conTendencia.has(h.id)).length
   for (const { id } of hojas.filter((h) => !conTendencia.has(h.id)).slice(0, TENDENCIAS_POR_PASADA)) {
     if (Date.now() - inicio > presupuestoMs) break
     const r = await pedir(`/trends/MLC/${id}`, obtener)
     if (r.frenado) { frenos++; await esperar(PAUSA_429_MS); continue }
+    if (r.error) { erroresTendencia++; ultimoErrorTendencia = r.error }
     const terminos = normalizarTendencias(r.datos)
+    if (!r.error && !terminos.length) vaciasTendencia++
     if (terminos.length) { await TendenciaCategoria.updateOne({ categoriaId: id, dia }, { $setOnInsert: { categoriaId: id, dia, terminos, capturadoEl: ahora } }, { upsert: true }); tendencias++ }
     await esperar(PAUSA_MS)
   }
-  const resultado = { dia, arbol, hojasConVolumen: hojas.length, rankingHoy: hechas.size + capturadas, capturadas, movidas, tendencias, frenos }
+  const resultado = { dia, arbol, hojasConVolumen: hojas.length, rankingHoy: hechas.size + capturadas, capturadas, movidas, tendencias, frenos,
+    tendenciaDiag: { candidatas: candidatasTendencia, errores: erroresTendencia, vacias: vaciasTendencia, ultimoError: ultimoErrorTendencia, segundos: Math.round((Date.now() - inicio) / 1000) } }
+  ultimaPasada = { ...resultado, en: new Date() }
   console.log(`[panorama] ${dia}: ranking ${resultado.rankingHoy}/${hojas.length} categorías (+${capturadas}, ${movidas} movimientos), ${tendencias} tendencias, ${frenos} frenos${arbol ? ` · árbol ${arbol.total} (${arbol.pendientes} por leer)` : ''}`)
   return resultado
 }
@@ -189,6 +195,6 @@ export async function estadoPanorama({ ahora = new Date() } = {}) {
     RankingMasVendidos.countDocuments({ dia }), TendenciaCategoria.countDocuments({}),
     RankingMasVendidos.distinct('dia'),
   ])
-  return { dia, arbol: { total, pendientes }, hojasConVolumen: hojas, rankingHoy, capturasDeTendencias: tendencias, diasDeRanking: diasRanking.length,
+  return { dia, ultimaPasada, arbol: { total, pendientes }, hojasConVolumen: hojas, rankingHoy, capturasDeTendencias: tendencias, diasDeRanking: diasRanking.length,
     busquedasQueSuben: await busquedasQueSuben({ max: 15 }).catch(() => []) }
 }
