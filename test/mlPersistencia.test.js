@@ -127,7 +127,7 @@ test('el modo observación no cambia el prompt ni las sugerencias aunque existan
 
 test('ciclo completo: entrenar, congelar, volver a entrenar sin duplicar y evaluar un resultado futuro', async () => {
   const ahora = new Date()
-  const inicio = indiceMes(ahora.toISOString().slice(0, 7)) - 48
+  const inicio = indiceMes(ahora.toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }).slice(0, 7)) - 48
   const series = seriesSinteticas().map((s) => ({ ...s,
     meses: s.meses.map((m, i) => ({ ...m, periodo: periodoMes(inicio + i) })) }))
   const crudos = series.map((s) => ({ keyword: s.keyword, monthly_searches: s.meses }))
