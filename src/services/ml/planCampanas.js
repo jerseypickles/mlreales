@@ -293,12 +293,13 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   // la forma de campaña que rinde más, aprendida de toda la historia
   const nichoDe = new Map(propios.filter((x) => x.nichoId).map((x) => [x.itemIdMl ?? x.sku, String(x.nichoId)]))
   const formas = aprenderEstructura(observacionesEstructura(ads, ecoPorItem, nichoDe))
-  const recsViejas = await RecomendacionAds.find({ dia: { $lt: hoy } }).select('itemId dia accion').lean()
+  const recsViejas = await RecomendacionAds.find({ dia: { $lt: hoy } }).select('itemId dia accion budgetDiario').lean()
   const evaluacion = evaluarRecomendaciones(recsViejas, diasPorItem, ecoPorItem, { hoy })
   for (const fila of salida) {
     if (fila.pendiente) {
       // la fase cuenta desde que el producto está en su campaña ACTUAL: si se
       // lo pasó a una campaña propia, arranca su prueba de 2 semanas ahí
+      fila.desdeCampanaBitacora = fila.desdeCampana ?? null
       const enCampana = fila.desdeCampana ? fila._dias.filter((d) => d.dia >= fila.desdeCampana).length : fila._dias.length
       const r = revisarCampana(fila._dias, fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral, umbralAprendido: decision.estado === 'aprendido' })
       if (r && fila.desdeCampana && enCampana < fila._dias.length && enCampana <= 21) r.texto = `En su campaña nueva desde ${fila.desdeCampana}. ${r.texto}`
@@ -306,7 +307,10 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       delete fila.desdeCampana
       Object.assign(fila, r ?? { accion: 'sin-datos', texto: 'Sin datos suficientes.' })
     }
+    // la bitácora de largo plazo, desde que está en su campaña actual
+    if (fila._dias?.length) fila.bitacora = bitacoraProducto(fila._dias, fila.economia, recsViejas.filter((r) => r.itemId === fila.itemId), { desde: fila.desdeCampanaBitacora ?? null })
     delete fila._dias
+    delete fila.desdeCampanaBitacora
     const id = fila.itemId, plan = fila
     if (guardar) {
       await RecomendacionAds.updateOne({ itemId: id, dia: hoy }, { $set: { titulo: fila.titulo, fase: plan.fase, accion: plan.accion, texto: plan.texto,
@@ -612,4 +616,53 @@ export function aprenderEstructura(obs, { minProductos = 3, minSemanas = 6 } = {
     // la historia por forma, sin comparar productos: lo que se ve hoy
     crudo: Object.fromEntries(FORMAS.map((f) => { const xs = obs.filter((o) => o.forma === f); return [f, { semanas: xs.length, productos: new Set(xs.map((o) => o.itemId)).size, rinde: xs.length ? r2(xs.reduce((a, o) => a + o.rinde, 0) / xs.length) : null }] })),
   }
+}
+
+// ─── LA BITÁCORA DE CADA PRODUCTO, A LARGO PLAZO ─────────────────────────────
+//
+// El importador, 1-oct-2026: "que la lleve bien el learning machine de punta a
+// punta; quiero ver si en un tiempo prolongado ve bien, si desea escalar y
+// todo eso". La recomendación diaria mira 7 días; esto guarda la historia:
+// semana a semana desde que el producto está en su campaña, lo que gastó, lo
+// que vendió, la plata que dejó y lo que se recomendó, más un veredicto de
+// largo plazo que mira la tendencia y no una semana suelta.
+
+const lunesDe = (dia) => { const t = new Date(`${dia}T12:00:00Z`); return new Date(+t - ((t.getUTCDay() + 6) % 7) * DIA).toISOString().slice(0, 10) }
+
+// Pura. dias: filas diarias del producto; recs: { dia, accion, budgetDiario }.
+export function bitacoraProducto(dias, eco, recs = [], { desde = null, max = 12 } = {}) {
+  const porSemana = new Map()
+  for (const d of dias) {
+    if (desde && d.dia < desde) continue
+    const k = lunesDe(d.dia)
+    const s = porSemana.get(k) ?? { semana: k, dias: 0, gasto: 0, ventasAds: 0, ventaAds: 0, unidades: 0 }
+    s.dias++; s.gasto += d.gasto ?? 0; s.ventasAds += d.unidadesAds ?? 0; s.ventaAds += d.ventaAds ?? 0; s.unidades += d.unidades ?? 0
+    porSemana.set(k, s)
+  }
+  const recsPorSemana = new Map()
+  for (const r of [...recs].sort((a, b) => a.dia.localeCompare(b.dia))) recsPorSemana.set(lunesDe(r.dia), r)
+  const semanas = [...porSemana.values()].sort((a, b) => a.semana.localeCompare(b.semana)).map((s) => {
+    const r = recsPorSemana.get(s.semana)
+    return { semana: s.semana, dias: s.dias, gasto: Math.round(s.gasto), gastoDiario: Math.round(s.gasto / Math.max(1, s.dias)), ventasAds: s.ventasAds, ventas: s.unidades,
+      roas: s.gasto > 0 ? r2(s.ventaAds / s.gasto) : null, plata: eco ? Math.round(dejaronDe(s.ventaAds, s.ventasAds, eco) - s.gasto) : null,
+      recomendo: r ? { accion: r.accion, budgetDiario: r.budgetDiario ?? null } : null }
+  }).slice(-max)
+  const conGasto = semanas.filter((s) => s.gasto > 0)
+  const acumulado = conGasto.reduce((a, s) => a + (s.plata ?? 0), 0)
+  // tendencia: las 2 últimas semanas completas contra las 2 anteriores
+  const completas = conGasto.filter((s) => s.dias >= 6)
+  const ult = completas.slice(-2), prev = completas.slice(-4, -2)
+  const prom = (xs) => (xs.length ? xs.reduce((a, s) => a + (s.plata ?? 0), 0) / xs.length : null)
+  const tendencia = ult.length && prev.length ? (prom(ult) - prom(prev) > Math.abs(prom(prev)) * 0.15 ? 'mejora' : prom(ult) - prom(prev) < -Math.abs(prom(prev)) * 0.15 ? 'empeora' : 'estable') : null
+  // EL VEREDICTO DE LARGO PLAZO: no una semana suelta sino la serie
+  let veredicto = 'midiendo', texto = 'Todavía menos de 2 semanas completas en su campaña: se juzga con más datos.'
+  if (completas.length >= 2) {
+    const ultimasPositivas = ult.every((s) => (s.plata ?? 0) > 0)
+    const ultimasNegativas = ult.every((s) => (s.plata ?? 0) < 0)
+    if (ultimasPositivas && tendencia !== 'empeora') { veredicto = 'escalar'; texto = `Deja plata ${ult.length} semanas seguidas${tendencia === 'mejora' ? ' y viene mejorando' : ''}: es candidato a escalar por escalones mientras cada subida pague.` }
+    else if (ultimasPositivas) { veredicto = 'mantener'; texto = 'Deja plata, pero menos que antes: mantener y vigilar antes de subir.' }
+    else if (ultimasNegativas && acumulado < 0) { veredicto = 'cortar'; texto = `Pierde plata ${ult.length} semanas seguidas y en total va ${acumulado < 0 ? 'en rojo' : 'justo'}: cortar la publicidad.` }
+    else { veredicto = 'vigilar'; texto = 'Semanas mezcladas: mantener el budget y mirar la próxima semana.' }
+  }
+  return { semanas, acumulado: Math.round(acumulado), semanasConGasto: conGasto.length, tendencia, veredicto, texto }
 }

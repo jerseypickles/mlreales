@@ -253,3 +253,21 @@ test('estructuraCampanas: una campaña recién creada no se corrige con el gasto
   const vieja = estructuraCampanas({ campanas: [{ id: 9, nombre: 'Campaña', estado: 'active', presupuestoDiario: 1000, creadaEl: '2026-07-01T00:00:00Z' }], porItem, planes })
   assert.equal(vieja.acciones[0].tipo, 'ajustar-budget')
 })
+
+import { bitacoraProducto } from '../src/services/ml/planCampanas.js'
+test('bitacoraProducto: semana a semana, acumulado, tendencia y veredicto de largo plazo', () => {
+  const eco = economiaVenta({ precio: 10000, envio: 800, costo: 2000 }) // deja 5.500
+  const dia = (n) => new Date(Date.UTC(2026, 9, 5) + n * 86400e3).toISOString().slice(0, 10) // lunes 5-oct
+  // 4 semanas: la plata sube semana a semana
+  const dias = Array.from({ length: 28 }, (_, i) => ({ dia: dia(i), gasto: 1000, unidadesAds: [0.2, 0.3, 0.5, 0.6][Math.floor(i / 7)], ventaAds: [0.2, 0.3, 0.5, 0.6][Math.floor(i / 7)] * 10000, unidades: 1 }))
+  const recs = [{ dia: dia(6), accion: 'subir', budgetDiario: 2000 }]
+  const b = bitacoraProducto(dias, eco, recs)
+  assert.equal(b.semanas.length, 4)
+  assert.equal(b.semanas[0].recomendo.accion, 'subir')
+  assert.equal(b.tendencia, 'mejora')
+  assert.equal(b.veredicto, 'escalar')
+  const pierde = bitacoraProducto(dias.map((d) => ({ ...d, unidadesAds: 0, ventaAds: 0 })), eco)
+  assert.equal(pierde.veredicto, 'cortar')
+  assert.ok(pierde.acumulado < 0)
+  assert.equal(bitacoraProducto(dias.slice(0, 8), eco).veredicto, 'midiendo')
+})

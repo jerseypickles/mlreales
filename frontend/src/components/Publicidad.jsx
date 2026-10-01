@@ -491,6 +491,8 @@ function LearningMachine({ plan, aprendido, fotos }) {
         ) : <p className="pub-vacio">Todavía no hay días guardados.</p>}
       </section>
 
+      <Bitacoras plan={plan} fotos={fotos} />
+
       <FormasCampana formas={plan?.formas} />
 
       <div className="pub-aprende-tarjetas">
@@ -518,6 +520,50 @@ function LearningMachine({ plan, aprendido, fotos }) {
         ) : null}
       </div>
     </div>
+  )
+}
+
+// LA BITÁCORA DE LARGO PLAZO: cada producto semana a semana desde que está en
+// su campaña — plata, lo que se recomendó y el veredicto de la serie completa.
+const VEREDICTO_LARGO = { escalar: { t: 'escalar', c: 'bien' }, mantener: { t: 'mantener', c: 'bien' }, vigilar: { t: 'vigilar', c: 'medio' }, cortar: { t: 'cortar', c: 'mal' }, midiendo: { t: 'midiendo', c: 'neutro' } }
+function Bitacoras({ plan, fotos }) {
+  const prods = (plan?.productos ?? []).filter((p) => p.bitacora?.semanas?.some((s) => s.gasto > 0))
+  if (!prods.length) return null
+  return (
+    <section className="pub-caja">
+      <h3>Bitácora de cada producto <small>semana a semana desde que está en su campaña</small></h3>
+      <div className="pub-bitacoras">
+        {prods.map((p) => {
+          const b = p.bitacora
+          const v = VEREDICTO_LARGO[b.veredicto] ?? VEREDICTO_LARGO.midiendo
+          const max = Math.max(1, ...b.semanas.map((s) => Math.abs(s.plata ?? 0)))
+          return (
+            <div key={p.itemId} className="pub-bitacora">
+              <div className="pub-bitacora-cab">
+                {fotos.get(p.itemId) ? <img src={fotos.get(p.itemId)} alt="" width="32" height="32" /> : null}
+                <strong>{nombreCorto(p.titulo)}</strong>
+                <em className={`pub-accion ${v.c}`}>{v.t}</em>
+              </div>
+              <p className="pub-texto">{b.texto}</p>
+              <div className="pub-bitacora-semanas">
+                {b.semanas.map((s) => (
+                  <div key={s.semana} title={`Semana del ${s.semana}: gastó ${fmtPrecio(s.gasto)} (${fmtPrecio(s.gastoDiario)}/día), ${s.ventasAds} ventas por anuncio de ${s.ventas} totales, ROAS ${x(s.roas)}, dejó ${conSigno(s.plata)}${s.recomendo ? ` · se recomendó: ${ACCION[s.recomendo.accion]?.t ?? s.recomendo.accion}` : ''}`}>
+                    <span className="pub-bit-barra"><i className={(s.plata ?? 0) >= 0 ? 'bien' : 'mal'} style={{ height: `${Math.max(3, (Math.abs(s.plata ?? 0) / max) * 46)}px` }} /></span>
+                    <small>{s.semana.slice(8, 10)}/{s.semana.slice(5, 7)}</small>
+                    {s.recomendo ? <em className={`pub-bit-rec ${ACCION[s.recomendo.accion]?.c ?? 'neutro'}`}>{ACCION[s.recomendo.accion]?.t ?? s.recomendo.accion}</em> : <em className="pub-bit-rec vacio">—</em>}
+                  </div>
+                ))}
+              </div>
+              <div className="pub-bitacora-pie">
+                <span>acumulado <b className={b.acumulado >= 0 ? 'bien' : 'mal'}>{conSigno(b.acumulado)}</b></span>
+                <span>{b.semanasConGasto} {b.semanasConGasto === 1 ? 'semana' : 'semanas'} con gasto</span>
+                {b.tendencia ? <span>tendencia: <b className={b.tendencia === 'mejora' ? 'bien' : b.tendencia === 'empeora' ? 'mal' : ''}>{b.tendencia}</b></span> : null}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 

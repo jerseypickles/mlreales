@@ -7821,3 +7821,20 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .cont-detalle summary { cursor: pointer; font-weight: 600; }
 .f29m-alerta.medio { background: color-mix(in srgb, var(--avisa-tinta) 8%, var(--superficie)); border-color: color-mix(in srgb, var(--avisa-tinta) 35%, var(--borde)); }
 .f29m-alerta.medio svg { color: var(--avisa-tinta); }
+
+/* bitácora de largo plazo por producto */
+.pub-bitacoras { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.pub-bitacora { display: grid; gap: 8px; padding: 12px; border-radius: 12px; border: 1px solid var(--borde); background: var(--superficie); }
+.pub-bitacora-cab { display: flex; align-items: center; gap: 8px; }
+.pub-bitacora-cab img { width: 32px; height: 32px; border-radius: 8px; object-fit: cover; }
+.pub-bitacora-cab strong { font-size: 13.5px; flex: 1; min-width: 0; }
+.pub-bitacora-semanas { display: flex; gap: 4px; align-items: flex-end; overflow-x: auto; padding-bottom: 2px; }
+.pub-bitacora-semanas > div { display: grid; justify-items: center; gap: 2px; min-width: 40px; }
+.pub-bit-barra { height: 48px; display: flex; align-items: flex-end; }
+.pub-bit-barra i { display: block; width: 16px; border-radius: 4px 4px 1px 1px; }
+.pub-bit-barra i.bien { background: var(--exito-tinta); }
+.pub-bit-barra i.mal { background: var(--peligro); }
+.pub-bitacora-semanas small { font-size: 9.5px; color: var(--tinta-2); }
+.pub-bit-rec { font-style: normal; font-size: 9px; font-weight: 700; white-space: nowrap; }
+.pub-bit-rec.bien { color: var(--exito-tinta); } .pub-bit-rec.medio { color: var(--avisa-tinta); } .pub-bit-rec.mal { color: var(--peligro); } .pub-bit-rec.neutro, .pub-bit-rec.vacio { color: var(--tinta-2); }
+.pub-bitacora-pie { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--tinta-2); }
