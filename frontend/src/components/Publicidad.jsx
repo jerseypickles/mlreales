@@ -525,7 +525,7 @@ function LearningMachine({ plan, aprendido, fotos }) {
 
 // LA BITÁCORA DE LARGO PLAZO: cada producto semana a semana desde que está en
 // su campaña — plata, lo que se recomendó y el veredicto de la serie completa.
-const VEREDICTO_LARGO = { escalar: { t: 'escalar', c: 'bien' }, mantener: { t: 'mantener', c: 'bien' }, vigilar: { t: 'vigilar', c: 'medio' }, cortar: { t: 'cortar', c: 'mal' }, midiendo: { t: 'midiendo', c: 'neutro' } }
+const VEREDICTO_LARGO = { escalar: { t: 'escalar', c: 'bien' }, mantener: { t: 'mantener', c: 'bien' }, vigilar: { t: 'vigilar', c: 'medio' }, cortar: { t: 'cortar', c: 'mal' }, midiendo: { t: 'midiendo', c: 'neutro' }, pausado: { t: 'sin publicidad', c: 'neutro' } }
 function Bitacoras({ plan, fotos }) {
   const prods = (plan?.productos ?? []).filter((p) => p.bitacora?.semanas?.some((s) => s.gasto > 0))
   if (!prods.length) return null

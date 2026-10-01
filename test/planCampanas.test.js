@@ -271,3 +271,10 @@ test('bitacoraProducto: semana a semana, acumulado, tendencia y veredicto de lar
   assert.ok(pierde.acumulado < 0)
   assert.equal(bitacoraProducto(dias.slice(0, 8), eco).veredicto, 'midiendo')
 })
+
+test('bitacoraProducto: sin gasto las últimas semanas es "pausado", no "escalar"', () => {
+  const eco = economiaVenta({ precio: 10000, envio: 800 })
+  const dia = (n) => new Date(Date.UTC(2026, 7, 3) + n * 86400e3).toISOString().slice(0, 10)
+  const dias = Array.from({ length: 42 }, (_, i) => (i < 28 ? { dia: dia(i), gasto: 1000, unidadesAds: 1, ventaAds: 10000, unidades: 1 } : { dia: dia(i), gasto: 0, unidadesAds: 0, ventaAds: 0, unidades: 0 }))
+  assert.equal(bitacoraProducto(dias, eco).veredicto, 'pausado')
+})

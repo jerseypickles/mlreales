@@ -656,7 +656,13 @@ export function bitacoraProducto(dias, eco, recs = [], { desde = null, max = 12 
   const tendencia = ult.length && prev.length ? (prom(ult) - prom(prev) > Math.abs(prom(prev)) * 0.15 ? 'mejora' : prom(ult) - prom(prev) < -Math.abs(prom(prev)) * 0.15 ? 'empeora' : 'estable') : null
   // EL VEREDICTO DE LARGO PLAZO: no una semana suelta sino la serie
   let veredicto = 'midiendo', texto = 'Todavía menos de 2 semanas completas en su campaña: se juzga con más datos.'
-  if (completas.length >= 2) {
+  // sin gasto en las 2 últimas semanas (sin stock o apagado): no hay nada que
+  // escalar, aunque lo de hace un mes haya dejado plata
+  const recientes = semanas.slice(-2)
+  if (recientes.length && recientes.every((s) => !(s.gasto > 0))) {
+    veredicto = 'pausado'
+    texto = `Sin publicidad en las últimas semanas. Antes dejó ${acumulado >= 0 ? '+' : '−'}$${Math.abs(Math.round(acumulado)).toLocaleString('es-CL')} en total: si vuelve el stock, arrancar con una prueba en su propia campaña.`
+  } else if (completas.length >= 2) {
     const ultimasPositivas = ult.every((s) => (s.plata ?? 0) > 0)
     const ultimasNegativas = ult.every((s) => (s.plata ?? 0) < 0)
     if (ultimasPositivas && tendencia !== 'empeora') { veredicto = 'escalar'; texto = `Deja plata ${ult.length} semanas seguidas${tendencia === 'mejora' ? ' y viene mejorando' : ''}: es candidato a escalar por escalones mientras cada subida pague.` }
