@@ -35,7 +35,7 @@ const ACCION = {
   organico: { t: 'solo orgánico', c: 'mal' }, 'no-anunciar': { t: 'no anunciar', c: 'mal' },
   esperar: { t: 'esperar', c: 'neutro' }, mantener: { t: 'mantener', c: 'bien' }, subir: { t: 'subir', c: 'bien' },
   'subir-roas': { t: 'subir ROAS', c: 'medio' }, bajar: { t: 'bajar', c: 'medio' }, apagar: { t: 'apagar', c: 'mal' },
-  apagada: { t: 'sin anuncio', c: 'neutro' }, 'sin-economia': { t: 'sin precio', c: 'neutro' }, 'sin-datos': { t: 'sin datos', c: 'neutro' },
+  apagada: { t: 'sin anuncio', c: 'neutro' }, 'sin-stock': { t: 'sin stock', c: 'neutro' }, 'sin-economia': { t: 'sin precio', c: 'neutro' }, 'sin-datos': { t: 'sin datos', c: 'neutro' },
 }
 const ICONO = {
   'pausar-anuncio': PauseCircle, separar: Split, 'campana-propia': Split, 'agrupar-chicos': Layers, crear: PlusCircle, 'ajustar-budget': Target,
@@ -430,7 +430,7 @@ function LearningMachine({ plan, aprendido, fotos }) {
   const t = aprendido?.ultimo?.parametros?.ticket
   const r = plan?.reglas
   const ev = plan?.evaluacion
-  const enPrueba = (plan?.productos ?? []).filter((p) => ['semana-1', 'semana-2', 'ajuste', 'arranque'].includes(p.fase) && p.accion !== 'apagada')
+  const enPrueba = (plan?.productos ?? []).filter((p) => ['semana-1', 'semana-2', 'ajuste', 'arranque'].includes(p.fase) && !['apagada', 'sin-stock'].includes(p.accion))
   // historial: por producto, los últimos 14 días de recomendación como puntos
   const hist = plan?.historial ?? []
   const diasHist = [...new Set(hist.map((h) => h.dia))].sort().slice(-14)

@@ -295,14 +295,39 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const formas = aprenderEstructura(observacionesEstructura(ads, ecoPorItem, nichoDe))
   const recsViejas = await RecomendacionAds.find({ dia: { $lt: hoy } }).select('itemId dia accion budgetDiario').lean()
   const evaluacion = evaluarRecomendaciones(recsViejas, diasPorItem, ecoPorItem, { hoy })
+  // las campañas tal como están HOY en ML: su fecha de creación y el estado de
+  // cada anuncio. Hace falta antes de revisar, por dos trampas medidas el 1-oct:
+  //  · ML relee los últimos 7 días y los etiqueta con la campaña ACTUAL del
+  //    anuncio, así que un producto recién movido parecía llevar 7 días en su
+  //    campaña nueva y se juzgaba con días de la vieja. La creación manda.
+  //  · un anuncio en 'hold' (sin stock o pausado) recibía "subir".
+  let adsVivos = null
+  try {
+    const { resumenAds } = await import('../ads.js')
+    adsVivos = await resumenAds({ dias: 7 })
+  } catch (err) {
+    console.warn(`[plan-campanas] campañas no leídas: ${err.message}`)
+  }
+  const creadaDe = new Map((adsVivos?.campanas ?? []).map((c) => [c.id, c.creadaEl ? new Date(c.creadaEl).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }) : null]))
   for (const fila of salida) {
+    const anuncio = adsVivos?.porItem?.[fila.itemId]
+    if (anuncio?.estado === 'hold' && fila.accion !== 'apagada') {
+      Object.assign(fila, { pendiente: false, accion: 'sin-stock', budgetDiario: 0, texto: 'ML tiene el anuncio detenido (sin stock o pausado): sin recomendación hasta que vuelva a estar activo.' })
+    }
     if (fila.pendiente) {
       // la fase cuenta desde que el producto está en su campaña ACTUAL: si se
       // lo pasó a una campaña propia, arranca su prueba de 2 semanas ahí
-      fila.desdeCampanaBitacora = fila.desdeCampana ?? null
-      const enCampana = fila.desdeCampana ? fila._dias.filter((d) => d.dia >= fila.desdeCampana).length : fila._dias.length
-      const r = revisarCampana(fila._dias, fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral, umbralAprendido: decision.estado === 'aprendido' })
-      if (r && fila.desdeCampana && enCampana < fila._dias.length && enCampana <= 21) r.texto = `En su campaña nueva desde ${fila.desdeCampana}. ${r.texto}`
+      const creada = anuncio?.campanaId ? creadaDe.get(anuncio.campanaId) : null
+      const desde = [fila.desdeCampana, creada].filter(Boolean).sort().at(-1) ?? null
+      fila.desdeCampanaBitacora = desde
+      const enCampana = desde ? fila._dias.filter((d) => d.dia >= desde).length : fila._dias.length
+      const nueva = desde && enCampana < fila._dias.length
+      // en una campaña nueva se juzga SOLO con sus días; sin un día completo, esperar
+      const r = nueva && enCampana < 1
+        ? { fase: 'semana-1', accion: 'esperar', budgetDiario: anuncio?.campanaId ? (adsVivos.campanas.find((c) => c.id === anuncio.campanaId)?.presupuestoDiario ?? null) : null, metricas: { diasCorriendo: 0 },
+          texto: 'Campaña recién creada: arranca su prueba de 2 semanas con el primer día completo. Mantén el budget de partida.' }
+        : revisarCampana(nueva ? fila._dias.filter((d) => d.dia >= desde) : fila._dias, fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral, umbralAprendido: decision.estado === 'aprendido' })
+      if (r && nueva && enCampana <= 21) r.texto = `En su campaña nueva desde ${desde}. ${r.texto}`
       delete fila.pendiente
       delete fila.desdeCampana
       Object.assign(fila, r ?? { accion: 'sin-datos', texto: 'Sin datos suficientes.' })
@@ -321,8 +346,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   // la estructura real de las campañas contra lo que recomienda el plan
   let estructura = null
   try {
-    const { resumenAds } = await import('../ads.js')
-    const r = await resumenAds({ dias: 7 })
+    const r = adsVivos
     if (r) {
       estructura = estructuraCampanas({ campanas: r.campanas ?? [], porItem: r.porItem ?? {}, planes: salida, formas, nichoDe })
       const campanaDe = new Map(Object.entries(r.porItem ?? {}).map(([id, a]) => [id, (r.campanas ?? []).find((c) => c.id === a.campanaId)?.nombre ?? null]))
