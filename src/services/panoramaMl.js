@@ -122,9 +122,28 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, pres
   const ultima = new Map((await RankingMasVendidos.aggregate([{ $group: { _id: '$categoriaId', dia: { $max: '$dia' } } }])).map((x) => [x._id, x.dia]))
   const delTablero = await categoriasDelTablero().catch(() => new Map())
   const pendientes = hojasQueTocan(hojas, ultima, dia).slice(0, porPasada)
-  // el tiempo de las tendencias se reserva antes de que el ranking lo consuma
-  const presupuestoRanking = presupuestoMs * 0.8
-  let capturadas = 0, frenos = 0, movidas = 0
+  // búsquedas que suben: una vez por semana por categoría. VAN ANTES del
+  // ranking y con su propio tiempo: con 6.029 hojas el ranking siempre tiene
+  // pendientes, se comía la pasada entera y las tendencias quedaron en 575
+  // capturas desde el 16-sep sin una segunda lectura con qué comparar.
+  const finTendencias = Date.now() - inicio + presupuestoMs * 0.2
+  let frenos = 0
+  const vencida = diaChile(+ahora - REFRESCO_TENDENCIAS_DIAS * DIA)
+  const conTendencia = new Set(await TendenciaCategoria.distinct('categoriaId', { dia: { $gt: vencida } }))
+  let tendencias = 0, erroresTendencia = 0, vaciasTendencia = 0, ultimoErrorTendencia = null
+  const candidatasTendencia = hojas.filter((h) => !conTendencia.has(h.id)).length
+  for (const { id } of hojas.filter((h) => !conTendencia.has(h.id)).slice(0, TENDENCIAS_POR_PASADA)) {
+    if (Date.now() - inicio > finTendencias) break
+    const r = await pedir(`/trends/MLC/${id}`, obtener)
+    if (r.frenado) { frenos++; await esperar(PAUSA_429_MS); continue }
+    if (r.error) { erroresTendencia++; ultimoErrorTendencia = r.error }
+    const terminos = normalizarTendencias(r.datos)
+    if (!r.error && !terminos.length) vaciasTendencia++
+    if (terminos.length) { await TendenciaCategoria.updateOne({ categoriaId: id, dia }, { $setOnInsert: { categoriaId: id, dia, terminos, capturadoEl: ahora } }, { upsert: true }); tendencias++ }
+    await esperar(PAUSA_MS)
+  }
+  const presupuestoRanking = presupuestoMs
+  let capturadas = 0, movidas = 0
   for (const { id } of pendientes) {
     if (Date.now() - inicio > presupuestoRanking) break
     const r = await pedir(`/highlights/MLC/category/${id}`, obtener)
@@ -140,21 +159,6 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, pres
         if (mov.length) { movidas += mov.length; await resolverFichas(mov, { ahora }).catch(() => 0) }
       }
     }
-    await esperar(PAUSA_MS)
-  }
-  // búsquedas que suben: una vez por semana por categoría
-  const vencida = diaChile(+ahora - REFRESCO_TENDENCIAS_DIAS * DIA)
-  const conTendencia = new Set(await TendenciaCategoria.distinct('categoriaId', { dia: { $gt: vencida } }))
-  let tendencias = 0, erroresTendencia = 0, vaciasTendencia = 0, ultimoErrorTendencia = null
-  const candidatasTendencia = hojas.filter((h) => !conTendencia.has(h.id)).length
-  for (const { id } of hojas.filter((h) => !conTendencia.has(h.id)).slice(0, TENDENCIAS_POR_PASADA)) {
-    if (Date.now() - inicio > presupuestoMs) break
-    const r = await pedir(`/trends/MLC/${id}`, obtener)
-    if (r.frenado) { frenos++; await esperar(PAUSA_429_MS); continue }
-    if (r.error) { erroresTendencia++; ultimoErrorTendencia = r.error }
-    const terminos = normalizarTendencias(r.datos)
-    if (!r.error && !terminos.length) vaciasTendencia++
-    if (terminos.length) { await TendenciaCategoria.updateOne({ categoriaId: id, dia }, { $setOnInsert: { categoriaId: id, dia, terminos, capturadoEl: ahora } }, { upsert: true }); tendencias++ }
     await esperar(PAUSA_MS)
   }
   const resultado = { dia, arbol, hojasConVolumen: hojas.length, rankingHoy: hechas.size + capturadas, capturadas, movidas, tendencias, frenos,
