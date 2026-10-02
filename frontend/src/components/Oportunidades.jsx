@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, BadgeCheck, CalendarClock, FileSpreadsheet, ImageOff, Lightbulb, Search, Sun, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, CalendarClock, Check, CircleDollarSign, ImageOff, Lightbulb, MousePointerClick, PencilLine, Search, ShieldAlert, ShoppingBag, Sparkles, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
@@ -38,8 +38,6 @@ const esOrtografia = (keyword, medida) => Boolean(medida) && sinTildes(keyword) 
 // la publicidad empieza a pesar de verdad sobre el margen.
 const CPC_CARO = 0.4
 
-const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-const fmtMes = (m) => (m ? MESES[Number(m.slice(5, 7)) - 1] + (m.slice(0, 4) !== String(new Date().getFullYear()) ? ` ${m.slice(2, 4)}` : '') : '')
 
 // La salud del mercado, año contra año. Solo devuelve algo cuando cambia una
 // decisión: lo que se muere y lo que despega. `estable` y `subiendo` son el
@@ -86,74 +84,6 @@ const PICO_QUE_SE_DICE = 1.5
 function picosDe(curva) {
   return new Set((curva?.periodos?.picos ?? []).filter((p) => p.multiplicador >= PICO_QUE_SE_DICE).flatMap((p) => p.meses))
 }
-function textoPeriodo(p) {
-  return `${p.texto} ×${String(p.multiplicador).replace('.', ',')}${p.porque ? ` · ${p.porque.nombre}` : ' · sin explicación en el calendario'} · se repitió ${p.repite} de ${p.anios} años · ${p.participacionPct}% de las búsquedas del año`
-}
-function ChipMomento({ o }) {
-  const m = momentoDeCompra(o)
-  return <em className={`chip-momento m-${m.clase}`} title={m.motivo}>{m.etiqueta}</em>
-}
-
-function TodoElAnio({ periodos }) {
-  const pico = (periodos?.picos ?? []).find((p) => p.multiplicador >= PICO_QUE_SE_DICE)
-  if (!pico) return <em className="op-fila-plano">todo el año</em>
-  return (
-    <em className="op-fila-plano op-fila-conpico" title={`Se vende todo el año, con un período fuerte medido en 4 años de Google: ${textoPeriodo(pico)}`}>
-      todo el año · <b>pico {pico.texto}</b>
-    </em>
-  )
-}
-function PeriodosMedidos({ p }) {
-  if (!p?.picos?.length && !p?.valles?.length) return null
-  return (
-    <span className="curva-periodos">
-      {p.picos.map((x) => (
-        <b key={`p${x.texto}`} className={`curva-periodo-chip${x.porque ? '' : ' sin-porque'}`} title={textoPeriodo(x)}>
-          ▲ {x.texto} ×{String(x.multiplicador).replace('.', ',')} · {x.porque ? x.porque.nombre : '¿por qué?'} <small>{x.repite}/{x.anios} años</small>
-        </b>
-      ))}
-      {p.valles.map((x) => (
-        <b key={`v${x.texto}`} className="curva-periodo-chip valle" title={`Valle: ${x.texto}, ×${String(x.multiplicador).replace('.', ',')} de lo normal, se repitió ${x.repite} de ${x.anios} años`}>
-          ▼ {x.texto} ×{String(x.multiplicador).replace('.', ',')}
-        </b>
-      ))}
-    </span>
-  )
-}
-
-function chipVentana(v) {
-  if (!v || v.estado === 'sin-temporada') return null
-  const pico = v.pico ? ` · pico ${fmtMes(v.pico)}` : ''
-  if (v.estado === 'ultimo-mes') {
-    return { clase: 'ahora', icono: '🔥', texto: 'último mes para pedir', ayuda: `Pidiendo este mes el stock llega justo al arranque del pico${pico}` }
-  }
-  if (v.estado === 'ahora') {
-    return { clase: 'ahora', icono: '🎯', texto: `pedir hasta ${fmtMes(v.hasta)}`, ayuda: `Ventana abierta ${fmtMes(v.desde)}–${fmtMes(v.hasta)}${pico}` }
-  }
-  if (v.estado === 'pronto') {
-    return { clase: 'pronto', texto: `pedir ${fmtMes(v.desde)}`, ayuda: `La ventana abre en ${v.mesesAl} mes(es)${pico}` }
-  }
-  // PERDER LA TEMPORADA NO ES LO MISMO QUE TENERLA LEJOS.
-  //
-  // Los dos casos caen en 'futura' y hasta el 19-ago se veían idénticos: un
-  // "pedir may 2027" dentro de Estacionales lejanos. Pero son decisiones
-  // distintas — parrilla eléctrica tiene su pico en septiembre (Fiestas
-  // Patrias, 2,08×) y la ventana marítima se cerró en julio: no está lejos,
-  // se pasó por un mes. Eso cambia qué hacer (agendar el año que viene, o
-  // evaluar aéreo si el bulto lo permite) y merece leerse sin abrir el tooltip.
-  if (v.perdioLaTemporada) {
-    return {
-      clase: 'futura',
-      texto: `se pasó · pedir ${fmtMes(v.desde)}`,
-      ayuda: `La temporada de este año ya no se alcanza con lead marítimo (${v.leadMeses?.min ?? 2}-${v.leadMeses?.max ?? 4} meses). Próxima ventana ${fmtMes(v.desde)}–${fmtMes(v.hasta)}${pico}`,
-    }
-  }
-  return {
-    clase: 'futura',
-    texto: `pedir ${fmtMes(v.desde)}`,
-    ayuda: `Faltan ${v.mesesAl} mes(es)${pico}`,
-  }
-}
 
 function Hecho({ etiqueta, children }) {
   if (children == null || children === '') return null
@@ -164,76 +94,7 @@ function Hecho({ etiqueta, children }) {
   )
 }
 
-const MESES_CORTOS = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
-const MESES_LARGOS = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-]
 
-// LA FORMA DEL AÑO de un vistazo. Índice 0-100 de Google Trends relativo a la
-// PROPIA keyword: sirve para comparar diciembre contra julio del mismo
-// producto, jamás un producto contra otro. Por eso no lleva eje ni números.
-function CurvaAno({ curva }) {
-  if (!curva?.curva?.length) return null
-  const max = Math.max(...curva.curva) || 1
-  const mesHoy = new Date().getMonth()
-  return (
-    <div
-      className="curva-ano"
-      title={
-        curva.fuente === 'google-ads'
-          ? `${curva.busquedasMes?.toLocaleString('es-CL') ?? '?'} búsquedas al mes en Chile · pico en ${curva.nombreMesPico} (${curva.ratioPico}× el promedio). Volumen real de Google Ads, últimos 12 meses — comparable con otros nichos.`
-          : `Pico en ${curva.nombreMesPico} · ${curva.ratioPico}× el promedio (Google Trends, índice 0-100 relativo a esta keyword: NO comparable con otros nichos)`
-      }
-    >
-      <div className="curva-barras">
-        {curva.curva.map((v, i) => (
-          <span
-            key={i}
-            className={`curva-barra${i === mesHoy ? ' curva-hoy' : ''}${picosDe(curva).has(i + 1) ? ' curva-periodo' : ''}`}
-            style={{ height: `${Math.max(6, Math.round((100 * v) / max))}%` }}
-            // el valor del mes al pasar el mouse: en google-ads son búsquedas
-            // reales, en trends un índice 0-100 relativo a la propia keyword
-            data-mes={`${MESES_LARGOS[i]}: ${
-              curva.fuente === 'google-ads' ? `${fmtNum(v)} búsquedas` : `índice ${v}`
-            }`}
-          >
-            <i>{MESES_CORTOS[i]}</i>
-          </span>
-        ))}
-      </div>
-      <span className="curva-pie">
-        {curva.busquedasMes != null ? (
-          <strong className="curva-volumen">{fmtNum(curva.busquedasMes)} búsquedas/mes</strong>
-        ) : null}
-        {/* la keyword del nicho nació comprimida y se mide en Google con la
-            forma buena: se declara para que el número no parezca mágico */}
-        {curva.keywordMedida && curva.keywordMedida !== curva.keyword ? (
-          <em
-            className="curva-corregida"
-            title={`El nicho se llama «${curva.keyword}» y así se sigue midiendo en Mercado Libre. En Google se midió con «${curva.keywordMedida}», que es como la gente lo escribe${curva.correccionFactor ? ` — ${curva.correccionFactor}× más búsquedas` : ''}. El nicho no se renombra para no romper su serie.`}
-          >
-            {' '}como «{curva.keywordMedida}»
-          </em>
-        ) : null}
-        {/* la etiqueta tiene que calzar con lo que muestra la barra: un ratio
-            de 1,5 sobre una silueta plana no es "temporada", es un bulto */}
-        {curva.clasificacion === 'estacional'
-          ? ` temporada real · pico ${curva.nombreMesPico}, ${curva.ratioPico}× el promedio`
-          : curva.clasificacion === 'alza-suave'
-            ? ` se busca todo el año · leve alza en ${curva.nombreMesPico} (${curva.ratioPico}×)`
-            : ' se busca parejo todo el año'}
-        <PeriodosMedidos p={curva.periodos} />
-      </span>
-    </div>
-  )
-}
-
-// FILA DENSA: lo que se lee de un vistazo, en 40px de alto.
-//
-// La tarjeta completa mide ~300px, y con 48 nichos eso son 14.000px de scroll
-// para encontrar lo que se puede comprar hoy. Acá va solo lo que decide si
-// vale la pena abrirla; el detalle se despliega con un clic.
 // LA TRAYECTORIA DEL TOP, en el ancho de una columna.
 //
 // Suma de los badges "+N vendidos" que ML publica en el listado. Son baldes
@@ -266,18 +127,13 @@ function fmtPiso(n) {
 //     top despegó (ML no pone badge bajo 25 unidades, así que la barra vacía es
 //     "casi nadie vendió nunca")
 function Trayectoria({ v }) {
-  if (!v?.pisoUnidades) return <span className="op-fila-vend" />
+  if (!v?.pisoUnidades) return <em className="opt-nada">—</em>
   const pct = v.pctCobertura ?? null
   return (
-    <span
-      className="op-fila-vend"
-      title={`El top vendió al menos ${fmtNum(v.pisoUnidades)} unidades EN TODA SU VIDA — acumulado desde que se publicó cada aviso, no por mes ni por año. Suma de los badges "+N vendidos" de ML.\n\nLa barra: ${pct}% del top (${v.itemsConDato} de ${v.itemsDelScan}) vendió 25 unidades o más alguna vez. ML no muestra badge bajo 25, así que el resto nunca despegó.`}
-    >
+    <span className="opt-vend">
       {/* el ≥ se queda: cada badge dice "al menos N", así que la suma es un piso.
-          Ya no carga el peso de avisar "esto no es una tasa" —de eso se encargan
-          el encabezado y la barra— pero sin él el número mentiría por exceso de
-          precisión. */}
-      <b><em>≥</em>{fmtPiso(v.pisoUnidades)}</b>
+          Sin él el número mentiría por exceso de precisión. */}
+      <span><em>≥</em>{fmtPiso(v.pisoUnidades)}</span>
       {pct != null ? (
         <i className="op-vend-barra" aria-hidden="true">
           <i style={{ width: `${Math.max(3, pct)}%` }} className={pct < 50 ? 'flojo' : undefined} />
@@ -286,37 +142,11 @@ function Trayectoria({ v }) {
     </span>
   )
 }
+const ayudaTrayectoria = (v) =>
+  v?.pisoUnidades
+    ? `El top vendió al menos ${fmtNum(v.pisoUnidades)} unidades EN TODA SU VIDA — acumulado desde que se publicó cada aviso, no por mes ni por año. Suma de los badges "+N vendidos" de ML.${v.pctCobertura != null ? `\n\nLa barra: ${v.pctCobertura}% del top (${v.itemsConDato} de ${v.itemsDelScan}) vendió 25 unidades o más alguna vez. ML no muestra badge bajo 25, así que el resto nunca despegó.` : ''}`
+    : 'Sin badges de vendidos en el top'
 
-// "ACÁ YA VENDO YO". La mesa listaba los 45 nichos como si todos fueran
-// territorio nuevo, pero en varios ya hay publicación propia. No es lo mismo
-// evaluar un nicho a ciegas que uno del que tienes conversión, visitas y
-// precio propio: ahí la decisión no es entrar, es reponer o ampliar surtido.
-//
-// Dos estados, porque tener publicación y vender no es lo mismo: bolsa llena y
-// verde cuando hubo unidades en 30 días, bolsa apagada cuando el listing está
-// pero no se mueve — ese segundo caso es el que más conviene ver, porque es un
-// nicho donde ya apostaste y no está rindiendo.
-function MioBadge({ mios }) {
-  if (!mios?.publicaciones) return null
-  const vende = mios.unidades30d > 0
-  const plural = mios.publicaciones === 1 ? 'publicación' : 'publicaciones'
-  return (
-    <i
-      className={`op-mio${vende ? ' vende' : ''}`}
-      title={
-        vende
-          ? `Ya vendes acá: ${mios.publicaciones} ${plural} tuya(s), ${mios.unidades30d} unidad(es) en los últimos 30 días.`
-          : `Tienes ${mios.publicaciones} ${plural} en este nicho, sin ventas en los últimos 30 días.`
-      }
-      aria-label={vende ? 'nicho propio con ventas' : 'nicho propio sin ventas recientes'}
-    >
-      <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
-        <path d="M3.4 5.6h9.2l-.75 7.7a1.15 1.15 0 0 1-1.15 1.05H5.3a1.15 1.15 0 0 1-1.15-1.05z" fill="currentColor" />
-        <path d="M5.9 5.6V4.4a2.1 2.1 0 0 1 4.2 0v1.2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    </i>
-  )
-}
 
 // RECIÉN LLEGADO. Un nicho nuevo del radar cae en medio de 44 filas que ya
 // estaban ahí ayer y se pierde. Se marca por una semana, que es más o menos lo
@@ -328,22 +158,6 @@ function esNuevo(creadoEl) {
   return (Date.now() - new Date(creadoEl).getTime()) / 86400e3 <= DIAS_NUEVO
 }
 
-function NuevoBadge({ creadoEl }) {
-  if (!esNuevo(creadoEl)) return null
-  const dias = Math.floor((Date.now() - new Date(creadoEl).getTime()) / 86400e3)
-  return (
-    <i
-      className="op-nuevo"
-      title={
-        dias < 1
-          ? 'El radar lo descubrió hoy. Todavía está midiendo: dale unos días de serie antes de decidir nada.'
-          : `El radar lo descubrió hace ${dias} día${dias === 1 ? '' : 's'}.`
-      }
-    >
-      nuevo
-    </i>
-  )
-}
 
 // ¿LA BÚSQUEDA SE CONVIERTE EN VENTA ACÁ? Es el cruce de las dos fuentes:
 // unidades vendidas en ML por cada búsqueda en Google, comparado contra lo
@@ -400,38 +214,6 @@ function claseTramo(mediana) {
   return 'op-tramo-alto'
 }
 
-function ChipTramo({ mediana }) {
-  if (!Number.isFinite(mediana)) return null
-  const c = claseTramo(mediana)
-  if (c === 'op-tramo-bueno') {
-    return (
-      <i
-        className="op-chip-tramo bueno"
-        title={`Mediana ${fmtPrecio(mediana)}: cae en el tramo de $10.000 a $19.989, donde queda entre 72,6% y 77,8% de cada venta después de comisión y envío Full. Es el mejor rendimiento de toda la escala.`}
-      >
-        en tramo
-      </i>
-    )
-  }
-  if (c === 'op-tramo-bajo') {
-    return (
-      <i
-        className="op-chip-tramo bajo"
-        title={`Mediana ${fmtPrecio(mediana)}: bajo $10.000 el envío fijo de Full (~$870) se come una parte grande del precio, y comprar un cliente con publicidad cuesta $1.717 medidos — bajo ese piso la publicidad no puede ser rentable.`}
-      >
-        bajo tramo
-      </i>
-    )
-  }
-  return (
-    <i
-      className="op-chip-tramo alto"
-      title={`Mediana ${fmtPrecio(mediana)}: pasando $19.990 la tarifa de Full salta de $1.040 a $3.250 y el rendimiento cae de 77,8% a 66,7%. No vuelve a rendir igual hasta cerca de $50.000. No descarta el nicho, pero el producto tiene que justificar el salto.`}
-    >
-      sobre tramo
-    </i>
-  )
-}
 
 // MARCA DE COTIZACIÓN, EN LA FILA Y DE UN CLIC.
 //
@@ -448,178 +230,259 @@ function MarcaCotizando({ o, onRecargar }) {
   return (
     <button
       type="button"
-      className={`op-marca${activo ? ' activa' : ''}`}
+      className={`opt-marca${activo ? ' activa' : ''}`}
       title={activo ? 'Lo estás cotizando — clic para desmarcar' : 'Marcar que estás cotizando este nicho'}
       aria-pressed={activo}
-      aria-label={activo ? 'quitar marca de cotizando' : 'marcar como cotizando'}
       onClick={async (e) => {
         e.stopPropagation()
         await api.ajustarNicho(o.nichoId, { etapaCompra: activo ? 'evaluando' : 'cotizando' })
         onRecargar()
       }}
     >
-      <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
-        <path d="M3 2.5h7.2L13 5.3V13a.9.9 0 0 1-.9.9H3a.9.9 0 0 1-.9-.9V3.4A.9.9 0 0 1 3 2.5z"
-          fill={activo ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-        <path d="M5 7.6h6M5 10.2h4" stroke={activo ? 'var(--fondo, #fff)' : 'currentColor'} strokeWidth="1.2" strokeLinecap="round" />
-      </svg>
+      {activo ? <><Check size={12} aria-hidden="true" />Cotizando</> : '+ cotizar'}
     </button>
   )
 }
 
-function FilaCompacta({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
-  const ven = chipVentana(o.ventana)
+// LAS ALERTAS, EN UN SOLO LUGAR (2-oct-2026).
+//
+// La fila llegó a cargar siete etiquetas de colores distintos —tramo, ticket,
+// Full, tendencia, mejora, momento, cotizando— más fondos naranjos y bordes
+// azules, y el importador lo dijo: "hay muchas etiquetas, falta mejorar la
+// estructura". Cada alerta vive ahora acá con su texto corto y su porqué: la
+// tarjeta las muestra como íconos chicos (el porqué al pasar el mouse) y el
+// panel las lista enteras. `soloPanel` es contexto que no cambia la decisión de
+// abrir la tarjeta (el tramo bueno, una medición más amplia).
+const ORDEN_TONO = { mal: 0, aviso: 1, bien: 2, info: 3 }
+function avisosDe(o, tendencia) {
+  const a = []
   const c = o.curvaAnual
+  if (o.ticket?.bajo) {
+    a.push({
+      id: 'ticket', Icono: CircleDollarSign, tono: 'mal',
+      corto: `${o.ticket.enValle ? 'Salto de envío' : 'Ticket bajo'} · deja ${o.ticket.pctConAds}% con publicidad`,
+      ayuda: `A ${fmtPrecio(o.ticket.precio)}, con publicidad queda ${fmtPrecio(o.ticket.quedaConAds)} (${o.ticket.pctConAds}%) para pagar el producto y ganar; sin publicidad ${fmtPrecio(o.ticket.quedaSinAds)} (${o.ticket.pctSinAds}%). Aprendido de tus ventas: bajo ${fmtPrecio(o.ticket.minimo40)} queda menos del 40%.${o.ticket.enValle ? ' A este precio el envío gratis obligatorio sube lo que pagas por envío: conviene quedar justo bajo el salto o bien por encima.' : ''}`,
+    })
+  } else if (claseTramo(o.mediana) === 'op-tramo-bajo') {
+    a.push({ id: 'tramo', Icono: CircleDollarSign, tono: 'aviso', corto: `Precio bajo $10.000 (mediana ${fmtPrecio(o.mediana)})`,
+      ayuda: 'Bajo $10.000 el envío fijo de Full se come una parte grande del precio, y comprar un cliente con publicidad cuesta $1.717 medidos: bajo ese piso la publicidad no puede ser rentable.' })
+  }
+  // el salto de envío ya es el aviso del precio alto: no se repite
+  if (claseTramo(o.mediana) === 'op-tramo-alto' && !o.ticket?.bajo) {
+    a.push({ id: 'tramo', Icono: CircleDollarSign, tono: 'aviso', corto: `Precio sobre $19.990 (mediana ${fmtPrecio(o.mediana)})`,
+      ayuda: 'Pasando $19.990 la tarifa de Full salta de $1.040 a $3.250 y el rendimiento cae de 77,8% a 66,7%. No vuelve a rendir igual hasta cerca de $50.000. No descarta el nicho, pero el producto tiene que justificar el salto.' })
+  } else if (claseTramo(o.mediana) === 'op-tramo-bueno') {
+    a.push({ id: 'tramo', Icono: CircleDollarSign, tono: 'bien', soloPanel: true, corto: `Precio en el mejor tramo (mediana ${fmtPrecio(o.mediana)})`,
+      ayuda: 'Entre $10.000 y $19.989 queda entre 72,6% y 77,8% de cada venta después de comisión y envío Full: el mejor rendimiento de toda la escala.' })
+  }
+  // la regla física (medidas/peso contra los límites de ML) manda sobre lo que
+  // declaró la IA: silla gamer decía "full" con una caja de 19 kg
+  const f = o.fueraDeFull
+  if (f?.estado === 'no-cabe') a.push({ id: 'full', Icono: Warehouse, tono: 'mal', corto: 'No entra a Full', ayuda: f.motivos.join(' · ') })
+  else if (o.logistica && o.logistica !== 'full') a.push({ id: 'full', Icono: Warehouse, tono: 'aviso', corto: o.logistica === 'flete_propio' ? 'Sin Full · flete propio' : 'Sin Full · desde bodega', ayuda: LOGISTICA_CHIP[o.logistica]?.title ?? '' })
+  else if (f?.estado === 'al-limite') a.push({ id: 'full', Icono: Warehouse, tono: 'aviso', corto: 'Full al límite', ayuda: `Cabe en Full, pero al límite: ${f.motivos.join(' · ')}` })
+  // EL APRENDIZAJE ORDENA NICHOS. No sabe cuánto se va a buscar, pero sí cuál
+  // viene mejor que otro (probado en dos períodos: 3,9-4,4 de cada 10 del quinto
+  // de arriba lo cumplen; al azar serían 2). Solo se marca el quinto de arriba y
+  // el de abajo, y solo si el último entrenamiento volvió a pasar la prueba.
+  if (tendencia && tendencia.grupo !== 'medio') {
+    const arriba = tendencia.grupo === 'arriba'
+    a.push({
+      id: 'tendencia', Icono: arriba ? TrendingUp : TrendingDown, tono: arriba ? 'bien' : 'aviso',
+      corto: arriba ? 'Viene mejor que el año pasado' : 'Viene peor que el año pasado',
+      ayuda: `Aprendizaje: ${arriba ? 'entre el 20% que más crecerá' : 'entre el 20% que menos crecerá'} de ${tendencia.entre} nichos en los próximos 3-5 meses (${tendencia.vsAnioPasadoPct >= 0 ? '+' : ''}${tendencia.vsAnioPasadoPct}% contra el mismo mes del año pasado). El orden es confiable; el porcentaje exacto no.${arriba ? '' : ' En un producto de temporada significa un pico más bajo que el del año pasado, no que no haya temporada.'}`,
+    })
+  }
+  // ¿El mercado está vivo? Solo lo que cambia una decisión: lo que se muere y
+  // lo que despega. "Estable" es el caso normal y no informa.
+  const salud = chipSalud(c)
+  if (salud) a.push({ id: 'salud', Icono: salud.clase === 'bien' ? ArrowUpRight : ArrowDownRight, tono: salud.clase === 'bien' ? 'bien' : salud.clase, corto: `Google: ${salud.texto}`, ayuda: salud.ayuda })
+  // el CPC solo se marca cuando es caro: la mediana de la mesa es US$0,13
+  if (c?.cpcUsd >= CPC_CARO) a.push({ id: 'cpc', Icono: MousePointerClick, tono: 'aviso', corto: `Clic caro en Google · US$${c.cpcUsd}`, ayuda: `Un clic en Google cuesta US$${c.cpcUsd} en este nicho, contra US$0,13 de mediana. Entrar acá con publicidad sale caro.` })
+  if (o.nivelBusqueda?.nivel === 'renombrar') {
+    a.push({ id: 'keyword', Icono: PencilLine, tono: 'aviso', corto: 'La gente lo busca con otra frase', ayuda: o.nivelBusqueda.keywordSugerida ? `En Mercado Libre se escribe «${o.nivelBusqueda.keywordSugerida}»: cotizar sobre esta keyword es cotizar sobre un listado que nadie abre.` : 'La keyword del nicho casi no se busca así.' })
+  } else if (c?.keywordMedida) {
+    // EL NÚMERO NO SIEMPRE ES DE ESTA KEYWORD: cuando la frase exacta no tiene
+    // volumen se mide su forma más amplia ("waflera electrica" → "waflera").
+    const typo = esOrtografia(o.keyword, c.keywordMedida)
+    a.push(typo
+      ? { id: 'keyword', Icono: PencilLine, tono: 'aviso', corto: `Keyword mal escrita: Google mide «${c.keywordMedida}»`, ayuda: `La keyword del nicho está mal escrita: Google mide "${c.keywordMedida}", no "${o.keyword}". El error también viaja al scrapeo de ML.` }
+      : { id: 'keyword', Icono: Search, tono: 'info', soloPanel: true, corto: `Búsquedas medidas como «${c.keywordMedida}»`, ayuda: `Este volumen es de "${c.keywordMedida}", una búsqueda más amplia. La frase exacta del nicho tiene ${c.correccionFactor ? `${Math.round(c.correccionFactor)}× menos` : 'menos'}.` })
+  }
+  if (o.mejoras?.length) a.push({ id: 'mejora', Icono: Lightbulb, tono: 'aviso', corto: o.mejoras.length === 1 ? 'Mejora por revisar' : `${o.mejoras.length} mejoras por revisar`, ayuda: `${o.mejoras.map((m) => m.motivo).join(' · ')}. Se revisa en la pestaña Mejoras del panel.` })
+  // criterio del importador: la certificación se informa, no veta (sabe
+  // tramitarla), así que va al panel y no ensucia la tarjeta
+  for (const t of o.tramites ?? []) a.push({ id: `tramite-${t}`, Icono: ShieldAlert, tono: 'info', soloPanel: true, corto: `Requiere ${t}`, ayuda: 'Trámite de importación: se informa como costo y plazo, la decisión es tuya.' })
+  // "ACÁ YA VENDO YO": evaluar a ciegas no es lo mismo que un nicho del que ya
+  // tienes conversión y precio propio; ahí la decisión es reponer o ampliar
+  if (o.mios?.publicaciones) {
+    const vende = o.mios.unidades30d > 0
+    a.push({ id: 'mio', Icono: ShoppingBag, tono: vende ? 'bien' : 'aviso', corto: vende ? `Ya vendes acá · ${o.mios.unidades30d} u en 30 días` : 'Tienes publicación acá sin ventas en 30 días', ayuda: `${o.mios.publicaciones} publicación(es) tuya(s) en este nicho.` })
+  }
+  // recién llegado: se marca por la semana que tarda en juntar su serie
+  if (esNuevo(o.creadoEl)) {
+    const dias = Math.floor((Date.now() - new Date(o.creadoEl).getTime()) / 86400e3)
+    a.push({ id: 'nuevo', Icono: Sparkles, tono: 'bien', corto: dias < 1 ? 'Nuevo: el radar lo descubrió hoy' : `Nuevo: descubierto hace ${dias} día${dias === 1 ? '' : 's'}`, ayuda: 'Todavía está juntando su serie de scans: dale unos días antes de decidir.' })
+  }
+  return a.sort((x, y) => ORDEN_TONO[x.tono] - ORDEN_TONO[y.tono])
+}
+
+function AvisosIconos({ lista }) {
+  if (!lista.length) return null
+  return (
+    <span className="opt-avisos" aria-label={lista.map((x) => x.corto).join(' · ')}>
+      {lista.map(({ id, Icono, tono, corto, ayuda }) => (
+        <i key={id} className={`opt-aviso t-${tono}`} title={`${corto}\n\n${ayuda}`}><Icono size={13} aria-hidden="true" /></i>
+      ))}
+    </span>
+  )
+}
+
+function AvisosLista({ lista }) {
+  if (!lista.length) return null
+  return (
+    <ul className="opp-avisos">
+      {lista.map(({ id, Icono, tono, corto, ayuda }) => (
+        <li key={id} className={`t-${tono}`}>
+          {/* el porqué plegado: abierto entero era un muro de texto */}
+          <details>
+            <summary>
+              <i className={`opt-aviso t-${tono}`} aria-hidden="true"><Icono size={14} /></i>
+              <b>{corto}</b>
+            </summary>
+            {ayuda ? <small>{ayuda}</small> : null}
+          </details>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+const capital = (t) => (t ? t[0].toUpperCase() + t.slice(1) : t)
+
+// LO QUE CUESTA, EN UNA LÍNEA: el costo puesto que anotó el importador manda; si
+// no hay, el EXW cotizado (un nicho puede traer varios productos: rango, nunca
+// el promedio). El detalle editable vive en la pestaña Compra del panel.
+function costoCorto(cot) {
+  if (!cot) return null
+  if (cot.costoPuestoClp != null) return `${fmtPrecio(cot.costoPuestoClp)}/u puesto`
+  const exw = (cot.productos?.length > 1 ? cot.productos.map((p) => p.exwUsd) : [cot.exwUsd]).filter(Number.isFinite)
+  if (!exw.length) return null
+  const lo = Math.min(...exw), hi = Math.max(...exw)
+  return `EXW US$ ${usd(lo)}${hi > lo ? `–${usd(hi)}` : ''}`
+}
+
+const ETAPA_TEXTO = { cotizando: 'Cotizando', pedido: 'Pedido', vendiendo: 'Vendiendo', 'en-espera': 'En espera', descartado: 'Descartado' }
+
+// EL ESTADO DE LA COMPRA, A LA DERECHA Y SIEMPRE EN EL MISMO LUGAR: "no sé
+// cuáles estoy cotizando" fue el pedido que lo trajo a la fila. Escribe la
+// misma etapaCompra de siempre, así que Nichos y el radar lo ven igual.
+function EstadoCompra({ o, onRecargar }) {
+  const etapa = o.etapaCompra && !['evaluando', 'cotizando'].includes(o.etapaCompra) ? o.etapaCompra : null
+  const costo = costoCorto(o.cotizacion)
+  return (
+    <span className="opt-compra">
+      {etapa ? <b className={`opt-etapa e-${etapa}`}>{ETAPA_TEXTO[etapa] ?? etapa}</b> : <MarcaCotizando o={o} onRecargar={onRecargar} />}
+      {costo ? <small className={o.cotizacion?.costoPuestoClp != null ? 'real' : undefined}>{costo}</small> : null}
+    </span>
+  )
+}
+
+function Cifra({ etiqueta, title, children }) {
+  return (
+    <span className="opt-cifra" title={title}>
+      <small>{etiqueta}</small>
+      <span className="opt-cifra-v">{children}</span>
+    </span>
+  )
+}
+
+// La forma del año en miniatura: barras de la propia keyword (no se compara
+// entre nichos), el mes de hoy en azul y los meses de pico medidos marcados.
+function MiniCurva({ c }) {
   const max = c?.curva?.length ? Math.max(...c.curva) : 0
+  if (!max) return <em className="opt-nada">—</em>
   const mesHoy = new Date().getMonth()
-  const cotizando = o.etapaCompra === 'cotizando'
+  const picos = picosDe(c)
+  return (
+    <span className="opt-curva" aria-hidden="true">
+      {c.curva.map((v, i) => (
+        <i key={i} className={[i === mesHoy ? 'hoy' : '', picos.has(i + 1) ? 'pico' : ''].join(' ').trim() || undefined} style={{ height: `${Math.max(10, Math.round((100 * v) / max))}%` }} />
+      ))}
+    </span>
+  )
+}
+
+// LA TARJETA DEL NICHO (2-oct-2026): foto, nombre, UNA línea de por qué traerlo
+// ahora, las alertas en íconos, el score y el estado de la compra, y abajo las
+// cinco cifras que deciden si vale abrirla. Todo lo demás está en el panel.
+function TarjetaNicho({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
+  const m = momentoDeCompra(o)
+  const c = o.curvaAnual
+  const avisos = avisosDe(o, tendencia).filter((x) => !x.soloPanel)
   return (
     <div
       role="button"
       tabIndex={0}
-      className={`op-fila${abierta ? ' op-fila-abierta' : ''}${cotizando ? ' op-cotizando' : ''}${o.cotizacion?.recargoTransportePct ? ' op-con-exw' : ''} ${claseTramo(o.mediana)}`}
+      className={`opt m-${m.clase}${abierta ? ' abierta' : ''}`}
       onClick={onAlternar}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAlternar() }
       }}
       aria-expanded={abierta}
     >
-      <span className="op-fila-rank">
-        <i>{rank}</i>
-        {o.imagen ? <Miniatura src={o.imagen} lado={36} /> : <b className="op-fila-sinfoto" aria-hidden="true"><ImageOff size={14} /></b>}
+      <span className="opt-foto">
+        {o.imagen ? <Miniatura src={o.imagen} lado={72} /> : <ImageOff size={20} aria-hidden="true" />}
+        <i className="opt-rank">{rank}</i>
       </span>
-      <span className="op-fila-kw" data-exw={etiquetaExw(o.cotizacion)}>
-        <MioBadge mios={o.mios} />
-        {o.keyword}
-        <ChipTramo mediana={o.mediana} />
-        <ChipSinFull o={o} />
-        <ChipTendencia t={tendencia} />
-        {o.ticket?.bajo ? (
-          <em className="op-ticket-bajo" title={`A ${fmtPrecio(o.ticket.precio)}, con publicidad queda ${fmtPrecio(o.ticket.quedaConAds)} (${o.ticket.pctConAds}%) para pagar el producto y ganar; sin publicidad ${fmtPrecio(o.ticket.quedaSinAds)} (${o.ticket.pctSinAds}%). Aprendido de tus ventas: bajo ${fmtPrecio(o.ticket.minimo40)} queda menos del 40%.${o.ticket.enValle ? ' A este precio el envío gratis obligatorio sube lo que pagas por envío: conviene quedar justo bajo el salto o bien por encima.' : ''}`}>
-            {o.ticket.enValle ? 'salto de envío' : 'ticket bajo'} · deja {o.ticket.pctConAds}% con publicidad
-          </em>
-        ) : null}
-        {o.mejoras?.length ? <em className="op-mejora-icono" title={`El sistema detectó ${o.mejoras.length === 1 ? 'una mejora' : `${o.mejoras.length} mejoras`}: ${o.mejoras.map((m) => m.motivo).join(' · ')}`}><Lightbulb size={12} aria-hidden="true" />mejora</em> : null}
-        <NuevoBadge creadoEl={o.creadoEl} />
-        {o.nivelBusqueda?.nivel === 'renombrar' ? <i className="op-fila-alerta" title="La gente escribe otra frase">keyword</i> : null}
-        <span className="op-fila-momento">
-          <ChipMomento o={o} />
-          {o.midiendo ? <small className="op-fila-faltan-txt">faltan {o.faltanScans} {o.faltanScans === 1 ? 'scan' : 'scans'}</small> : null}
+      <span className="opt-cab">
+        <strong className="opt-nombre">{o.keyword}</strong>
+        <span className="opt-momento" title={m.motivo}>
+          <b>{capital(m.etiqueta)}</b>
+          <span>{o.midiendo ? `faltan ${o.faltanScans} ${o.faltanScans === 1 ? 'scan' : 'scans'} para el veredicto` : m.motivo}</span>
         </span>
+        <AvisosIconos lista={avisos} />
       </span>
-      {o.midiendo ? (
-        <span
-          className="op-fila-midiendo"
-          title={`Recién descubierto: lleva ${o.scansConDemanda} de ${o.scansConDemanda + o.faltanScans} scans con demanda medida. No tiene score ni veredicto todavía, y no se van a inventar — el sistema lo escanea a diario hasta juntar la serie.`}
+      <span className="opt-score">
+        {o.midiendo ? (
+          <span className="opt-midiendo" title={`Recién descubierto: lleva ${o.scansConDemanda} de ${o.scansConDemanda + o.faltanScans} scans con demanda medida. No tiene score ni veredicto todavía, y no se van a inventar.`}>
+            {o.scansConDemanda}/{o.scansConDemanda + o.faltanScans}<small>scans</small>
+          </span>
+        ) : Number.isFinite(o.score) ? (
+          <span title={`Score ${o.score} de 100${o.dispersion != null ? ` · promedio de la serie de scans (se movió ${o.dispersion} puntos entre el más alto y el más bajo)` : ''}`}>
+            <ScoreRing valor={o.score} size={46} grosor={4.5} />
+          </span>
+        ) : <em className="opt-nada">—</em>}
+      </span>
+      <EstadoCompra o={o} onRecargar={onRecargar} />
+      <span className="opt-cifras">
+        <Cifra
+          etiqueta="Búsquedas"
+          title={c?.busquedasMes ? `${fmtNum(c.busquedasMes)} búsquedas al mes en Chile (Google Ads, promedio de 12 meses)${c.keywordMedida ? `, medido sobre «${c.keywordMedida}»` : ''}.` : 'Todavía sin medir contra Google Ads'}
         >
-          {o.scansConDemanda}/{o.scansConDemanda + o.faltanScans}
-        </span>
-      ) : (
-        <span className={`op-fila-score s-${o.score >= 75 ? 'alto' : o.score >= 55 ? 'medio' : 'bajo'}`}>{o.score ?? '—'}</span>
-      )}
-      {/* ── GOOGLE: cuánta gente lo busca y cómo se reparte en el año ──
-          EL NÚMERO NO SIEMPRE ES DE ESTA KEYWORD. Cuando la frase exacta no
-          tiene volumen, el sistema mide sus prefijos y usa el mayor, para no
-          matar un nicho por su variante más específica. Es correcto, pero deja
-          dos cosas distintas con la misma cara: "manguera extensible" mide 260
-          de esa frase y "waflera electrica" muestra 22.200 que son de
-          "waflera" —su keyword tiene 140—. El importador lo cazó mirando la
-          tabla: "esa cantidad de búsqueda está bien? tal vez están sucios".
-          Ahora el número dice de dónde salió. */}
-      <span
-        className="op-fila-vol"
-        title={
-          c?.busquedasMes
-            ? `${fmtNum(c.busquedasMes)} búsquedas/mes en Chile (Google Ads, promedio de 12 meses).${
-                c.cpcUsd ? ` Clic en Ads: US$${c.cpcUsd}.` : ''
-              }${c.keywordMedida ? ` Medido sobre "${c.keywordMedida}".` : ''}`
-            : 'Todavía sin medir contra Google Ads'
-        }
-      >
-        {c?.busquedasMes ? (
-          <>
-            {fmtNum(c.busquedasMes)}/mes
-            {/* EL CPC SOLO SE MUESTRA CUANDO ES CARO.
-                Está guardado para los 76 nichos y va de US$0,07 a US$1,01 —14
-                veces—, pero la mediana es US$0,13: ponerlo en todas las filas
-                sería repetir el mismo número 70 veces. `competenciaAds` ni
-                siquiera eso: es "HIGH" en 74 de 76, o sea que no distingue nada
-                y no se muestra.
-                Lo que sí cambia una decisión es el nicho donde el clic cuesta
-                el triple de lo normal, porque la publicidad ya es US$1.141 por
-                unidad vendida en la cartera real. */}
-            {c.cpcUsd >= CPC_CARO ? (
-              <b className="vol-cpc" title={`Un clic en Google cuesta US$${c.cpcUsd} en este nicho, contra US$0,13 de mediana. Entrar acá con publicidad sale caro.`}>
-                ${c.cpcUsd}/clic
-              </b>
-            ) : null}
-            {/* ¿EL PRODUCTO ESTÁ VIVO? Últimos 12 meses contra los 12
-                anteriores, así la estacionalidad se cancela. Solo se marca lo
-                que cambia una decisión de compra: un nicho que se muere y uno
-                que despega. "Estable" es el 80% de la mesa y no informa. */}
-            {(c.salud === 'muriendo' || c.salud === 'bajando' || c.salud === 'despegando') && chipSalud(c) ? (
-              <b className={`vol-salud ${c.salud === 'despegando' ? 'vol-salud-bien' : 'vol-salud-mal'}`} title={chipSalud(c).ayuda}>
-                {c.salud === 'despegando' ? '↑' : '↓'}{Math.round(Math.abs(c.variacionRelativaPct ?? c.variacionInteranualPct))}% {Number.isFinite(c.variacionRelativaPct) ? 'vs mercado' : 'año'}
-              </b>
-            ) : null}
-            {c.keywordMedida ? (
-              <b
-                className={`vol-medida${esOrtografia(o.keyword, c.keywordMedida) ? ' vol-medida-typo' : ''}`}
-                title={
-                  esOrtografia(o.keyword, c.keywordMedida)
-                    ? `La keyword del nicho está mal escrita: Google mide "${c.keywordMedida}", no "${o.keyword}". El error también viaja al scrapeo de ML.`
-                    : `Este volumen es de "${c.keywordMedida}", una búsqueda más amplia. La frase exacta del nicho tiene ${c.correccionFactor ? `${Math.round(c.correccionFactor)}× menos` : 'menos'}.`
-                }
-              >
-                {esOrtografia(o.keyword, c.keywordMedida) ? '✎' : '↗'} {c.keywordMedida}
-              </b>
-            ) : null}
-          </>
-        ) : (
-          <em>sin medir</em>
-        )}
+          {c?.busquedasMes ? <>{fmtNum(c.busquedasMes)}<small>/mes</small></> : <em className="opt-nada">sin medir</em>}
+        </Cifra>
+        <Cifra etiqueta="El año" title={c?.curva?.length ? `Forma del año según Google: pico en ${c.nombreMesPico ?? '—'}, ${c.ratioPico}× el promedio. En azul, el mes de hoy.` : undefined}>
+          <MiniCurva c={c} />
+        </Cifra>
+        <Cifra etiqueta="Histórico" title={ayudaTrayectoria(o.vendidosHistoricos)}>
+          <Trayectoria v={o.vendidosHistoricos} />
+        </Cifra>
+        <Cifra etiqueta="Full" title={o.pctFull != null ? `${Math.round(o.pctFull)}% del top vende por Full. Poco Full no es hueco libre: suele ser un nicho donde nadie logró vender lo suficiente para inmovilizar stock.` : 'sin medir'}>
+          {o.pctFull != null ? `${Math.round(o.pctFull)}%` : <em className="opt-nada">—</em>}
+        </Cifra>
+        <Cifra etiqueta="Precio" title="Mediana de precio del top del nicho">
+          {o.mediana ? fmtPrecio(o.mediana) : <em className="opt-nada">—</em>}
+        </Cifra>
       </span>
-      {max ? (
-        <span
-          className="op-fila-curva"
-          title={`Forma del año según Google Trends (5 años). Pico ${c.nombreMesPico ?? '—'}, ${c.ratioPico}× sobre el promedio.`}
-        >
-          {c.curva.map((v, i) => (
-            <i key={i} className={[i === mesHoy ? 'hoy' : '', picosDe(c).has(i + 1) ? 'pico' : ''].join(' ').trim() || undefined} style={{ height: `${Math.max(8, Math.round((100 * v) / max))}%` }} />
-          ))}
-        </span>
-      ) : (
-        <span className="op-fila-curva" />
-      )}
-      {/* ── MERCADO LIBRE: qué pasó de verdad en el listado ── */}
-      <Trayectoria v={o.vendidosHistoricos} />
-      <span
-        className="op-fila-full"
-        title={
-          o.pctFull != null
-            ? `${Math.round(o.pctFull)}% del top vende por Full. Full es la puerta: en la cuenta propia son 105 visitas semanales dentro contra 2 fuera. Poco Full no es hueco libre — suele ser un nicho donde nadie logró vender lo suficiente para inmovilizar stock.`
-            : 'sin medir'
-        }
-      >
-        {o.pctFull != null ? `${Math.round(o.pctFull)}%` : '—'}
-      </span>
-      {/* ── EL CRUCE: ¿esa búsqueda de Google se convierte en venta acá? ── */}
-      <Conversion c={o.conversion} />
-      {/* el veredicto y los scans que faltan viven en el panel; el momento de
-          compra va bajo el nombre, que es donde se lee junto al porqué */}
-      <MarcaCotizando o={o} onRecargar={onRecargar} />
     </div>
   )
 }
 
-// La etiqueta naranja de la fila. Un nicho puede traer VARIOS productos (manguera
-// de 15 y 30 m, focos de 200 y 300 W): cada uno con su precio, nunca el promedio.
+// Dólares con coma decimal. Un nicho puede traer VARIOS productos (manguera de
+// 15 y 30 m, focos de 200 y 300 W): cada uno con su precio, nunca el promedio.
 const usd = (v) => String(v).replace('.', ',')
-function etiquetaExw(cot) {
-  if (!cot?.recargoTransportePct) return undefined
-  if (cot.productos?.length > 1) return `${cot.productos.map((p) => `${p.nombre} US$ ${usd(p.exwUsd)}`).join(' · ')} c/flete`
-  return `EXW US$ ${usd(cot.exwUsd)} c/flete`
-}
 
 // Etapas del embudo de compra (espejo de ETAPAS_COMPRA en el backend)
 const ETAPAS = ['evaluando', 'cotizando', 'pedido', 'vendiendo', 'en-espera', 'descartado']
@@ -752,26 +615,6 @@ const LOGISTICA_CHIP = {
   flete_propio: { texto: 'flete propio', title: 'El analista propone despachar desde tu bodega con courier propio: el volumétrico de Mercado Envíos no cierra' },
 }
 
-// LO QUE NO ENTRA A FULL SE VE EN LA FILA CERRADA. El importador, 22-sep: "lo que
-// no se pueda Full ponle alguna etiqueta o color para tener idea". Antes esto
-// solo se veía abriendo la fila; una silla gamer de 19 kg pasaba desapercibida.
-// EL APRENDIZAJE ORDENA NICHOS. No sabe cuánto se va a buscar, pero sí cuál
-// viene mejor que otro (probado en dos períodos: 3,9-4,4 de cada 10 del quinto
-// de arriba lo cumplen; al azar serían 2). Solo se pinta el quinto de arriba y
-// el de abajo, que es lo que se validó, y solo si el último entrenamiento
-// volvió a pasar la prueba de orden.
-function ChipTendencia({ t }) {
-  if (!t || t.grupo === 'medio') return null
-  const arriba = t.grupo === 'arriba'
-  const Icono = arriba ? TrendingUp : TrendingDown
-  const lugar = arriba ? `entre el 20% que más crecerá de ${t.entre} nichos` : `entre el 20% que menos crecerá de ${t.entre} nichos`
-  return (
-    <em className={`op-tendencia op-tendencia-${t.grupo}`}
-      title={`Aprendizaje: ${lugar} en los próximos 3-5 meses (${t.vsAnioPasadoPct >= 0 ? '+' : ''}${t.vsAnioPasadoPct}% contra el mismo mes del año pasado). El orden es confiable; el porcentaje exacto no.${arriba ? '' : ' En un producto de temporada significa un pico más bajo que el del año pasado, no que no haya temporada: pasó así en las dos pruebas (acertó 5 de cada 10 veces; al azar serían 2).'}`}>
-      <Icono size={11} aria-hidden="true" />{arriba ? 'viene mejor' : 'viene peor'}
-    </em>
-  )
-}
 
 // LO QUE EL VIGÍA ENCONTRÓ (services/vigiaMejoras.js). Hoy: el nombre chileno
 // de un nicho mal medido en Google. El sistema sugiere con el volumen medido;
@@ -907,18 +750,6 @@ function SelloVerificacion({ f }) {
     : <span className={`op-plan-sello op-plan-sello-${s.clase}`} title={titulo}>{s.texto}</span>
 }
 
-function ChipSinFull({ o }) {
-  const f = o.fueraDeFull
-  // la regla física (medidas/peso contra los límites de ML) manda sobre lo que
-  // declaró la IA: silla gamer decía "full" con una caja de 19 kg
-  if (f?.estado === 'no-cabe') return <em className="op-sinfull op-sinfull-nocabe" title={`No entra a Full: ${f.motivos.join(' · ')}`}><Warehouse size={11} aria-hidden="true" />no entra a Full</em>
-  if (o.logistica && o.logistica !== 'full') {
-    const chip = LOGISTICA_CHIP[o.logistica]
-    return <em className={`op-sinfull op-sinfull-${o.logistica}`} title={chip.title}><Warehouse size={11} aria-hidden="true" />{o.logistica === 'flete_propio' ? 'sin Full · flete propio' : 'sin Full · desde bodega'}</em>
-  }
-  if (f?.estado === 'al-limite') return <em className="op-sinfull op-sinfull-limite" title={`Cabe en Full, pero al límite: ${f.motivos.join(' · ')}`}><Warehouse size={11} aria-hidden="true" />Full al límite</em>
-  return null
-}
 
 function FletePropio({ o, onRecargar }) {
   const [editando, setEditando] = useState(false)
@@ -989,272 +820,6 @@ function FletePropio({ o, onRecargar }) {
   )
 }
 
-function CartaOportunidad({ o, rank, onAbrir, mismaCompraQue, onRecargar, pronostico, modeloGana, enPanel = false }) {
-  const flecha = o.tendenciaVentas ? FLECHA[o.tendenciaVentas] : null
-  const nb = o.nivelBusqueda
-  const nivel = nb?.nivel ? NIVELES[nb.nivel] : null
-  const ven = chipVentana(o.ventana)
-  const salud = chipSalud(o.curvaAnual)
-  const cot = o.cotizacion
-
-  return (
-    <article
-      className={`op-carta${enPanel ? ' op-carta-panel' : ''}${nb?.nivel === 'renombrar' || nb?.nivel === 'nulo' ? ' op-carta-tibia' : ''}`}
-      // en el panel lateral la carta no es un botón: un clic cualquiera sacaba de la página
-      onClick={enPanel ? undefined : () => onAbrir(o.nichoId)}
-      tabIndex={enPanel ? undefined : 0}
-      role={enPanel ? undefined : 'button'}
-      onKeyDown={enPanel ? undefined : (e) => {
-        if (e.key === 'Enter') onAbrir(o.nichoId)
-      }}
-    >
-      <div className="op-lateral">
-        {o.imagen ? <Miniatura className="op-lateral-foto" src={o.imagen} lado={96} /> : null}
-        <span className="op-rank">#{rank}</span>
-        {o.madurando ? (
-          <span className="mini-madurando mini-madurando-carta" title="Midiendo entrabilidad: el veredicto firme llega al completar la serie">
-            {o.scansConDemanda}/{o.scansConDemanda + (o.faltanScans ?? 0)}
-          </span>
-        ) : o.score != null ? (
-          <span
-            title={
-              o.dispersion != null
-                ? `Nivel ${o.score}: promedio de la serie de scans, no la última medición. El score de un scan suelto vibra ±5 puntos, así que leer el último valor acierta el veredicto 64-69% de las veces y leer el nivel, 81%. Este nicho se movió ${o.dispersion} puntos entre su scan más alto y el más bajo${o.scoreUltimo != null ? ` (el último midió ${o.scoreUltimo})` : ''}.`
-                : `Nivel ${o.score} sobre 100.`
-            }
-          >
-            <ScoreRing valor={o.score} size={44} grosor={4.5} />
-          </span>
-        ) : null}
-      </div>
-
-      <div className="op-cuerpo">
-        {/* fila 1: lo que decide si esto se mira o no */}
-        <div className="op-encabezado">
-          <h3 className="op-keyword">{o.keyword}</h3>
-          {nivel ? (
-            <span className={`chip-busqueda ${nivel.clase}`} title={nb.explicacion ?? ''}>
-              {nivel.texto}
-              {/* la posición a la vista: "búsqueda alta" no dice si es #1 o #9
-                  de su lista, y esa diferencia es de volumen real */}
-              {nb.posicion ? (
-                <span className="chip-pos">
-                  #{nb.posicion}/{nb.deCuantas} en “{nb.prefijo}”
-                </span>
-              ) : null}
-            </span>
-          ) : (
-            <span className="chip-busqueda nb-medio" title="Todavía sin medir si la gente busca esta keyword">
-              búsqueda sin medir
-            </span>
-          )}
-          {ven ? (
-            <span className={`chip-ventana v-${ven.clase}`} title={ven.ayuda}>
-              {ven.icono ? `${ven.icono} ` : ''}
-              {ven.texto}
-            </span>
-          ) : null}
-          {/* ¿EL MERCADO ESTÁ VIVO? Últimos 12 meses de Google contra los 12
-              anteriores, así la estacionalidad se cancela sola y queda la
-              tendencia. Va acá arriba y no entre las métricas porque cambia si
-              el nicho se mira o no: traer un contenedor de algo que se está
-              muriendo es capital que se queda en bodega.
-              Medido el 31-ago-2026: "audifonos bluetooth" pasó de 60.500
-              búsquedas al mes en 2022 a 22.200 hoy, un -34% contra el año
-              pasado. No es un mes raro, es una caída sostenida de cuatro años.
-              "Estable" no se muestra: es el caso normal y no informa. */}
-          {salud && salud.clase ? (
-            <span className={`chip-salud cs-${salud.clase}`} title={salud.ayuda}>
-              {salud.texto}
-            </span>
-          ) : null}
-          {o.tramites.map((t) => (
-            <span key={t} className="op-tramite" title="Requiere trámite de importación">
-              ⚠ {t}
-            </span>
-          ))}
-        </div>
-
-        {/* si la keyword está mal, eso manda sobre cualquier otra cosa */}
-        {nb?.nivel === 'renombrar' && nb.keywordSugerida ? (
-          <p className="op-aviso-kw">
-            Esta búsqueda no existe en Mercado Libre. La gente escribe <strong>{nb.keywordSugerida}</strong> —
-            cotizar sobre esta keyword es cotizar sobre un listado que nadie abre.
-          </p>
-        ) : null}
-
-        {o.titular ? <p className="op-titular">{o.titular}</p> : null}
-        {o.mejoras?.length ? <MejorasNicho o={o} onRecargar={onRecargar} /> : null}
-        {o.planPublicidad ? <PlanPublicidad plan={o.planPublicidad} /> : null}
-        {o.tallas ? <TallasChile t={o.tallas} /> : null}
-        {/* repuestos: la compra es por pieza y por auto — sin modelo y años no se cotiza */}
-        {o.planRepuestos?.length ? (
-          <ol className="op-plan-repuestos">
-            {o.planRepuestos.map((f) => (
-              <li key={`${f.prioridad}-${f.marca}-${f.pieza}`} className={`op-plan-${f.verificacion ?? 'no-revisada'}`}>
-                <b className="op-plan-n">{f.prioridad}</b>
-                <span className="op-plan-auto">
-                  <strong>{f.marca}</strong>{f.pieza ? <em> · {f.pieza}</em> : null}
-                  <span className="op-plan-modelos">{f.modelos}</span>
-                </span>
-                <SelloVerificacion f={f} />
-                {f.referencia ? <code className="op-plan-ref" title="Código de la pieza, tal como aparece en el top de ML">{f.referencia}</code> : null}
-                {f.precioVentaClp ? <span className="op-plan-precio">{fmtPrecio(f.precioVentaClp)}</span> : null}
-              </li>
-            ))}
-          </ol>
-        ) : null}
-
-        {/* fila 2: los números de la compra */}
-        <div className="op-hechos">
-          <Hecho etiqueta="vender a">{o.precioVentaClp ? fmtPrecio(o.precioVentaClp) : null}</Hecho>
-          <Hecho etiqueta="EXW máx">{o.exwMaximoUsd != null ? `US$ ${o.exwMaximoUsd}` : null}</Hecho>
-          {/* LO CONTADO, no lo derivado: reseñas nuevas es un entero exacto que
-              entrega ML. La estimación de ventas/día (delta × factor 25) va
-              plegada al pie con su aritmética, porque el factor está sin
-              calibrar y produjo saltos de 5x en 41 mediciones. */}
-          <Hecho etiqueta="se mueve">
-            {o.resenasNuevas != null && o.ventanaDias ? (
-              <span
-                title={`${o.resenasNuevas} reseñas nuevas en ${o.ventanaDias} días, contadas sobre ${o.canasta} productos ${o.fuenteResenas === 'api' ? 'de todo el listado (API oficial de ML)' : 'del top (ficha)'}${
-                  o.saltosFiltrados ? ` · ${o.saltosFiltrados} saltos de catálogo descartados` : ''
-                }`}
-              >
-                +{fmtNum(o.resenasNuevas)} reseñas / {o.ventanaDias}d{' '}
-                {flecha ? <span className={`delta ${flecha[1]}`}>{flecha[0]}</span> : null}
-                {o.saltosFiltrados ? <span className="op-sucio" title="hubo saltos de catálogo filtrados">⚠</span> : null}
-              </span>
-            ) : null}
-          </Hecho>
-          {/* el dato que el juez descartó queda a la vista: si alguna vez un
-              salto era real, se tiene que poder ver */}
-          {o.saltoSospechoso ? (
-            <Hecho etiqueta="descartado">
-              <span
-                className="op-sucio"
-                title={`Se midieron ${Math.round(o.saltoSospechoso.valorCrudo)} ventas/día contra ${Math.round(o.saltoSospechoso.contra)} del scan anterior (×${o.saltoSospechoso.salto}). ${o.saltoSospechoso.motivo}`}
-              >
-                ⚠ salto ×{o.saltoSospechoso.salto} no creíble
-              </span>
-            </Hecho>
-          ) : null}
-          {o.mios?.publicaciones ? (
-            <Hecho etiqueta="ya vendo acá">
-              {o.mios.publicaciones} public.
-              {o.mios.unidades30d > 0 ? ` · ${o.mios.unidades30d} u. en 30 días` : ' · sin ventas en 30 días'}
-            </Hecho>
-          ) : null}
-          {/* cuánto le queda a la competencia. Un pct alto no es un riesgo: es
-              un nicho desabastecido, o sea una ventana para quien trae stock */}
-          {o.profundidadStock?.itemsPorAgotarse ? (
-            <Hecho etiqueta="por agotarse">
-              <span title={`${o.profundidadStock.itemsPorAgotarse} de ${o.profundidadStock.itemsDelScan} publicaciones del top muestran "últimas unidades". ML solo pone ese aviso cuando quedan 5 o menos, así que el resto tiene más de 5.\n\nEntre las avisadas quedan ${o.profundidadStock.unidadesVisibles} unidades. Eso NO es el stock del nicho: de las demás no se sabe.`}>
-                {o.profundidadStock.pctEnUltimas}% del top
-                {o.profundidadStock.pctEnUltimas >= 40 ? ' · desabastecido' : ''}
-              </span>
-            </Hecho>
-          ) : null}
-          {o.pctCrossBorder ? (
-            <Hecho etiqueta="importan directo">
-              <span title={`${Math.round(o.pctCrossBorder)}% del top despacha desde el extranjero${o.origenesCrossBorder ? ` (${Object.entries(o.origenesCrossBorder).map(([k, v]) => `${k}: ${v}`).join(', ')})` : ''}. Doble filo: prueba de que el producto se importa bien, y a la vez rival con tu misma estructura de costo.`}>
-                {Math.round(o.pctCrossBorder)}%
-                {o.origenesCrossBorder ? ` · ${Object.keys(o.origenesCrossBorder).join('/')}` : ''}
-              </span>
-            </Hecho>
-          ) : null}
-          <Hecho etiqueta="mediana">{o.mediana ? fmtPrecio(o.mediana) : null}</Hecho>
-          <Hecho etiqueta="Full">{o.pctFull != null ? `${Math.round(o.pctFull)}%` : null}</Hecho>
-          <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
-          {/* acá sí va el número entero y dicho con todas sus letras: es donde
-              el importador se detiene a decidir, no la vista de barrido */}
-          {o.vendidosHistoricos?.pisoUnidades ? (
-            <Hecho etiqueta="el top vendió">
-              <span title={`Suma de los badges "+N vendidos" de ML en el top. ML redondea a baldes (25, 50, 100, 500, 1.000...) y el badge dice "al menos", así que la suma es un piso, no una estimación. Cada badge cuenta desde que ESE aviso se publicó, sea hace tres meses o hace cinco años: por eso mezcla edades y no se puede convertir en ritmo.`}>
-                al menos {fmtNum(o.vendidosHistoricos.pisoUnidades)} en toda su vida
-                {o.vendidosHistoricos.pctCobertura != null ? (
-                  <i
-                    className="op-vend-despegue"
-                    title={`El balde más chico de ML es 25: por debajo no muestra badge. Así que este ${o.vendidosHistoricos.pctCobertura}% (${o.vendidosHistoricos.itemsConDato} de ${o.vendidosHistoricos.itemsDelScan}) es la parte del top que vendió 25 unidades o más alguna vez. El resto nunca despegó.`}
-                  >
-                    {' · '}{o.vendidosHistoricos.pctCobertura}% del top despegó
-                  </i>
-                ) : null}
-              </span>
-            </Hecho>
-          ) : null}
-        </div>
-
-        {/* EL DETALLE EN PESTAÑAS. Antes eran siete bloques apilados (~2.000 px) y
-            cada producto salía hasta tres veces: en el ranking de la categoría,
-            en los vendedores seguidos y en la lista del scan. Ahora la
-            competencia es UNA lista y cada producto lleva sus sellos. */}
-        <DetalleNicho o={o} pronostico={pronostico} modeloGana={modeloGana} />
-
-        {/* fila 3: en qué estado está la decisión */}
-        <div className="op-estado">
-          <span className={`veredicto veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span>
-          {o.confirmacion ? (
-            <span
-              className={`op-confianza ${o.confirmacion === 'confirmado' ? 'op-confianza-alta' : 'op-confianza-media'}`}
-              title={
-                o.confirmacion === 'confirmado'
-                  ? `Demanda sostenida en ${o.scansConDemanda} scans`
-                  : `Solo ${o.scansConDemanda} scan(s) con demanda${o.madurando ? ' · se escanea a diario solo' : ''}`
-              }
-            >
-              {o.confirmacion === 'confirmado' ? `✓ confirmado · ${o.scansConDemanda} scans` : `preliminar · ${o.scansConDemanda} scans`}
-            </span>
-          ) : null}
-          <Cotizacion o={o} onRecargar={onRecargar} />
-          <FletePropio o={o} onRecargar={onRecargar} />
-          <select
-            className="etapa-select"
-            value={o.etapaCompra ?? 'evaluando'}
-            title={o.notaEtapa ?? 'Etapa del embudo de compra'}
-            onClick={(e) => e.stopPropagation()}
-            onChange={async (e) => {
-              e.stopPropagation()
-              await api.ajustarNicho(o.nichoId, { etapaCompra: e.target.value })
-              onRecargar()
-            }}
-          >
-            {ETAPAS.map((et) => (
-              <option key={et} value={et}>
-                {et.replace(/-/g, ' ')}
-              </option>
-            ))}
-          </select>
-          {o.listingListo ? <span className="op-listing">listing ✓</span> : null}
-          {mismaCompraQue ? (
-            <span className="op-listing" title="Mismo producto de fábrica: un solo pedido cubre ambos nichos">
-              🔁 misma compra que “{mismaCompraQue}”
-            </span>
-          ) : null}
-          {Number.isFinite(o.shareJugadaPct) && o.shareJugadaPct < 50 ? (
-            <span
-              className="op-confianza op-confianza-media"
-              title={`El top mezcla familias; la jugada recomendada concentra el ${o.shareJugadaPct}% de las reseñas${o.keywordJugada ? ` — se aísla con "${o.keywordJugada}"` : ''}`}
-            >
-              jugada {o.shareJugadaPct}% del top
-            </span>
-          ) : null}
-        </div>
-
-        {o.condiciones ? <p className="op-condicion">condición: {o.condiciones}</p> : null}
-
-        <div className="op-pie">
-          {o.primeraCompra ? (
-            <span>
-              1ª compra: {o.primeraCompra}
-              {o.inversionEstimadaUsd != null ? ` (~US$ ${fmtNum(o.inversionEstimadaUsd)})` : ''}
-            </span>
-          ) : null}
-          {o.fechaScan ? <span>scan {fmtFecha(o.fechaScan)}</span> : null}
-        </div>
-      </div>
-    </article>
-  )
-}
 
 // Nichos que miden el MISMO mercado que la carta líder (solape de SKUs)
 function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) {
@@ -1334,152 +899,25 @@ function FamiliaColapsada({ miembros, porKeyword, lider, onAbrir, onRecargar }) 
   )
 }
 
-// GRUPOS POR COMPORTAMIENTO DE TEMPORADA.
+// LA MESA EN PESTAÑAS POR MOMENTO DE COMPRA (2-oct-2026).
 //
-// Una lista única de 50 nichos es scroll infinito: obliga a leer todo para
-// encontrar lo que se puede comprar hoy. Agrupando por CUÁNDO se compra, la
-// pregunta se contesta sola — arriba lo que tiene la ventana abierta, después
-// lo que se puede traer cualquier día, y al final lo que hay que esperar.
-//
-// El orden de los grupos ES la prioridad de compra.
-// LA MESA SE ORDENA POR CONSTANCIA, NO POR LA VENTANA.
-//
-// Antes los grupos eran "comprar ahora / se venden todo el año / su ventana se
-// acerca / temporada lejana" — o sea que mandaba CUÁNDO se compra. Eso ponía un
-// árbol de navidad arriba de un producto que vende los 12 meses solo porque a
-// uno se le abría la ventana.
-//
-// El importador lo dio vuelta: quiere trabajar nichos de todo el año AUNQUE
-// ESTÉN SATURADOS. La razón es de caja, no de gusto: un estacional deja el
-// capital dormido 10 meses y su stock sobrante paga bodega Full todo ese
-// tiempo; un producto plano lo rota cuatro o cinco veces al año y mantiene la
-// cuenta vendiendo siempre, que es lo que sostiene la posición en el buscador.
-//
-// La ventana no se pierde: sigue ordenando DENTRO de los estacionales y sigue
-// mostrándose en cada fila.
-const esPlano = (o) => ['todo-el-año', 'alza-suave'].includes(o.curvaAnual?.clasificacion)
-
-// UNA LISTA MEZCLADA POR MOMENTO DE COMPRA (24-sep-2026). Los grupos por
-// constancia dejaban la temporada abajo y el importador terminó cotizando solo
-// productos planos. Ahora arriba va todo lo que se puede traer hoy —verano con
-// la ventana abierta, planos, planos con un pico por preparar— ordenado por
-// puntaje + urgencia, y cada fila dice por qué (ver lib/momentoCompra.js).
+// Historia del orden: primero mandaba la ventana; después la constancia (los de
+// todo el año arriba, por caja: un plano rota el capital 4-5 veces al año); el
+// 24-sep se mezcló todo lo que se puede traer hoy, porque con los planos arriba
+// el importador terminó cotizando solo productos planos (ver lib/momentoCompra.js).
+// Los grupos plegables y los cinco contadores de arriba repetían lo mismo que
+// los filtros: ahora el momento es una pestaña y el conteo va en ella.
 const GRUPOS_OP = [
-  {
-    id: 'ahora',
-    titulo: 'Para traer ahora',
-    sub: 'mezclado: temporadas con la ventana abierta y productos de todo el año, ordenados por puntaje + urgencia; cada fila dice por qué',
-    abierto: true,
-    test: (o) => momentoDeCompra(o).grupo === 'ahora',
-  },
-  {
-    id: 'adelante',
-    titulo: 'Más adelante',
-    sub: 'temporadas que todavía no toca pedir: pedir hoy es capital dormido',
-    abierto: false,
-    test: (o) => momentoDeCompra(o).grupo === 'adelante',
-  },
+  { id: 'ahora', titulo: 'Para traer ahora', sub: 'Temporadas con la ventana abierta y productos de todo el año, ordenados por puntaje + urgencia.' },
+  { id: 'adelante', titulo: 'Más adelante', sub: 'Temporadas que todavía no toca pedir: pedir hoy es capital dormido.' },
+  { id: 'sin-medir', titulo: 'Midiendo', sub: 'Recién descubiertos, sin curva de búsqueda o sin búsqueda en ML: todavía sin veredicto.' },
 ]
 
-// LA TEMPORADA QUE HAY QUE PEDIR AHORA, ARRIBA Y CON FOTO.
-//
-// La mesa abre con los de todo el año —71 filas— y los estacionales con la
-// ventana abierta quedaban 3.700 px más abajo. El importador lo dijo el 17-sep:
-// "he estado solo eligiendo lo que se vende todo el año, y se me ha ido traer lo
-// que se viene ahora, verano". Tenía 28 con la ventana abierta y ninguno en
-// cotización. Una ventana que se cierra no puede depender de que alguien baje
-// con la rueda del mouse.
-const MES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-const mesDe = (periodo) => (/^\d{4}-\d{2}$/.test(periodo ?? '') ? MES_LARGO[Number(periodo.slice(5)) - 1] : null)
-
-function VitrinaTemporada({ oportunidades, onElegir }) {
-  const abiertas = oportunidades
-    .filter((o) => !o.midiendo && !esPlano(o) && ['ahora', 'ultimo-mes'].includes(o.ventana?.estado))
-    .sort((a, b) => (a.ventana.estado === 'ultimo-mes' ? 0 : 1) - (b.ventana.estado === 'ultimo-mes' ? 0 : 1)
-      || String(a.ventana.hasta).localeCompare(String(b.ventana.hasta)) || (b.score ?? 0) - (a.score ?? 0))
-  if (!abiertas.length) return null
-  const cotizando = abiertas.filter((o) => ['cotizando', 'pedido'].includes(o.etapaCompra)).length
-  return (
-    <section className="op-vitrina" aria-labelledby="op-vitrina-titulo">
-      <div className="op-vitrina-cab">
-        <span className="op-vitrina-icono"><Sun size={18} aria-hidden="true" /></span>
-        <div>
-          <h3 id="op-vitrina-titulo">Temporada que hay que pedir ahora</h3>
-          <p>{abiertas.length} nichos con la ventana de compra abierta · <strong className={cotizando ? '' : 'op-vitrina-alerta'}>{cotizando ? `${cotizando} en cotización` : 'ninguno en cotización todavía'}</strong>. Pidiendo hoy, el stock llega en unos 45 días.</p>
-        </div>
-      </div>
-      <div className="op-vitrina-carril" role="list">
-        {abiertas.map((o) => {
-          const ultimo = o.ventana.estado === 'ultimo-mes'
-          return (
-            <button key={o.nichoId} type="button" role="listitem" className={`op-vitrina-carta${ultimo ? ' op-vitrina-urgente' : ''}`} onClick={() => onElegir(o)}>
-              <span className="op-vitrina-foto">{o.imagen ? <Miniatura src={o.imagen} lado={78} /> : <ImageOff size={22} aria-hidden="true" />}</span>
-              <span className="op-vitrina-cuerpo">
-                <strong>{o.keyword}</strong>
-                <span className={`op-vitrina-plazo${ultimo ? ' urgente' : ''}`}><CalendarClock size={12} aria-hidden="true" />{ultimo ? 'último mes para pedir' : `pedir hasta ${mesDe(o.ventana.hasta) ?? '—'}`}</span>
-                <span className="op-vitrina-datos">pico en {mesDe(o.ventana.pico) ?? o.curvaAnual?.nombreMesPico ?? '—'}{o.curvaAnual?.busquedasMes ? ` · ${fmtNum(o.curvaAnual.busquedasMes)} búsq/mes` : ''}</span>
-                <span className="op-vitrina-pie">
-                  <em className={`op-pildora veredicto-${o.veredicto}`}>{o.veredicto === 'entrar' ? 'entrar' : 'condiciones'}</em>
-                  {Number.isFinite(o.score) ? <em className="op-vitrina-score">{o.score}</em> : null}
-                  {o.etapaCompra === 'cotizando' ? <em className="op-pildora op-pildora-cot">cotizando</em> : null}
-                </span>
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
-
-function GrupoOportunidades({ grupo, filas, children }) {
-  const [abierto, setAbierto] = useState(grupo.abierto)
-  if (!filas.length) return null
-  return (
-    <section className="op-grupo" id={`grupo-${grupo.id}`}>
-      <button type="button" className="op-grupo-cab" onClick={() => setAbierto((v) => !v)} aria-expanded={abierto}>
-        <span className={`op-grupo-flecha${abierto ? ' abierto' : ''}`} aria-hidden="true">▸</span>
-        <h3>{grupo.titulo}</h3>
-        <span className="op-grupo-cuenta">{filas.length}</span>
-        <span className="op-grupo-sub">{grupo.sub}</span>
-      </button>
-      {abierto ? (
-        <div className="op-lista">
-          {/* LAS DOS FUENTES, LADO A LADO Y ROTULADAS.
-              Google dice cuánta gente lo busca y en qué mes del año; ML dice
-              qué pasó de verdad en el listado. Antes las columnas venían
-              intercaladas (búsqueda · vendidos · curva) y no se leía de dónde
-              salía cada número. Ahora cada fuente es un bloque y el de ML va
-              sombreado para distinguirse de un vistazo.
-              El encabezado va por grupo y no una sola vez arriba porque los
-              grupos se colapsan: uno que se fue del viewport no explica nada. */}
-          <div className="op-fila op-fila-bandas" aria-hidden="true">
-            <span /><span /><span />
-            <span className="op-banda op-banda-google">Google</span>
-            <span className="op-banda op-banda-ml">Mercado Libre</span>
-            <span className="op-banda op-banda-cruce">cruce</span>
-            <span />
-          </div>
-          <div className="op-fila op-fila-cab" aria-hidden="true">
-            <span /><span>nicho</span><span>score</span>
-            <span>búsq/mes</span><span>el año</span>
-            <span className="op-fila-vend" title="Unidades que el top acumula desde que se publicó cada aviso. No es por mes ni por año.">vendido</span>
-            <span>full</span>
-            <span title="Ventas en ML por búsqueda en Google, contra lo normal de su tramo de precio">convierte</span>
-            <span />
-          </div>
-          {children}
-        </div>
-      ) : null}
-    </section>
-  )
-}
-
 const FILTROS = [
-  ['comprables', 'Comprables ahora', (o) => ['ahora', 'ultimo-mes', 'pronto', 'sin-temporada'].includes(o.ventana?.estado ?? 'sin-temporada')],
-  ['buscados', 'Solo búsqueda alta', (o) => o.nivelBusqueda?.nivel === 'alto'],
+  ['buscados', 'Búsqueda alta', (o) => o.nivelBusqueda?.nivel === 'alto'],
   ['confirmados', 'Confirmados', (o) => o.confirmacion === 'confirmado'],
-  ['cotizados', 'Ya cotizados', (o) => Boolean(o.cotizacion)],
+  ['cotizando', 'En cotización', (o) => ['cotizando', 'pedido'].includes(o.etapaCompra)],
+  ['cotizados', 'Con costo', (o) => Boolean(o.cotizacion)],
   ['arreglar', 'Keyword por arreglar', (o) => o.nivelBusqueda?.nivel === 'renombrar'],
 ]
 
@@ -1491,33 +929,217 @@ const FILTROS = [
 //
 // Se pide al abrir la fila, no con el tablero: son ~95 productos por nicho y
 // cargarlos para las 69 filas de una sola vez es un payload que nadie mira.
-// El detalle del nicho elegido, fijo a la derecha con su propio scroll.
-function PanelNicho({ o, rank, mismaCompraQue, porKeyword, onAbrir, onRecargar, onCerrar, pronostico, modeloGana }) {
+// EL DETALLE DEL NICHO, fijo a la derecha con su propio scroll (2-oct-2026).
+//
+// Antes era la carta entera apilada: chips de búsqueda, ventana, salud y
+// trámites arriba, la caja de mejoras, los gráficos, la competencia y el estado
+// de la compra uno debajo del otro. Ahora una cabecera fija dice qué es y por
+// qué, y el resto va en pestañas: lo que se lee para decidir (Resumen), cuándo
+// y a qué precio, contra quién, y lo que se hace para comprarlo.
+function PanelNicho({ o, rank, mismaCompraQue, porKeyword, onAbrir, onRecargar, onCerrar, pronostico, modeloGana, tendencia }) {
+  const [pestana, setPestana] = useState('resumen')
+  const m = momentoDeCompra(o)
+  const pestanas = [
+    ['resumen', 'Resumen'],
+    ['temporada', 'Temporada · precio'],
+    ['competencia', 'Competencia'],
+    ['compra', 'Compra'],
+    ...(o.mejoras?.length ? [['mejoras', `Mejoras (${o.mejoras.length})`]] : []),
+  ]
   return (
-    <div className="op-panel-dentro">
+    <div className="op-panel-dentro opp">
       <div className="op-panel-barra">
-        <span className="op-panel-momento"><ChipMomento o={o} /></span>
+        <span className="opp-rank">#{rank}</span>
+        <span className="op-panel-momento" />
         <button type="button" className="boton-secundario op-panel-ir" onClick={() => onAbrir(o.nichoId)}>Ver análisis completo →</button>
         <button type="button" className="op-panel-cerrar" onClick={onCerrar} aria-label="Cerrar el detalle (Esc)" title="Cerrar (Esc)">✕</button>
       </div>
+
+      <div className="opp-cab">
+        <span className="opp-foto">{o.imagen ? <Miniatura src={o.imagen} lado={88} /> : <ImageOff size={24} aria-hidden="true" />}</span>
+        <div className="opp-cab-texto">
+          <h3>{o.keyword}</h3>
+          <p className={`opp-momento m-${m.clase}`}><b>{capital(m.etiqueta)}</b>{m.motivo ? <span>{m.motivo}</span> : null}</p>
+          <div className="opp-sellos">
+            {o.veredicto && !o.midiendo ? <span className={`op-pildora veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span> : null}
+            {o.confirmacion && !o.midiendo ? (
+              <span className="opp-sello" title={o.confirmacion === 'confirmado' ? `Demanda sostenida en ${o.scansConDemanda} scans` : `Solo ${o.scansConDemanda} scan(s) con demanda`}>
+                {o.confirmacion === 'confirmado' ? `✓ confirmado · ${o.scansConDemanda} scans` : `preliminar · ${o.scansConDemanda} scans`}
+              </span>
+            ) : null}
+            {o.etapaCompra && o.etapaCompra !== 'evaluando' ? <b className={`opt-etapa e-${o.etapaCompra}`}>{ETAPA_TEXTO[o.etapaCompra] ?? o.etapaCompra}</b> : null}
+          </div>
+        </div>
+        <span className="opp-score">
+          {o.midiendo
+            ? <span className="opt-midiendo">{o.scansConDemanda}/{o.scansConDemanda + o.faltanScans}<small>scans</small></span>
+            : Number.isFinite(o.score) ? <ScoreRing valor={o.score} size={58} grosor={5} /> : null}
+        </span>
+      </div>
+      {o.titular ? <p className="opp-titular">{o.titular}</p> : null}
+
       {o.midiendo ? (
         <>
-          <div className="op-midiendo-carta">
-            <strong>{o.keyword} · midiendo entrabilidad · {o.scansConDemanda} de {o.scansConDemanda + o.faltanScans} scans</strong>
-            <p>
-              El radar lo descubrió recién y el sistema lo escanea a diario. No hay score ni veredicto porque todavía no
-              hay serie que los sostenga, y no se van a estimar.
-              {o.curvaAnual?.busquedasMes ? ` Lo que sí está medido: ${fmtNum(o.curvaAnual.busquedasMes)} búsquedas al mes en Chile.` : ' Falta medirle el volumen de búsqueda.'}
-            </p>
-          </div>
+          <p className="opp-nota">
+            El radar lo descubrió recién y el sistema lo escanea a diario. No hay score ni veredicto porque todavía no
+            hay serie que los sostenga, y no se van a estimar.
+            {o.curvaAnual?.busquedasMes ? ` Lo que sí está medido: ${fmtNum(o.curvaAnual.busquedasMes)} búsquedas al mes en Chile.` : ' Falta medirle el volumen de búsqueda.'}
+          </p>
           <ProductosEscaneados nichoId={o.nichoId} />
         </>
       ) : (
-        <CartaOportunidad o={o} rank={rank} onAbrir={onAbrir} mismaCompraQue={mismaCompraQue} onRecargar={onRecargar}
-          pronostico={pronostico} modeloGana={modeloGana} enPanel />
+        <>
+          <div className="op-pestanas opp-pestanas" role="tablist">
+            {pestanas.map(([id, nombre]) => (
+              <button key={id} type="button" role="tab" aria-selected={pestana === id} className={`op-pestana${pestana === id ? ' activa' : ''}`} onClick={() => setPestana(id)}>{nombre}</button>
+            ))}
+          </div>
+          {pestana === 'resumen' ? <ResumenNicho o={o} tendencia={tendencia} /> : null}
+          {pestana === 'temporada' ? (
+            <div className="op-graficos">
+              <GraficoTemporada curva={o.curvaAnual} ventana={o.ventana} />
+              <GraficoPrecio precios={o.precios} precioVenta={o.precioVentaClp} />
+              <GraficoPronostico pronostico={pronostico} modeloGana={modeloGana} />
+            </div>
+          ) : null}
+          {pestana === 'competencia' ? <CompetenciaNicho o={o} /> : null}
+          {pestana === 'compra' ? <CompraNicho o={o} onRecargar={onRecargar} mismaCompraQue={mismaCompraQue} /> : null}
+          {pestana === 'mejoras' && o.mejoras?.length ? <MejorasNicho o={o} onRecargar={onRecargar} /> : null}
+        </>
       )}
       {o.familiaMiembros?.length ? (
         <FamiliaColapsada miembros={o.familiaMiembros} porKeyword={porKeyword} lider={o} onAbrir={onAbrir} onRecargar={onRecargar} />
+      ) : null}
+    </div>
+  )
+}
+
+// LO QUE SE LEE PARA DECIDIR: las alertas enteras con su porqué, y las cifras.
+function ResumenNicho({ o, tendencia }) {
+  const nb = o.nivelBusqueda
+  const nivel = nb?.nivel ? NIVELES[nb.nivel] : null
+  const flecha = o.tendenciaVentas ? FLECHA[o.tendenciaVentas] : null
+  const c = o.curvaAnual
+  return (
+    <div className="opp-resumen">
+      <AvisosLista lista={avisosDe(o, tendencia)} />
+      <h4 className="opp-sub">Las cifras</h4>
+      <div className="op-hechos">
+        <Hecho etiqueta="búsqueda">
+          {nivel ? <span title={nb.explicacion ?? ''}>{nivel.texto}{nb.posicion ? <i> · #{nb.posicion}/{nb.deCuantas} en “{nb.prefijo}”</i> : null}</span> : 'sin medir'}
+        </Hecho>
+        <Hecho etiqueta="búsquedas/mes">{c?.busquedasMes ? fmtNum(c.busquedasMes) : null}</Hecho>
+        <Hecho etiqueta="vender a">{o.precioVentaClp ? fmtPrecio(o.precioVentaClp) : null}</Hecho>
+        <Hecho etiqueta="EXW máx">{o.exwMaximoUsd != null ? `US$ ${o.exwMaximoUsd}` : null}</Hecho>
+        <Hecho etiqueta="mediana">{o.mediana ? fmtPrecio(o.mediana) : null}</Hecho>
+        {/* LO CONTADO, no lo derivado: reseñas nuevas es un entero exacto que
+            entrega ML; la estimación de ventas/día va plegada en Competencia */}
+        <Hecho etiqueta="se mueve">
+          {o.resenasNuevas != null && o.ventanaDias ? (
+            <span title={`${o.resenasNuevas} reseñas nuevas en ${o.ventanaDias} días, contadas sobre ${o.canasta} productos ${o.fuenteResenas === 'api' ? 'de todo el listado (API oficial de ML)' : 'del top (ficha)'}${o.saltosFiltrados ? ` · ${o.saltosFiltrados} saltos de catálogo descartados` : ''}`}>
+              +{fmtNum(o.resenasNuevas)} reseñas / {o.ventanaDias}d{' '}
+              {flecha ? <span className={`delta ${flecha[1]}`}>{flecha[0]}</span> : null}
+              {o.saltosFiltrados ? <span className="op-sucio" title="hubo saltos de catálogo filtrados">⚠</span> : null}
+            </span>
+          ) : null}
+        </Hecho>
+        {/* el dato que el juez descartó queda a la vista: si alguna vez un
+            salto era real, se tiene que poder ver */}
+        {o.saltoSospechoso ? (
+          <Hecho etiqueta="descartado">
+            <span className="op-sucio" title={`Se midieron ${Math.round(o.saltoSospechoso.valorCrudo)} ventas/día contra ${Math.round(o.saltoSospechoso.contra)} del scan anterior (×${o.saltoSospechoso.salto}). ${o.saltoSospechoso.motivo}`}>
+              ⚠ salto ×{o.saltoSospechoso.salto} no creíble
+            </span>
+          </Hecho>
+        ) : null}
+        {o.vendidosHistoricos?.pisoUnidades ? (
+          <Hecho etiqueta="el top vendió">
+            <span title={ayudaTrayectoria(o.vendidosHistoricos)}>
+              al menos {fmtNum(o.vendidosHistoricos.pisoUnidades)} en toda su vida
+              {o.vendidosHistoricos.pctCobertura != null ? <i> · {o.vendidosHistoricos.pctCobertura}% del top despegó</i> : null}
+            </span>
+          </Hecho>
+        ) : null}
+        {o.conversion?.factor ? <Hecho etiqueta="convierte"><Conversion c={o.conversion} /></Hecho> : null}
+        <Hecho etiqueta="Full">{o.pctFull != null ? `${Math.round(o.pctFull)}% del top` : null}</Hecho>
+        <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
+        {/* un pct alto de "últimas unidades" no es riesgo: es un nicho
+            desabastecido, o sea una ventana para quien trae stock */}
+        {o.profundidadStock?.itemsPorAgotarse ? (
+          <Hecho etiqueta="por agotarse">
+            <span title={`${o.profundidadStock.itemsPorAgotarse} de ${o.profundidadStock.itemsDelScan} publicaciones del top muestran "últimas unidades" (5 o menos). Entre ellas quedan ${o.profundidadStock.unidadesVisibles} unidades; del resto no se sabe.`}>
+              {o.profundidadStock.pctEnUltimas}% del top{o.profundidadStock.pctEnUltimas >= 40 ? ' · desabastecido' : ''}
+            </span>
+          </Hecho>
+        ) : null}
+        {o.pctCrossBorder ? (
+          <Hecho etiqueta="importan directo">
+            <span title={`${Math.round(o.pctCrossBorder)}% del top despacha desde el extranjero. Doble filo: prueba de que el producto se importa bien, y a la vez rival con tu misma estructura de costo.`}>
+              {Math.round(o.pctCrossBorder)}%{o.origenesCrossBorder ? ` · ${Object.keys(o.origenesCrossBorder).join('/')}` : ''}
+            </span>
+          </Hecho>
+        ) : null}
+      </div>
+      {o.condiciones ? <p className="op-condicion">Condición: {o.condiciones}</p> : null}
+      {o.fechaScan ? <p className="opp-pie">Último scan {fmtFecha(o.fechaScan)}</p> : null}
+    </div>
+  )
+}
+
+// LO QUE SE HACE PARA COMPRARLO: etapa, costo, flete y el plan.
+function CompraNicho({ o, onRecargar, mismaCompraQue }) {
+  return (
+    <div className="opp-compra">
+      <div className="opp-campos">
+        <label className="opp-campo">
+          <span>Etapa</span>
+          <select
+            className="etapa-select"
+            value={o.etapaCompra ?? 'evaluando'}
+            title={o.notaEtapa ?? 'Etapa del embudo de compra'}
+            onChange={async (e) => {
+              await api.ajustarNicho(o.nichoId, { etapaCompra: e.target.value })
+              onRecargar()
+            }}
+          >
+            {ETAPAS.map((et) => <option key={et} value={et}>{et.replace(/-/g, ' ')}</option>)}
+          </select>
+        </label>
+        <div className="opp-campo"><span>Costo</span><Cotizacion o={o} onRecargar={onRecargar} /></div>
+        {o.logistica && o.logistica !== 'full' || o.fletePropioClp != null ? (
+          <div className="opp-campo"><span>Despacho</span><FletePropio o={o} onRecargar={onRecargar} /></div>
+        ) : null}
+      </div>
+      <div className="op-hechos">
+        <Hecho etiqueta="1ª compra">{o.primeraCompra ? `${o.primeraCompra}${o.inversionEstimadaUsd != null ? ` (~US$ ${fmtNum(o.inversionEstimadaUsd)})` : ''}` : null}</Hecho>
+        <Hecho etiqueta="vender a">{o.precioVentaClp ? fmtPrecio(o.precioVentaClp) : null}</Hecho>
+        <Hecho etiqueta="EXW máx">{o.exwMaximoUsd != null ? `US$ ${o.exwMaximoUsd}` : null}</Hecho>
+        <Hecho etiqueta="listing">{o.listingListo ? '✓ listo' : null}</Hecho>
+        {mismaCompraQue ? <Hecho etiqueta="misma compra que"><span title="Mismo producto de fábrica: un solo pedido cubre ambos nichos">{mismaCompraQue}</span></Hecho> : null}
+        {Number.isFinite(o.shareJugadaPct) && o.shareJugadaPct < 50 ? (
+          <Hecho etiqueta="jugada">
+            <span title={`El top mezcla familias; la jugada recomendada concentra el ${o.shareJugadaPct}% de las reseñas${o.keywordJugada ? ` — se aísla con "${o.keywordJugada}"` : ''}`}>{o.shareJugadaPct}% del top</span>
+          </Hecho>
+        ) : null}
+      </div>
+      {o.planPublicidad ? <PlanPublicidad plan={o.planPublicidad} /> : null}
+      {o.tallas ? <TallasChile t={o.tallas} /> : null}
+      {/* repuestos: la compra es por pieza y por auto — sin modelo y años no se cotiza */}
+      {o.planRepuestos?.length ? (
+        <ol className="op-plan-repuestos">
+          {o.planRepuestos.map((f) => (
+            <li key={`${f.prioridad}-${f.marca}-${f.pieza}`} className={`op-plan-${f.verificacion ?? 'no-revisada'}`}>
+              <b className="op-plan-n">{f.prioridad}</b>
+              <span className="op-plan-auto">
+                <strong>{f.marca}</strong>{f.pieza ? <em> · {f.pieza}</em> : null}
+                <span className="op-plan-modelos">{f.modelos}</span>
+              </span>
+              <SelloVerificacion f={f} />
+              {f.referencia ? <code className="op-plan-ref" title="Código de la pieza, tal como aparece en el top de ML">{f.referencia}</code> : null}
+              {f.precioVentaClp ? <span className="op-plan-precio">{fmtPrecio(f.precioVentaClp)}</span> : null}
+            </li>
+          ))}
+        </ol>
       ) : null}
     </div>
   )
@@ -1538,28 +1160,6 @@ function NavegarConFlechas({ orden, actual, onElegir }) {
   return null
 }
 
-function DetalleNicho({ o, pronostico, modeloGana }) {
-  const [pestana, setPestana] = useState('temporada')
-  const PESTANAS = [['temporada', 'Temporada y precio'], ['competencia', 'Competencia']]
-  return (
-    <div className="op-detalle" onClick={(e) => e.stopPropagation()}>
-      <div className="op-pestanas" role="tablist">
-        {PESTANAS.map(([id, nombre]) => (
-          <button key={id} type="button" role="tab" aria-selected={pestana === id} className={`op-pestana${pestana === id ? ' activa' : ''}`} onClick={() => setPestana(id)}>{nombre}</button>
-        ))}
-      </div>
-      {pestana === 'temporada' ? (
-        <div className="op-graficos">
-          <GraficoTemporada curva={o.curvaAnual} ventana={o.ventana} />
-          <GraficoPrecio precios={o.precios} precioVenta={o.precioVentaClp} />
-          <GraficoPronostico pronostico={pronostico} modeloGana={modeloGana} />
-        </div>
-      ) : (
-        <CompetenciaNicho o={o} />
-      )}
-    </div>
-  )
-}
 
 // UNA lista de competencia: el scan (orden de ML) con lo que se sabe de cada
 // producto pegado como sello —su lugar en los más vendidos de la categoría y
@@ -1795,21 +1395,22 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [activos, setActivos] = useState([])
-  // LISTA + PANEL: la fila elegida se ve entera a la derecha, sin acordeón que
-  // empuje la lista. En pantalla chica el panel se abre encima.
+  const [grupo, setGrupo] = useState('ahora')
+  // LISTA + PANEL: la tarjeta elegida se ve entera a la derecha, sin acordeón
+  // que empuje la lista. En pantalla chica el panel se abre encima.
   // null = panel cerrado y la lista a todo el ancho
   const [seleccion, setSeleccion] = useState(null)
-  // se cierra con Esc o con un clic fuera del panel y de las filas
+  // se cierra con Esc o con un clic fuera del panel y de las tarjetas
   useEffect(() => {
     if (!seleccion) return
     const alTeclear = (e) => { if (e.key === 'Escape') setSeleccion(null) }
-    const alClic = (e) => { if (!e.target.closest?.('.op-panel, .op-fila, .op-filtros, .op-kpis')) setSeleccion(null) }
+    const alClic = (e) => { if (!e.target.closest?.('.op-panel, .opt, .opx-barra')) setSeleccion(null) }
     window.addEventListener('keydown', alTeclear)
     document.addEventListener('mousedown', alClic)
     return () => { window.removeEventListener('keydown', alTeclear); document.removeEventListener('mousedown', alClic) }
   }, [seleccion])
   const [busca, setBusca] = useState('')
-  // pronósticos del aprendizaje, por nicho: alimentan el gráfico de la carta
+  // pronósticos del aprendizaje, por nicho: alimentan el gráfico y la alerta de tendencia
   const [pron, setPron] = useState({ porNicho: new Map(), modeloGana: false, ordena: false })
   useEffect(() => {
     Promise.all([api.aprendizajePronosticosNichos(), api.aprendizaje()])
@@ -1818,7 +1419,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
         modeloGana: Boolean(e.modelos?.find((m) => m.objetivo === 'busquedas-google')?.evaluacion?.superaReferencias),
         ordena: Boolean(e.modelos?.find((m) => m.objetivo === 'busquedas-google')?.evaluacion?.ranking?.ordenaMejor),
       }))
-      .catch(() => {}) // sin pronósticos la carta funciona igual
+      .catch(() => {}) // sin pronósticos la mesa funciona igual
   }, [])
 
   const cargar = useCallback(() => {
@@ -1834,8 +1435,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   }, [cargar])
 
   // AL VOLVER A LA PESTAÑA, LOS DATOS SE REFRESCAN. Una cotización cargada por
-  // fuera (otra pestaña, la API) no se veía hasta recargar a mano: el
-  // cosmetiquero seguía sin naranjo con su EXW ya guardado.
+  // fuera (otra pestaña, la API) no se veía hasta recargar a mano.
   useEffect(() => {
     let ultima = Date.now()
     const alVolver = () => {
@@ -1857,10 +1457,32 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const visibles = todas
     .filter((o) => filtrosActivos.every(([, , fn]) => fn(o)))
     .filter((o) => !q || o.keyword.toLowerCase().includes(q) || (o.titular ?? '').toLowerCase().includes(q))
-
   const cuenta = (fn) => todas.filter(fn).length
-  const porArreglar = cuenta((o) => o.nivelBusqueda?.nivel === 'renombrar')
-  const sinMedir = cuenta((o) => !o.nivelBusqueda?.nivel)
+  const tendenciaDe = (o) => (pron.ordena ? pron.porNicho.get(String(o.nichoId))?.tendencia : null)
+
+  // cada nicho en su pestaña; los miembros de una familia viven dentro del líder
+  const porGrupo = new Map(GRUPOS_OP.map((g) => [g.id, []]))
+  for (const o of visibles.filter((x) => !x.familiaLider)) porGrupo.get(momentoDeCompra(o).grupo)?.push(o)
+  for (const filas of porGrupo.values()) filas.sort((a, b) => compararPorMomento(a, b))
+  // "misma compra que" se resuelve en el orden de toda la mesa, no de la pestaña
+  const dueno = new Map(), mismaDe = new Map()
+  for (const o of [...porGrupo.values()].flat()) {
+    if (!o.productoClave) continue
+    if (dueno.has(o.productoClave)) mismaDe.set(o.nichoId, dueno.get(o.productoClave))
+    else dueno.set(o.productoClave, o.keyword)
+  }
+  const grupoActual = GRUPOS_OP.find((g) => g.id === grupo) ?? GRUPOS_OP[0]
+  const orden = porGrupo.get(grupoActual.id) ?? []
+  const rankDe = new Map(orden.map((o, i) => [o.nichoId, i + 1]))
+  const porKeyword = new Map(todas.map((o) => [o.keyword, o]))
+  const elegido = orden.find((o) => o.nichoId === seleccion) ?? visibles.find((o) => o.nichoId === seleccion) ?? null
+  // clic en la tarjeta abierta la cierra
+  const elegir = (o) => setSeleccion((actual) => (actual === o.nichoId ? null : o.nichoId))
+
+  // la temporada con la ventana abierta no puede depender de bajar con la rueda:
+  // "se me ha ido traer lo que se viene ahora, verano" (17-sep)
+  const ventanaAbierta = orden.filter((o) => ['ahora', 'ultimo-mes'].includes(o.ventana?.estado))
+  const enCotizacion = orden.filter((o) => ['cotizando', 'pedido'].includes(o.etapaCompra)).length
 
   return (
     <main>
@@ -1868,113 +1490,69 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
         <div>
           <h2>Oportunidades</h2>
           <p className="reporte-fecha">
-            Una sola lista, mezclada por <strong>lo que conviene traer ahora</strong>: temporadas con la ventana
-            abierta y productos de todo el año juntos, cada uno con su porqué. Elige uno para verlo entero a la
-            derecha; <kbd>↑</kbd> <kbd>↓</kbd> para recorrerlos y <kbd>Esc</kbd> o un clic afuera para cerrar.
+            Qué conviene traer, ordenado por puntaje y urgencia. Elige uno para ver el detalle; <kbd>↑</kbd> <kbd>↓</kbd> para recorrer y <kbd>Esc</kbd> para cerrar.
           </p>
         </div>
       </div>
 
-      <div className="op-kpis">
-        <div className="op-kpi"><span className="op-kpi-icono"><Search size={16} aria-hidden="true" /></span><div><b>{cuenta((o) => o.nivelBusqueda?.nivel === 'alto')}</b><small>con búsqueda alta</small></div></div>
-        <button type="button" className="op-kpi op-kpi-accion" onClick={() => document.getElementById('grupo-ahora')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-          <span className="op-kpi-icono op-kpi-ambar"><CalendarClock size={16} aria-hidden="true" /></span><div><b>{cuenta((o) => ['ahora', 'ultimo-mes'].includes(o.ventana?.estado))}</b><small>con ventana abierta</small></div></button>
-        <div className="op-kpi"><span className="op-kpi-icono op-kpi-verde"><BadgeCheck size={16} aria-hidden="true" /></span><div><b>{cuenta((o) => o.confirmacion === 'confirmado')}</b><small>confirmados</small></div></div>
-        <div className="op-kpi"><span className="op-kpi-icono"><FileSpreadsheet size={16} aria-hidden="true" /></span><div><b>{cuenta((o) => Boolean(o.cotizacion))}</b><small>cotizados</small></div></div>
-        {porArreglar ? <div className="op-kpi op-kpi-aviso"><span className="op-kpi-icono op-kpi-ambar"><AlertTriangle size={16} aria-hidden="true" /></span><div><b>{porArreglar}</b><small>keyword por arreglar</small></div></div> : null}
-        {sinMedir ? <div className="op-kpi op-kpi-aviso"><span className="op-kpi-icono op-kpi-ambar"><AlertTriangle size={16} aria-hidden="true" /></span><div><b>{sinMedir}</b><small>sin medir la búsqueda</small></div></div> : null}
-      </div>
-
-      {/* la vitrina de temporada ya no va: la temporada abierta entra mezclada en "Para traer ahora" */}
-
-      <div className="chips op-filtros">
-        <div className="op-buscador">
-          <input
-            type="search"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar nicho…"
-            aria-label="Buscar entre las oportunidades"
-          />
-          {busca ? (
-            <button type="button" className="op-buscador-x" onClick={() => setBusca('')} aria-label="Limpiar búsqueda">×</button>
-          ) : null}
+      <div className="opx-barra">
+        <div className="opx-tabs" role="tablist" aria-label="Momento de compra">
+          {GRUPOS_OP.map((g) => (
+            <button key={g.id} type="button" role="tab" aria-selected={grupo === g.id} className={`opx-tab${grupo === g.id ? ' activa' : ''}`}
+              onClick={() => { setGrupo(g.id); setSeleccion(null) }}>
+              {g.titulo}<span className="opx-tab-n">{porGrupo.get(g.id).length}</span>
+            </button>
+          ))}
         </div>
-        {FILTROS.map(([id, etiqueta, fn]) => (
-          <button
-            key={id}
-            className={activos.includes(id) ? 'chip activo' : 'chip'}
-            aria-pressed={activos.includes(id)}
-            onClick={() => setActivos((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id]))}
-          >
-            {etiqueta} <span className="op-filtro-n">{cuenta(fn)}</span>
-          </button>
-        ))}
-        {activos.length ? (
-          <button className="enlace-boton" onClick={() => setActivos([])}>
-            limpiar
-          </button>
-        ) : null}
+        <div className="opx-filtros">
+          <label className="op-buscador">
+            <Search size={15} aria-hidden="true" />
+            <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nicho…" aria-label="Buscar entre las oportunidades" />
+            {busca ? <button type="button" className="op-buscador-x" onClick={() => setBusca('')} aria-label="Limpiar búsqueda">×</button> : null}
+          </label>
+          {FILTROS.map(([id, etiqueta, fn]) => {
+            const n = cuenta(fn)
+            if (!n && !activos.includes(id)) return null
+            return (
+              <button key={id} type="button" className={activos.includes(id) ? 'chip activo' : 'chip'} aria-pressed={activos.includes(id)}
+                onClick={() => setActivos((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id]))}>
+                {etiqueta} <span className="op-filtro-n">{n}</span>
+              </button>
+            )
+          })}
+          {activos.length ? <button type="button" className="enlace-boton" onClick={() => setActivos([])}>limpiar</button> : null}
+        </div>
       </div>
+
+      <p className="opx-sub">
+        {grupoActual.sub}
+        {grupoActual.id === 'ahora' && ventanaAbierta.length ? (
+          <> <strong className={enCotizacion ? '' : 'opx-alerta'}><CalendarClock size={13} aria-hidden="true" /> {ventanaAbierta.length} con la ventana de temporada abierta · {enCotizacion ? `${enCotizacion} en cotización` : 'ninguno en cotización todavía'}</strong></>
+        ) : null}
+      </p>
 
       {!todas.length ? (
-        <p className="vacio">
-          Todavía no hay nichos con veredicto de entrada. El radar y los análisis van llenando este panel solos.
-        </p>
-      ) : !visibles.length ? (
-        <p className="vacio">Ninguna oportunidad pasa los filtros.</p>
+        <p className="vacio">Todavía no hay nichos con veredicto de entrada. El radar y los análisis van llenando este panel solos.</p>
+      ) : !orden.length ? (
+        <p className="vacio">{visibles.length ? 'Nada en esta pestaña con estos filtros: mira las otras.' : 'Ninguna oportunidad pasa los filtros.'}</p>
       ) : (
-        (() => {
-          const dueno = new Map()
-          const porKeyword = new Map(todas.map((o) => [o.keyword, o]))
-          const sinLider = visibles.filter((o) => !o.familiaLider)
-          const usados = new Set()
-          const secciones = GRUPOS_OP.map((g) => {
-            const filas = sinLider.filter((o) => !usados.has(o.nichoId) && g.test(o)).sort((a, b) => compararPorMomento(a, b))
-            filas.forEach((o) => usados.add(o.nichoId))
-            return { grupo: g, filas }
-          })
-          const resto = sinLider.filter((o) => !usados.has(o.nichoId))
-          if (resto.length) secciones.push({ grupo: { id: 'resto', titulo: 'Midiendo o sin medir', sub: 'recién descubiertos, sin curva de búsqueda o sin búsqueda en ML', abierto: false }, filas: resto })
-          // rango y "misma compra que" en el orden en que se ven
-          const orden = secciones.flatMap((x) => x.filas)
-          const rankDe = new Map(), mismaDe = new Map()
-          orden.forEach((o, i) => {
-            rankDe.set(o.nichoId, i + 1)
-            if (o.productoClave) {
-              if (dueno.has(o.productoClave)) mismaDe.set(o.nichoId, dueno.get(o.productoClave))
-              else dueno.set(o.productoClave, o.keyword)
-            }
-          })
-          const elegido = orden.find((o) => o.nichoId === seleccion) ?? null
-          // clic en la fila abierta la cierra
-          const elegir = (o) => setSeleccion((actual) => (actual === o.nichoId ? null : o.nichoId))
-          const fila = (o) => (
-            <div key={o.nichoId} className="op-item" id={`op-${o.nichoId}`}>
-              <FilaCompacta o={o} rank={rankDe.get(o.nichoId)} abierta={elegido?.nichoId === o.nichoId} onAlternar={() => elegir(o)} onRecargar={cargar}
-                tendencia={pron.ordena ? pron.porNicho.get(String(o.nichoId))?.tendencia : null} />
-            </div>
-          )
-          return (
-            <div className={`op-maestro${elegido ? ' con-panel' : ''}`}>
-              <div className="op-maestro-lista">
-                {elegido ? <NavegarConFlechas orden={orden} actual={elegido} onElegir={(o) => { setSeleccion(o.nichoId); document.getElementById(`op-${o.nichoId}`)?.scrollIntoView({ block: 'nearest' }) }} /> : null}
-                {secciones.map(({ grupo, filas }) => (
-                  <GrupoOportunidades key={grupo.id} grupo={grupo} filas={filas}>
-                    {filas.map(fila)}
-                  </GrupoOportunidades>
-                ))}
+        <div className={`op-maestro${elegido ? ' con-panel' : ''}`}>
+          <div className="op-maestro-lista opx-lista">
+            {elegido ? <NavegarConFlechas orden={orden} actual={elegido} onElegir={(o) => { setSeleccion(o.nichoId); document.getElementById(`op-${o.nichoId}`)?.scrollIntoView({ block: 'nearest' }) }} /> : null}
+            {orden.map((o) => (
+              <div key={o.nichoId} id={`op-${o.nichoId}`}>
+                <TarjetaNicho o={o} rank={rankDe.get(o.nichoId)} abierta={elegido?.nichoId === o.nichoId} onAlternar={() => elegir(o)} onRecargar={cargar} tendencia={tendenciaDe(o)} />
               </div>
-              {elegido ? (
-                <aside className="op-panel abierto" aria-label="Detalle del nicho elegido">
-                  <PanelNicho key={elegido.nichoId} o={elegido} rank={rankDe.get(elegido.nichoId)} mismaCompraQue={mismaDe.get(elegido.nichoId)}
-                    porKeyword={porKeyword} onAbrir={onAbrirNicho} onRecargar={cargar} onCerrar={() => setSeleccion(null)}
-                    pronostico={pron.porNicho.get(String(elegido.nichoId))} modeloGana={pron.modeloGana} />
-                </aside>
-              ) : null}
-            </div>
-          )
-        })()
+            ))}
+          </div>
+          {elegido ? (
+            <aside className="op-panel abierto" aria-label="Detalle del nicho elegido">
+              <PanelNicho key={elegido.nichoId} o={elegido} rank={rankDe.get(elegido.nichoId) ?? '—'} mismaCompraQue={mismaDe.get(elegido.nichoId)}
+                porKeyword={porKeyword} onAbrir={onAbrirNicho} onRecargar={cargar} onCerrar={() => setSeleccion(null)}
+                pronostico={pron.porNicho.get(String(elegido.nichoId))} modeloGana={pron.modeloGana} tendencia={tendenciaDe(elegido)} />
+            </aside>
+          ) : null}
+        </div>
       )}
 
       <Criterios />
@@ -1982,8 +1560,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
       <p className="nota">
         "EXW máx" es lo más que puedes pagar en China (precio ex-fábrica) para que el margen cierre al precio
         sugerido. La ventana sale del pico de temporada menos el lead time de importación (~2 meses desde que
-        pagas hasta tener stock vendible en Full). Abre una carta para ver la familia de búsqueda, el análisis
-        completo y el simulador.
+        pagas hasta tener stock vendible en Full).
       </p>
     </main>
   )
