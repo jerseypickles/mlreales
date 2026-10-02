@@ -1,4 +1,4 @@
-import { CategoriaMl, TendenciaCategoria } from '../models/CategoriaMl.js'
+import { CategoriaMl, TendenciaCategoria, PasadaPanorama } from '../models/CategoriaMl.js'
 import { RankingMasVendidos } from '../models/RankingMasVendidos.js'
 import { meliGet } from './meli.js'
 import { normalizarDestacados, normalizarTendencias } from './senalesOficiales.js'
@@ -23,6 +23,10 @@ const DIA = 86400e3
 export const MIN_ITEMS_CATEGORIA = 500 // categorías más chicas no mueven un nicho
 const REFRESCO_ARBOL_DIAS = 7
 const REFRESCO_TENDENCIAS_DIAS = 7
+// una categoría donde ML no publica ranking o tendencias se vuelve a probar
+// recién después de esto (puede empezar a publicar si crece)
+export const SIN_RANKING_DIAS = 14
+export const SIN_TENDENCIAS_DIAS = 30
 const PAUSA_MS = 250
 const PAUSA_429_MS = 6000
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -34,6 +38,20 @@ async function pedir(ruta, obtener = meliGet) {
   } catch (err) {
     return { frenado: /\b429\b|too many/i.test(err.message), error: err.message }
   }
+}
+
+// Pura. ¿ML dice que esa categoría no tiene el dato publicado? Un 404 ("Not
+// found public trends") o una respuesta vacía sin error. Un freno (429) o un
+// error de red NO cuentan: esos se reintentan en la pasada siguiente.
+export function noPublicado(r, vacio) {
+  if (r?.frenado) return false
+  if (r?.error) return /\b404\b/.test(r.error)
+  return Boolean(vacio)
+}
+
+// Pura. Las hojas que se pueden pedir: sin marca de "no publica" vigente.
+export function pedibles(hojas, campo, ahora) {
+  return hojas.filter((h) => !(h[campo] && new Date(h[campo]) > ahora))
 }
 
 // Pura. Lo que se guarda de una categoría leída.
@@ -117,11 +135,14 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, pres
   const porLeer = await CategoriaMl.countDocuments({ actualizadoEl: null })
   const arbol = porLeer || !(await CategoriaMl.exists({}))
     ? await avanzarArbol({ ahora, presupuestoMs: presupuestoMs * (porLeer > 300 ? 0.85 : 0.5), obtener }) : null
-  const hojas = await CategoriaMl.find({ hoja: true, totalItems: { $gte: MIN_ITEMS_CATEGORIA } }).select('id').sort({ totalItems: -1 }).lean()
+  const hojas = await CategoriaMl.find({ hoja: true, totalItems: { $gte: MIN_ITEMS_CATEGORIA } }).select('id sinRankingHasta sinTendenciasHasta').sort({ totalItems: -1 }).lean()
   const hechas = new Set(await RankingMasVendidos.distinct('categoriaId', { dia }))
   const ultima = new Map((await RankingMasVendidos.aggregate([{ $group: { _id: '$categoriaId', dia: { $max: '$dia' } } }])).map((x) => [x._id, x.dia]))
   const delTablero = await categoriasDelTablero().catch(() => new Map())
-  const pendientes = hojasQueTocan(hojas, ultima, dia).slice(0, porPasada)
+  // TRABA DEL 1-OCT: las categorías sin ranking publicado no se anotaban, y
+  // como nunca tenían captura volvían a encabezar los 220 cupos de cada pasada.
+  // El ranking diario se quedó en ~579 de 6.029 (+162, +113… hasta +1 por hora).
+  const pendientes = hojasQueTocan(pedibles(hojas, 'sinRankingHasta', ahora), ultima, dia).slice(0, porPasada)
   // búsquedas que suben: una vez por semana por categoría. VAN ANTES del
   // ranking y con su propio tiempo: con 6.029 hojas el ranking siempre tiene
   // pendientes, se comía la pasada entera y las tendencias quedaron en 575
@@ -130,25 +151,37 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, pres
   let frenos = 0
   const vencida = diaChile(+ahora - REFRESCO_TENDENCIAS_DIAS * DIA)
   const conTendencia = new Set(await TendenciaCategoria.distinct('categoriaId', { dia: { $gt: vencida } }))
-  let tendencias = 0, erroresTendencia = 0, vaciasTendencia = 0, ultimoErrorTendencia = null
-  const candidatasTendencia = hojas.filter((h) => !conTendencia.has(h.id)).length
-  for (const { id } of hojas.filter((h) => !conTendencia.has(h.id)).slice(0, TENDENCIAS_POR_PASADA)) {
+  let tendencias = 0, erroresTendencia = 0, vaciasTendencia = 0, ultimoErrorTendencia = null, sinTendencias = 0
+  // MISMA TRABA, PEOR: las 40 más grandes daban 404 "Not found public trends"
+  // en todas las pasadas (40 errores de 40, todo el 1 y 2-oct) y se volvían a
+  // pedir cada hora: 6 capturas en dos días. Ahora el 404 queda anotado.
+  const candidatas = pedibles(hojas, 'sinTendenciasHasta', ahora).filter((h) => !conTendencia.has(h.id))
+  const candidatasTendencia = candidatas.length
+  for (const { id } of candidatas.slice(0, TENDENCIAS_POR_PASADA)) {
     if (Date.now() - inicio > finTendencias) break
     const r = await pedir(`/trends/MLC/${id}`, obtener)
     if (r.frenado) { frenos++; await esperar(PAUSA_429_MS); continue }
     if (r.error) { erroresTendencia++; ultimoErrorTendencia = r.error }
     const terminos = normalizarTendencias(r.datos)
     if (!r.error && !terminos.length) vaciasTendencia++
+    if (noPublicado(r, !terminos.length)) {
+      await CategoriaMl.updateOne({ id }, { $set: { sinTendenciasHasta: new Date(+ahora + SIN_TENDENCIAS_DIAS * DIA) } })
+      sinTendencias++
+    }
     if (terminos.length) { await TendenciaCategoria.updateOne({ categoriaId: id, dia }, { $setOnInsert: { categoriaId: id, dia, terminos, capturadoEl: ahora } }, { upsert: true }); tendencias++ }
     await esperar(PAUSA_MS)
   }
   const presupuestoRanking = presupuestoMs
-  let capturadas = 0, movidas = 0
+  let capturadas = 0, movidas = 0, sinRanking = 0
   for (const { id } of pendientes) {
     if (Date.now() - inicio > presupuestoRanking) break
     const r = await pedir(`/highlights/MLC/category/${id}`, obtener)
     if (r.frenado) { frenos++; await esperar(PAUSA_429_MS); continue }
     const items = normalizarDestacados(r.datos)
+    if (noPublicado(r, !items.length)) {
+      await CategoriaMl.updateOne({ id }, { $set: { sinRankingHasta: new Date(+ahora + SIN_RANKING_DIAS * DIA) } })
+      sinRanking++
+    }
     if (items.length) {
       await RankingMasVendidos.updateOne({ categoriaId: id, dia }, { $setOnInsert: { categoriaId: id, dia, nichos: delTablero.get(id) ?? [], items, capturadoEl: ahora } }, { upsert: true })
       capturadas++
@@ -161,9 +194,11 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, pres
     }
     await esperar(PAUSA_MS)
   }
-  const resultado = { dia, arbol, hojasConVolumen: hojas.length, rankingHoy: hechas.size + capturadas, capturadas, movidas, tendencias, frenos,
-    tendenciaDiag: { candidatas: candidatasTendencia, errores: erroresTendencia, vacias: vaciasTendencia, ultimoError: ultimoErrorTendencia, segundos: Math.round((Date.now() - inicio) / 1000) } }
+  const resultado = { dia, arbol, hojasConVolumen: hojas.length, rankingHoy: hechas.size + capturadas, capturadas, movidas, sinRanking, tendencias, frenos,
+    tendenciaDiag: { candidatas: candidatasTendencia, errores: erroresTendencia, vacias: vaciasTendencia, sinTendencias, ultimoError: ultimoErrorTendencia, segundos: Math.round((Date.now() - inicio) / 1000) } }
   ultimaPasada = { ...resultado, en: new Date() }
+  // la API corre en otro proceso: sin esto solo se veía en el log
+  await PasadaPanorama.create({ en: ultimaPasada.en, dia, resultado }).catch(() => null)
   console.log(`[panorama] ${dia}: ranking ${resultado.rankingHoy}/${hojas.length} categorías (+${capturadas}, ${movidas} movimientos), ${tendencias} tendencias, ${frenos} frenos${arbol ? ` · árbol ${arbol.total} (${arbol.pendientes} por leer)` : ''}`)
   return resultado
 }
@@ -199,6 +234,10 @@ export async function estadoPanorama({ ahora = new Date() } = {}) {
     RankingMasVendidos.countDocuments({ dia }), TendenciaCategoria.countDocuments({}),
     RankingMasVendidos.distinct('dia'),
   ])
-  return { dia, ultimaPasada, arbol: { total, pendientes }, hojasConVolumen: hojas, rankingHoy, capturasDeTendencias: tendencias, diasDeRanking: diasRanking.length,
+  const guardada = ultimaPasada ? null : await PasadaPanorama.findOne().sort({ en: -1 }).lean().catch(() => null)
+  const [sinRanking, sinTendencias] = await Promise.all([
+    CategoriaMl.countDocuments({ sinRankingHasta: { $gt: ahora } }), CategoriaMl.countDocuments({ sinTendenciasHasta: { $gt: ahora } }),
+  ])
+  return { dia, ultimaPasada: ultimaPasada ?? (guardada ? { ...guardada.resultado, en: guardada.en } : null), sinPublicar: { ranking: sinRanking, tendencias: sinTendencias }, arbol: { total, pendientes }, hojasConVolumen: hojas, rankingHoy, capturasDeTendencias: tendencias, diasDeRanking: diasRanking.length,
     busquedasQueSuben: await busquedasQueSuben({ max: 15 }).catch(() => []) }
 }

@@ -28,3 +28,24 @@ test('panorama: las grandes a diario, las chicas cada 3 días', async () => {
   assert.equal(tocan.has(`C${DIARIAS + 1}`), true, 'chica leída hace 3 días: toca')
   assert.equal(tocan.has(`C${DIARIAS + 2}`), true, 'chica nunca leída: toca')
 })
+
+test('panorama: 404 o vacío = ML no lo publica; freno o error de red se reintenta', async () => {
+  const { noPublicado } = await import('../src/services/panoramaMl.js')
+  assert.equal(noPublicado({ error: '/trends/MLC/MLC440853 → 404: Not found public trends.' }, true), true)
+  assert.equal(noPublicado({ datos: [] }, true), true, 'respuesta vacía sin error')
+  assert.equal(noPublicado({ datos: [{ keyword: 'x' }] }, false), false)
+  assert.equal(noPublicado({ frenado: true, error: '429 Too Many Requests' }, true), false)
+  assert.equal(noPublicado({ error: 'ETIMEDOUT' }, true), false, 'red caída: no se marca')
+  assert.equal(noPublicado({ error: '500 Internal Server Error' }, true), false)
+})
+
+test('panorama: una categoría marcada sin dato no se pide hasta que vence la marca', async () => {
+  const { pedibles } = await import('../src/services/panoramaMl.js')
+  const ahora = new Date('2026-10-02T12:00:00Z')
+  const hojas = [
+    { id: 'A' },
+    { id: 'B', sinTendenciasHasta: new Date('2026-11-01') },
+    { id: 'C', sinTendenciasHasta: new Date('2026-09-30') },
+  ]
+  assert.deepEqual(pedibles(hojas, 'sinTendenciasHasta', ahora).map((h) => h.id), ['A', 'C'])
+})

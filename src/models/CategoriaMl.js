@@ -15,6 +15,11 @@ const schema = new mongoose.Schema({
   totalItems: { type: Number, default: null },
   // null = descubierta como hija pero todavía sin leer
   actualizadoEl: { type: Date, default: null },
+  // ML no publica ranking o tendencias en muchas categorías finales (404 "Not
+  // found public trends"): se anota hasta cuándo no volver a pedirlas, o la
+  // cola reintenta siempre las mismas y nunca llega a las que sí tienen
+  sinRankingHasta: { type: Date, default: null },
+  sinTendenciasHasta: { type: Date, default: null },
 }, { versionKey: false })
 schema.index({ hoja: 1, totalItems: -1 })
 schema.index({ actualizadoEl: 1 })
@@ -31,3 +36,14 @@ const tendenciaSchema = new mongoose.Schema({
 tendenciaSchema.index({ categoriaId: 1, dia: 1 }, { unique: true })
 tendenciaSchema.index({ dia: -1 })
 export const TendenciaCategoria = mongoose.model('TendenciaCategoria', tendenciaSchema)
+
+// El resultado de cada pasada del panorama. Vivía solo en la memoria del worker
+// y la API (proceso web) lo veía null: la traba de las tendencias (40 errores
+// 404 de 40 en cada pasada) solo se veía en el log. Se guarda dos semanas.
+const pasadaSchema = new mongoose.Schema({
+  en: { type: Date, required: true },
+  dia: { type: String, required: true },
+  resultado: { type: mongoose.Schema.Types.Mixed, default: {} },
+}, { versionKey: false })
+pasadaSchema.index({ en: 1 }, { expireAfterSeconds: 14 * 86400 })
+export const PasadaPanorama = mongoose.model('PasadaPanorama', pasadaSchema)
