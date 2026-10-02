@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, CalendarClock, Check, CircleDollarSign, ImageOff, Lightbulb, MousePointerClick, PencilLine, Search, ShieldAlert, ShoppingBag, Sparkles, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, CalendarClock, Check, CircleDollarSign, FileText, ImageOff, Lightbulb, MousePointerClick, PencilLine, Search, ShieldAlert, ShoppingBag, Sparkles, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
@@ -377,13 +377,47 @@ const ETAPA_TEXTO = { cotizando: 'Cotizando', pedido: 'Pedido', vendiendo: 'Vend
 // EL ESTADO DE LA COMPRA, A LA DERECHA Y SIEMPRE EN EL MISMO LUGAR: "no sé
 // cuáles estoy cotizando" fue el pedido que lo trajo a la fila. Escribe la
 // misma etapaCompra de siempre, así que Nichos y el radar lo ven igual.
+const enCotizacion = (o) => ['cotizando', 'pedido'].includes(o.etapaCompra)
+
 function EstadoCompra({ o, onRecargar }) {
-  const etapa = o.etapaCompra && !['evaluando', 'cotizando'].includes(o.etapaCompra) ? o.etapaCompra : null
+  // lo que está en cotización lo dice la franja de arriba, con su costo
+  if (enCotizacion(o)) return <span className="opt-compra" />
+  const etapa = o.etapaCompra && o.etapaCompra !== 'evaluando' ? o.etapaCompra : null
   const costo = costoCorto(o.cotizacion)
   return (
     <span className="opt-compra">
       {etapa ? <b className={`opt-etapa e-${etapa}`}>{ETAPA_TEXTO[etapa] ?? etapa}</b> : <MarcaCotizando o={o} onRecargar={onRecargar} />}
       {costo ? <small className={o.cotizacion?.costoPuestoClp != null ? 'real' : undefined}>{costo}</small> : null}
+    </span>
+  )
+}
+
+// LO QUE SE ESTÁ COTIZANDO SE VE DESDE LEJOS (2-oct-2026). La pastilla
+// "Cotizando" en la esquina se perdía: "que los identifique mejor el
+// contenedor, se ve bien chiquito". Ahora la tarjeta entera lleva borde y
+// franja azul con el costo, y desde la franja se quita la marca.
+function BandaCotizando({ o, onRecargar }) {
+  const pedido = o.etapaCompra === 'pedido'
+  const costo = costoCorto(o.cotizacion)
+  return (
+    <span className="opt-banda">
+      <FileText size={14} aria-hidden="true" />
+      <b>{pedido ? 'Pedido hecho' : 'En cotización'}</b>
+      {costo ? <span className={o.cotizacion?.costoPuestoClp != null ? 'real' : undefined}>{costo}</span> : <span className="falta">sin costo todavía</span>}
+      {pedido ? null : (
+        <button
+          type="button"
+          className="opt-banda-quitar"
+          title="Quitar la marca de cotizando"
+          onClick={async (e) => {
+            e.stopPropagation()
+            await api.ajustarNicho(o.nichoId, { etapaCompra: 'evaluando' })
+            onRecargar()
+          }}
+        >
+          quitar
+        </button>
+      )}
     </span>
   )
 }
@@ -424,7 +458,7 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
     <div
       role="button"
       tabIndex={0}
-      className={`opt m-${m.clase}${abierta ? ' abierta' : ''}`}
+      className={`opt m-${m.clase}${abierta ? ' abierta' : ''}${enCotizacion(o) ? ' cotizando' : ''}`}
       onClick={onAlternar}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return
@@ -432,6 +466,7 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
       }}
       aria-expanded={abierta}
     >
+      {enCotizacion(o) ? <BandaCotizando o={o} onRecargar={onRecargar} /> : null}
       <span className="opt-foto">
         {o.imagen ? <Miniatura src={o.imagen} lado={72} /> : <ImageOff size={20} aria-hidden="true" />}
         <i className="opt-rank">{rank}</i>
