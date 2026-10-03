@@ -145,7 +145,11 @@ export async function actualizarCostoAdsNicho({ ahora = new Date() } = {}) {
   const totalUnidades = ads.reduce((s, a) => s + a.unidades, 0)
   const base = cacDeCuenta({ medido: totalUnidades ? totalCosto / totalUnidades : null, unidades: totalUnidades })
 
-  const propios = await ProductoPropio.find({ nichoId: { $ne: null }, itemIdMl: { $ne: null } }).select('itemIdMl titulo nichoId').lean()
+  // el id de ML vive en itemIdMl o, en los propios importados, en el sku (igual
+  // que en actualizarAprendizajePublicidad)
+  const propios = (await ProductoPropio.find({ nichoId: { $ne: null } }).select('itemIdMl sku titulo nichoId').lean())
+    .map((p) => ({ ...p, itemIdMl: p.itemIdMl ?? p.sku }))
+    .filter((p) => p.itemIdMl)
   const nichos = new Map((await Nicho.find({ _id: { $in: propios.map((p) => p.nichoId) } }).select('keyword').lean()).map((n) => [String(n._id), n]))
   const curvas = new Map((await CurvaEstacional.find({ keyword: { $in: [...nichos.values()].map((n) => n.keyword) } }).select('keyword cpcUsd').lean()).map((c) => [c.keyword, c]))
   const presion = new Map()
