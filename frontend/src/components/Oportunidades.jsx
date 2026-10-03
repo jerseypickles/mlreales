@@ -315,6 +315,13 @@ function avisosDe(o, tendencia) {
     a.push({ id: 'ads', Icono: MousePointerClick, tono: 'aviso', corto: `Clic disputado en ML: ${pa.pctTopPaga}% del top paga publicidad`,
       ayuda: `De las publicaciones que ya rankean arriba, ${pa.pctTopPaga}% además paga anuncios, y hay ${pa.anunciantes} vendedores anunciando${pa.anunciantesOficiales ? ` (${pa.anunciantesOficiales} tiendas oficiales)` : ''}. Entrar sin historia acá significa pujar contra ellos por cada clic. Umbral inicial (${TOP_PAGA_DISPUTADO}%): se calibra con el costo por venta real de tus campañas.` })
   }
+  // el costo por venta aprendido (ml/costoAdsNicho.js): solo alerta cuando el
+  // modelo por nicho ya validó y este nicho sale bastante más caro que la base
+  const ca = o.costoAds
+  if (ca?.fuente === 'nicho' && ca.cac >= ca.base * 1.5) {
+    a.push({ id: 'cac', Icono: CircleDollarSign, tono: 'mal', corto: `Publicidad cara: ~${fmtPrecio(ca.cac)} por venta`,
+      ayuda: `Aprendido de tus campañas: en este nicho una venta por anuncio costaría ~${fmtPrecio(ca.cac)}, ${ca.factor}× lo que cuesta en tu cuenta (${fmtPrecio(ca.base)}). Ya está descontado del score.` })
+  }
   // el CPC solo se marca cuando es caro: la mediana de la mesa es US$0,13
   if (c?.cpcUsd >= CPC_CARO) a.push({ id: 'cpc', Icono: MousePointerClick, tono: 'aviso', corto: `Clic caro en Google · US$${c.cpcUsd}`, ayuda: `Un clic en Google cuesta US$${c.cpcUsd} en este nicho, contra US$0,13 de mediana. Entrar acá con publicidad sale caro.` })
   if (o.nivelBusqueda?.nivel === 'renombrar') {
@@ -503,7 +510,7 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
             {o.scansConDemanda}/{o.scansConDemanda + o.faltanScans}<small>scans</small>
           </span>
         ) : Number.isFinite(o.score) ? (
-          <span title={`Score ${o.score} de 100${o.dispersion != null ? ` · promedio de la serie de scans (se movió ${o.dispersion} puntos entre el más alto y el más bajo)` : ''}`}>
+          <span title={`Score ${o.score} de 100${o.dispersion != null ? ` · promedio de la serie de scans (se movió ${o.dispersion} puntos entre el más alto y el más bajo)` : ''}${o.costoAds?.ajusteScore ? ` · ${o.costoAds.ajusteScore > 0 ? '+' : ''}${o.costoAds.ajusteScore} por el costo de publicidad aprendido (~${fmtPrecio(o.costoAds.cac)} por venta en vez de $1.717 fijos; sin ajuste: ${o.scoreSinAjuste})` : ''}`}>
             <ScoreRing valor={o.score} size={46} grosor={4.5} />
           </span>
         ) : <em className="opt-nada">—</em>}
@@ -1123,6 +1130,13 @@ function ResumenNicho({ o, tendencia }) {
             </span>
           ) : <i>se mide desde el próximo scan</i>}
         </Hecho>
+        {o.costoAds ? (
+          <Hecho etiqueta="publicidad por venta">
+            <span title={`${o.costoAds.fuente === 'nicho' ? `Estimado para este nicho: la base de tu cuenta (${fmtPrecio(o.costoAds.base)}) × ${o.costoAds.factor} según ${o.costoAds.variable === 'cpcGoogle' ? 'el costo del clic en Google' : 'la parte del top que paga publicidad'}.` : o.costoAds.fuente === 'cuenta' ? 'Medido en tu cuenta (gasto / ventas por anuncio, 90 días), mezclado con el fijo de agosto según la evidencia.' : 'Costo fijo de agosto: todavía sin medición propia.'}${o.costoAds.sombra != null ? ` En sombra, el modelo por nicho diría ${fmtPrecio(o.costoAds.sombra)} (todavía no valida: ${o.costoAds.modelo === 'pocos-casos' ? 'faltan productos propios con publicidad en nichos distintos' : 'no predice mejor que la base'}).` : ''}${o.costoAds.ajusteScore ? ` Contra los $1.717 fijos, el score se movió ${o.costoAds.ajusteScore > 0 ? '+' : ''}${o.costoAds.ajusteScore}.` : ''}`}>
+              ~{fmtPrecio(o.costoAds.cac)}<i> · {o.costoAds.fuente === 'nicho' ? 'de este nicho' : o.costoAds.fuente === 'cuenta' ? 'de tu cuenta' : 'fijo'}{o.costoAds.sombra != null ? ` · sombra ${fmtPrecio(o.costoAds.sombra)}` : ''}</i>
+            </span>
+          </Hecho>
+        ) : null}
         <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
         {/* un pct alto de "últimas unidades" no es riesgo: es un nicho
             desabastecido, o sea una ventana para quien trae stock */}

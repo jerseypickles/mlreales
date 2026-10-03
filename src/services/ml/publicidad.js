@@ -166,6 +166,14 @@ export async function actualizarAprendizajePublicidad({ ahora = new Date() } = {
     console.warn(`[ml-publicidad] economía por precio no calculada: ${err.message}`)
   }
   parametros.ticket = ticket
+  // el costo por venta de cada nicho, cruzando los anuncios propios con las
+  // señales de su nicho (ml/costoAdsNicho.js)
+  try {
+    const { actualizarCostoAdsNicho } = await import('./costoAdsNicho.js')
+    await actualizarCostoAdsNicho({ ahora })
+  } catch (err) {
+    console.warn(`[ml-publicidad] costo por nicho no calculado: ${err.message}`)
+  }
   await AprendizajePublicidad.updateOne({ dia }, { $set: { parametros, porProducto, efecto, calculadoEl: ahora } }, { upsert: true })
   cache = null
   console.log(`[ml-publicidad] ${parametros.productosConMuestra}/${parametros.productos} anuncios con muestra · ROAS mediana ${parametros.roas.mediana}x (p75 ${parametros.roas.p75}x) · venta por anuncio $${parametros.costoPorVenta.mediana} · envío real ${parametros.factorEnvio}× la base`)

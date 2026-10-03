@@ -190,6 +190,16 @@ router.post('/publicidad', async (_req, res) => {
   const { actualizarAprendizajePublicidad } = await import('../../services/ml/publicidad.js')
   res.json(await actualizarAprendizajePublicidad())
 })
+// lo que cuesta una venta por publicidad: base de la cuenta, pares producto ↔
+// nicho y el modelo por nicho (en sombra hasta validar); POST lo recalcula
+router.get('/costo-ads', async (_req, res) => {
+  const { leccionCostoAds } = await import('../../services/ml/costoAdsNicho.js')
+  res.json((await leccionCostoAds()) ?? { estado: 'sin-calcular' })
+})
+router.post('/costo-ads', async (_req, res) => {
+  const { actualizarCostoAdsNicho } = await import('../../services/ml/costoAdsNicho.js')
+  res.json(await actualizarCostoAdsNicho())
+})
 router.get('/fuentes-radar', async (_req, res) => {
   const { fuentesDelRadar } = await import('../../services/ml/fuentesRadar.js')
   res.json(await fuentesDelRadar())

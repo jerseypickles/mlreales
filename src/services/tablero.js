@@ -648,6 +648,29 @@ export async function tableroOportunidades({ todos = false } = {}) {
     })
   }
 
+  // LO QUE CUESTA UNA VENTA POR PUBLICIDAD EN CADA NICHO (ml/costoAdsNicho.js).
+  // El score guardado en cada scan cobra el CAC fijo de agosto ($1.717); acá se
+  // corrige con el costo medido en la cuenta y, cuando el modelo valida, con el
+  // de cada nicho. Se ajusta el NIVEL al leer y no la fórmula de cada scan: la
+  // serie exige una sola fórmula. El score sin ajuste queda a la vista.
+  try {
+    const { leccionCostoAds, cacDeNicho, ajusteScore } = await import('./ml/costoAdsNicho.js')
+    const leccion = await leccionCostoAds()
+    if (leccion) {
+      for (const o of oportunidades) {
+        const c = cacDeNicho({ cpcGoogle: o.curvaAnual?.cpcUsd, pctTopPaga: o.presionAds?.pctTopPaga }, leccion)
+        const ajuste = Number.isFinite(o.score) ? ajusteScore({ mediana: o.mediana, comisionPct: o.comisionMlPct, cac: c.cac }) : 0
+        o.costoAds = { ...c, ajusteScore: ajuste, modelo: leccion.modelo?.estado ?? null }
+        if (ajuste) {
+          o.scoreSinAjuste = o.score
+          o.score = Math.max(0, Math.min(100, o.score + ajuste))
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[tablero] costo de publicidad por nicho no aplicado: ${err.message}`)
+  }
+
   oportunidades.sort(
     (a, b) => (b.score ?? -1) - (a.score ?? -1) || (b.ventasDia ?? 0) - (a.ventasDia ?? 0),
   )
