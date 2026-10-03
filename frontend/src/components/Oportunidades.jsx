@@ -254,6 +254,15 @@ function MarcaCotizando({ o, onRecargar }) {
 // panel las lista enteras. `soloPanel` es contexto que no cambia la decisión de
 // abrir la tarjeta (el tramo bueno, una medición más amplia).
 const ORDEN_TONO = { mal: 0, aviso: 1, bien: 2, info: 3 }
+
+// LA VARA DE BÚSQUEDA (2-oct-2026, decisión del importador): el radar ya no
+// propone nichos nuevos bajo 5.000 búsquedas al mes. Los que ya existen no se
+// borran —Google subestima lo que se compra dentro de ML: la pistola de juguete
+// mide 1.600 y vendía 22 u en 30 días—, llevan esta alerta y él decide.
+const VARA_BUSQUEDAS = 5000
+// umbral INICIAL de clic disputado: falta calibrarlo contra el costo por venta
+// real de las campañas propias (con los productos nuevos de octubre)
+const TOP_PAGA_DISPUTADO = 50
 function avisosDe(o, tendencia) {
   const a = []
   const c = o.curvaAnual
@@ -297,6 +306,15 @@ function avisosDe(o, tendencia) {
   // lo que despega. "Estable" es el caso normal y no informa.
   const salud = chipSalud(c)
   if (salud) a.push({ id: 'salud', Icono: salud.clase === 'bien' ? ArrowUpRight : ArrowDownRight, tono: salud.clase === 'bien' ? 'bien' : salud.clase, corto: `Google: ${salud.texto}`, ayuda: salud.ayuda })
+  if (Number.isFinite(c?.busquedasMes) && c.busquedasMes < VARA_BUSQUEDAS) {
+    a.push({ id: 'vara', Icono: Search, tono: 'aviso', corto: `Bajo la vara: ${fmtNum(c.busquedasMes)} búsquedas/mes (mínimo ${fmtNum(VARA_BUSQUEDAS)})`,
+      ayuda: `Tu vara para nichos nuevos es ${fmtNum(VARA_BUSQUEDAS)} búsquedas al mes en Google Chile: bajo eso el mercado es chico para repartir y entrar sin historia depende de publicidad. No lo descarta solo: hay productos que se compran dentro de ML sin googlearlos (mira "convierte" en las cifras).` })
+  }
+  const pa = o.presionAds
+  if (pa?.pctTopPaga >= TOP_PAGA_DISPUTADO) {
+    a.push({ id: 'ads', Icono: MousePointerClick, tono: 'aviso', corto: `Clic disputado en ML: ${pa.pctTopPaga}% del top paga publicidad`,
+      ayuda: `De las publicaciones que ya rankean arriba, ${pa.pctTopPaga}% además paga anuncios, y hay ${pa.anunciantes} vendedores anunciando${pa.anunciantesOficiales ? ` (${pa.anunciantesOficiales} tiendas oficiales)` : ''}. Entrar sin historia acá significa pujar contra ellos por cada clic. Umbral inicial (${TOP_PAGA_DISPUTADO}%): se calibra con el costo por venta real de tus campañas.` })
+  }
   // el CPC solo se marca cuando es caro: la mediana de la mesa es US$0,13
   if (c?.cpcUsd >= CPC_CARO) a.push({ id: 'cpc', Icono: MousePointerClick, tono: 'aviso', corto: `Clic caro en Google · US$${c.cpcUsd}`, ayuda: `Un clic en Google cuesta US$${c.cpcUsd} en este nicho, contra US$0,13 de mediana. Entrar acá con publicidad sale caro.` })
   if (o.nivelBusqueda?.nivel === 'renombrar') {
@@ -949,6 +967,7 @@ const GRUPOS_OP = [
 ]
 
 const FILTROS = [
+  ['vara', `Sobre ${fmtNum(VARA_BUSQUEDAS)} búsquedas`, (o) => (o.curvaAnual?.busquedasMes ?? 0) >= VARA_BUSQUEDAS],
   ['buscados', 'Búsqueda alta', (o) => o.nivelBusqueda?.nivel === 'alto'],
   ['confirmados', 'Confirmados', (o) => o.confirmacion === 'confirmado'],
   ['cotizando', 'En cotización', (o) => ['cotizando', 'pedido'].includes(o.etapaCompra)],
@@ -1097,6 +1116,13 @@ function ResumenNicho({ o, tendencia }) {
         ) : null}
         {o.conversion?.factor ? <Hecho etiqueta="convierte"><Conversion c={o.conversion} /></Hecho> : null}
         <Hecho etiqueta="Full">{o.pctFull != null ? `${Math.round(o.pctFull)}% del top` : null}</Hecho>
+        <Hecho etiqueta="publicidad en ML">
+          {o.presionAds ? (
+            <span title={`Del top orgánico con dato (${o.presionAds.topConDato}), ${o.presionAds.pctTopPaga}% además paga anuncios. ${o.presionAds.anunciantes} vendedores distintos anuncian en el listado${o.presionAds.anunciantesOficiales ? `, ${o.presionAds.anunciantesOficiales} de ellos tiendas oficiales` : ''}; ${o.presionAds.anunciosPuros} anuncios pagan sin rankear.`}>
+              {o.presionAds.pctTopPaga != null ? `${o.presionAds.pctTopPaga}% del top paga` : '—'}<i> · {o.presionAds.anunciantes} anunciantes</i>
+            </span>
+          ) : <i>se mide desde el próximo scan</i>}
+        </Hecho>
         <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
         {/* un pct alto de "últimas unidades" no es riesgo: es un nicho
             desabastecido, o sea una ventana para quien trae stock */}

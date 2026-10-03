@@ -22,6 +22,13 @@ const URL_TRENDS = 'https://api.dataforseo.com/v3/keywords_data/google_trends/ex
 // por gusto: es el piso donde el volumen deja de sostener una compra.
 export const VOLUMEN_MINIMO = 200
 
+// LA VARA DEL RADAR (2-oct-2026, decisión del importador): un nicho NUEVO se
+// propone solo desde 5.000 búsquedas al mes. Bajo eso el mercado es chico para
+// repartir y, sin historia propia, la entrada depende de publicidad. Aplica a
+// lo que el radar propone, no a VOLUMEN_MINIMO (que sigue decidiendo cuándo
+// buscar variantes) ni a los nichos que ya existen: esos llevan una alerta.
+export const RADAR_BUSQUEDAS_MINIMAS = 5000
+
 // LA FAMILIA, NO LA FRASE MÁS LARGA.
 //
 // Google Ads mide frases exactas, y una específica puede ser cola larga aunque
@@ -163,7 +170,10 @@ async function serieTrends(keyword, { locationCode = CHILE, desde = '2021-08-01'
 // Mide una tanda de candidatas: volumen en UNA llamada (el precio es por
 // request, no por keyword) y crecimiento en una consulta por candidata, solo
 // para las que pasaron el piso de volumen.
-export async function medirAtractivo(keywords, { conCrecimiento = true, buscarVariantes = true } = {}) {
+// `variantesBajo`: bajo qué volumen se pregunta cómo se llama de verdad. El
+// radar lo sube a su vara: una frase de 1.000 puede ser la variante larga de
+// una familia de 10.000, y descartarla sin preguntar perdía el nicho.
+export async function medirAtractivo(keywords, { conCrecimiento = true, buscarVariantes = true, variantesBajo = VOLUMEN_MINIMO } = {}) {
   const lista = [...new Set((keywords ?? []).filter(Boolean))]
   if (!lista.length) return []
 
@@ -268,7 +278,7 @@ export async function medirAtractivo(keywords, { conCrecimiento = true, buscarVa
     }
     // sin dato exacto o bajo el piso: preguntar CÓMO SE LLAMA de verdad antes
     // de descartar. Se reportan como sugerencia, jamás se aplican solas.
-    if (buscarVariantes && (fila.sinDatoExacto || !fila.suficiente)) {
+    if (buscarVariantes && (fila.sinDatoExacto || !fila.suficiente || fila.volumen < variantesBajo)) {
       // si la semilla está muerta, Google tampoco genera ideas a partir de
       // ella (medido: "scooter niño" no expande nada). Se reintenta desde la
       // FAMILIA, que sí tiene vida, y el filtro sigue exigiendo que la variante

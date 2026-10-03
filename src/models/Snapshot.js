@@ -44,6 +44,8 @@ const snapshotSchema = new mongoose.Schema({
   posicion: Number,
   // la posición es pagada (anuncio) u orgánica; null = proveedor que no lo dice
   esAnuncio: Boolean,
+  // paga publicidad (pura o además orgánica); null = scan sin el dato
+  pagaPublicidad: Boolean,
   keyword: String,
   // ids de las preguntas visibles en la página (nivel 2): el diff entre scans
   // cuenta preguntas NUEVAS reales — segundo proxy de demanda, independiente

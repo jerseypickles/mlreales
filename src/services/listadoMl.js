@@ -268,6 +268,11 @@ export function aItemBusqueda(tarjeta, telemetria, { keyword, domainCode = 'CL',
 
     // --- campos nuevos, que ningún actor daba
     esAnuncio,
+    // PAGA PUBLICIDAD, rankee o no (2-oct-2026). `esAnuncio` marca solo al que
+    // paga y NO rankea; el que hace las dos cosas también puja por el clic. La
+    // cuenta de los que pagan es la presión publicitaria del nicho: lo que
+    // costará el clic al entrar sin historia. null = sin telemetría.
+    pagaPublicidad: telemetria ? Boolean(telemetria.tienePad) : String(meta.is_pad) === 'true' ? true : null,
     catalogId: meta.product_id ?? null,
     userProductId: meta.user_product_id ?? null,
     itemId: meta.id ?? null,

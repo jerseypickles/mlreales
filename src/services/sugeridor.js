@@ -78,6 +78,7 @@ Propones keywords de búsqueda para nichos que valga la pena INVESTIGAR con dato
 - El lead time es ELIMINATORIO Y YA VIENE CALCULADO. En cada pasada te paso el CALENDARIO DE IMPORTACIÓN con la fecha exacta de hoy: qué temporadas se alcanzan pagando ahora, cuáles ya no, y cuáles todavía no toca. NO saques tú la cuenta de los días ni de los meses — la regla vieja ("2,5 meses") dejaba pasar Navidad en septiembre, cuando el contenedor entra a mitad de noviembre o en diciembre y la temporada se acaba el 24. Un estacional SOLO puede pertenecer a una temporada que el calendario marque A TIEMPO o JUSTO. Las que dicen YA NO SE ALCANZAN o TODAVÍA NO TOCA están prohibidas, por buena que parezca la idea. Los nichos todo_el_año no tienen esta restricción.
 - Productos importables: livianos o de volumen razonable, ticket hasta $60.000 CLP; el piso lo fijan los CRITERIOS DEL IMPORTADOR, y la ECONOMÍA POR PRECIO de lo aprendido muestra con ventas reales por qué (comisión y publicidad son % del precio, el envío es fijo, y en $19.990-$24.990 salta). Prefiere lo que entra sin trámites, pero una oportunidad fuerte con certificación SEC (eléctricos 220V) o registro ISP (cosméticos) SÍ se puede proponer — deja el trámite explícito en el campo riesgo. Evita solo alimentos.
 - Tendencias de producto que ya se ven en otros mercados y llegan a Chile con rezago.
+- VOLUMEN: el importador fijó la vara en 5.000 búsquedas al mes en Google Chile. Propón productos de mercado masivo, con la frase como la escribe la gente (familia de producto, no la variante larga): lo que se mida bajo esa vara se descarta solo antes de abrirse.
 - La MARCA DOMINANTE NO VETA un nicho. Lo dice el criterio del importador y está probado: entró a brochas con 63% de Full y marcas arriba, y vende 35 u/semana ganando por precio ($2.690 contra una mediana de $7.364). La publicidad compra la posición que no se gana orgánicamente, y no todo Chile compra por logo — mucha gente busca lo económico que funcione. Lo que sí importa es que el producto se pueda diferenciar con ficha y fotos propias, y que el ticket aguante el CAC. Belleza y cuidado personal genéricos valen: ya vendió cosmético genérico y sabe tramitar el ISP.
 
 APRENDE DEL HISTORIAL del importador (te lo paso con resultados):
@@ -290,17 +291,18 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   }
 
   try {
-    const { medirAtractivo } = await import('./atractivoNicho.js')
+    const { medirAtractivo, RADAR_BUSQUEDAS_MINIMAS } = await import('./atractivoNicho.js')
     const sugerencias = datos?.sugerencias ?? []
-    const medidas = await medirAtractivo(sugerencias.map((s) => s.keyword))
+    const medidas = await medirAtractivo(sugerencias.map((s) => s.keyword), { variantesBajo: RADAR_BUSQUEDAS_MINIMAS })
     const porKeyword = new Map(medidas.map((m) => [m.keyword, m]))
+    const alcanza = (m) => m.suficiente && (m.volumen ?? 0) >= RADAR_BUSQUEDAS_MINIMAS
     datos.sugerencias = sugerencias
       .map((s) => ({ ...s, atractivo: porKeyword.get(s.keyword) ?? null }))
-      .filter((s) => !s.atractivo || s.atractivo.suficiente)
+      .filter((s) => !s.atractivo || alcanza(s.atractivo))
       .sort((a, b) => (b.atractivo?.volumen ?? 0) * (b.atractivo?.crecimiento === 'crece' ? 1.35 : 1)
         - (a.atractivo?.volumen ?? 0) * (a.atractivo?.crecimiento === 'crece' ? 1.35 : 1))
     datos.descartadasPorVolumen = medidas
-      .filter((m) => !m.suficiente)
+      .filter((m) => !alcanza(m))
       .map((m) => ({ keyword: m.keyword, volumen: m.volumen }))
   } catch (err) {
     // sin medición el radar sigue proponiendo como antes: mejor a ciegas que detenido

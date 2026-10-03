@@ -381,6 +381,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         precios: preciosDe(met?.precio),
         vendidosHistoricos: met?.vendidosHistoricos ?? null,
         profundidadStock: met?.profundidadStock ?? null,
+        presionAds: met?.publicidad ?? null,
         pctFull: met?.competencia?.pctFull ?? null,
         pctCatalogo: met?.competencia?.pctCatalogo ?? null,
         pctCrossBorder: met?.competencia?.pctCrossBorder ?? null,
@@ -569,6 +570,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
       vendidosHistoricos: ultimo?.metricas?.vendidosHistoricos ?? null,
       // qué parte del top está por agotarse, y quién despacha desde el extranjero
       profundidadStock: ultimo?.metricas?.profundidadStock ?? null,
+      // cuánto se puja por el clic en el listado (null en scans viejos)
+      presionAds: ultimo?.metricas?.publicidad ?? null,
       pctCrossBorder: ultimo?.metricas?.competencia?.pctCrossBorder ?? null,
       origenesCrossBorder: ultimo?.metricas?.competencia?.origenesCrossBorder ?? null,
       // {publicaciones, activas, unidades30d} si ya tengo listing en este nicho

@@ -197,6 +197,8 @@ export function normalizarItemBusqueda(raw, { fecha, keyword, posicionGlobal } =
     // anuncio y otra orgánico—. Sin este campo la métrica de posición mezcla
     // ranking real con publicidad comprada. Ningún actor lo entregaba.
     esAnuncio: raw.esAnuncio === true ? true : raw.esAnuncio === false ? false : null,
+    // paga publicidad aunque además rankee: la presión publicitaria del nicho
+    pagaPublicidad: raw.pagaPublicidad === true ? true : raw.pagaPublicidad === false ? false : null,
     keyword: kw,
   }
 

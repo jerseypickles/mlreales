@@ -823,12 +823,44 @@ export function calcularMetricas({
     vendidosHistoricos: vendidosHist,
     // cuánto le queda a la competencia: la otra cara del vendidosHistoricos
     profundidadStock: profundidadStock(top),
+    // cuánto se puja por el clic: lo que costará entrar sin historia
+    publicidad: presionPublicitaria(snapshots, top, productosPorSku),
     demanda, // null mientras el detalle no traiga conteo de reseñas suficiente
     oportunidad, // { score, componentes } | null
     scoreOportunidad: oportunidad?.score ?? null,
     // por qué este scan no tiene score: para que la mesa lo diga en vez de
     // mostrar un hueco, y para poder auditar después cuántos scans se perdieron
     ...(detalleLlego ? {} : { sinScore: 'detalle bloqueado por ML: sin cobertura de reseñas' }),
+  }
+}
+
+// LA PRESIÓN PUBLICITARIA DEL NICHO (2-oct-2026). Pedido del importador: el
+// radar lanzaba nichos por volumen de búsqueda, pero entrar sin historia en uno
+// donde todos pujan cuesta PPC sin impresiones orgánicas. Hasta acá el costo de
+// publicidad era un CAC fijo ($1.717) igual para todos los nichos.
+//
+// El volumen solo no encarece el clic: más búsquedas son más impresiones. Lo que
+// lo encarece es cuántos vendedores pujan. Se mide en el mismo listado:
+//   · qué parte del top ORGÁNICO además paga publicidad (los que ya rankean y
+//     igual compran posición: el clic está disputado)
+//   · cuántos vendedores distintos anuncian, y cuántos son tiendas oficiales
+//   · los anuncios puros (pagan y no rankean)
+// Pura. null en scans sin el dato (antes del 2-oct-2026, o Apify).
+export function presionPublicitaria(snapshots, top, productosPorSku = new Map()) {
+  const conDato = (snapshots ?? []).filter((s) => s.pagaPublicidad != null)
+  if (!conDato.length) return null
+  const topConDato = (top ?? []).filter((s) => s.pagaPublicidad != null)
+  const pagan = conDato.filter((s) => s.pagaPublicidad)
+  const vendedor = (s) => productosPorSku.get(s.sku)?.vendedor ?? null
+  const anunciantes = new Set(pagan.map(vendedor).filter(Boolean))
+  const oficiales = new Set(pagan.filter((s) => productosPorSku.get(s.sku)?.esTiendaOficial).map(vendedor).filter(Boolean))
+  return {
+    pctTopPaga: topConDato.length ? redondear((topConDato.filter((s) => s.pagaPublicidad).length / topConDato.length) * 100, 0) : null,
+    topConDato: topConDato.length,
+    anunciantes: anunciantes.size,
+    anunciantesOficiales: oficiales.size,
+    anunciosPuros: conDato.filter((s) => s.esAnuncio === true).length,
+    itemsConDato: conDato.length,
   }
 }
 
