@@ -131,6 +131,13 @@ export async function registrarProgramados() {
     { pattern: process.env.TIENDAS_CRON || '5 10 * * *', tz: 'America/Santiago' },
     { name: 'tiendas-ganadoras', data: {} },
   )
+  // ¿se vende hoy en ML? ranking de la semana + baja de stock, por nicho
+  // (services/demandaActualMl.js). Después del ranking diario y del stock
+  await colas.tendencias.upsertJobScheduler(
+    'demanda-ml',
+    { pattern: process.env.DEMANDA_ML_CRON || '30 12 * * *', tz: 'America/Santiago' },
+    { name: 'demanda-ml', data: {} },
+  )
   // el vigía de mejoras: nichos mal medidos → nombre chileno sugerido
   await colas.tendencias.upsertJobScheduler(
     'vigia-mejoras',

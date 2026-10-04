@@ -25,6 +25,9 @@ const nichoSchema = new mongoose.Schema({
   // {nivel: alto|medio|bajo|nulo, puntaje, prefijo, posicion, deCuantas,
   //  seEscribe, derivadas, alternativas, medidoEl}
   nivelBusqueda: { type: mongoose.Schema.Types.Mixed, default: null },
+  // ¿se vende HOY en ML? ranking de más vendidos de la semana y baja de stock
+  // de competidores (services/demandaActualMl.js), medido a diario
+  demandaMl: { type: mongoose.Schema.Types.Mixed, default: null },
   // si origen='jugada': {nichoId, keyword, generadoEl} del nicho padre
   jugadaDe: { type: mongoose.Schema.Types.Mixed, default: null },
   // keywords con las que el usuario marcó "mantener aparte": el agrupador de

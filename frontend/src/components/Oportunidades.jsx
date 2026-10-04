@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, CalendarClock, Check, CircleDollarSign, FileText, ImageOff, Lightbulb, MousePointerClick, PencilLine, Search, ShieldAlert, ShoppingBag, Sparkles, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarClock, Check, CircleDollarSign, FileText, ImageOff, Lightbulb, MousePointerClick, PencilLine, Search, ShieldAlert, ShoppingBag, Sparkles, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
@@ -309,6 +309,12 @@ function avisosDe(o, tendencia) {
   if (Number.isFinite(c?.busquedasMes) && c.busquedasMes < VARA_BUSQUEDAS) {
     a.push({ id: 'vara', Icono: Search, tono: 'aviso', corto: `Bajo la vara: ${fmtNum(c.busquedasMes)} búsquedas/mes (mínimo ${fmtNum(VARA_BUSQUEDAS)})`,
       ayuda: `Tu vara para nichos nuevos es ${fmtNum(VARA_BUSQUEDAS)} búsquedas al mes en Google Chile: bajo eso el mercado es chico para repartir y entrar sin historia depende de publicidad. No lo descarta solo: hay productos que se compran dentro de ML sin googlearlos (mira "convierte" en las cifras).` })
+  }
+  // ¿se vende HOY en ML? (services/demandaActualMl.js) Solo nichos abiertos
+  // desde la regla del 4-oct y con 2 semanas para mostrarlo
+  if (o.sinDemandaActual) {
+    a.push({ id: 'muerto', Icono: AlertTriangle, tono: 'mal', corto: 'Sin demanda actual en ML',
+      ayuda: 'En 2 semanas ningún producto del nicho apareció en el ranking de más vendidos de su categoría y ningún competidor seguido bajó stock. Puede tener búsquedas en Google, pero en Mercado Libre no se ve venta hoy: riesgo de producto sin impresiones.' })
   }
   const pa = o.presionAds
   if (pa?.pctTopPaga >= TOP_PAGA_DISPUTADO) {
@@ -1137,6 +1143,14 @@ function ResumenNicho({ o, tendencia }) {
             </span>
           </Hecho>
         ) : null}
+        <Hecho etiqueta="se vende hoy en ML">
+          {o.demandaMl ? (
+            <span title={`Últimos ${o.demandaMl.ventanaDias ?? 7} días. Ranking: productos del nicho que aparecieron en el ranking oficial de más vendidos de su categoría. Stock: competidores seguidos que bajaron stock (venta real entre dos lecturas). El "top vendió X" no entra: es un acumulado sin fecha.`}>
+              {o.demandaMl.hayDemanda ? 'sí' : 'no se ve'}
+              <i> · {o.demandaMl.ranking?.productos ?? 0} en el ranking{o.demandaMl.ranking?.mejorPuesto ? ` (mejor #${o.demandaMl.ranking.mejorPuesto})` : ''}{o.demandaMl.stock ? ` · ${o.demandaMl.stock.vendiendo} de ${o.demandaMl.stock.seguidos} bajan stock` : ''}</i>
+            </span>
+          ) : <i>se mide a diario desde hoy</i>}
+        </Hecho>
         <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
         {/* un pct alto de "últimas unidades" no es riesgo: es un nicho
             desabastecido, o sea una ventana para quien trae stock */}

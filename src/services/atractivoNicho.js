@@ -28,6 +28,10 @@ export const VOLUMEN_MINIMO = 200
 // lo que el radar propone, no a VOLUMEN_MINIMO (que sigue decidiendo cuándo
 // buscar variantes) ni a los nichos que ya existen: esos llevan una alerta.
 export const RADAR_BUSQUEDAS_MINIMAS = 5000
+// Desde aquí Google basta: medido el 4-oct sobre 116 nichos, sobre 15.000
+// búsquedas el 90% está en la cima del autocompletado de ML. Entre 5.000 y
+// 15.000 es zona gris (~7 de 10): ahí el autocompletado tiene que confirmar.
+export const RADAR_BUSQUEDAS_DIRECTO = 15000
 
 // LA FAMILIA, NO LA FRASE MÁS LARGA.
 //

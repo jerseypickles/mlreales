@@ -15,6 +15,7 @@ import { calcularMargen } from './margen.js'
 import { comisionMlExacta, categoriaDominante } from './comisionesMl.js'
 import { topSkusPorKeyword, agruparFamilias } from './familias.js'
 import { puntajeBusqueda, explicar } from './nivelBusqueda.js'
+import { sinDemandaActual } from './demandaActualMl.js'
 import { ventanaDeCompra } from './ventana.js'
 
 // Margen estimado si compras al EXW que cotizó el proveedor, con los mismos
@@ -225,6 +226,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         serieScore: 1,
         nivelBusqueda: 1,
         creadoEl: 1, // la mesa marca los recién descubiertos
+        demandaMl: 1,
         origen: 1,
         jugadaDe: 1,
         familiaAparte: 1,
@@ -372,6 +374,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
         keyword: n.keyword,
         imagen: fotoDe(n),
         creadoEl: n.creadoEl ?? null,
+        demandaMl: n.demandaMl ?? null,
+        sinDemandaActual: sinDemandaActual(n),
         midiendo: true,
         scansConDemanda: scans,
         faltanScans: Math.max(0, config.maduracionScans - scans),
@@ -579,6 +583,8 @@ export async function tableroOportunidades({ todos = false } = {}) {
       // cuándo lo descubrió el radar: la mesa marca los recién llegados para
       // que no se pierdan entre 44 filas que ya estaban ahí ayer
       creadoEl: n.creadoEl ?? null,
+      demandaMl: n.demandaMl ?? null,
+      sinDemandaActual: sinDemandaActual(n),
       titular: rec.titular ?? null,
       // ropa: la tabla del proveedor llevada a talla chilena por cm
       tallas: n.tablaTallasProveedor?.length ? equivalenciaChilena(n.tablaTallasProveedor) : null,

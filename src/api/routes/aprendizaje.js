@@ -200,6 +200,12 @@ router.post('/costo-ads', async (_req, res) => {
   const { actualizarCostoAdsNicho } = await import('../../services/ml/costoAdsNicho.js')
   res.json(await actualizarCostoAdsNicho())
 })
+// ¿se vende hoy en ML? por nicho (ranking de la semana + baja de stock); corre
+// a diario a las 12:30 y POST lo mide ya
+router.post('/demanda-ml', async (_req, res) => {
+  const { medirDemandaActual } = await import('../../services/demandaActualMl.js')
+  res.json(await medirDemandaActual())
+})
 router.get('/fuentes-radar', async (_req, res) => {
   const { fuentesDelRadar } = await import('../../services/ml/fuentesRadar.js')
   res.json(await fuentesDelRadar())
