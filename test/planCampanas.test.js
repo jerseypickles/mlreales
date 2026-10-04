@@ -320,14 +320,45 @@ test('ctrDeCuenta: mediana del CTR de la historia de cada producto con muestra',
   assert.deepEqual(ctrDeCuenta(filas), { ctr: 0.3, productos: 3 })
 })
 
-test('clic: si toda la cuenta cayó igual en las mismas fechas, es el mercado y no el anuncio', async () => {
+test('clic: si los demás productos, cada uno contra sí mismo, cayeron igual, es el mercado', async () => {
   const { diagnosticoClic } = await import('../src/services/ml/planCampanas.js')
-  const fecha = (i) => new Date(Date.UTC(2026, 8, 1) + i * 86400e3).toISOString().slice(0, 10)
-  const dias = Array.from({ length: 35 }, (_, i) => ({ dia: fecha(i), prints: 3000, clicks: i < 28 ? 21 : 6 }))
-  // la cuenta: 0,7% → 0,25% en las mismas fechas
-  const cuenta = new Map(dias.map((d, i) => [d.dia, { prints: 10000, clicks: i < 28 ? 70 : 25 }]))
-  assert.equal(diagnosticoClic(dias, 0.3, cuenta).estado, 'cayo-con-la-cuenta')
-  // la cuenta estable: la caída es del anuncio
-  const estable = new Map(dias.map((d) => [d.dia, { prints: 10000, clicks: 70 }]))
-  assert.equal(diagnosticoClic(dias, 0.3, estable).estado, 'cayo')
+  const dias = Array.from({ length: 35 }, (_, i) => ({ dia: `d${i}`, prints: 3000, clicks: i < 28 ? 21 : 6, gasto: i < 28 ? 2100 : 600 }))
+  assert.equal(diagnosticoClic(dias, 0.3, { relMediana: 0.35, ctr7Mediana: 0.2 }).estado, 'cayo-con-el-mercado')
+  assert.equal(diagnosticoClic(dias, 0.3, { relMediana: 1, ctr7Mediana: 0.5 }).estado, 'cayo', 'los demás estables: es el anuncio')
+})
+
+test('clic: el CTR cae y el clic se abarató mucho → es la puja (ubicaciones más baratas), no el anuncio', async () => {
+  const { diagnosticoClic } = await import('../src/services/ml/planCampanas.js')
+  // CPC $117 → $62, como el Set 10 en septiembre
+  const dias = Array.from({ length: 35 }, (_, i) => i < 28
+    ? { dia: `d${i}`, prints: 3000, clicks: 12, gasto: 12 * 117 }
+    : { dia: `d${i}`, prints: 3000, clicks: 3, gasto: 3 * 62 })
+  const c = diagnosticoClic(dias, 0.3, { relMediana: 1, ctr7Mediana: 0.3 })
+  assert.equal(c.estado, 'cayo-por-puja')
+  assert.equal(c.cpcPrevio, 117)
+  assert.equal(c.cpc7, 62)
+})
+
+test('mercadoPara: cada producto contra sí mismo, sin contarse a sí mismo', async () => {
+  const { mercadoPara } = await import('../src/services/ml/planCampanas.js')
+  const v = (ctrPrevio, ctr7) => ({ prints7: 20000, ctrPrevio, ctr7 })
+  const m = mercadoPara('a', new Map([['a', v(1, 0.1)], ['b', v(0.8, 0.4)], ['c', v(0.3, 0.18)], ['d', v(0.2, 0.1)]]))
+  assert.equal(m.relMediana, 0.5)
+  assert.equal(m.productos, 3)
+})
+
+test('clic de la cuenta: si sale un producto de clic alto, el bruto cae y el de mezcla constante no', async () => {
+  const { clicPorSemana } = await import('../src/services/ml/planCampanas.js')
+  const semana = (lunes, p, c) => Array.from({ length: 7 }, (_, i) => ({ dia: new Date(Date.parse(`${lunes}T12:00:00Z`) + i * 86400e3).toISOString().slice(0, 10), prints: p / 7, clicks: c / 7 }))
+  const porProducto = [
+    // alto: 1% de CTR, se queda sin stock la segunda semana
+    { itemId: 'alto', titulo: 'Brochas Set 9', dias: semana('2026-08-03', 10000, 100) },
+    // bajo: 0,2% las dos semanas
+    { itemId: 'bajo', titulo: 'Brochas Set 10', dias: [...semana('2026-08-03', 10000, 20), ...semana('2026-08-10', 20000, 40)] },
+  ]
+  const [s1, s2] = clicPorSemana(porProducto)
+  assert.equal(s1.ctrBruto, 0.6)
+  assert.equal(s2.ctrBruto, 0.2, 'el bruto cae a un tercio')
+  assert.equal(s2.ctrMezclaConstante, 0.6, 'el anuncio que quedó no cambió')
+  assert.deepEqual(s2.salieron, ['Brochas Set 9'])
 })

@@ -8022,7 +8022,10 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .pub-prod-numeros small { display: block; font-size: 11px; color: var(--tinta-3); font-weight: 500; }
 .pub-clic-semanas { display: flex; gap: 6px; align-items: flex-end; overflow-x: auto; padding: 4px 0; }
 .pub-clic-semanas > div { display: grid; justify-items: center; gap: 2px; min-width: 44px; }
-.pub-clic-barra { display: flex; align-items: flex-end; height: 64px; }
+.pub-clic-barra { position: relative; display: flex; align-items: flex-end; height: 64px; }
 .pub-clic-barra i { display: block; width: 18px; border-radius: 4px 4px 1px 1px; background: var(--acento); }
 .pub-clic-semanas b { font-size: 11px; font-variant-numeric: tabular-nums; }
 .pub-clic-semanas small { font-size: 10px; color: var(--tinta-3); }
+.pub-clic-barra em { position: absolute; left: 50%; width: 10px; height: 10px; margin: 0 0 -5px -5px; border-radius: 999px; background: var(--superficie); border: 2px solid var(--avisa-tinta); }
+.pub-clic-mc { color: var(--avisa-tinta) !important; font-weight: 600; }
+.pub-clic-sale { color: var(--peligro) !important; max-width: 60px; text-align: center; line-height: 1.2; }

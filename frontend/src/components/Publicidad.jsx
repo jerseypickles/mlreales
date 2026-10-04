@@ -44,9 +44,10 @@ const ICONO = {
 }
 // el diagnóstico del clic (ml/planCampanas.js diagnosticoClic)
 const CLIC = {
-  cayo: { c: 'mal', etiqueta: 'El clic cayó solo en este producto: revisar precio contra la competencia, foto y título', ayuda: 'Bajó contra su propio CTR de las 4 semanas anteriores mucho más que la cuenta en las mismas fechas.' },
-  bajo: { c: 'mal', etiqueta: 'CTR bajo la mitad del de la cuenta: el anuncio no atrae', ayuda: 'Menos de la mitad del CTR de la cuenta en las mismas fechas.' },
-  'cayo-con-la-cuenta': { c: 'medio', etiqueta: 'El clic bajó, pero igual que toda la cuenta: es el mercado (época, fin de mes, competencia)', ayuda: 'La cuenta entera bajó parecido en las mismas fechas.' },
+  cayo: { c: 'mal', etiqueta: 'El clic cayó solo en este producto: revisar precio contra la competencia, foto y título', ayuda: 'Bajó contra su propio CTR de las 4 semanas anteriores mucho más que los demás productos, cada uno contra sí mismo.' },
+  bajo: { c: 'mal', etiqueta: 'CTR bajo la mitad del de tus otros productos: el anuncio no atrae', ayuda: 'Menos de la mitad del CTR mediano de tus otros productos la misma semana.' },
+  'cayo-con-el-mercado': { c: 'medio', etiqueta: 'El clic bajó, pero igual que tus otros productos: es el mercado (época, fin de mes, competencia)', ayuda: 'Los demás productos, cada uno contra sí mismo, cayeron parecido en las mismas fechas. Sin el efecto de la mezcla.' },
+  'cayo-por-puja': { c: 'medio', etiqueta: 'El clic bajó y además se abarató: ML lo muestra en ubicaciones más baratas (revisar budget o ROAS objetivo antes que el anuncio)', ayuda: 'El costo por clic cayó más de 25% a la vez que el CTR: se está pujando menos.' },
   normal: { c: 'bien', ayuda: 'CTR en línea con su historia y con la cuenta.' },
   'poca-muestra': { c: '', ayuda: 'Menos de 3.000 impresiones en 7 días: el CTR todavía es ruido.' },
 }
@@ -358,7 +359,7 @@ function Estudio({ p, ad, efecto, serie, veredicto, ticket }) {
             <div title={CLIC[p.clic?.estado]?.ayuda ?? ''}>
               <span>CTR 7 días</span>
               <strong className={CLIC[p.clic?.estado]?.c ?? ''}>{pctClic(m.ctr7)}</strong>
-              <small>{m.ctrPrevio != null ? `antes ${pctClic(m.ctrPrevio)}` : 'sin historia'}{p.clic?.ctrCuenta7 != null ? ` · cuenta ${pctClic(p.clic.ctrCuenta7)}` : ''}</small>
+              <small>{m.ctrPrevio != null ? `antes ${pctClic(m.ctrPrevio)}` : 'sin historia'}{p.clic?.mercadoCtr7 != null ? ` · otros ${pctClic(p.clic.mercadoCtr7)}` : ''}</small>
             </div>
           ) : null}
         </div>
@@ -707,18 +708,23 @@ export function Publicidad() {
 function ClicCuenta({ plan }) {
   const semanas = (plan?.marcador ?? []).filter((s) => s.impresiones > 0).slice(-10)
   if (!semanas.length) return null
-  const max = Math.max(...semanas.map((s) => s.ctr ?? 0), 0.01)
+  const max = Math.max(...semanas.map((s) => Math.max(s.ctr ?? 0, s.ctrMezclaConstante ?? 0)), 0.01)
   const ev = plan?.evaluacion?.clic
   return (
     <section className="pub-caja">
       <h4>El clic de la cuenta</h4>
-      <p className="pub-texto">CTR de todos tus anuncios por semana{plan?.clicCuenta?.ctr != null ? ` · lo normal de tu historia: ${pctClic(plan.clicCuenta.ctr)}` : ''}. Si cae parejo en todos, es el mercado; si cae en uno solo, es su anuncio.</p>
+      <p className="pub-texto">CTR de todos tus anuncios por semana{plan?.clicCuenta?.ctr != null ? ` · lo normal de tu historia: ${pctClic(plan.clicCuenta.ctr)}` : ''}. La barra es el CTR bruto; el punto, el mismo CTR <b>a mezcla constante</b> (solo productos que estuvieron las dos semanas). Si la barra cae y el punto no, fue porque salieron productos de clic alto, no porque empeoraran los anuncios.</p>
       <div className="pub-clic-semanas">
         {semanas.map((s) => (
-          <div key={s.semana} title={`Semana del ${s.semana}: ${s.impresiones.toLocaleString('es-CL')} impresiones, ${s.clicks} clics, CTR ${pctClic(s.ctr)}, ${s.ventasAds} ventas por anuncio`}>
-            <span className="pub-clic-barra"><i style={{ height: `${Math.max(4, Math.round((100 * (s.ctr ?? 0)) / max))}%` }} /></span>
+          <div key={s.semana} title={`Semana del ${s.semana}: ${s.impresiones.toLocaleString('es-CL')} impresiones, ${s.clicks} clics, CTR ${pctClic(s.ctr)}${s.ctrMezclaConstante != null ? ` · a mezcla constante ${pctClic(s.ctrMezclaConstante)}` : ''}, ${s.ventasAds} ventas por anuncio${s.salieron?.length ? `\nSalieron: ${s.salieron.join(', ')}` : ''}${s.entraron?.length ? `\nEntraron: ${s.entraron.join(', ')}` : ''}`}>
+            <span className="pub-clic-barra">
+              <i style={{ height: `${Math.max(4, Math.round((100 * (s.ctr ?? 0)) / max))}%` }} />
+              {s.ctrMezclaConstante != null ? <em style={{ bottom: `${Math.min(100, Math.round((100 * s.ctrMezclaConstante) / max))}%` }} aria-hidden="true" /> : null}
+            </span>
             <b>{pctClic(s.ctr)}</b>
+            {s.ctrMezclaConstante != null ? <small className="pub-clic-mc">{pctClic(s.ctrMezclaConstante)}</small> : null}
             <small>{s.semana.slice(8, 10)}/{s.semana.slice(5, 7)}</small>
+            {s.salieron?.length ? <small className="pub-clic-sale">−{s.salieron.join(', ')}</small> : null}
           </div>
         ))}
       </div>

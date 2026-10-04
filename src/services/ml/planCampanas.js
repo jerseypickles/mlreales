@@ -125,65 +125,101 @@ export function ctrDeCuenta(filas, { minImpresiones = 20_000 } = {}) {
   return { ctr: ctrs.length % 2 ? ctrs[m] : Math.round(((ctrs[m - 1] + ctrs[m]) / 2) * 100) / 100, productos: ctrs.length }
 }
 
-// Pura. ¿Al anuncio le faltan clics? `dias`: filas con { dia, prints, clicks }.
-//
-// EL MERCADO PRIMERO. El importador, 4-oct: "se puede deber a varios factores:
-// el precio de la competencia, el mes, que se acerca fin de mes". Una caída que
-// viene del mercado —la época, la plata que hay a fin de mes, la competencia—
-// golpea a TODA la cuenta a la vez; la de un anuncio, solo a él. Por eso se
-// compara contra la cuenta en las MISMAS fechas (`cuentaPorDia`: día → {prints,
-// clicks} de todos los productos):
-//   'cayo-con-la-cuenta' → bajó como bajaron todos: es el mercado, no el anuncio
-//   'cayo'               → bajó contra su propio pasado mucho más que la cuenta
-//   'bajo'               → su CTR es menos de la mitad del de la cuenta esa
-//                          misma semana (sirve para un producto nuevo sin historia)
-export function diagnosticoClic(dias, ctrCuenta = null, cuentaPorDia = null) {
+// Pura. Las dos ventanas del clic de un producto: los últimos 7 días contra
+// las 4 semanas anteriores, con el costo por clic de cada una.
+export function ventanasClic(dias) {
   const suma = (xs, k) => xs.reduce((a, d) => a + (d[k] ?? 0), 0)
   const ult7 = dias.slice(-7), previo = dias.slice(-35, -7)
-  const prints7 = suma(ult7, 'prints'), clicks7 = suma(ult7, 'clicks')
-  const printsPrevio = suma(previo, 'prints'), clicksPrevio = suma(previo, 'clicks')
-  const ctr7 = ctrDe(clicks7, prints7)
-  const ctrPrevio = printsPrevio >= MIN_IMPRESIONES_REFERENCIA ? ctrDe(clicksPrevio, printsPrevio) : null
-  // la cuenta en las mismas fechas
-  const deCuenta = (w) => {
-    if (!cuentaPorDia) return null
-    let p = 0, c = 0
-    for (const d of w) { const x = cuentaPorDia.get(d.dia); if (x) { p += x.prints; c += x.clicks } }
-    return p >= MIN_IMPRESIONES_REFERENCIA ? ctrDe(c, p) : null
+  const prints7 = suma(ult7, 'prints'), clicks7 = suma(ult7, 'clicks'), gasto7 = suma(ult7, 'gasto')
+  const printsPrevio = suma(previo, 'prints'), clicksPrevio = suma(previo, 'clicks'), gastoPrevio = suma(previo, 'gasto')
+  return {
+    prints7, clicks7, printsPrevio, impresionesDia: Math.round(prints7 / Math.max(1, ult7.length)),
+    ctr7: ctrDe(clicks7, prints7),
+    ctrPrevio: printsPrevio >= MIN_IMPRESIONES_REFERENCIA ? ctrDe(clicksPrevio, printsPrevio) : null,
+    cpc7: clicks7 ? Math.round(gasto7 / clicks7) : null,
+    cpcPrevio: clicksPrevio ? Math.round(gastoPrevio / clicksPrevio) : null,
   }
-  const cuenta7 = deCuenta(ult7), cuentaPrevio = deCuenta(previo)
-  const base = { ctr7, ctrPrevio, ctrCuenta: ctrCuenta ?? null, ctrCuenta7: cuenta7, ctrCuentaPrevio: cuentaPrevio, prints7, clicks7, impresionesDia: Math.round(prints7 / Math.max(1, ult7.length)) }
-  if (prints7 < MIN_IMPRESIONES_7) return { ...base, estado: 'poca-muestra' }
-  if (ctrPrevio && ctr7 < ctrPrevio * CAIDA_CLIC) {
-    const caidaPct = Math.round((1 - ctr7 / ctrPrevio) * 100)
-    // si la cuenta entera cayó parecido (el producto conserva al menos el 80%
-    // de lo que conservó la cuenta), la causa es de mercado
-    const relProducto = ctr7 / ctrPrevio, relCuenta = cuenta7 != null && cuentaPrevio ? cuenta7 / cuentaPrevio : null
-    if (relCuenta != null && relProducto >= relCuenta * 0.8) return { ...base, estado: 'cayo-con-la-cuenta', caidaPct, caidaCuentaPct: Math.round((1 - relCuenta) * 100) }
+}
+
+const mediana = (xs) => {
+  const v = xs.filter(Number.isFinite).sort((a, b) => a - b)
+  if (!v.length) return null
+  const m = Math.floor(v.length / 2)
+  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2
+}
+
+// Pura. EL MERCADO SIN LA MEZCLA, visto desde un producto: cuánto cambió el
+// CTR de CADA OTRO producto contra sí mismo (mediana), y su CTR de la semana.
+//
+// El importador, 4-oct, sobre la caída de septiembre: "la campaña tenía más
+// productos con stock y ahora no". Tenía razón: el CTR de la cuenta mezcla
+// productos, y cuando salen los de clic alto (Set 9 1,1%, saca puntos 2-4%,
+// lámpara 0,5%) y entran los de clic bajo (Set 10 0,1%), baja sin que ningún
+// anuncio empeore. Comparar contra "la cuenta en las mismas fechas" heredaba
+// ese sesgo. Comparando cada producto consigo mismo, la mezcla no entra.
+export function mercadoPara(itemId, ventanasPorItem) {
+  const otros = [...ventanasPorItem].filter(([id]) => id !== itemId).map(([, v]) => v)
+  const conAmbas = otros.filter((v) => v.prints7 >= MIN_IMPRESIONES_7 && v.ctrPrevio && v.ctr7 != null)
+  const conSemana = otros.filter((v) => v.prints7 >= MIN_IMPRESIONES_7 && v.ctr7 != null)
+  return {
+    relMediana: conAmbas.length >= 2 ? Math.round(mediana(conAmbas.map((v) => v.ctr7 / v.ctrPrevio)) * 100) / 100 : null,
+    ctr7Mediana: conSemana.length >= 2 ? Math.round(mediana(conSemana.map((v) => v.ctr7)) * 100) / 100 : null,
+    productos: conAmbas.length,
+  }
+}
+
+// Pura. ¿Al anuncio le faltan clics? Tres causas posibles, en este orden:
+//   'cayo-por-puja'  → el CTR cayó Y el clic se abarató mucho: ML lo está
+//                      mostrando en ubicaciones más baratas y peores porque
+//                      se puja menos (budget o ROAS objetivo). En septiembre el
+//                      gasto bajó de ~$77k a $20-29k por semana y el clic del
+//                      Set 10 pasó de $117 a $62 mientras su CTR caía.
+//   'cayo-con-el-mercado' → los demás productos, cada uno contra sí mismo,
+//                      cayeron parecido: época, fin de mes, competencia.
+//   'cayo'           → cayó él solo.
+//   'bajo'           → su CTR es menos de la mitad del de los demás esa misma
+//                      semana (mediana, no la cuenta ponderada: sin mezcla);
+//                      sirve para un producto nuevo sin historia propia.
+const ABARATO_CLIC = 0.75
+export function diagnosticoClic(dias, ctrCuenta = null, mercado = null) {
+  const v = ventanasClic(dias)
+  const base = { ...v, ctrCuenta: ctrCuenta ?? null, mercadoRel: mercado?.relMediana ?? null, mercadoCtr7: mercado?.ctr7Mediana ?? null }
+  if (v.prints7 < MIN_IMPRESIONES_7) return { ...base, estado: 'poca-muestra' }
+  if (v.ctrPrevio && v.ctr7 < v.ctrPrevio * CAIDA_CLIC) {
+    const rel = v.ctr7 / v.ctrPrevio
+    const caidaPct = Math.round((1 - rel) * 100)
+    if (v.cpc7 && v.cpcPrevio && v.cpc7 < v.cpcPrevio * ABARATO_CLIC) {
+      return { ...base, estado: 'cayo-por-puja', caidaPct, abaratoPct: Math.round((1 - v.cpc7 / v.cpcPrevio) * 100) }
+    }
+    if (mercado?.relMediana != null && rel >= mercado.relMediana * 0.8) {
+      return { ...base, estado: 'cayo-con-el-mercado', caidaPct, caidaMercadoPct: Math.round((1 - mercado.relMediana) * 100) }
+    }
     return { ...base, estado: 'cayo', caidaPct }
   }
-  // contra la cuenta de ESA semana si se conoce (aísla el mercado); si no,
-  // contra el CTR normal de la historia
-  const referencia = cuenta7 ?? ctrCuenta
-  if (referencia && ctr7 < referencia * BAJO_VS_CUENTA) return { ...base, estado: 'bajo', referencia }
+  const referencia = mercado?.ctr7Mediana ?? ctrCuenta
+  if (referencia && v.ctr7 < referencia * BAJO_VS_CUENTA) return { ...base, estado: 'bajo', referencia }
   return { ...base, estado: 'normal' }
 }
 
 // Pura. Revisión de una campaña en curso. `dias`: filas diarias del producto
 // desde el primer gasto { dia, gasto, unidadesAds, ventaAds, unidades }.
+const coma = (n) => String(n).replace('.', ',')
 export function revisarCampana(dias, eco, p, opciones = {}) {
   const r = revisarCampanaSinClic(dias, eco, p, opciones)
   if (!r) return r
-  const clic = diagnosticoClic(dias, opciones.ctrCuenta, opciones.cuentaPorDia)
-  r.metricas = { ...r.metricas, ctr7: clic.ctr7, ctrPrevio: clic.ctrPrevio, ctrCuenta: clic.ctrCuenta, impresionesDia: clic.impresionesDia }
+  const clic = diagnosticoClic(dias, opciones.ctrCuenta, opciones.mercado)
+  r.metricas = { ...r.metricas, ctr7: clic.ctr7, ctrPrevio: clic.ctrPrevio, ctrCuenta: clic.ctrCuenta, impresionesDia: clic.impresionesDia, cpc7: clic.cpc7, cpcPrevio: clic.cpcPrevio }
   r.clic = clic
-  if (clic.estado === 'cayo-con-la-cuenta') {
-    return { ...r, texto: `${r.texto} El clic bajó ${clic.caidaPct}%, pero toda la cuenta bajó ${clic.caidaCuentaPct}% en las mismas fechas: es el mercado (época, fin de mes, competencia), no este anuncio.` }
+  if (clic.estado === 'cayo-con-el-mercado') {
+    return { ...r, texto: `${r.texto} El clic bajó ${clic.caidaPct}%, pero los demás productos —cada uno contra sí mismo— bajaron ${clic.caidaMercadoPct}%: es el mercado (época, fin de mes, competencia), no este anuncio.` }
+  }
+  if (clic.estado === 'cayo-por-puja') {
+    return { ...r, texto: `${r.texto} El CTR cayó ${clic.caidaPct}% y a la vez el clic se abarató ${clic.abaratoPct}% ($${clic.cpcPrevio} → $${clic.cpc7}): ML lo está mostrando en ubicaciones más baratas, porque el budget o el ROAS objetivo limitan la puja. Antes de tocar el anuncio, revisa la puja.` }
   }
   if (!['cayo', 'bajo'].includes(clic.estado)) return r
   const porque = clic.estado === 'cayo'
-    ? `el clic cayó ${clic.caidaPct}%: CTR ${String(clic.ctr7).replace('.', ',')}% contra ${String(clic.ctrPrevio).replace('.', ',')}% de las 4 semanas anteriores`
-    : `el CTR es ${String(clic.ctr7).replace('.', ',')}%, menos de la mitad del de tu cuenta (${String(clic.referencia).replace('.', ',')}%${clic.ctrCuenta7 != null ? ' en las mismas fechas' : ''})`
+    ? `el clic cayó ${clic.caidaPct}% (CTR ${coma(clic.ctr7)}% contra ${coma(clic.ctrPrevio)}% de las 4 semanas anteriores) y los demás productos no cayeron así`
+    : `el CTR es ${coma(clic.ctr7)}%, menos de la mitad del de tus otros productos esta semana (${coma(clic.referencia)}%)`
   // perdiendo plata o sin vender, el problema es el anuncio: ni más budget ni
   // más ROAS lo arreglan, y bajar el budget no cambia nada (se paga por clic)
   if (['subir', 'subir-roas', 'bajar', 'esperar'].includes(r.accion) && !(r.metricas?.resultado7 > 0)) {
@@ -319,6 +355,54 @@ export function marcadorSemanal(porProducto) {
     .map((s) => ({ ...s, gasto: Math.round(s.gasto), dejaron: Math.round(s.dejaron), resultado: Math.round(s.dejaron - s.gasto), ctr: ctrDe(s.clicks, s.impresiones) }))
 }
 
+// Pura. EL CTR DE LA CUENTA A MEZCLA CONSTANTE, por semana. El CTR bruto sube y
+// baja también porque cambia QUÉ productos se anuncian (uno se queda sin stock,
+// otro entra): cada semana se compara solo con los productos que estuvieron en
+// las dos, pesando cada uno por sus impresiones de la semana anterior, y el
+// índice se encadena. Si el bruto cae y el de mezcla constante no, fue la mezcla.
+// También dice qué productos salieron o entraron (≥10% de las impresiones).
+export function clicPorSemana(porProducto, { minImpresiones = 1000, pesoQueCuenta = 0.1 } = {}) {
+  const semanas = new Map() // lunes → Map(itemId → {p, c})
+  const nombres = new Map()
+  for (const { dias, itemId, titulo } of porProducto) {
+    if (!itemId) continue
+    nombres.set(itemId, titulo ? nombreCorto(titulo) : itemId)
+    for (const d of dias) {
+      if (!(d.prints > 0)) continue
+      const k = lunesDe(d.dia)
+      const sem = semanas.get(k) ?? new Map()
+      const x = sem.get(itemId) ?? { p: 0, c: 0 }
+      x.p += d.prints; x.c += d.clicks ?? 0
+      sem.set(itemId, x); semanas.set(k, sem)
+    }
+  }
+  const orden = [...semanas.keys()].sort()
+  const salida = []
+  let indice = null, anterior = null
+  for (const k of orden) {
+    const sem = semanas.get(k)
+    const P = [...sem.values()].reduce((a, x) => a + x.p, 0), C = [...sem.values()].reduce((a, x) => a + x.c, 0)
+    const ctr = ctrDe(C, P)
+    let salieron = [], entraron = []
+    if (anterior == null) indice = ctr
+    else {
+      const Pa = [...anterior.values()].reduce((a, x) => a + x.p, 0)
+      const comunes = [...sem.keys()].filter((id) => anterior.has(id) && anterior.get(id).p >= minImpresiones && sem.get(id).p >= minImpresiones)
+      const pesoAntes = comunes.reduce((a, id) => a + anterior.get(id).p, 0)
+      if (comunes.length && pesoAntes) {
+        const ahora = comunes.reduce((a, id) => a + anterior.get(id).p * (sem.get(id).c / sem.get(id).p), 0)
+        const antes = comunes.reduce((a, id) => a + anterior.get(id).p * (anterior.get(id).c / anterior.get(id).p), 0)
+        if (antes > 0 && indice != null) indice = Math.round(indice * (ahora / antes) * 100) / 100
+      }
+      salieron = [...anterior.entries()].filter(([id, x]) => x.p / Pa >= pesoQueCuenta && (sem.get(id)?.p ?? 0) / P < 0.01).map(([id]) => nombres.get(id))
+      entraron = [...sem.entries()].filter(([id, x]) => x.p / P >= pesoQueCuenta && (anterior.get(id)?.p ?? 0) / Pa < 0.01).map(([id]) => nombres.get(id))
+    }
+    salida.push({ semana: k, ctrBruto: ctr, ctrMezclaConstante: indice, salieron, entraron })
+    anterior = sem
+  }
+  return salida
+}
+
 // Todos los productos propios: plan de arranque si no tiene anuncio, revisión
 // si ya gasta. Una fila por producto y día queda guardada (así se puede ver
 // después si lo recomendado dejó plata).
@@ -378,7 +462,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       const ultimoGasto = susAds.filter((a) => a.costo > 0).map((a) => a.dia).sort().at(-1)
       if (ultimoGasto && +new Date(hoy) - +new Date(ultimoGasto) > 7 * DIA) plan = { fase: 'apagada', accion: 'apagada', budgetDiario: 0, texto: `Sin gasto desde ${ultimoGasto}.` }
       else plan = { pendiente: true, desdeCampana: diaDeCampanaActual(susAds) }
-      paraMarcador.push({ dias, eco })
+      paraMarcador.push({ dias, eco, itemId: id, titulo: prop.titulo ?? null })
       transiciones.push(...transicionesSemanales(dias, eco).map((t) => ({ ...t, itemId: id })))
       diasPorItem.set(id, dias)
       ecoPorItem.set(id, eco)
@@ -395,13 +479,9 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const decision = aprenderUmbral(transiciones, { ajustar: ajustarRidge })
   // el CTR normal de la cuenta, de toda la historia (no de la semana caída)
   const clicCuenta = ctrDeCuenta(ads)
-  // la cuenta día a día: separa lo que le pasa al mercado de lo de cada anuncio
-  const cuentaPorDia = new Map()
-  for (const a of ads) {
-    const x = cuentaPorDia.get(a.dia) ?? { prints: 0, clicks: 0 }
-    x.prints += a.prints ?? 0; x.clicks += a.clicks ?? 0
-    cuentaPorDia.set(a.dia, x)
-  }
+  // las ventanas del clic de cada producto (historia completa, mismas fechas):
+  // de acá sale el mercado sin la mezcla para cada uno
+  const ventanasPorItem = new Map([...diasPorItem].map(([id, d]) => [id, ventanasClic(d)]))
   // la forma de campaña que rinde más, aprendida de toda la historia
   const nichoDe = new Map(propios.filter((x) => x.nichoId).map((x) => [x.itemIdMl ?? x.sku, String(x.nichoId)]))
   const formas = aprenderEstructura(observacionesEstructura(ads, ecoPorItem, nichoDe))
@@ -439,7 +519,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       const r = nueva && enCampana < 1
         ? { fase: 'semana-1', accion: 'esperar', budgetDiario: anuncio?.campanaId ? (adsVivos.campanas.find((c) => c.id === anuncio.campanaId)?.presupuestoDiario ?? null) : null, metricas: { diasCorriendo: 0 },
           texto: 'Campaña recién creada: arranca su prueba de 2 semanas con el primer día completo. Mantén el budget de partida.' }
-        : revisarCampana(nueva ? fila._dias.filter((d) => d.dia >= desde) : fila._dias, fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral, umbralAprendido: decision.estado === 'aprendido', ctrCuenta: clicCuenta.ctr, cuentaPorDia })
+        : revisarCampana(nueva ? fila._dias.filter((d) => d.dia >= desde) : fila._dias, fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral, umbralAprendido: decision.estado === 'aprendido', ctrCuenta: clicCuenta.ctr, mercado: mercadoPara(fila.itemId, ventanasPorItem) })
       if (r && nueva && enCampana <= 21) r.texto = `En su campaña nueva desde ${desde}. ${r.texto}`
       delete fila.pendiente
       delete fila.desdeCampana
@@ -455,7 +535,10 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
         budgetDiario: plan.budgetDiario ?? null, roasObjetivo: plan.roasObjetivo ?? null, metricas: { ...(plan.metricas ?? {}), economia: plan.economia, umbral: decision.umbral }, calculadoEl: ahora } }, { upsert: true })
     }
   }
-  const marcador = marcadorSemanal(paraMarcador)
+  // el CTR de la cuenta a mezcla constante: separa lo que cambió en los
+  // anuncios de lo que cambió porque entraron o salieron productos
+  const clicSemanal = new Map(clicPorSemana(paraMarcador).map((c) => [c.semana, c]))
+  const marcador = marcadorSemanal(paraMarcador).map((m) => ({ ...m, ...(clicSemanal.get(m.semana) ?? {}) }))
   // la estructura real de las campañas contra lo que recomienda el plan
   let estructura = null
   try {
