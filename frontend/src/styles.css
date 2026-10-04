@@ -8014,3 +8014,15 @@ a.op-plan-sello:hover { text-decoration: underline; }
   .opt-banda { margin: -12px -12px 6px -14px; padding: 8px 12px 8px 14px; }
 }
 .opt.cotizando::before { top: 48px; }
+
+/* el clic en Publicidad */
+.pub-clic { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; padding: 7px 10px; border-radius: 10px; font-size: 12.5px; font-weight: 600; background: var(--superficie-2); color: var(--tinta-2); }
+.pub-clic.mal { background: var(--peligro-tenue); color: var(--peligro); }
+.pub-clic.medio { background: var(--avisa-tenue); color: var(--avisa-tinta); }
+.pub-prod-numeros small { display: block; font-size: 11px; color: var(--tinta-3); font-weight: 500; }
+.pub-clic-semanas { display: flex; gap: 6px; align-items: flex-end; overflow-x: auto; padding: 4px 0; }
+.pub-clic-semanas > div { display: grid; justify-items: center; gap: 2px; min-width: 44px; }
+.pub-clic-barra { display: flex; align-items: flex-end; height: 64px; }
+.pub-clic-barra i { display: block; width: 18px; border-radius: 4px 4px 1px 1px; background: var(--acento); }
+.pub-clic-semanas b { font-size: 11px; font-variant-numeric: tabular-nums; }
+.pub-clic-semanas small { font-size: 10px; color: var(--tinta-3); }

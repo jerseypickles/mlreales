@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
-import { PauseCircle, Split, PlusCircle, TrendingUp, TrendingDown, Target, Layers, Hourglass, Megaphone, CheckCircle2, XCircle, CircleDot } from 'lucide-react'
+import { PauseCircle, Split, PlusCircle, TrendingUp, TrendingDown, Target, Layers, Hourglass, Megaphone, CheckCircle2, XCircle, CircleDot, MousePointerClick } from 'lucide-react'
 import { fmtPrecio } from '../lib/formato.js'
 
 // PUBLICIDAD EN CUATRO PESTAÑAS (30-sep-2026). El importador pidió, tras un
@@ -35,12 +35,24 @@ const ACCION = {
   organico: { t: 'solo orgánico', c: 'mal' }, 'no-anunciar': { t: 'no anunciar', c: 'mal' },
   esperar: { t: 'esperar', c: 'neutro' }, mantener: { t: 'mantener', c: 'bien' }, subir: { t: 'subir', c: 'bien' },
   'subir-roas': { t: 'subir ROAS', c: 'medio' }, bajar: { t: 'bajar', c: 'medio' }, apagar: { t: 'apagar', c: 'mal' },
+  'revisar-anuncio': { t: 'revisar anuncio', c: 'medio' },
   apagada: { t: 'sin anuncio', c: 'neutro' }, 'sin-stock': { t: 'sin stock', c: 'neutro' }, 'sin-economia': { t: 'sin precio', c: 'neutro' }, 'sin-datos': { t: 'sin datos', c: 'neutro' },
 }
 const ICONO = {
   'pausar-anuncio': PauseCircle, separar: Split, 'campana-propia': Split, 'agrupar-chicos': Layers, crear: PlusCircle, 'ajustar-budget': Target,
-  subir: TrendingUp, bajar: TrendingDown, apagar: PauseCircle, 'subir-roas': Target, arrancar: PlusCircle, 'arrancar-con-cuidado': PlusCircle, esperar: Hourglass,
+  subir: TrendingUp, bajar: TrendingDown, apagar: PauseCircle, 'subir-roas': Target, 'revisar-anuncio': MousePointerClick, arrancar: PlusCircle, 'arrancar-con-cuidado': PlusCircle, esperar: Hourglass,
 }
+// el diagnóstico del clic (ml/planCampanas.js diagnosticoClic)
+const CLIC = {
+  cayo: { c: 'mal', etiqueta: 'El clic cayó solo en este producto: revisar precio contra la competencia, foto y título', ayuda: 'Bajó contra su propio CTR de las 4 semanas anteriores mucho más que la cuenta en las mismas fechas.' },
+  bajo: { c: 'mal', etiqueta: 'CTR bajo la mitad del de la cuenta: el anuncio no atrae', ayuda: 'Menos de la mitad del CTR de la cuenta en las mismas fechas.' },
+  'cayo-con-la-cuenta': { c: 'medio', etiqueta: 'El clic bajó, pero igual que toda la cuenta: es el mercado (época, fin de mes, competencia)', ayuda: 'La cuenta entera bajó parecido en las mismas fechas.' },
+  normal: { c: 'bien', ayuda: 'CTR en línea con su historia y con la cuenta.' },
+  'poca-muestra': { c: '', ayuda: 'Menos de 3.000 impresiones en 7 días: el CTR todavía es ruido.' },
+}
+// el CTR va con sus dos decimales: 0,26% redondeado a 0,3% esconde la caída
+const pctClic = (v) => (v == null ? '—' : `${String(v).replace('.', ',')}%`)
+
 const FASE = { arranque: 'antes de anunciar', 'semana-1': 'prueba · semana 1', 'semana-2': 'prueba · semana 2', ajuste: 'ajuste (semana 3)', regular: 'en régimen', apagada: 'sin anuncio' }
 
 // lo que dejaron unas ventas por anuncio, con el precio cobrado
@@ -187,7 +199,7 @@ function QueHacer({ plan, fotos, max }) {
     const est = plan?.estructura?.acciones ?? []
     const cubiertos = new Set(est.flatMap((a) => [a.itemId, ...(a.itemIds ?? [])]).filter(Boolean))
     const extra = (plan?.productos ?? [])
-      .filter((p) => !cubiertos.has(p.itemId) && ['subir', 'bajar', 'subir-roas', 'apagar', 'arrancar', 'arrancar-con-cuidado'].includes(p.accion))
+      .filter((p) => !cubiertos.has(p.itemId) && ['subir', 'bajar', 'subir-roas', 'revisar-anuncio', 'apagar', 'arrancar', 'arrancar-con-cuidado'].includes(p.accion))
       .map((p) => ({ tipo: p.accion, itemId: p.itemId, prioridad: p.accion === 'apagar' ? 1 : 2, texto: `${nombreCorto(p.titulo)}: ${p.texto}` }))
     return [...est, ...extra].sort((a, b) => a.prioridad - b.prioridad)
   }, [plan])
@@ -342,7 +354,15 @@ function Estudio({ p, ad, efecto, serie, veredicto, ticket }) {
           <div><span>ROAS objetivo</span><strong>{x(p.roasObjetivo)}</strong></div>
           <div><span>dejó 7 días</span><strong className={m.resultado7 >= 0 ? 'bien' : 'mal'}>{conSigno(m.resultado7)}</strong></div>
           {m.resultado30 != null ? <div><span>dejó 30 días</span><strong className={m.resultado30 >= 0 ? 'bien' : 'mal'}>{conSigno(m.resultado30)}</strong></div> : null}
+          {m.ctr7 != null ? (
+            <div title={CLIC[p.clic?.estado]?.ayuda ?? ''}>
+              <span>CTR 7 días</span>
+              <strong className={CLIC[p.clic?.estado]?.c ?? ''}>{pctClic(m.ctr7)}</strong>
+              <small>{m.ctrPrevio != null ? `antes ${pctClic(m.ctrPrevio)}` : 'sin historia'}{p.clic?.ctrCuenta7 != null ? ` · cuenta ${pctClic(p.clic.ctrCuenta7)}` : ''}</small>
+            </div>
+          ) : null}
         </div>
+        {p.clic && CLIC[p.clic.estado]?.etiqueta ? <p className={`pub-clic ${CLIC[p.clic.estado].c}`}><MousePointerClick size={13} aria-hidden="true" /> {CLIC[p.clic.estado].etiqueta}</p> : null}
         <MedidorRoas roas={m.roas7} empate={eco?.roasEmpate} />
       </section>
 
@@ -495,6 +515,8 @@ function LearningMachine({ plan, aprendido, fotos }) {
 
       <FormasCampana formas={plan?.formas} />
 
+      <ClicCuenta plan={plan} />
+
       <div className="pub-aprende-tarjetas">
         <div>
           <strong>Sus aciertos</strong>
@@ -547,7 +569,7 @@ function Bitacoras({ plan, fotos }) {
               <p className="pub-texto">{b.texto}</p>
               <div className="pub-bitacora-semanas">
                 {b.semanas.map((s) => (
-                  <div key={s.semana} title={`Semana del ${s.semana}: gastó ${fmtPrecio(s.gasto)} (${fmtPrecio(s.gastoDiario)}/día), ${s.ventasAds} ventas por anuncio de ${s.ventas} totales, ROAS ${x(s.roas)}, dejó ${conSigno(s.plata)}${s.recomendo ? ` · se recomendó: ${ACCION[s.recomendo.accion]?.t ?? s.recomendo.accion}` : ''}`}>
+                  <div key={s.semana} title={`Semana del ${s.semana}: gastó ${fmtPrecio(s.gasto)} (${fmtPrecio(s.gastoDiario)}/día), ${s.ventasAds} ventas por anuncio de ${s.ventas} totales, ROAS ${x(s.roas)}, CTR ${pctClic(s.ctr)}, dejó ${conSigno(s.plata)}${s.recomendo ? ` · se recomendó: ${ACCION[s.recomendo.accion]?.t ?? s.recomendo.accion}` : ''}`}>
                     <span className="pub-bit-barra"><i className={(s.plata ?? 0) >= 0 ? 'bien' : 'mal'} style={{ height: `${Math.max(3, (Math.abs(s.plata ?? 0) / max) * 46)}px` }} /></span>
                     <small>{s.semana.slice(8, 10)}/{s.semana.slice(5, 7)}</small>
                     {s.recomendo ? <em className={`pub-bit-rec ${ACCION[s.recomendo.accion]?.c ?? 'neutro'}`}>{ACCION[s.recomendo.accion]?.t ?? s.recomendo.accion}</em> : <em className="pub-bit-rec vacio">—</em>}
@@ -676,5 +698,31 @@ export function Publicidad() {
       {pestana === 'productos' ? <Productos plan={plan} datos={datos} aprendido={aprendido} serie={serie} fotos={fotos} sel={sel} onSel={setSel} /> : null}
       {pestana === 'lm' ? <LearningMachine plan={plan} aprendido={aprendido} fotos={fotos} /> : null}
     </main>
+  )
+}
+
+// EL CLIC DE LA CUENTA, SEMANA A SEMANA (4-oct-2026). La caída de septiembre no
+// fue de impresiones sino de clic: esto la deja a la vista, con lo que el
+// learning machine aprendió de cada "revisar anuncio" que recomendó.
+function ClicCuenta({ plan }) {
+  const semanas = (plan?.marcador ?? []).filter((s) => s.impresiones > 0).slice(-10)
+  if (!semanas.length) return null
+  const max = Math.max(...semanas.map((s) => s.ctr ?? 0), 0.01)
+  const ev = plan?.evaluacion?.clic
+  return (
+    <section className="pub-caja">
+      <h4>El clic de la cuenta</h4>
+      <p className="pub-texto">CTR de todos tus anuncios por semana{plan?.clicCuenta?.ctr != null ? ` · lo normal de tu historia: ${pctClic(plan.clicCuenta.ctr)}` : ''}. Si cae parejo en todos, es el mercado; si cae en uno solo, es su anuncio.</p>
+      <div className="pub-clic-semanas">
+        {semanas.map((s) => (
+          <div key={s.semana} title={`Semana del ${s.semana}: ${s.impresiones.toLocaleString('es-CL')} impresiones, ${s.clicks} clics, CTR ${pctClic(s.ctr)}, ${s.ventasAds} ventas por anuncio`}>
+            <span className="pub-clic-barra"><i style={{ height: `${Math.max(4, Math.round((100 * (s.ctr ?? 0)) / max))}%` }} /></span>
+            <b>{pctClic(s.ctr)}</b>
+            <small>{s.semana.slice(8, 10)}/{s.semana.slice(5, 7)}</small>
+          </div>
+        ))}
+      </div>
+      <p className="pub-ley">{ev?.evaluadas ? `"Revisar anuncio" recomendado ${ev.evaluadas} veces: el clic se recuperó en ${ev.recuperadas}.` : '"Revisar anuncio" se evalúa 7 días después: ¿el clic se recuperó al menos 30%?'}</p>
+    </section>
   )
 }

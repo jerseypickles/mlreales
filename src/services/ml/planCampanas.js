@@ -91,9 +91,110 @@ export function planDeArranque(eco, p) {
   }
 }
 
+// ─── EL CLIC ────────────────────────────────────────────────────────────────
+//
+// El importador, 4-oct-2026: "arreglemos el CTR del learning machine". Medido
+// con toda la historia guardada: las impresiones de la cuenta nunca faltaron
+// (80-118 mil por semana) y en las últimas semanas cada producto tenía MÁS
+// impresiones diarias que su promedio; lo que se cayó fue el clic — CTR de la
+// cuenta 0,77% (semana del 3-ago) → 0,26% (28-sep), y con él las ventas por
+// anuncio de 59 a 5-18 por semana. El plan no lo veía: leía "vende menos" y
+// recetaba budget o ROAS, que no arreglan un anuncio que nadie cliquea.
+// Product Ads cobra por clic: un CTR bajo no cuesta impresiones, cuesta ventas.
+// Umbrales INICIALES: lo que se recomienda queda guardado y se evalúa si el
+// clic se recuperó, para afinarlos con evidencia.
+export const MIN_IMPRESIONES_7 = 3000 // con menos, el CTR de una semana es ruido
+const CAIDA_CLIC = 0.6 // cayó si quedó bajo el 60% de su propio CTR anterior
+const BAJO_VS_CUENTA = 0.5 // bajo si es menos de la mitad del CTR normal de la cuenta
+const MIN_IMPRESIONES_REFERENCIA = 5000
+const ctrDe = (clicks, prints) => (prints > 0 ? Math.round((clicks / prints) * 10000) / 100 : null) // en %
+
+// Pura. El CTR normal de la cuenta: la mediana del CTR de toda la historia de
+// cada producto con muestra. Se usa la mediana de la historia y no el de esta
+// semana: el de esta semana es justamente el que se cayó.
+export function ctrDeCuenta(filas, { minImpresiones = 20_000 } = {}) {
+  const porItem = new Map()
+  for (const f of filas) {
+    const a = porItem.get(f.itemId) ?? { prints: 0, clicks: 0 }
+    a.prints += f.prints ?? 0; a.clicks += f.clicks ?? 0
+    porItem.set(f.itemId, a)
+  }
+  const ctrs = [...porItem.values()].filter((a) => a.prints >= minImpresiones).map((a) => ctrDe(a.clicks, a.prints)).sort((x, y) => x - y)
+  if (!ctrs.length) return { ctr: null, productos: 0 }
+  const m = Math.floor(ctrs.length / 2)
+  return { ctr: ctrs.length % 2 ? ctrs[m] : Math.round(((ctrs[m - 1] + ctrs[m]) / 2) * 100) / 100, productos: ctrs.length }
+}
+
+// Pura. ¿Al anuncio le faltan clics? `dias`: filas con { dia, prints, clicks }.
+//
+// EL MERCADO PRIMERO. El importador, 4-oct: "se puede deber a varios factores:
+// el precio de la competencia, el mes, que se acerca fin de mes". Una caída que
+// viene del mercado —la época, la plata que hay a fin de mes, la competencia—
+// golpea a TODA la cuenta a la vez; la de un anuncio, solo a él. Por eso se
+// compara contra la cuenta en las MISMAS fechas (`cuentaPorDia`: día → {prints,
+// clicks} de todos los productos):
+//   'cayo-con-la-cuenta' → bajó como bajaron todos: es el mercado, no el anuncio
+//   'cayo'               → bajó contra su propio pasado mucho más que la cuenta
+//   'bajo'               → su CTR es menos de la mitad del de la cuenta esa
+//                          misma semana (sirve para un producto nuevo sin historia)
+export function diagnosticoClic(dias, ctrCuenta = null, cuentaPorDia = null) {
+  const suma = (xs, k) => xs.reduce((a, d) => a + (d[k] ?? 0), 0)
+  const ult7 = dias.slice(-7), previo = dias.slice(-35, -7)
+  const prints7 = suma(ult7, 'prints'), clicks7 = suma(ult7, 'clicks')
+  const printsPrevio = suma(previo, 'prints'), clicksPrevio = suma(previo, 'clicks')
+  const ctr7 = ctrDe(clicks7, prints7)
+  const ctrPrevio = printsPrevio >= MIN_IMPRESIONES_REFERENCIA ? ctrDe(clicksPrevio, printsPrevio) : null
+  // la cuenta en las mismas fechas
+  const deCuenta = (w) => {
+    if (!cuentaPorDia) return null
+    let p = 0, c = 0
+    for (const d of w) { const x = cuentaPorDia.get(d.dia); if (x) { p += x.prints; c += x.clicks } }
+    return p >= MIN_IMPRESIONES_REFERENCIA ? ctrDe(c, p) : null
+  }
+  const cuenta7 = deCuenta(ult7), cuentaPrevio = deCuenta(previo)
+  const base = { ctr7, ctrPrevio, ctrCuenta: ctrCuenta ?? null, ctrCuenta7: cuenta7, ctrCuentaPrevio: cuentaPrevio, prints7, clicks7, impresionesDia: Math.round(prints7 / Math.max(1, ult7.length)) }
+  if (prints7 < MIN_IMPRESIONES_7) return { ...base, estado: 'poca-muestra' }
+  if (ctrPrevio && ctr7 < ctrPrevio * CAIDA_CLIC) {
+    const caidaPct = Math.round((1 - ctr7 / ctrPrevio) * 100)
+    // si la cuenta entera cayó parecido (el producto conserva al menos el 80%
+    // de lo que conservó la cuenta), la causa es de mercado
+    const relProducto = ctr7 / ctrPrevio, relCuenta = cuenta7 != null && cuentaPrevio ? cuenta7 / cuentaPrevio : null
+    if (relCuenta != null && relProducto >= relCuenta * 0.8) return { ...base, estado: 'cayo-con-la-cuenta', caidaPct, caidaCuentaPct: Math.round((1 - relCuenta) * 100) }
+    return { ...base, estado: 'cayo', caidaPct }
+  }
+  // contra la cuenta de ESA semana si se conoce (aísla el mercado); si no,
+  // contra el CTR normal de la historia
+  const referencia = cuenta7 ?? ctrCuenta
+  if (referencia && ctr7 < referencia * BAJO_VS_CUENTA) return { ...base, estado: 'bajo', referencia }
+  return { ...base, estado: 'normal' }
+}
+
 // Pura. Revisión de una campaña en curso. `dias`: filas diarias del producto
 // desde el primer gasto { dia, gasto, unidadesAds, ventaAds, unidades }.
-export function revisarCampana(dias, eco, p, { beta = null, diasCorriendo = dias.length, umbral = UMBRAL_INICIAL, umbralAprendido = false } = {}) {
+export function revisarCampana(dias, eco, p, opciones = {}) {
+  const r = revisarCampanaSinClic(dias, eco, p, opciones)
+  if (!r) return r
+  const clic = diagnosticoClic(dias, opciones.ctrCuenta, opciones.cuentaPorDia)
+  r.metricas = { ...r.metricas, ctr7: clic.ctr7, ctrPrevio: clic.ctrPrevio, ctrCuenta: clic.ctrCuenta, impresionesDia: clic.impresionesDia }
+  r.clic = clic
+  if (clic.estado === 'cayo-con-la-cuenta') {
+    return { ...r, texto: `${r.texto} El clic bajó ${clic.caidaPct}%, pero toda la cuenta bajó ${clic.caidaCuentaPct}% en las mismas fechas: es el mercado (época, fin de mes, competencia), no este anuncio.` }
+  }
+  if (!['cayo', 'bajo'].includes(clic.estado)) return r
+  const porque = clic.estado === 'cayo'
+    ? `el clic cayó ${clic.caidaPct}%: CTR ${String(clic.ctr7).replace('.', ',')}% contra ${String(clic.ctrPrevio).replace('.', ',')}% de las 4 semanas anteriores`
+    : `el CTR es ${String(clic.ctr7).replace('.', ',')}%, menos de la mitad del de tu cuenta (${String(clic.referencia).replace('.', ',')}%${clic.ctrCuenta7 != null ? ' en las mismas fechas' : ''})`
+  // perdiendo plata o sin vender, el problema es el anuncio: ni más budget ni
+  // más ROAS lo arreglan, y bajar el budget no cambia nada (se paga por clic)
+  if (['subir', 'subir-roas', 'bajar', 'esperar'].includes(r.accion) && !(r.metricas?.resultado7 > 0)) {
+    return { ...r, accion: 'revisar-anuncio', budgetDiario: r.metricas?.gastoDiario ?? r.budgetDiario,
+      texto: `Impresiones hay (${clic.impresionesDia.toLocaleString('es-CL')}/día), pero ${porque}. Subir el budget o el ROAS no arregla eso: revisa el precio contra la competencia, la foto principal y el título. Mantén el budget mientras tanto.` }
+  }
+  // deja plata, pero el clic avisa
+  return { ...r, texto: `${r.texto} Ojo: ${porque}.` }
+}
+
+function revisarCampanaSinClic(dias, eco, p, { beta = null, diasCorriendo = dias.length, umbral = UMBRAL_INICIAL, umbralAprendido = false } = {}) {
   const conGasto = dias.filter((d) => d.gasto > 0)
   if (!conGasto.length) return null
   const ult7 = dias.slice(-7)
@@ -205,7 +306,9 @@ export function marcadorSemanal(porProducto) {
       if (!(d.gasto > 0) && !(d.unidadesAds > 0)) continue
       const t = new Date(`${d.dia}T12:00:00Z`)
       const lunes = new Date(+t - ((t.getUTCDay() + 6) % 7) * DIA).toISOString().slice(0, 10)
-      const s = semanas.get(lunes) ?? { semana: lunes, gasto: 0, ventasAds: 0, dejaron: 0 }
+      const s = semanas.get(lunes) ?? { semana: lunes, gasto: 0, ventasAds: 0, dejaron: 0, impresiones: 0, clicks: 0 }
+      s.impresiones += d.prints ?? 0
+      s.clicks += d.clicks ?? 0
       s.gasto += d.gasto ?? 0
       s.ventasAds += d.unidadesAds ?? 0
       s.dejaron += dejaronDe(d.ventaAds ?? 0, d.unidadesAds ?? 0, eco)
@@ -213,7 +316,7 @@ export function marcadorSemanal(porProducto) {
     }
   }
   return [...semanas.values()].sort((a, b) => a.semana.localeCompare(b.semana))
-    .map((s) => ({ ...s, gasto: Math.round(s.gasto), dejaron: Math.round(s.dejaron), resultado: Math.round(s.dejaron - s.gasto) }))
+    .map((s) => ({ ...s, gasto: Math.round(s.gasto), dejaron: Math.round(s.dejaron), resultado: Math.round(s.dejaron - s.gasto), ctr: ctrDe(s.clicks, s.impresiones) }))
 }
 
 // Todos los productos propios: plan de arranque si no tiene anuncio, revisión
@@ -235,7 +338,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const ids = propios.map((x) => x.itemIdMl ?? x.sku)
   // toda la historia que ML retiene de publicidad (~100 días)
   const desde = new Date(+ahora - 120 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
-  const ads = await AdsDiaMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia costo unidadesAds ventaAds campanaId').lean()
+  const ads = await AdsDiaMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia costo unidadesAds ventaAds campanaId prints clicks').lean()
   const libro = await DiaProductoMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia unidades').lean()
   const hoy = new Date(ahora).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
   const salida = []
@@ -269,7 +372,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       for (let t = +new Date(`${primer}T12:00:00Z`); new Date(t).toISOString().slice(0, 10) < hoy; t += DIA) {
         const dia = new Date(t).toISOString().slice(0, 10)
         const a = porDia.get(dia)
-        dias.push({ dia, gasto: a?.costo ?? 0, unidadesAds: a?.unidadesAds ?? 0, ventaAds: a?.ventaAds ?? 0, unidades: ventas.get(dia) ?? 0, precio: precioDia.get(`${id}|${dia}`) ?? null, stockFraccion: stockDia.get(`${id}|${dia}`) ?? null })
+        dias.push({ dia, gasto: a?.costo ?? 0, unidadesAds: a?.unidadesAds ?? 0, ventaAds: a?.ventaAds ?? 0, unidades: ventas.get(dia) ?? 0, prints: a?.prints ?? 0, clicks: a?.clicks ?? 0, precio: precioDia.get(`${id}|${dia}`) ?? null, stockFraccion: stockDia.get(`${id}|${dia}`) ?? null })
       }
       // una campaña apagada hace más de 7 días ya no se revisa como en curso
       const ultimoGasto = susAds.filter((a) => a.costo > 0).map((a) => a.dia).sort().at(-1)
@@ -290,11 +393,21 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   // historia, y las recomendaciones pasadas se evalúan contra la plata
   const { ajustarRidge } = await import('./regresion.js')
   const decision = aprenderUmbral(transiciones, { ajustar: ajustarRidge })
+  // el CTR normal de la cuenta, de toda la historia (no de la semana caída)
+  const clicCuenta = ctrDeCuenta(ads)
+  // la cuenta día a día: separa lo que le pasa al mercado de lo de cada anuncio
+  const cuentaPorDia = new Map()
+  for (const a of ads) {
+    const x = cuentaPorDia.get(a.dia) ?? { prints: 0, clicks: 0 }
+    x.prints += a.prints ?? 0; x.clicks += a.clicks ?? 0
+    cuentaPorDia.set(a.dia, x)
+  }
   // la forma de campaña que rinde más, aprendida de toda la historia
   const nichoDe = new Map(propios.filter((x) => x.nichoId).map((x) => [x.itemIdMl ?? x.sku, String(x.nichoId)]))
   const formas = aprenderEstructura(observacionesEstructura(ads, ecoPorItem, nichoDe))
   const recsViejas = await RecomendacionAds.find({ dia: { $lt: hoy } }).select('itemId dia accion budgetDiario').lean()
   const evaluacion = evaluarRecomendaciones(recsViejas, diasPorItem, ecoPorItem, { hoy })
+  evaluacion.clic = evaluarRevisionAnuncio(recsViejas, diasPorItem, { hoy })
   // las campañas tal como están HOY en ML: su fecha de creación y el estado de
   // cada anuncio. Hace falta antes de revisar, por dos trampas medidas el 1-oct:
   //  · ML relee los últimos 7 días y los etiqueta con la campaña ACTUAL del
@@ -326,7 +439,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       const r = nueva && enCampana < 1
         ? { fase: 'semana-1', accion: 'esperar', budgetDiario: anuncio?.campanaId ? (adsVivos.campanas.find((c) => c.id === anuncio.campanaId)?.presupuestoDiario ?? null) : null, metricas: { diasCorriendo: 0 },
           texto: 'Campaña recién creada: arranca su prueba de 2 semanas con el primer día completo. Mantén el budget de partida.' }
-        : revisarCampana(nueva ? fila._dias.filter((d) => d.dia >= desde) : fila._dias, fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral, umbralAprendido: decision.estado === 'aprendido' })
+        : revisarCampana(nueva ? fila._dias.filter((d) => d.dia >= desde) : fila._dias, fila.economia, p, { beta: betaUsable, diasCorriendo: enCampana, umbral: decision.umbral, umbralAprendido: decision.estado === 'aprendido', ctrCuenta: clicCuenta.ctr, cuentaPorDia })
       if (r && nueva && enCampana <= 21) r.texto = `En su campaña nueva desde ${desde}. ${r.texto}`
       delete fila.pendiente
       delete fila.desdeCampana
@@ -356,7 +469,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     console.warn(`[plan-campanas] estructura de campañas no leída: ${err.message}`)
   }
   return { dia: hoy, productos: salida, marcador, estructura, sinCosto: salida.filter((x) => x.economia?.esTecho).length,
-    reglas: { ...decision, transiciones: transiciones.length, ultimas: transiciones.slice(-12) }, evaluacion, formas }
+    reglas: { ...decision, transiciones: transiciones.length, ultimas: transiciones.slice(-12) }, evaluacion, formas, clicCuenta }
 }
 
 // ─── LAS REGLAS TAMBIÉN SE APRENDEN ─────────────────────────────────────────
@@ -453,6 +566,26 @@ export function evaluarRecomendaciones(recs, diasPorItem, ecoPorItem, { hoy }) {
     detalle: evaluadas.slice(-20) }
 }
 
+// Pura. "Revisar anuncio" no mueve el budget, así que no se evalúa por plata
+// sino por lo que pretende arreglar: ¿7 días después el CTR se recuperó al
+// menos un 30%? Es la evidencia para afinar los umbrales del clic.
+export function evaluarRevisionAnuncio(recs, diasPorItem, { hoy }) {
+  const evaluadas = []
+  for (const r of recs.filter((x) => x.accion === 'revisar-anuncio')) {
+    const dias = diasPorItem.get(r.itemId) ?? []
+    const i = dias.findIndex((d) => d.dia > r.dia)
+    if (i < 0) continue
+    const despues = dias.slice(i, i + 7)
+    if (despues.length < 7 || despues.at(-1).dia >= hoy) continue
+    const antes = dias.slice(Math.max(0, i - 7), i)
+    const ctr = (w) => ctrDe(w.reduce((a, d) => a + (d.clicks ?? 0), 0), w.reduce((a, d) => a + (d.prints ?? 0), 0))
+    const a = ctr(antes), d = ctr(despues)
+    if (a == null || d == null) continue
+    evaluadas.push({ itemId: r.itemId, dia: r.dia, ctrAntes: a, ctrDespues: d, recupero: d >= a * 1.3 })
+  }
+  return { evaluadas: evaluadas.length, recuperadas: evaluadas.filter((e) => e.recupero).length, detalle: evaluadas.slice(-20) }
+}
+
 // ─── CÓMO ESTÁN ARMADAS LAS CAMPAÑAS ─────────────────────────────────────────
 //
 // El importador, 30-sep-2026: "hay una sola campaña activa y están todos los
@@ -462,7 +595,7 @@ export function evaluarRecomendaciones(recs, diasPorItem, ecoPorItem, { hoy }) {
 // empatan en ROAS distintos, y el learning machine no puede separar qué rinde
 // cada uno. Esto mira la estructura real y dice qué mover.
 
-const ACTIVOS = new Set(['subir', 'mantener', 'bajar', 'esperar', 'subir-roas', 'arrancar', 'arrancar-con-cuidado'])
+const ACTIVOS = new Set(['subir', 'mantener', 'bajar', 'esperar', 'subir-roas', 'revisar-anuncio', 'arrancar', 'arrancar-con-cuidado'])
 const FUERA = new Set(['apagar', 'organico', 'no-anunciar'])
 const BUDGET_MINIMO_SOLO = 1000 // bajo esto una campaña propia no junta datos: se agrupa
 
@@ -659,8 +792,9 @@ export function bitacoraProducto(dias, eco, recs = [], { desde = null, max = 12 
   for (const d of dias) {
     if (desde && d.dia < desde) continue
     const k = lunesDe(d.dia)
-    const s = porSemana.get(k) ?? { semana: k, dias: 0, gasto: 0, ventasAds: 0, ventaAds: 0, unidades: 0 }
+    const s = porSemana.get(k) ?? { semana: k, dias: 0, gasto: 0, ventasAds: 0, ventaAds: 0, unidades: 0, prints: 0, clicks: 0 }
     s.dias++; s.gasto += d.gasto ?? 0; s.ventasAds += d.unidadesAds ?? 0; s.ventaAds += d.ventaAds ?? 0; s.unidades += d.unidades ?? 0
+    s.prints += d.prints ?? 0; s.clicks += d.clicks ?? 0
     porSemana.set(k, s)
   }
   const recsPorSemana = new Map()
@@ -669,6 +803,7 @@ export function bitacoraProducto(dias, eco, recs = [], { desde = null, max = 12 
     const r = recsPorSemana.get(s.semana)
     return { semana: s.semana, dias: s.dias, gasto: Math.round(s.gasto), gastoDiario: Math.round(s.gasto / Math.max(1, s.dias)), ventasAds: s.ventasAds, ventas: s.unidades,
       roas: s.gasto > 0 ? r2(s.ventaAds / s.gasto) : null, plata: eco ? Math.round(dejaronDe(s.ventaAds, s.ventasAds, eco) - s.gasto) : null,
+      impresiones: s.prints, clicks: s.clicks, ctr: ctrDe(s.clicks, s.prints),
       recomendo: r ? { accion: r.accion, budgetDiario: r.budgetDiario ?? null } : null }
   }).slice(-max)
   const conGasto = semanas.filter((s) => s.gasto > 0)

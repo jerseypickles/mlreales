@@ -278,3 +278,56 @@ test('bitacoraProducto: sin gasto las últimas semanas es "pausado", no "escalar
   const dias = Array.from({ length: 42 }, (_, i) => (i < 28 ? { dia: dia(i), gasto: 1000, unidadesAds: 1, ventaAds: 10000, unidades: 1 } : { dia: dia(i), gasto: 0, unidadesAds: 0, ventaAds: 0, unidades: 0 }))
   assert.equal(bitacoraProducto(dias, eco).veredicto, 'pausado')
 })
+
+test('clic: impresiones de sobra y el CTR cayó contra su propio pasado → "cayo"', async () => {
+  const { diagnosticoClic } = await import('../src/services/ml/planCampanas.js')
+  // 4 semanas a 0,7% y la última a 0,2%, con ~3.000 impresiones diarias (Set 8 de septiembre)
+  const antes = Array.from({ length: 28 }, (_, i) => ({ dia: `d${i}`, prints: 3000, clicks: 21 }))
+  const ahora = Array.from({ length: 7 }, (_, i) => ({ dia: `n${i}`, prints: 3000, clicks: 6 }))
+  const c = diagnosticoClic([...antes, ...ahora], 0.3)
+  assert.equal(c.estado, 'cayo')
+  assert.equal(c.ctr7, 0.2)
+  assert.equal(c.ctrPrevio, 0.7)
+})
+
+test('clic: producto nuevo sin historia con CTR bajo la mitad de la cuenta → "bajo"; poca muestra no juzga', async () => {
+  const { diagnosticoClic } = await import('../src/services/ml/planCampanas.js')
+  const nuevo = Array.from({ length: 7 }, (_, i) => ({ dia: `n${i}`, prints: 2800, clicks: 2 })) // Set 10: 0,1%
+  assert.equal(diagnosticoClic(nuevo, 0.34).estado, 'bajo')
+  const chico = Array.from({ length: 7 }, (_, i) => ({ dia: `n${i}`, prints: 100, clicks: 0 }))
+  assert.equal(diagnosticoClic(chico, 0.34).estado, 'poca-muestra')
+  const sano = Array.from({ length: 7 }, (_, i) => ({ dia: `n${i}`, prints: 3000, clicks: 12 }))
+  assert.equal(diagnosticoClic(sano, 0.34).estado, 'normal')
+})
+
+test('clic: sin ventas y sin clic, el plan dice revisar el anuncio en vez de tocar el budget', () => {
+  const eco = economiaVenta({ precio: 3990, envio: 800 })
+  const dias = Array.from({ length: 10 }, (_, i) => ({ dia: `2026-09-${String(20 + i).padStart(2, '0')}`, gasto: 150, unidadesAds: 0, ventaAds: 0, unidades: 0, prints: 2800, clicks: 2 }))
+  const r = revisarCampana(dias, eco, P, { diasCorriendo: 10, ctrCuenta: 0.34 })
+  assert.equal(r.accion, 'revisar-anuncio')
+  assert.equal(r.budgetDiario, 150)
+  assert.match(r.texto, /precio contra la competencia/)
+})
+
+test('ctrDeCuenta: mediana del CTR de la historia de cada producto con muestra', async () => {
+  const { ctrDeCuenta } = await import('../src/services/ml/planCampanas.js')
+  const filas = [
+    { itemId: 'a', prints: 30000, clicks: 90 }, // 0,3%
+    { itemId: 'b', prints: 25000, clicks: 50 }, // 0,2%
+    { itemId: 'c', prints: 40000, clicks: 280 }, // 0,7%
+    { itemId: 'd', prints: 500, clicks: 50 }, // sin muestra
+  ]
+  assert.deepEqual(ctrDeCuenta(filas), { ctr: 0.3, productos: 3 })
+})
+
+test('clic: si toda la cuenta cayó igual en las mismas fechas, es el mercado y no el anuncio', async () => {
+  const { diagnosticoClic } = await import('../src/services/ml/planCampanas.js')
+  const fecha = (i) => new Date(Date.UTC(2026, 8, 1) + i * 86400e3).toISOString().slice(0, 10)
+  const dias = Array.from({ length: 35 }, (_, i) => ({ dia: fecha(i), prints: 3000, clicks: i < 28 ? 21 : 6 }))
+  // la cuenta: 0,7% → 0,25% en las mismas fechas
+  const cuenta = new Map(dias.map((d, i) => [d.dia, { prints: 10000, clicks: i < 28 ? 70 : 25 }]))
+  assert.equal(diagnosticoClic(dias, 0.3, cuenta).estado, 'cayo-con-la-cuenta')
+  // la cuenta estable: la caída es del anuncio
+  const estable = new Map(dias.map((d) => [d.dia, { prints: 10000, clicks: 70 }]))
+  assert.equal(diagnosticoClic(dias, 0.3, estable).estado, 'cayo')
+})
