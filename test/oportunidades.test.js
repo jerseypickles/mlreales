@@ -136,3 +136,9 @@ test('tendencia: con la fuente cambiada (API → ficha) compara ficha contra fic
   // misma fuente: como siempre
   assert.equal(tendenciaVentas(r('api', 30, 5), r('api', 40, 5)), 'baja')
 })
+
+test('trámites: SEREMI se detecta cuando se afirma, no cuando se niega', async () => {
+  const { detectarTramites } = await import('../src/services/oportunidades.js')
+  assert.deepEqual(detectarTramites(['requiere autorización SEREMI de Salud por contacto con alimentos']), ['SEREMI'])
+  assert.deepEqual(detectarTramites(['no requiere SEREMI']), [])
+})

@@ -400,6 +400,13 @@ export function clicPorSemana(porProducto, { minImpresiones = 1000, pesoQueCuent
     salida.push({ semana: k, ctrBruto: ctr, ctrMezclaConstante: indice, salieron, entraron })
     anterior = sem
   }
+  // anclado a la semana actual: "con los productos de hoy, el CTR de esa semana
+  // habría sido X". Anclado a la primera mostraba niveles que nunca existieron
+  const ultima = salida.at(-1)
+  if (ultima?.ctrMezclaConstante > 0 && ultima.ctrBruto != null) {
+    const f = ultima.ctrBruto / ultima.ctrMezclaConstante
+    for (const x of salida) if (x.ctrMezclaConstante != null) x.ctrMezclaConstante = Math.round(x.ctrMezclaConstante * f * 100) / 100
+  }
   return salida
 }
 

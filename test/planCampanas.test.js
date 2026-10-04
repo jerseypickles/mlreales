@@ -359,6 +359,7 @@ test('clic de la cuenta: si sale un producto de clic alto, el bruto cae y el de 
   const [s1, s2] = clicPorSemana(porProducto)
   assert.equal(s1.ctrBruto, 0.6)
   assert.equal(s2.ctrBruto, 0.2, 'el bruto cae a un tercio')
-  assert.equal(s2.ctrMezclaConstante, 0.6, 'el anuncio que quedó no cambió')
+  assert.equal(s2.ctrMezclaConstante, 0.2, 'anclado a la semana actual')
+  assert.equal(s1.ctrMezclaConstante, 0.2, 'con los productos de hoy, antes también era 0,2%: el anuncio no cambió')
   assert.deepEqual(s2.salieron, ['Brochas Set 9'])
 })
