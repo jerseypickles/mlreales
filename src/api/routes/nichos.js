@@ -39,8 +39,20 @@ router.post(
       })
     }
 
-    const nicho = await Nicho.create({ keyword, domainCode, frecuenciaScan })
-    const job = await encolarScanNicho(nicho._id, { motivo: 'creacion' })
+    // un nicho que salió de una tanda del radar revisada a mano lleva su origen
+    // y su porqué igual que los que crea el radar solo: así "fuentes del radar"
+    // (ml/fuentesRadar.js) aprende también de estos
+    const r = req.body?.radar
+    const desdeRadar = r && typeof r === 'object'
+    const nicho = await Nicho.create({
+      keyword, domainCode, frecuenciaScan,
+      ...(desdeRadar ? {
+        origen: 'radar', fase: 'screening',
+        radarInfo: { razon: r.razon ?? null, categoria: r.categoria ?? null, estacionalidad: r.estacionalidad ?? null, ventanaImportacion: r.ventanaImportacion ?? null,
+          riesgo: r.riesgo ?? null, fuente: r.fuente ?? null, evidencia: r.evidencia || null, descubiertoEl: new Date() },
+      } : {}),
+    })
+    const job = await encolarScanNicho(nicho._id, { motivo: desdeRadar ? 'radar' : 'creacion' })
     res.status(201).json({ nicho, scanJobId: job.id })
   }),
 )
