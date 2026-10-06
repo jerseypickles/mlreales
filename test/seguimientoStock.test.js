@@ -3,12 +3,13 @@ import assert from 'node:assert/strict'
 import { horasHastaLaProxima, elegirParaSeguir, resumenDeSerie, esUrlDeCatalogo, seguidoFlojo, esMedible, quienSeQueda, movimientoDelNicho, fichaDe, calibracionPorEscalon, ventaEstimada, escalonDe } from '../src/services/seguimientoStock.js'
 
 test('se lee más seguido donde más se ve: "+50" semanal, rangos diario, número exacto cada 12 h', () => {
-  assert.equal(horasHastaLaProxima({ stock: 51, topado: true }), 168)
-  assert.equal(horasHastaLaProxima({ stock: 26, topado: true }), 24)
-  assert.equal(horasHastaLaProxima({ stock: 11, topado: true }), 24)
-  assert.equal(horasHastaLaProxima({ stock: 6, topado: true }), 24)
-  assert.equal(horasHastaLaProxima({ stock: 3, topado: false }), 12)
-  assert.equal(horasHastaLaProxima({ stock: 0, topado: false }), 24)
+  // no medibles: la mitad de seguido desde el 6-oct (la plata va a los medibles)
+  assert.equal(horasHastaLaProxima({ stock: 51, topado: true }), 336)
+  assert.equal(horasHastaLaProxima({ stock: 26, topado: true }), 48)
+  assert.equal(horasHastaLaProxima({ stock: 11, topado: true }), 48)
+  assert.equal(horasHastaLaProxima({ stock: 6, topado: true }), 48)
+  assert.equal(horasHastaLaProxima({ stock: 3, topado: false }), 24)
+  assert.equal(horasHastaLaProxima({ stock: 0, topado: false }), 48)
   assert.equal(horasHastaLaProxima(null), 24)
 })
 
@@ -188,10 +189,10 @@ test('el piso mejora al leer más seguido, no empeora', () => {
 
 test('cadencia: al medible se le lee seguido, al que no dice nada no se le gasta', () => {
   const medible = { medible: true }
-  assert.deepEqual([horasHastaLaProxima({ stock: 51, topado: true }), horasHastaLaProxima({ stock: 51, topado: true }, medible)], [168, 48])
-  assert.deepEqual([horasHastaLaProxima({ stock: 26, topado: true }), horasHastaLaProxima({ stock: 26, topado: true }, medible)], [24, 12])
-  assert.deepEqual([horasHastaLaProxima({ stock: 6, topado: true }), horasHastaLaProxima({ stock: 6, topado: true }, medible)], [24, 8])
-  assert.deepEqual([horasHastaLaProxima({ stock: 3 }), horasHastaLaProxima({ stock: 3 }, medible)], [12, 8])
+  assert.deepEqual([horasHastaLaProxima({ stock: 51, topado: true }), horasHastaLaProxima({ stock: 51, topado: true }, medible)], [336, 48])
+  assert.deepEqual([horasHastaLaProxima({ stock: 26, topado: true }), horasHastaLaProxima({ stock: 26, topado: true }, medible)], [48, 12])
+  assert.deepEqual([horasHastaLaProxima({ stock: 6, topado: true }), horasHastaLaProxima({ stock: 6, topado: true }, medible)], [48, 8])
+  assert.deepEqual([horasHastaLaProxima({ stock: 3 }), horasHastaLaProxima({ stock: 3 }, medible)], [24, 8])
   // Full con su publicación propia resuelta, o Full que nunca fue catálogo
   assert.equal(esMedible({ esFull: true, esCatalogo: true, itemIdReal: 'MLC1' }), true)
   assert.equal(esMedible({ esFull: true, url: 'https://articulo.mercadolibre.cl/MLC-1-x' }), true)
@@ -267,4 +268,23 @@ test('la calibración por escalón: en número exacto se ve todo, en rango una f
   assert.deepEqual(ventaEstimada(0, 'mas25', esc), { desde: 0, hasta: null })
   assert.equal(escalonDe({ stock: 26, topado: true }), 'mas25')
   assert.equal(escalonDe({ stock: 4, topado: false }), 'exacto')
+})
+
+test('sensores por nicho: 3 con decisión cerca, 2 si pasa la vara de búsqueda, 0 si no', async () => {
+  const { sensoresDelNicho } = await import('../src/services/seguimientoStock.js')
+  assert.equal(sensoresDelNicho({ decisionCerca: true, busquedasMes: 300 }), 3, 'cotizando aunque sea chico')
+  assert.equal(sensoresDelNicho({ decisionCerca: false, busquedasMes: 74000 }), 2, 'sobre 15.000 pasa directo')
+  assert.equal(sensoresDelNicho({ decisionCerca: false, busquedasMes: 9900, posicionAutocompletado: 2 }), 2, 'zona gris con cima del autocompletado')
+  assert.equal(sensoresDelNicho({ decisionCerca: false, busquedasMes: 9900, posicionAutocompletado: 7 }), 0)
+  assert.equal(sensoresDelNicho({ decisionCerca: false, busquedasMes: 2400, posicionAutocompletado: 1 }), 0, 'bajo 5.000 no')
+})
+
+test('elegir a quién seguir: entre Full iguales, primero el que muestra un número que se mueve; el nominal ≤5 no gana', () => {
+  const base = { esFull: true, url: 'https://articulo.mercadolibre.cl/MLC-1', stockFuente: 'texto' }
+  const elegidos = elegirParaSeguir([
+    { ...base, sku: 'a', vendedor: 'A', posicion: 1, stock: 51, stockTopado: true },
+    { ...base, sku: 'b', vendedor: 'B', posicion: 2, stock: 3, stockTopado: false },
+    { ...base, sku: 'c', vendedor: 'C', posicion: 3, stock: 26, stockTopado: true },
+  ], { max: 3 })
+  assert.deepEqual(elegidos.map((p) => p.sku), ['c', 'a', 'b'])
 })

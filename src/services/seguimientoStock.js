@@ -38,13 +38,19 @@ const MAX_POR_PASADA = 40
 // `medible` = Full con publicación atribuible: ahí el número es bodega real de ML
 // y se mueve con cada venta, así que la lectura rinde. En los demás se mantiene la
 // cadencia vieja para no gastar la plata donde no dice nada.
+//
+// LOS NO MEDIBLES, MÁS ESPACIADOS (6-oct-2026). Con US$30 al mes alcanzan ~166
+// lecturas al día y la cadencia pedía 200-250: siempre quedaban ~100 atrasadas,
+// y los medibles —los únicos cuyo número se mueve con las ventas— se leían menos
+// de lo diseñado. Un sin-Full o un catálogo casi nunca muestra una venta: se lee
+// la mitad de seguido y esa plata pasa a los medibles. El tope no cambia.
 export function horasHastaLaProxima(ultima, { medible = false } = {}) {
   if (!ultima || !Number.isFinite(ultima.stock)) return 24
-  if (ultima.topado && ultima.stock >= 51) return medible ? 48 : 168 // "+50"
-  if (ultima.topado && ultima.stock >= 11) return medible ? 12 : 24 // "+10" y "+25"
-  if (ultima.stock === 0) return medible ? 12 : 24 // agotado: esperar la reposición
-  if (ultima.topado) return medible ? 8 : 24 // "+5": todavía es un rango
-  return medible ? 8 : 12 // número exacto: cada lectura es una venta contada
+  if (ultima.topado && ultima.stock >= 51) return medible ? 48 : 336 // "+50"
+  if (ultima.topado && ultima.stock >= 11) return medible ? 12 : 48 // "+10" y "+25"
+  if (ultima.stock === 0) return medible ? 12 : 48 // agotado: esperar la reposición
+  if (ultima.topado) return medible ? 8 : 48 // "+5": todavía es un rango
+  return medible ? 8 : 24 // número exacto: cada lectura es una venta contada
 }
 
 // Full y atribuible: su stock es bodega de ML y sabemos de quién es.
@@ -81,12 +87,17 @@ export function elegirParaSeguir(productos, { max = POR_NICHO } = {}) {
   const visible = (p) => p.stockFuente === 'texto' && Number.isFinite(p.stock)
   // cuánto vale seguirlo, de menor (mejor) a mayor
   const valor = (p) => (p.esFull ? 0 : 4) + (esUrlDeCatalogo(p.url) ? 2 : 0) + (nominal(p) ? 1 : 0)
+  // DESEMPATE ENTRE IGUALES (6-oct-2026): a mismo valor, primero el que muestra
+  // un número que se MUEVE —exacto sobre 5, o "+5" a "+25"—, donde cada venta se
+  // ve; después el "+50" (su primera venta visible son ≥25 unidades). No vuelve a
+  // preferir el stock chico: el nominal ≤5 ya pesa en contra (ver arriba).
+  const seMueve = (p) => visible(p) && !(p.stockTopado && p.stock >= 51) && !nominal(p)
   const vistos = new Set()
   return (productos ?? [])
     .filter((p) => p.url && p.esTiendaOficial !== true && p.esAnuncio !== true
       // "+50" sin Full no se puede leer: ni se mueve ni hay bodega detrás
       && !(visible(p) && p.stockTopado && p.stock >= 51 && !p.esFull))
-    .sort((a, b) => valor(a) - valor(b) || Number(visible(b)) - Number(visible(a)) || (a.posicion ?? 999) - (b.posicion ?? 999))
+    .sort((a, b) => valor(a) - valor(b) || Number(seMueve(b)) - Number(seMueve(a)) || Number(visible(b)) - Number(visible(a)) || (a.posicion ?? 999) - (b.posicion ?? 999))
     .filter((p) => {
       const v = p.vendedor ?? p.sku
       if (vistos.has(v)) return false
@@ -119,18 +130,32 @@ export function quienSeQueda(seguidos, { max = POR_NICHO } = {}) {
   return { seQuedan: orden.slice(0, max), sobran: orden.slice(max) }
 }
 
-// Qué nichos se siguen: los que están en cotización o pedido, y los de
-// temporada con la ventana de compra abierta. Es donde una decisión de compra
-// está cerca y saber si el chico vende cambia algo.
+// Qué nichos se siguen y con cuántos sensores. Con decisión de compra cerca
+// —en cotización o pedido, o temporada con la ventana abierta— tres. Desde el
+// 6-oct-2026 también los que pasan la vara de búsqueda (Google ≥15.000, o ≥5.000
+// en la cima del autocompletado de ML): el importador decidió ir solo por nichos
+// de alta búsqueda, y un nicho nuevo de esos necesita saber si el chico vende
+// antes de cotizar. Esos llevan dos. Los demás no llevan: la plata no alcanza.
+export const SENSORES_DECISION = POR_NICHO
+export const SENSORES_VARA = 2
+export function sensoresDelNicho({ decisionCerca, busquedasMes, posicionAutocompletado }, vara = { minimas: 5000, directo: 15000 }) {
+  if (decisionCerca) return SENSORES_DECISION
+  const pasa = busquedasMes >= vara.directo || (busquedasMes >= vara.minimas && (posicionAutocompletado ?? 99) <= 3)
+  return pasa ? SENSORES_VARA : 0
+}
+
 async function nichosQueImportan() {
   const { CurvaEstacional } = await import('../models/CurvaEstacional.js')
-  const nichos = await Nicho.find({ estado: 'activo' }).select('keyword etapaCompra radarInfo ventanaCompra').lean()
-  const curvas = new Map((await CurvaEstacional.find({ keyword: { $in: nichos.map((n) => n.keyword) } }).select('keyword clasificacion mesPico ratioPico nombreMesPico').lean()).map((c) => [c.keyword, c]))
-  return nichos.filter((n) => {
-    if (['cotizando', 'pedido'].includes(n.etapaCompra)) return true
+  const { RADAR_BUSQUEDAS_MINIMAS, RADAR_BUSQUEDAS_DIRECTO } = await import('./atractivoNicho.js')
+  const nichos = await Nicho.find({ estado: 'activo' }).select('keyword etapaCompra radarInfo ventanaCompra nivelBusqueda').lean()
+  const curvas = new Map((await CurvaEstacional.find({ keyword: { $in: nichos.map((n) => n.keyword) } }).select('keyword clasificacion mesPico ratioPico nombreMesPico busquedasMes').lean()).map((c) => [c.keyword, c]))
+  return nichos.map((n) => {
     const v = ventanaDeCompra({ keyword: n.keyword, ventanaCompra: n.ventanaCompra, estacionalidad: n.radarInfo?.estacionalidad, curvaAnual: curvas.get(n.keyword) })
-    return ['ahora', 'ultimo-mes'].includes(v?.estado)
-  })
+    const decisionCerca = ['cotizando', 'pedido'].includes(n.etapaCompra) || ['ahora', 'ultimo-mes'].includes(v?.estado)
+    const cupo = sensoresDelNicho({ decisionCerca, busquedasMes: curvas.get(n.keyword)?.busquedasMes ?? 0, posicionAutocompletado: ['alto', 'medio'].includes(n.nivelBusqueda?.nivel) ? n.nivelBusqueda?.posicion : null },
+      { minimas: RADAR_BUSQUEDAS_MINIMAS, directo: RADAR_BUSQUEDAS_DIRECTO })
+    return { ...n, cupo }
+  }).filter((n) => n.cupo > 0)
 }
 
 // DEJAR DE LEER LA PÁGINA DE CATÁLOGO. Una ficha /p/MLC… muestra al ganador de la
@@ -184,8 +209,16 @@ export async function resolverCatalogos({ max = 25 } = {}) {
 // cupo del nicho; el resto de las bajas lo decide la lectura, cuando una
 // publicación pasa semanas en "+50" o desaparece.
 export async function actualizarLista({ ahora = new Date() } = {}) {
-  let agregados = 0, cedidos = 0, podados = 0
-  for (const n of await nichosQueImportan()) {
+  let agregados = 0, cedidos = 0, podados = 0, fueraDePrioridad = 0
+  const importan = await nichosQueImportan()
+  // los sensores de nichos que ya no importan dejan de leerse (su historia
+  // queda): la plata pasa a los que están cerca de una decisión o pasan la vara
+  const fuera = await SeguimientoStock.updateMany(
+    { activo: true, esPropio: false, nichoId: { $nin: importan.map((n) => n._id) } },
+    { $set: { activo: false, motivoBaja: 'nicho fuera de prioridad: ni se cotiza, ni temporada abierta, ni pasa la vara de búsqueda' } })
+  fueraDePrioridad = fuera.modifiedCount ?? 0
+  for (const n of importan) {
+    const POR_ESTE = n.cupo
     let seguidos = await SeguimientoStock.find({ nichoId: n._id, activo: true, esPropio: false }).select('sku url esCatalogo esFull lecturas reposicionesVistas cambiosDeVendedor sellerId itemIdReal urlLectura ultima resueltoEl').lean()
     const ultimo = await Snapshot.findOne({ keyword: n.keyword }).sort({ fecha: -1 }).select('fecha').lean()
     if (!ultimo) continue
@@ -193,12 +226,12 @@ export async function actualizarLista({ ahora = new Date() } = {}) {
     // que ser de los que más venden, no el Full del puesto 56.
     const snaps = await Snapshot.find({ keyword: n.keyword, fecha: ultimo.fecha, posicion: { $lte: 30 } }).select('sku posicion stock stockTopado stockFuente esAnuncio').lean()
     // los que sobran del cupo dejan de leerse: su historia queda, la plata no
-    if (seguidos.length > POR_NICHO) {
+    if (seguidos.length > POR_ESTE) {
       const puesto = new Map((await Snapshot.find({ keyword: n.keyword, fecha: ultimo.fecha, sku: { $in: seguidos.map((p) => p.sku) } }).select('sku posicion').lean()).map((x) => [x.sku, x.posicion]))
       const series = new Map()
       for (const l of await LecturaStock.find({ sku: { $in: seguidos.map((p) => p.sku) } }).sort({ fecha: 1 }).lean()) series.set(l.sku, [...(series.get(l.sku) ?? []), l])
       const { seQuedan, sobran } = quienSeQueda(seguidos.map((p) => ({ ...p, posicion: puesto.get(p.sku) ?? null,
-        unidadesPiso: resumenDeSerie(series.get(p.sku), { esCatalogo: !p.itemIdReal && (p.esCatalogo === true || esUrlDeCatalogo(p.url)), desdeEl: p.resueltoEl }).unidadesPiso })))
+        unidadesPiso: resumenDeSerie(series.get(p.sku), { esCatalogo: !p.itemIdReal && (p.esCatalogo === true || esUrlDeCatalogo(p.url)), desdeEl: p.resueltoEl }).unidadesPiso })), { max: POR_ESTE })
       await SeguimientoStock.updateMany({ sku: { $in: sobran.map((p) => p.sku) } }, { $set: { activo: false, motivoBaja: 'sensor de sobra: el nicho se mide con los que mejor dejan ver' } })
       podados += sobran.length
       seguidos = seQuedan
@@ -211,14 +244,14 @@ export async function actualizarLista({ ahora = new Date() } = {}) {
     const flojos = seguidos.filter((p) => seguidoFlojo(p) && !p.reposicionesVistas)
     const firmes = seguidos.length - flojos.length
     const yaEstan = new Set(seguidos.map((p) => p.sku))
-    const todos = elegirParaSeguir(snaps.map((s) => ({ ...s, ...(prods.get(s.sku) ?? {}) })).filter((p) => p.vendedor), { max: POR_NICHO })
+    const todos = elegirParaSeguir(snaps.map((s) => ({ ...s, ...(prods.get(s.sku) ?? {}) })).filter((p) => p.vendedor), { max: POR_ESTE })
     const mejores = todos.filter((c) => !yaEstan.has(c.sku) && c.esFull && !esUrlDeCatalogo(c.url))
-    const ceder = Math.max(0, Math.min(flojos.length, mejores.length - Math.max(0, POR_NICHO - seguidos.length)))
+    const ceder = Math.max(0, Math.min(flojos.length, mejores.length - Math.max(0, POR_ESTE - seguidos.length)))
     for (const f of flojos.slice(0, ceder)) {
       await SeguimientoStock.updateOne({ sku: f.sku }, { $set: { activo: false, motivoBaja: 'ficha de catálogo: el stock puede ser de otro vendedor' } })
       cedidos++
     }
-    const libres = POR_NICHO - (firmes + flojos.length - ceder)
+    const libres = POR_ESTE - (firmes + flojos.length - ceder)
     if (libres <= 0) continue
     const candidatos = [...mejores, ...todos.filter((c) => !yaEstan.has(c.sku) && !mejores.includes(c))].slice(0, libres)
     for (const c of candidatos) {
@@ -248,7 +281,7 @@ export async function actualizarLista({ ahora = new Date() } = {}) {
       imagen: p.imagen ?? null, vendedor: 'propio', esPropio: true, itemIdPropio: p.itemIdMl ?? p.sku, agregadoEl: ahora, proximaLecturaEl: ahora } }, { upsert: true })
     agregados += r.upsertedCount ?? 0
   }
-  return { agregados, cedidos, podados, activos: await SeguimientoStock.countDocuments({ activo: true }) }
+  return { agregados, cedidos, podados, fueraDePrioridad, nichos: importan.length, activos: await SeguimientoStock.countDocuments({ activo: true }) }
 }
 
 export async function gastoDelMes({ ahora = new Date() } = {}) {
@@ -306,11 +339,22 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
   // dentro de cada grupo, primero quien puede dar señal: Full con publicación
   // propia antes que un catálogo que quizá no se pueda atribuir
   const utilidad = (p) => (esMedible(p) ? 0 : 2) + (seguidoFlojo(p) ? 1 : 0)
-  const relecturas = vencidos.filter((p) => !p.esPropio && dejaVer(p)).sort((a, b) => utilidad(a) - utilidad(b))
-  const resto = vencidos.filter((p) => !p.esPropio && !dejaVer(p)).sort((a, b) => Number(Boolean(a.ultima)) - Number(Boolean(b.ultima)) || utilidad(a) - utilidad(b))
+  // LOS NO MEDIBLES CON TOPE (6-oct-2026): ya conocidos y sin Full atribuible,
+  // como mucho un cuarto de cada pasada. La primera lectura de un recién llegado
+  // sí entra —es la que dice si es Full—, y lo que el tope no usa pasa al resto.
+  const conocidoNoMedible = (p) => p.ultima && !esMedible(p)
+  const relecturas = vencidos.filter((p) => !p.esPropio && dejaVer(p) && !conocidoNoMedible(p)).sort((a, b) => utilidad(a) - utilidad(b))
+  const resto = vencidos.filter((p) => !p.esPropio && !dejaVer(p) && !conocidoNoMedible(p)).sort((a, b) => Number(Boolean(a.ultima)) - Number(Boolean(b.ultima)) || utilidad(a) - utilidad(b))
+  const noMedibles = vencidos.filter((p) => !p.esPropio && conocidoNoMedible(p)).sort((a, b) => utilidad(a) - utilidad(b))
   const libre = Math.max(0, cupo - propios.length)
-  const paraReleer = relecturas.slice(0, Math.max(Math.ceil(libre / 2), libre - resto.length))
-  const pendientes = [...propios, ...paraReleer, ...resto.slice(0, libre - paraReleer.length)].slice(0, cupo)
+  const topeNoMedibles = Math.ceil(libre * 0.25)
+  // tope ESTRICTO: si sobra cupo no se gasta en ellos; la plata del día queda
+  // para los medibles que vencen más tarde
+  const deNoMedibles = noMedibles.slice(0, topeNoMedibles)
+  const libreMedibles = libre - deNoMedibles.length
+  const paraReleer = relecturas.slice(0, Math.max(Math.ceil(libreMedibles / 2), libreMedibles - resto.length))
+  const deResto = resto.slice(0, Math.max(0, libreMedibles - paraReleer.length))
+  const pendientes = [...propios, ...paraReleer, ...deResto, ...deNoMedibles].slice(0, cupo)
   if (!pendientes.length) return { leidas: 0, motivo: 'nada pendiente', gasto }
   const { items, costoUsd: costoPedido, fallidos = [] } = await leer(pendientes.map((p) => p.urlLectura ?? p.url))
   // SI EL PROVEEDOR NO ENTREGÓ LA PÁGINA, EL FALLO NO ES DE LA PUBLICACIÓN. El
