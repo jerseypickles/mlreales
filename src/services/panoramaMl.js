@@ -242,6 +242,36 @@ export async function busquedasQueSuben({ max = 30 } = {}) {
   return salida.sort((a, b) => b.totalItems - a.totalItems).slice(0, max)
 }
 
+// BARRIDO DEL VOCABULARIO DE TEMPORADA (8-oct-2026). Toma la última captura de
+// tendencias de cada categoría, clasifica cada término y cuenta las palabras de
+// los que quedaron como "novedad": ahí aparecen las palabras de temporada que
+// el calendario todavía no reconoce. Solo lectura.
+const VACIAS = new Set(['de', 'para', 'con', 'sin', 'y', 'el', 'la', 'los', 'las', 'en', 'un', 'una', 'por', 'al', 'del', 'mujer', 'hombre', 'nino', 'nina', 'ninos', 'ninas'])
+export async function barridoVocabulario({ hoy = new Date(), max = 400 } = {}) {
+  const docs = await TendenciaCategoria.find({}).sort({ dia: -1 }).select('categoriaId dia terminos').lean()
+  const ultima = new Map()
+  for (const d of docs) if (!ultima.has(d.categoriaId)) ultima.set(d.categoriaId, d)
+  const rutas = new Map((await CategoriaMl.find({ id: { $in: [...ultima.keys()] } }).select('id ruta').lean()).map((c) => [c.id, c.ruta]))
+  const porTipo = {}, palabras = new Map(), ejemplos = new Map(), porTemporada = {}
+  let total = 0
+  for (const [categoriaId, d] of ultima) {
+    const ruta = rutas.get(categoriaId) ?? ''
+    for (const t of d.terminos ?? []) {
+      total++
+      const c = clasificarBusqueda(t, temporadaDe(`${t} ${ruta}`, hoy))
+      porTipo[c.tipo] = (porTipo[c.tipo] ?? 0) + 1
+      if (c.temporada) porTemporada[c.temporada] = (porTemporada[c.temporada] ?? 0) + 1
+      if (c.tipo !== 'novedad') continue
+      for (const w of new Set(String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter((x) => x.length >= 4 && !VACIAS.has(x)))) {
+        palabras.set(w, (palabras.get(w) ?? 0) + 1)
+        if (!ejemplos.has(w)) ejemplos.set(w, `${t} · ${ruta.split(' > ').slice(-1)[0]}`)
+      }
+    }
+  }
+  return { categorias: ultima.size, total, porTipo, porTemporada,
+    palabras: [...palabras].sort((a, b) => b[1] - a[1]).slice(0, max).map(([w, n]) => ({ w, n, ej: ejemplos.get(w) })) }
+}
+
 export async function estadoPanorama({ ahora = new Date() } = {}) {
   const dia = diaChile(ahora)
   const [total, pendientes, hojas, rankingHoy, tendencias, diasRanking] = await Promise.all([

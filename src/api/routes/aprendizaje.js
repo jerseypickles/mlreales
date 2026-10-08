@@ -141,6 +141,11 @@ router.post('/panorama', async (_req, res) => {
 })
 // Publicaciones que aparecieron hace poco en un nicho que ya se escaneaba y
 // ya suben de posición, ganan reseñas o cambian de balde.
+// barrido del vocabulario de temporada sobre todas las tendencias capturadas
+router.get('/panorama/vocabulario', async (req, res) => {
+  const { barridoVocabulario } = await import('../../services/panoramaMl.js')
+  res.json(await barridoVocabulario({ max: Math.min(1000, Number(req.query.max) || 400) }))
+})
 router.get('/nuevos-que-despegan', async (_req, res) => {
   const { productosNuevosQueDespegan } = await import('../../services/nuevosQueDespegan.js')
   res.json({ productos: await productosNuevosQueDespegan() })
