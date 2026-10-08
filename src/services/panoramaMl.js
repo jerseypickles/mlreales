@@ -252,7 +252,7 @@ export async function barridoVocabulario({ hoy = new Date(), max = 400 } = {}) {
   const ultima = new Map()
   for (const d of docs) if (!ultima.has(d.categoriaId)) ultima.set(d.categoriaId, d)
   const rutas = new Map((await CategoriaMl.find({ id: { $in: [...ultima.keys()] } }).select('id ruta').lean()).map((c) => [c.id, c.ruta]))
-  const porTipo = {}, palabras = new Map(), ejemplos = new Map(), porTemporada = {}
+  const porTipo = {}, palabras = new Map(), ejemplos = new Map(), porTemporada = {}, estacionales = new Map()
   let total = 0
   for (const [categoriaId, d] of ultima) {
     const ruta = rutas.get(categoriaId) ?? ''
@@ -261,7 +261,13 @@ export async function barridoVocabulario({ hoy = new Date(), max = 400 } = {}) {
       const c = clasificarBusqueda(t, temporadaDe(`${t} ${ruta}`, hoy))
       porTipo[c.tipo] = (porTipo[c.tipo] ?? 0) + 1
       if (c.temporada) porTemporada[c.temporada] = (porTemporada[c.temporada] ?? 0) + 1
-      if (c.tipo !== 'novedad') continue
+      if (c.tipo !== 'novedad') {
+        // el otro lado: qué palabra hizo estacional a cada término (para cazar
+        // falsos positivos: "cooler" de PC, "ventilador" de radiador)
+        const k = `${c.temporada}|${t}`
+        if (!estacionales.has(k)) estacionales.set(k, { temporada: c.temporada, termino: t, categoria: ruta.split(' > ').slice(-1)[0] })
+        continue
+      }
       for (const w of new Set(String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter((x) => x.length >= 4 && !VACIAS.has(x)))) {
         palabras.set(w, (palabras.get(w) ?? 0) + 1)
         if (!ejemplos.has(w)) ejemplos.set(w, `${t} · ${ruta.split(' > ').slice(-1)[0]}`)
@@ -269,7 +275,8 @@ export async function barridoVocabulario({ hoy = new Date(), max = 400 } = {}) {
     }
   }
   return { categorias: ultima.size, total, porTipo, porTemporada,
-    palabras: [...palabras].sort((a, b) => b[1] - a[1]).slice(0, max).map(([w, n]) => ({ w, n, ej: ejemplos.get(w) })) }
+    palabras: [...palabras].sort((a, b) => b[1] - a[1]).slice(0, max).map(([w, n]) => ({ w, n, ej: ejemplos.get(w) })),
+    estacionales: [...estacionales.values()] }
 }
 
 export async function estadoPanorama({ ahora = new Date() } = {}) {
