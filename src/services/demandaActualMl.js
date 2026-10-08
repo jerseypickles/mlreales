@@ -74,9 +74,12 @@ export function tendenciaRanking(serie) {
   if (!antes.length) return { ...base, estado: conAhora ? 'nuevo' : 'fuera' }
   if (conAhora && !conAntes) return { ...base, estado: 'sube' }
   if (!conAhora && conAntes) return { ...base, estado: 'baja' }
-  const masProductos = pAhora - pAntes, mejoraPuesto = mAntes != null && mAhora != null ? mAntes - mAhora : 0
-  if (masProductos >= 0.5 || mejoraPuesto >= 3) return { ...base, estado: 'sube' }
-  if (masProductos <= -0.5 || mejoraPuesto <= -3) return { ...base, estado: 'baja' }
+  // cambio RELATIVO: pasar de 19,9 a 18,6 productos no es una caída (primera
+  // versión: medio producto bastaba y marcaba "baja" a nichos estables)
+  const masProductos = pAhora - pAntes, rel = pAntes > 0 ? masProductos / pAntes : 0
+  const mejoraPuesto = mAntes != null && mAhora != null ? mAntes - mAhora : 0
+  if ((masProductos >= 0.5 && rel >= 0.2) || mejoraPuesto >= 3) return { ...base, estado: 'sube' }
+  if ((masProductos <= -0.5 && rel <= -0.2) || mejoraPuesto <= -3) return { ...base, estado: 'baja' }
   return { ...base, estado: 'estable' }
 }
 
@@ -104,11 +107,26 @@ export async function medirDemandaActual({ ahora = new Date() } = {}) {
   const desde = diaChile(+ahora - VENTANA_DIAS * DIA)
   const desdeTendencia = diaChile(+ahora - DIAS_TENDENCIA * DIA)
   const ranking = new Map()
-  const indice = new Map() // id → [{ dia, posicion }] de las últimas 3 semanas
-  for (const r of await RankingMasVendidos.find({ dia: { $gte: desdeTendencia } }).select('dia items').lean()) {
+  const indice = new Map() // id → [{ dia, posicion }] de las últimas 3 semanas, categorías parejas
+  const indiceTodo = new Map() // lo mismo con todas las capturas: para el puesto de tus productos
+  const docs = await RankingMasVendidos.find({ dia: { $gte: desdeTendencia } }).select('categoriaId dia items').lean()
+  // MÁS COBERTURA NO ES MÁS VENTA. Desde el 2-oct el panorama captura ~1.770
+  // categorías al día (eran ~580): comparando sin cuidado, 82 de 121 nichos
+  // "subían" solo porque ahora se miran más categorías. La tendencia usa solo
+  // las categorías capturadas parejo en las dos ventanas.
+  const corte = diaChile(+ahora - 7 * DIA)
+  const capturas = new Map()
+  for (const r of docs) {
+    const c = capturas.get(r.categoriaId) ?? { ahora: 0, antes: 0 }
+    if (r.dia >= corte) c.ahora++; else c.antes++
+    capturas.set(r.categoriaId, c)
+  }
+  const pareja = new Set([...capturas].filter(([, c]) => c.ahora >= 5 && c.antes >= 10).map(([id]) => id))
+  for (const r of docs) {
     for (const i of r.items ?? []) {
       if (!i?.id) continue
-      indice.set(i.id, [...(indice.get(i.id) ?? []), { dia: r.dia, posicion: i.posicion }])
+      indiceTodo.set(i.id, [...(indiceTodo.get(i.id) ?? []), { dia: r.dia, posicion: i.posicion }])
+      if (pareja.has(r.categoriaId)) indice.set(i.id, [...(indice.get(i.id) ?? []), { dia: r.dia, posicion: i.posicion }])
       if (r.dia >= desde && (!ranking.has(i.id) || i.posicion < ranking.get(i.id))) ranking.set(i.id, i.posicion)
     }
   }
@@ -134,7 +152,7 @@ export async function medirDemandaActual({ ahora = new Date() } = {}) {
     await Nicho.updateOne({ _id: n._id }, { $set: { demandaMl: { ...lectura, tendenciaRanking: tendencia, ventanaDias: VENTANA_DIAS, medidoEl: ahora } } })
   }
   console.log(`[demanda-ml] ${conDemanda}/${nichos.length} nichos con demanda actual en ML (ranking ${VENTANA_DIAS} días o baja de stock)`)
-  const propios = await rankingDePropios({ ahora, indice, dias }).catch((e) => ({ error: e.message }))
+  const propios = await rankingDePropios({ ahora, indice: indiceTodo, dias }).catch((e) => ({ error: e.message }))
   return { nichos: nichos.length, conDemanda, propios }
 }
 

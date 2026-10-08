@@ -50,3 +50,9 @@ test('ranking de tus productos: se busca por producto de usuario y catálogo, no
   const s = serieRanking(['MLCU123', 'MLC999', 'MLC4212659314'], indice, dias)
   assert.deepEqual(s.map((d) => d.mejor), [null, 7])
 })
+
+test('ranking en el tiempo: un cambio chico no es tendencia (19,9 → 18,6 productos es estable)', async () => {
+  const { tendenciaRanking } = await import('../src/services/demandaActualMl.js')
+  const serie = [...Array.from({ length: 14 }, (_, k) => ({ dia: `a${k}`, productos: 20, mejor: 1 })), ...Array.from({ length: 7 }, (_, k) => ({ dia: `b${k}`, productos: 18.6, mejor: 1 }))]
+  assert.equal(tendenciaRanking(serie).estado, 'estable')
+})
