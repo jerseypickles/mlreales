@@ -520,6 +520,8 @@ function LearningMachine({ plan, aprendido, fotos }) {
 
       <DemandaPropia />
 
+      <RankingPropios />
+
       <div className="pub-aprende-tarjetas">
         <div>
           <strong>Sus aciertos</strong>
@@ -779,6 +781,37 @@ function DemandaPropia() {
         })}
       </div>
       <p className="pub-ley"><i className="pub-dp-limpia" /> se lee como demanda · <i className="pub-dp-limitada" /> limitada por la campaña · <i className="pub-dp-sindato" /> sin dato de la campaña</p>
+    </section>
+  )
+}
+
+// TUS PRODUCTOS EN EL RANKING DE MÁS VENDIDOS DE ML (8-oct-2026): el puesto de
+// cada día en su categoría. Subir en el ranking es la prueba más directa de que
+// lo que se hace (precio, publicidad, fotos) funciona.
+function RankingPropios() {
+  const [d, setD] = useState(null)
+  useEffect(() => { api.rankingPropios().then(setD).catch(() => setD({ productos: [] })) }, [])
+  const ps = (d?.productos ?? []).filter((p) => p.ranking)
+  if (!ps.length) return null
+  const TXT = { sube: 'subiendo', baja: 'bajando', estable: 'estable', nuevo: 'recién entró', fuera: 'fuera del top 20' }
+  return (
+    <section className="pub-caja">
+      <h4>Tus productos en el ranking de más vendidos</h4>
+      <p className="pub-texto">El puesto de cada día en el top 20 oficial de su categoría (últimas 3 semanas). Arriba es mejor; sin barra, ese día no estuvo en el top 20.</p>
+      <div className="pub-rk">
+        {ps.map((p) => (
+          <div key={p.itemId} className="pub-rk-prod">
+            {p.imagen ? <img src={p.imagen} alt="" width="36" height="36" /> : null}
+            <span className="pub-rk-txt">
+              <strong>{nombreCorto(p.titulo ?? p.itemId)}</strong>
+              <small>{p.ranking.puestoActual ? `#${p.ranking.puestoActual} hoy` : p.ranking.ultimoVisto ? `último visto #${p.ranking.ultimoVisto.mejor} el ${p.ranking.ultimoVisto.dia}` : 'no está en el top 20'} · {TXT[p.ranking.tendencia?.estado] ?? '—'}{p.ranking.categoriaCapturada === false ? ' · su categoría todavía no se captura' : ''}</small>
+            </span>
+            <span className="pub-rk-serie" aria-hidden="true">
+              {(p.ranking.serie ?? []).map((x) => <i key={x.dia} title={`${x.dia}: ${x.puesto ? `#${x.puesto}` : 'fuera del top 20'}`} style={{ height: x.puesto ? `${Math.max(8, Math.round(((21 - x.puesto) / 20) * 100))}%` : '0%' }} />)}
+            </span>
+          </div>
+        ))}
+      </div>
     </section>
   )
 }

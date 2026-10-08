@@ -8043,3 +8043,14 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .pub-dp-sindato { background: color-mix(in srgb, var(--acento) 35%, var(--borde)); }
 .pub-ley i.pub-dp-limpia, .pub-ley i.pub-dp-limitada, .pub-ley i.pub-dp-sindato { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: middle; margin: 0 2px 0 6px; }
 .pub-dp-google { color: var(--tinta-2) !important; font-weight: 600; }
+
+/* tus productos en el ranking */
+.pub-rk { display: grid; gap: 8px; }
+.pub-rk-prod { display: grid; grid-template-columns: 36px minmax(0, 1fr) 150px; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--borde); border-radius: 12px; }
+.pub-rk-prod img { border-radius: 8px; object-fit: cover; }
+.pub-rk-txt { display: grid; min-width: 0; }
+.pub-rk-txt strong { font-size: 13px; }
+.pub-rk-txt small { font-size: 11.5px; color: var(--tinta-3); }
+.pub-rk-serie { display: flex; align-items: flex-end; gap: 2px; height: 34px; }
+.pub-rk-serie i { flex: 1; min-width: 3px; border-radius: 2px 2px 0 0; background: var(--exito); }
+@media (max-width: 640px) { .pub-rk-prod { grid-template-columns: 36px minmax(0, 1fr); } .pub-rk-serie { grid-column: 1 / -1; } }

@@ -218,6 +218,12 @@ router.get('/demanda-propia', async (_req, res) => {
   const { demandaPropia } = await import('../../services/ml/demandaPropia.js')
   res.json(await demandaPropia())
 })
+// tus productos en el ranking de más vendidos de ML: puesto diario y tendencia
+router.get('/ranking-propios', async (_req, res) => {
+  const { ProductoPropio } = await import('../../models/ProductoPropio.js')
+  const ps = await ProductoPropio.find({}).select('itemIdMl sku titulo imagen estado rankingMl idsRanking').lean()
+  res.json({ productos: ps.map((p) => ({ itemId: p.itemIdMl ?? p.sku, titulo: p.titulo, imagen: p.imagen, estado: p.estado, ids: p.idsRanking, ranking: p.rankingMl })) })
+})
 router.get('/fuentes-radar', async (_req, res) => {
   const { fuentesDelRadar } = await import('../../services/ml/fuentesRadar.js')
   res.json(await fuentesDelRadar())

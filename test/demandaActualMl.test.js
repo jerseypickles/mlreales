@@ -23,3 +23,30 @@ test('demanda actual: la alerta es solo para nichos nuevos con el plazo cumplido
   assert.equal(sinDemandaActual({ demandaMl: { hayDemanda: true }, creadoEl: new Date('2026-10-10') }, ahora), false)
   assert.equal(sinDemandaActual({ creadoEl: new Date('2026-10-10') }, ahora), false, 'sin medir no alerta')
 })
+
+test('ranking en el tiempo: el nicho sube si aparece más o mejora de puesto, baja si se cae', async () => {
+  const { serieRanking, tendenciaRanking, ajustePorRanking } = await import('../src/services/demandaActualMl.js')
+  const dias = Array.from({ length: 21 }, (_, k) => `2026-09-${String(10 + k).padStart(2, '0')}`)
+  // antes en el puesto 15 un solo producto; la última semana dos productos y el mejor en el 4
+  const indice = new Map([
+    ['A', dias.map((dia, k) => ({ dia, posicion: k < 14 ? 15 : 4 }))],
+    ['B', dias.slice(14).map((dia) => ({ dia, posicion: 9 }))],
+  ])
+  const t = tendenciaRanking(serieRanking(['A', 'B', 'X'], indice, dias))
+  assert.equal(t.estado, 'sube')
+  assert.equal(t.mejorAhora, 4)
+  assert.equal(ajustePorRanking(t), 3)
+  const cae = new Map([['A', dias.slice(0, 14).map((dia) => ({ dia, posicion: 6 }))]])
+  assert.equal(tendenciaRanking(serieRanking(['A'], cae, dias)).estado, 'baja')
+  assert.equal(ajustePorRanking({ estado: 'baja' }), -2)
+  assert.equal(tendenciaRanking(serieRanking(['Z'], cae, dias)).estado, 'fuera')
+  assert.equal(ajustePorRanking({ estado: 'estable', mejorAhora: 3 }), 2, 'estable y arriba del top 5')
+})
+
+test('ranking de tus productos: se busca por producto de usuario y catálogo, no por id de publicación', async () => {
+  const { serieRanking } = await import('../src/services/demandaActualMl.js')
+  const dias = ['2026-10-06', '2026-10-07']
+  const indice = new Map([['MLCU123', [{ dia: '2026-10-07', posicion: 7 }]]])
+  const s = serieRanking(['MLCU123', 'MLC999', 'MLC4212659314'], indice, dias)
+  assert.deepEqual(s.map((d) => d.mejor), [null, 7])
+})

@@ -316,6 +316,15 @@ function avisosDe(o, tendencia) {
     a.push({ id: 'muerto', Icono: AlertTriangle, tono: 'mal', corto: 'Sin demanda actual en ML',
       ayuda: 'En 2 semanas ningún producto del nicho apareció en el ranking de más vendidos de su categoría y ningún competidor seguido bajó stock. Puede tener búsquedas en Google, pero en Mercado Libre no se ve venta hoy: riesgo de producto sin impresiones.' })
   }
+  // la tendencia del nicho en el ranking de más vendidos (últimas 3 semanas)
+  const tr = o.demandaMl?.tendenciaRanking
+  if (tr?.estado === 'sube' || tr?.estado === 'nuevo') {
+    a.push({ id: 'ranking', Icono: TrendingUp, tono: 'bien', corto: tr.estado === 'nuevo' ? 'Entró al ranking de más vendidos de ML' : 'Subiendo en el ranking de más vendidos de ML',
+      ayuda: `Última semana: ${tr.productosAhora} producto(s) del nicho en el ranking${tr.mejorAhora ? `, mejor puesto #${tr.mejorAhora}` : ''}; las dos anteriores: ${tr.productosAntes ?? 0}${tr.mejorAntes ? ` (#${tr.mejorAntes})` : ''}. Es venta de hoy dicha por ML, con fecha.${o.ajusteRanking ? ` Suma ${o.ajusteRanking} al score.` : ''}` })
+  } else if (tr?.estado === 'baja') {
+    a.push({ id: 'ranking', Icono: TrendingDown, tono: 'aviso', corto: 'Bajando en el ranking de más vendidos de ML',
+      ayuda: `Última semana: ${tr.productosAhora} producto(s) del nicho en el ranking${tr.mejorAhora ? ` (#${tr.mejorAhora})` : ''}; las dos anteriores: ${tr.productosAntes ?? 0}${tr.mejorAntes ? ` (#${tr.mejorAntes})` : ''}.${o.ajusteRanking ? ` Resta ${-o.ajusteRanking} al score.` : ''}` })
+  }
   const pa = o.presionAds
   if (pa?.pctTopPaga >= TOP_PAGA_DISPUTADO) {
     a.push({ id: 'ads', Icono: MousePointerClick, tono: 'aviso', corto: `Clic disputado en ML: ${pa.pctTopPaga}% del top paga publicidad`,
@@ -516,7 +525,7 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
             {o.scansConDemanda}/{o.scansConDemanda + o.faltanScans}<small>scans</small>
           </span>
         ) : Number.isFinite(o.score) ? (
-          <span title={`Score ${o.score} de 100${o.dispersion != null ? ` · promedio de la serie de scans (se movió ${o.dispersion} puntos entre el más alto y el más bajo)` : ''}${o.costoAds?.ajusteScore ? ` · ${o.costoAds.ajusteScore > 0 ? '+' : ''}${o.costoAds.ajusteScore} por el costo de publicidad aprendido (~${fmtPrecio(o.costoAds.cac)} por venta en vez de $1.717 fijos; sin ajuste: ${o.scoreSinAjuste})` : ''}`}>
+          <span title={`Score ${o.score} de 100${o.dispersion != null ? ` · promedio de la serie de scans (se movió ${o.dispersion} puntos entre el más alto y el más bajo)` : ''}${o.costoAds?.ajusteScore ? ` · ${o.costoAds.ajusteScore > 0 ? '+' : ''}${o.costoAds.ajusteScore} por el costo de publicidad aprendido (~${fmtPrecio(o.costoAds.cac)} por venta en vez de $1.717 fijos)` : ''}${o.ajusteRanking ? ` · ${o.ajusteRanking > 0 ? '+' : ''}${o.ajusteRanking} por su tendencia en el ranking de más vendidos` : ''}${o.scoreSinAjuste != null ? ` · sin ajustes: ${o.scoreSinAjuste}` : ''}`}>
             <ScoreRing valor={o.score} size={46} grosor={4.5} />
           </span>
         ) : <em className="opt-nada">—</em>}
@@ -1149,7 +1158,7 @@ function ResumenNicho({ o, tendencia }) {
           {o.demandaMl ? (
             <span title={`Últimos ${o.demandaMl.ventanaDias ?? 7} días. Ranking: productos del nicho que aparecieron en el ranking oficial de más vendidos de su categoría. Stock: competidores seguidos que bajaron stock (venta real entre dos lecturas). El "top vendió X" no entra: es un acumulado sin fecha.`}>
               {o.demandaMl.hayDemanda ? 'sí' : 'no se ve'}
-              <i> · {o.demandaMl.ranking?.productos ?? 0} en el ranking{o.demandaMl.ranking?.mejorPuesto ? ` (mejor #${o.demandaMl.ranking.mejorPuesto})` : ''}{o.demandaMl.stock ? ` · ${o.demandaMl.stock.vendiendo} de ${o.demandaMl.stock.seguidos} bajan stock` : ''}</i>
+              <i> · {o.demandaMl.ranking?.productos ?? 0} en el ranking{o.demandaMl.ranking?.mejorPuesto ? ` (mejor #${o.demandaMl.ranking.mejorPuesto})` : ''}{o.demandaMl.tendenciaRanking?.estado && o.demandaMl.tendenciaRanking.estado !== 'fuera' ? ` · ${{ sube: 'subiendo', baja: 'bajando', estable: 'estable', nuevo: 'recién entró' }[o.demandaMl.tendenciaRanking.estado]}` : ''}{o.demandaMl.stock ? ` · ${o.demandaMl.stock.vendiendo} de ${o.demandaMl.stock.seguidos} bajan stock` : ''}</i>
             </span>
           ) : <i>se mide a diario desde hoy</i>}
         </Hecho>

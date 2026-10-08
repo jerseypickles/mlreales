@@ -64,6 +64,7 @@ export const api = {
   publicidadSerie: (dias = 60) => pedir(`/api/aprendizaje/publicidad/serie?dias=${dias}`),
   aprendizajePronosticos: (opciones) => pedir('/api/aprendizaje/pronosticos', opciones),
   demandaPropia: () => pedir('/api/aprendizaje/demanda-propia'),
+  rankingPropios: () => pedir('/api/aprendizaje/ranking-propios'),
   seguimiento: (nicho, opciones) => pedir(`/api/seguimiento${nicho ? `?nicho=${encodeURIComponent(nicho)}` : ''}`, opciones),
   masVendidos: (nicho, opciones) => pedir(`/api/mas-vendidos${nicho ? `?nicho=${encodeURIComponent(nicho)}` : ''}`, opciones),
   aprendizajePronosticosNichos: (opciones) => pedir('/api/aprendizaje/pronosticos-nichos', opciones),

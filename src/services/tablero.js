@@ -15,7 +15,7 @@ import { calcularMargen } from './margen.js'
 import { comisionMlExacta, categoriaDominante } from './comisionesMl.js'
 import { topSkusPorKeyword, agruparFamilias } from './familias.js'
 import { puntajeBusqueda, explicar } from './nivelBusqueda.js'
-import { sinDemandaActual } from './demandaActualMl.js'
+import { sinDemandaActual, ajustePorRanking } from './demandaActualMl.js'
 import { ventanaDeCompra } from './ventana.js'
 
 // Margen estimado si compras al EXW que cotizó el proveedor, con los mismos
@@ -675,6 +675,21 @@ export async function tableroOportunidades({ todos = false } = {}) {
     }
   } catch (err) {
     console.warn(`[tablero] costo de publicidad por nicho no aplicado: ${err.message}`)
+  }
+
+  // LA TENDENCIA DEL NICHO EN EL RANKING DE MÁS VENDIDOS (8-oct-2026, pedido
+  // del importador): si viene subiendo o bajando en ML pesa en el score, con
+  // pesos chicos e iniciales (demandaActualMl.js). Igual que el costo de
+  // publicidad, se ajusta el nivel al leer y el score sin ajuste queda a la vista.
+  for (const o of oportunidades) {
+    const t = o.demandaMl?.tendenciaRanking
+    const ajuste = Number.isFinite(o.score) ? ajustePorRanking(t) : 0
+    if (!t) continue
+    o.ajusteRanking = ajuste
+    if (ajuste) {
+      o.scoreSinAjuste ??= o.score
+      o.score = Math.max(0, Math.min(100, o.score + ajuste))
+    }
   }
 
   oportunidades.sort(
