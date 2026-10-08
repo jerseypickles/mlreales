@@ -49,3 +49,14 @@ test('panorama: una categoría marcada sin dato no se pide hasta que vence la ma
   ]
   assert.deepEqual(pedibles(hojas, 'sinTendenciasHasta', ahora).map((h) => h.id), ['A', 'C'])
 })
+
+test('búsquedas que suben: lo de temporada que ya no se alcanza no es oportunidad; lo que no es de temporada sí', async () => {
+  const { clasificarBusqueda } = await import('../src/services/panoramaMl.js')
+  const { temporadaDe } = await import('../src/services/calendarioTemporadas.js')
+  const oct = new Date('2026-10-08T12:00:00-03:00')
+  assert.equal(clasificarBusqueda('poleron gorro hombre', temporadaDe('poleron gorro hombre Abrigos > Polerones', oct)).tipo, 'estacional-tarde')
+  assert.equal(clasificarBusqueda('disfraces para bebes halloween', temporadaDe('disfraces para bebes halloween', oct)).tipo, 'estacional-tarde')
+  assert.equal(clasificarBusqueda('fundas para autos a medida', temporadaDe('fundas para autos a medida Accesorios de Interior > Cubre Asientos', oct)).tipo, 'novedad')
+  // el verano todavía se alcanza en octubre
+  assert.equal(clasificarBusqueda('quitasol playa', temporadaDe('quitasol playa', oct)).tipo, 'estacional-a-tiempo')
+})

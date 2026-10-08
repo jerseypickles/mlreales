@@ -8029,3 +8029,4 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .pub-clic-barra em { position: absolute; left: 50%; width: 10px; height: 10px; margin: 0 0 -5px -5px; border-radius: 999px; background: var(--superficie); border: 2px solid var(--avisa-tinta); }
 .pub-clic-mc { color: var(--avisa-tinta) !important; font-weight: 600; }
 .pub-clic-sale { color: var(--peligro) !important; max-width: 60px; text-align: center; line-height: 1.2; }
+.opp-sub small { font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--tinta-3); margin-left: 4px; }

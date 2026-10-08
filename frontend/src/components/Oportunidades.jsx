@@ -1090,15 +1090,69 @@ function ResumenNicho({ o, tendencia }) {
   return (
     <div className="opp-resumen">
       <AvisosLista lista={avisosDe(o, tendencia)} />
-      <h4 className="opp-sub">Las cifras</h4>
+      {/* CADA CIFRA CON SU HORIZONTE (8-oct-2026). El importador: "tú tienes data
+          de 12 meses y a la mano ML con 7 días". La compra se paga hoy y se vende
+          en 2-3 meses: se decide con historia larga (Google, estructura del
+          mercado) y lo de días solo CONFIRMA que hoy se vende. */}
+      <h4 className="opp-sub">Para decidir la compra <small>· historia de 12–24 meses y estructura del mercado</small></h4>
       <div className="op-hechos">
+        <Hecho etiqueta="búsquedas/mes">{c?.busquedasMes ? fmtNum(c.busquedasMes) : null}</Hecho>
+        {Number.isFinite(c?.variacionInteranualPct) ? (
+          <Hecho etiqueta="Google 12 meses">
+            <span title={`Búsquedas de los últimos 12 meses contra los 12 anteriores: cada estación aparece una vez en cada lado, así que no la mueve la temporada.${Number.isFinite(c.variacionRelativaPct) ? ` Todo el mercado hizo ${c.variacionMercadoPct > 0 ? '+' : ''}${c.variacionMercadoPct}%; contra el mercado queda ${c.variacionRelativaPct > 0 ? '+' : ''}${c.variacionRelativaPct}%.` : ''}`}>
+              {c.variacionInteranualPct > 0 ? '+' : ''}{c.variacionInteranualPct}%{Number.isFinite(c.variacionRelativaPct) ? <i> · {c.variacionRelativaPct > 0 ? '+' : ''}{c.variacionRelativaPct}% vs mercado</i> : null}
+            </span>
+          </Hecho>
+        ) : null}
         <Hecho etiqueta="búsqueda">
           {nivel ? <span title={nb.explicacion ?? ''}>{nivel.texto}{nb.posicion ? <i> · #{nb.posicion}/{nb.deCuantas} en “{nb.prefijo}”</i> : null}</span> : 'sin medir'}
         </Hecho>
-        <Hecho etiqueta="búsquedas/mes">{c?.busquedasMes ? fmtNum(c.busquedasMes) : null}</Hecho>
         <Hecho etiqueta="vender a">{o.precioVentaClp ? fmtPrecio(o.precioVentaClp) : null}</Hecho>
         <Hecho etiqueta="EXW máx">{o.exwMaximoUsd != null ? `US$ ${o.exwMaximoUsd}` : null}</Hecho>
         <Hecho etiqueta="mediana">{o.mediana ? fmtPrecio(o.mediana) : null}</Hecho>
+        {o.conversion?.factor ? <Hecho etiqueta="convierte"><Conversion c={o.conversion} /></Hecho> : null}
+        <Hecho etiqueta="Full">{o.pctFull != null ? `${Math.round(o.pctFull)}% del top` : null}</Hecho>
+        <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
+        {o.pctCrossBorder ? (
+          <Hecho etiqueta="importan directo">
+            <span title={`${Math.round(o.pctCrossBorder)}% del top despacha desde el extranjero. Doble filo: prueba de que el producto se importa bien, y a la vez rival con tu misma estructura de costo.`}>
+              {Math.round(o.pctCrossBorder)}%{o.origenesCrossBorder ? ` · ${Object.keys(o.origenesCrossBorder).join('/')}` : ''}
+            </span>
+          </Hecho>
+        ) : null}
+        <Hecho etiqueta="publicidad en ML">
+          {o.presionAds ? (
+            <span title={`Del top orgánico con dato (${o.presionAds.topConDato}), ${o.presionAds.pctTopPaga}% además paga anuncios. ${o.presionAds.anunciantes} vendedores distintos anuncian en el listado${o.presionAds.anunciantesOficiales ? `, ${o.presionAds.anunciantesOficiales} de ellos tiendas oficiales` : ''}; ${o.presionAds.anunciosPuros} anuncios pagan sin rankear.`}>
+              {o.presionAds.pctTopPaga != null ? `${o.presionAds.pctTopPaga}% del top paga` : '—'}<i> · {o.presionAds.anunciantes} anunciantes</i>
+            </span>
+          ) : <i>se mide desde el próximo scan</i>}
+        </Hecho>
+        {o.costoAds ? (
+          <Hecho etiqueta="publicidad por venta">
+            <span title={`${o.costoAds.fuente === 'nicho' ? `Estimado para este nicho: la base de tu cuenta (${fmtPrecio(o.costoAds.base)}) × ${o.costoAds.factor} según ${o.costoAds.variable === 'cpcGoogle' ? 'el costo del clic en Google' : 'la parte del top que paga publicidad'}.` : o.costoAds.fuente === 'cuenta' ? 'Medido en tu cuenta (gasto / ventas por anuncio, 90 días), mezclado con el fijo de agosto según la evidencia.' : 'Costo fijo de agosto: todavía sin medición propia.'}${o.costoAds.sombra != null ? ` En sombra, el modelo por nicho diría ${fmtPrecio(o.costoAds.sombra)} (todavía no valida: ${o.costoAds.modelo === 'pocos-casos' ? 'faltan productos propios con publicidad en nichos distintos' : 'no predice mejor que la base'}).` : ''}${o.costoAds.ajusteScore ? ` Contra los $1.717 fijos, el score se movió ${o.costoAds.ajusteScore > 0 ? '+' : ''}${o.costoAds.ajusteScore}.` : ''}`}>
+              ~{fmtPrecio(o.costoAds.cac)}<i> · {o.costoAds.fuente === 'nicho' ? 'de este nicho' : o.costoAds.fuente === 'cuenta' ? 'de tu cuenta' : 'fijo'}{o.costoAds.sombra != null ? ` · sombra ${fmtPrecio(o.costoAds.sombra)}` : ''}</i>
+            </span>
+          </Hecho>
+        ) : null}
+        {o.vendidosHistoricos?.pisoUnidades ? (
+          <Hecho etiqueta="el top vendió (sin fecha)">
+            <span title={ayudaTrayectoria(o.vendidosHistoricos)}>
+              al menos {fmtNum(o.vendidosHistoricos.pisoUnidades)} en toda su vida
+              {o.vendidosHistoricos.pctCobertura != null ? <i> · {o.vendidosHistoricos.pctCobertura}% del top despegó</i> : null}
+            </span>
+          </Hecho>
+        ) : null}
+      </div>
+      <h4 className="opp-sub">Para confirmar que se vende hoy <small>· últimos días: confirma, no decide</small></h4>
+      <div className="op-hechos">
+        <Hecho etiqueta="se vende hoy en ML">
+          {o.demandaMl ? (
+            <span title={`Últimos ${o.demandaMl.ventanaDias ?? 7} días. Ranking: productos del nicho que aparecieron en el ranking oficial de más vendidos de su categoría. Stock: competidores seguidos que bajaron stock (venta real entre dos lecturas). El "top vendió X" no entra: es un acumulado sin fecha.`}>
+              {o.demandaMl.hayDemanda ? 'sí' : 'no se ve'}
+              <i> · {o.demandaMl.ranking?.productos ?? 0} en el ranking{o.demandaMl.ranking?.mejorPuesto ? ` (mejor #${o.demandaMl.ranking.mejorPuesto})` : ''}{o.demandaMl.stock ? ` · ${o.demandaMl.stock.vendiendo} de ${o.demandaMl.stock.seguidos} bajan stock` : ''}</i>
+            </span>
+          ) : <i>se mide a diario desde hoy</i>}
+        </Hecho>
         {/* LO CONTADO, no lo derivado: reseñas nuevas es un entero exacto que
             entrega ML; la estimación de ventas/día va plegada en Competencia */}
         <Hecho etiqueta="se mueve">
@@ -1119,52 +1173,12 @@ function ResumenNicho({ o, tendencia }) {
             </span>
           </Hecho>
         ) : null}
-        {o.vendidosHistoricos?.pisoUnidades ? (
-          <Hecho etiqueta="el top vendió">
-            <span title={ayudaTrayectoria(o.vendidosHistoricos)}>
-              al menos {fmtNum(o.vendidosHistoricos.pisoUnidades)} en toda su vida
-              {o.vendidosHistoricos.pctCobertura != null ? <i> · {o.vendidosHistoricos.pctCobertura}% del top despegó</i> : null}
-            </span>
-          </Hecho>
-        ) : null}
-        {o.conversion?.factor ? <Hecho etiqueta="convierte"><Conversion c={o.conversion} /></Hecho> : null}
-        <Hecho etiqueta="Full">{o.pctFull != null ? `${Math.round(o.pctFull)}% del top` : null}</Hecho>
-        <Hecho etiqueta="publicidad en ML">
-          {o.presionAds ? (
-            <span title={`Del top orgánico con dato (${o.presionAds.topConDato}), ${o.presionAds.pctTopPaga}% además paga anuncios. ${o.presionAds.anunciantes} vendedores distintos anuncian en el listado${o.presionAds.anunciantesOficiales ? `, ${o.presionAds.anunciantesOficiales} de ellos tiendas oficiales` : ''}; ${o.presionAds.anunciosPuros} anuncios pagan sin rankear.`}>
-              {o.presionAds.pctTopPaga != null ? `${o.presionAds.pctTopPaga}% del top paga` : '—'}<i> · {o.presionAds.anunciantes} anunciantes</i>
-            </span>
-          ) : <i>se mide desde el próximo scan</i>}
-        </Hecho>
-        {o.costoAds ? (
-          <Hecho etiqueta="publicidad por venta">
-            <span title={`${o.costoAds.fuente === 'nicho' ? `Estimado para este nicho: la base de tu cuenta (${fmtPrecio(o.costoAds.base)}) × ${o.costoAds.factor} según ${o.costoAds.variable === 'cpcGoogle' ? 'el costo del clic en Google' : 'la parte del top que paga publicidad'}.` : o.costoAds.fuente === 'cuenta' ? 'Medido en tu cuenta (gasto / ventas por anuncio, 90 días), mezclado con el fijo de agosto según la evidencia.' : 'Costo fijo de agosto: todavía sin medición propia.'}${o.costoAds.sombra != null ? ` En sombra, el modelo por nicho diría ${fmtPrecio(o.costoAds.sombra)} (todavía no valida: ${o.costoAds.modelo === 'pocos-casos' ? 'faltan productos propios con publicidad en nichos distintos' : 'no predice mejor que la base'}).` : ''}${o.costoAds.ajusteScore ? ` Contra los $1.717 fijos, el score se movió ${o.costoAds.ajusteScore > 0 ? '+' : ''}${o.costoAds.ajusteScore}.` : ''}`}>
-              ~{fmtPrecio(o.costoAds.cac)}<i> · {o.costoAds.fuente === 'nicho' ? 'de este nicho' : o.costoAds.fuente === 'cuenta' ? 'de tu cuenta' : 'fijo'}{o.costoAds.sombra != null ? ` · sombra ${fmtPrecio(o.costoAds.sombra)}` : ''}</i>
-            </span>
-          </Hecho>
-        ) : null}
-        <Hecho etiqueta="se vende hoy en ML">
-          {o.demandaMl ? (
-            <span title={`Últimos ${o.demandaMl.ventanaDias ?? 7} días. Ranking: productos del nicho que aparecieron en el ranking oficial de más vendidos de su categoría. Stock: competidores seguidos que bajaron stock (venta real entre dos lecturas). El "top vendió X" no entra: es un acumulado sin fecha.`}>
-              {o.demandaMl.hayDemanda ? 'sí' : 'no se ve'}
-              <i> · {o.demandaMl.ranking?.productos ?? 0} en el ranking{o.demandaMl.ranking?.mejorPuesto ? ` (mejor #${o.demandaMl.ranking.mejorPuesto})` : ''}{o.demandaMl.stock ? ` · ${o.demandaMl.stock.vendiendo} de ${o.demandaMl.stock.seguidos} bajan stock` : ''}</i>
-            </span>
-          ) : <i>se mide a diario desde hoy</i>}
-        </Hecho>
-        <Hecho etiqueta="sellers">{o.sellersUnicos != null ? fmtNum(o.sellersUnicos) : null}</Hecho>
         {/* un pct alto de "últimas unidades" no es riesgo: es un nicho
             desabastecido, o sea una ventana para quien trae stock */}
         {o.profundidadStock?.itemsPorAgotarse ? (
           <Hecho etiqueta="por agotarse">
             <span title={`${o.profundidadStock.itemsPorAgotarse} de ${o.profundidadStock.itemsDelScan} publicaciones del top muestran "últimas unidades" (5 o menos). Entre ellas quedan ${o.profundidadStock.unidadesVisibles} unidades; del resto no se sabe.`}>
               {o.profundidadStock.pctEnUltimas}% del top{o.profundidadStock.pctEnUltimas >= 40 ? ' · desabastecido' : ''}
-            </span>
-          </Hecho>
-        ) : null}
-        {o.pctCrossBorder ? (
-          <Hecho etiqueta="importan directo">
-            <span title={`${Math.round(o.pctCrossBorder)}% del top despacha desde el extranjero. Doble filo: prueba de que el producto se importa bien, y a la vez rival con tu misma estructura de costo.`}>
-              {Math.round(o.pctCrossBorder)}%{o.origenesCrossBorder ? ` · ${Object.keys(o.origenesCrossBorder).join('/')}` : ''}
             </span>
           </Hecho>
         ) : null}

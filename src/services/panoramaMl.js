@@ -4,6 +4,7 @@ import { meliGet } from './meli.js'
 import { normalizarDestacados, normalizarTendencias } from './senalesOficiales.js'
 import { categoriasDelTablero, resolverFichas, movimientosDeRanking } from './rankingMasVendidos.js'
 import { diaChile } from './inventarioFull.js'
+import { temporadaDe } from './calendarioTemporadas.js'
 
 // EL PANORAMA DE MERCADO LIBRE: EL RADAR MIRA TODOS LOS PASILLOS.
 //
@@ -209,6 +210,20 @@ export function terminosNuevos(ultima, anterior) {
   return (ultima ?? []).filter((t) => !antes.has(t))
 }
 
+// Pura. QUÉ CLASE DE SEÑAL ES UNA BÚSQUEDA QUE SUBE (8-oct-2026). Compara esta
+// semana contra la anterior, así que sube lo que la ESTACIÓN empuja: en octubre
+// polerones, en diciembre piscinas. El importador: "tú tienes data de 12 meses y
+// a la mano ML con 7 días". Para quien importa con ~2 meses de demora, lo de
+// temporada que sube hoy llega tarde; lo que sirve es la NOVEDAD.
+//   'estacional-tarde'    → de una temporada que ya no se alcanza o no toca
+//   'estacional-a-tiempo' → de una temporada que todavía se alcanza pidiendo ya
+//   'novedad'             → no es de temporada: lo que de verdad aporta
+export function clasificarBusqueda(termino, temporada) {
+  if (!temporada) return { tipo: 'novedad' }
+  const aTiempo = ['a-tiempo', 'justo'].includes(temporada.estado)
+  return { tipo: aTiempo ? 'estacional-a-tiempo' : 'estacional-tarde', temporada: temporada.nombre, estadoTemporada: temporada.estado }
+}
+
 // Las búsquedas que ENTRARON a las tendencias de su categoría, con el nombre de
 // la categoría: lo que lee el radar.
 export async function busquedasQueSuben({ max = 30 } = {}) {
@@ -220,7 +235,8 @@ export async function busquedasQueSuben({ max = 30 } = {}) {
   for (const [categoriaId, serie] of porCat) {
     if (serie.length < 2) continue
     for (const t of terminosNuevos(serie[0].terminos, serie[1].terminos).slice(0, 3)) {
-      salida.push({ termino: t, categoria: nombres.get(categoriaId)?.ruta ?? categoriaId, totalItems: nombres.get(categoriaId)?.totalItems ?? 0 })
+      const ruta = nombres.get(categoriaId)?.ruta ?? categoriaId
+      salida.push({ termino: t, categoria: ruta, totalItems: nombres.get(categoriaId)?.totalItems ?? 0, ...clasificarBusqueda(t, temporadaDe(`${t} ${ruta}`)) })
     }
   }
   return salida.sort((a, b) => b.totalItems - a.totalItems).slice(0, max)

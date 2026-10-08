@@ -189,7 +189,9 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   const entradas = await import('./rankingMasVendidos.js').then((m) => m.entradasAlTop()).catch(() => [])
   // las búsquedas que ENTRARON a las tendencias de su categoría esta semana, en
   // todo Mercado Libre (panoramaMl.js): lo que la gente empezó a buscar
-  const suben = await import('./panoramaMl.js').then((m) => m.busquedasQueSuben()).catch(() => [])
+  // solo lo que todavía sirve: una búsqueda de temporada que ya no se alcanza
+  // sube porque la estación la empuja, no porque sea oportunidad (8-oct-2026)
+  const suben = (await import('./panoramaMl.js').then((m) => m.busquedasQueSuben()).catch(() => [])).filter((b) => b.tipo !== 'estacional-tarde')
   // publicaciones que llegaron hace poco a nichos que ya miramos y despegan:
   // otro importador trajo algo que el mercado está aceptando
   const despegan = await import('./nuevosQueDespegan.js').then((m) => m.productosNuevosQueDespegan({ max: 12 })).catch(() => [])

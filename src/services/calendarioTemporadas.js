@@ -126,6 +126,23 @@ export function calendarioParaPrompt(hoy = new Date()) {
 
 // Guarda en código: el modelo puede saltarse la prohibición; una keyword que
 // nombra una temporada que no se alcanza no entra al tablero.
+// LAS PALABRAS DE LAS TEMPORADAS LARGAS, SOLO PARA RECONOCER (8-oct-2026).
+// Verano e invierno no llevan `palabras` en TEMPORADAS a propósito: el radar no
+// bloquea por palabra una temporada larga (un quitasol pedido a fines de
+// noviembre todavía vende en enero), ahí decide la curva medida. Pero para
+// clasificar "búsquedas que suben" hay que reconocerlas: sin esto "quitasol" en
+// diciembre o "polerón" en octubre se leían como novedad.
+const PALABRAS_ESTACION = {
+  verano: /verano|playa|piscina|quitasol|bloqueador|protector solar|traje de ba[nñ]o|bikini|sandalia|ojota|inflable|ventilador|climatizad|aire acondicionado|cooler|camping|carpa|hamaca|mosquiter/i,
+  invierno: /invierno|t[eé]rmic|poler[oó]n|parka|plum[oó]n|chaqueta|abrigo|bufanda|guatero|frazada|calefact|estufa|paraguas|impermeable|deshumidific/i,
+}
+
+// La temporada a la que pertenece una búsqueda (si alguna) y su estado hoy.
+export function temporadaDe(keyword, hoy = new Date()) {
+  const k = String(keyword ?? '')
+  return calendarioTemporadas(hoy).find((t) => (t.palabras ?? PALABRAS_ESTACION[t.id])?.test(k)) ?? null
+}
+
 export function temporadaInalcanzableDe(keyword, hoy = new Date()) {
   return calendarioTemporadas(hoy).find((t) => t.palabras?.test(String(keyword ?? '')) && t.estado !== 'a-tiempo' && t.estado !== 'justo') ?? null
 }
