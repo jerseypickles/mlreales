@@ -1157,7 +1157,9 @@ export function iniciarWorkers() {
       if (job.name === 'panorama-ml') return import('../services/panoramaMl.js').then((m) => m.pasadaPanorama())
       if (job.name === 'tiendas-ganadoras') return import('../services/tiendasGanadoras.js').then((m) => m.pasadaTiendas())
       if (job.name === 'vigia-mejoras') return import('../services/vigiaMejoras.js').then((m) => m.pasadaVigia())
+      // con la demanda actual, una vez al día: el efecto de cada evento comercial y los saltos sin explicar
       if (job.name === 'demanda-ml') return import('../services/demandaActualMl.js').then((m) => m.medirDemandaActual())
+        .then(async (r) => ({ ...r, eventos: await import('../services/eventosComerciales.js').then((e) => e.revisarEventos()).catch((err) => ({ error: err.message })) }))
       if (job.name === 'nivel-busqueda') return procesarNivelBusqueda(job)
       if (job.name === 'refresco-curvas') return procesarRefrescoCurvas()
       return procesarTendencias(job)

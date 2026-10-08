@@ -27,12 +27,13 @@ const ctrDe = (c, p) => (p > 0 ? Math.round((c / p) * 10000) / 100 : null)
 // Pura. Semanas de un nicho. `filas`: AdsDiaMl de sus productos; `campanaDia`:
 // Map `${campanaId}|${dia}` → { presupuestoDiario, roasObjetivo };
 // `gastoCampanaDia`: Map `${campanaId}|${dia}` → gasto total de la campaña ese día.
-export function semanasDelNicho(filas, campanaDia = new Map(), gastoCampanaDia = new Map()) {
+export function semanasDelNicho(filas, campanaDia = new Map(), gastoCampanaDia = new Map(), diasEvento = new Set()) {
   const sem = new Map()
   for (const f of filas) {
     const k = lunesDe(f.dia)
-    const s = sem.get(k) ?? { semana: k, dias: new Set(), prints: 0, clicks: 0, gasto: 0, printsLimitados: 0, printsConDato: 0, roas: new Set(), presupuestos: new Set() }
+    const s = sem.get(k) ?? { semana: k, dias: new Set(), prints: 0, clicks: 0, gasto: 0, printsLimitados: 0, printsConDato: 0, printsEvento: 0, roas: new Set(), presupuestos: new Set() }
     s.dias.add(f.dia); s.prints += f.prints ?? 0; s.clicks += f.clicks ?? 0; s.gasto += f.costo ?? 0
+    if (diasEvento.has(f.dia)) s.printsEvento += f.prints ?? 0
     const conf = f.campanaId != null ? campanaDia.get(`${f.campanaId}|${f.dia}`) : null
     if (conf?.presupuestoDiario) {
       s.printsConDato += f.prints ?? 0
@@ -50,7 +51,9 @@ export function semanasDelNicho(filas, campanaDia = new Map(), gastoCampanaDia =
     const cambioConfig = s.roas.size > 1 || s.presupuestos.size > 1
     // lectura de la semana como DEMANDA: limpia, limitada por la campaña, con
     // cambio de configuración, o sin dato de la campaña (antes del 8-oct)
-    const lectura = s.prints < MIN_IMPRESIONES_SEMANA ? 'poca-muestra' : !conDato ? 'sin-dato-campana' : limitada ? 'limitada' : cambioConfig ? 'cambio-config' : 'limpia'
+    // una semana con evento comercial (CyberDay…) no es demanda normal
+    const evento = s.printsEvento >= s.prints * 0.3 && s.prints > 0
+    const lectura = s.prints < MIN_IMPRESIONES_SEMANA ? 'poca-muestra' : evento ? 'evento' : !conDato ? 'sin-dato-campana' : limitada ? 'limitada' : cambioConfig ? 'cambio-config' : 'limpia'
     return { semana: s.semana, dias, impresiones: s.prints, impresionesDia: Math.round(s.prints / Math.max(1, dias)), clicks: s.clicks,
       ctr: ctrDe(s.clicks, s.prints), cpc: s.clicks ? Math.round(s.gasto / s.clicks) : null, gasto: Math.round(s.gasto), lectura }
   })
@@ -101,6 +104,7 @@ export async function demandaPropia({ ahora = new Date() } = {}) {
   for (const g of await AdsDiaMl.aggregate([{ $match: { itemId: { $ne: '*' }, campanaId: { $ne: null } } }, { $group: { _id: { c: '$campanaId', d: '$dia' }, gasto: { $sum: '$costo' } } }])) {
     gastoCampanaDia.set(`${g._id.c}|${g._id.d}`, g.gasto)
   }
+  const diasEvento = await import('../eventosComerciales.js').then((m) => m.diasDeEvento()).catch(() => new Set())
   const curvas = new Map((await CurvaEstacional.find({ keyword: { $in: [...nichos.values()] } }).select('keyword serieMensual').lean()).map((c) => [c.keyword, c.serieMensual ?? []]))
   const porNicho = new Map()
   for (const p of propios) porNicho.set(String(p.nichoId), [...(porNicho.get(String(p.nichoId)) ?? []), p.id])
@@ -108,7 +112,7 @@ export async function demandaPropia({ ahora = new Date() } = {}) {
   for (const [nichoId, ids] of porNicho) {
     const susFilas = filas.filter((f) => ids.includes(f.itemId))
     if (!susFilas.length) continue
-    const semanas = semanasDelNicho(susFilas, campanaDia, gastoCampanaDia)
+    const semanas = semanasDelNicho(susFilas, campanaDia, gastoCampanaDia, diasEvento)
     const keyword = nichos.get(nichoId) ?? null
     const limpias = semanas.filter((s) => s.lectura === 'limpia')
     salida.push({ nichoId, keyword, productos: ids.length, semanas: semanas.slice(-16),

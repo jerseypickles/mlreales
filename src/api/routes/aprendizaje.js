@@ -224,6 +224,37 @@ router.get('/ranking-propios', async (_req, res) => {
   const ps = await ProductoPropio.find({}).select('itemIdMl sku titulo imagen estado rankingMl idsRanking').lean()
   res.json({ productos: ps.map((p) => ({ itemId: p.itemIdMl ?? p.sku, titulo: p.titulo, imagen: p.imagen, estado: p.estado, ids: p.idsRanking, ranking: p.rankingMl })) })
 })
+// EVENTOS COMERCIALES (services/eventosComerciales.js): el calendario con su
+// efecto medido y los saltos sin explicar. POST crea o corrige uno (el
+// importador confirma fechas, nombra un salto o lo descarta)
+router.get('/eventos', async (_req, res) => {
+  const { EventoComercial } = await import('../../models/EventoComercial.js')
+  const { asegurarSemilla } = await import('../../services/eventosComerciales.js')
+  await asegurarSemilla()
+  res.json({ eventos: await EventoComercial.find({}).sort({ desde: -1 }).lean() })
+})
+router.post('/eventos', async (req, res) => {
+  const { EventoComercial } = await import('../../models/EventoComercial.js')
+  const b = req.body ?? {}
+  const fecha = (x) => (typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : null)
+  if (b.clave) {
+    const cambios = {}
+    if (typeof b.nombre === 'string' && b.nombre.trim()) cambios.nombre = b.nombre.trim().slice(0, 80)
+    if (fecha(b.desde)) cambios.desde = b.desde
+    if (fecha(b.hasta)) cambios.hasta = b.hasta
+    if (['confirmado', 'inferido', 'por-revisar', 'descartado'].includes(b.estado)) cambios.estado = b.estado
+    const r = await EventoComercial.findOneAndUpdate({ clave: b.clave }, { $set: { ...cambios, actualizadoEl: new Date() } }, { new: true })
+    return r ? res.json({ evento: r }) : res.status(404).json({ error: 'evento no encontrado' })
+  }
+  if (!fecha(b.desde) || !fecha(b.hasta) || !(typeof b.nombre === 'string' && b.nombre.trim())) return res.status(400).json({ error: 'nombre, desde y hasta (AAAA-MM-DD) requeridos' })
+  const clave = `${b.nombre.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-')}-${b.desde}`
+  const evento = await EventoComercial.findOneAndUpdate({ clave }, { $set: { clave, nombre: b.nombre.trim().slice(0, 80), desde: b.desde, hasta: b.hasta, estado: 'confirmado', origen: 'manual', actualizadoEl: new Date() } }, { upsert: true, new: true })
+  res.status(201).json({ evento })
+})
+router.post('/eventos/revisar', async (_req, res) => {
+  const { revisarEventos } = await import('../../services/eventosComerciales.js')
+  res.json(await revisarEventos())
+})
 router.get('/fuentes-radar', async (_req, res) => {
   const { fuentesDelRadar } = await import('../../services/ml/fuentesRadar.js')
   res.json(await fuentesDelRadar())

@@ -8054,3 +8054,17 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .pub-rk-serie { display: flex; align-items: flex-end; gap: 2px; height: 34px; }
 .pub-rk-serie i { flex: 1; min-width: 3px; border-radius: 2px 2px 0 0; background: var(--exito); }
 @media (max-width: 640px) { .pub-rk-prod { grid-template-columns: 36px minmax(0, 1fr); } .pub-rk-serie { grid-column: 1 / -1; } }
+
+/* eventos comerciales */
+.pub-ev { display: grid; gap: 8px; margin-bottom: 10px; }
+.pub-ev-fila { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 12px; }
+.pub-ev-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pub-ev-cab strong { font-size: 13.5px; }
+.pub-ev-cab small, .pub-ev-nota { font-size: 12px; color: var(--tinta-3); }
+.pub-ev-efecto { font-size: 12.5px; font-weight: 600; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+.pub-ev-efecto i { font-style: normal; font-weight: 500; color: var(--tinta-3); }
+.pub-ev-acciones { display: flex; gap: 10px; align-items: center; }
+.pub-ev-form { display: flex; flex-wrap: wrap; gap: 6px; }
+.pub-ev-form input { font: inherit; font-size: 12.5px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--borde); background: var(--superficie); color: var(--tinta); }
+.pub-ev-form input:first-child { flex: 1 1 200px; }
+.pub-dp-evento { background: var(--avisa-tinta); }

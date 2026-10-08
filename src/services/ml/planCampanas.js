@@ -204,7 +204,10 @@ export function diagnosticoClic(dias, ctrCuenta = null, mercado = null) {
 // Pura. Revisión de una campaña en curso. `dias`: filas diarias del producto
 // desde el primer gasto { dia, gasto, unidadesAds, ventaAds, unidades }.
 const coma = (n) => String(n).replace('.', ',')
-export function revisarCampana(dias, eco, p, opciones = {}) {
+export function revisarCampana(diasConEventos, eco, p, opciones = {}) {
+  // los días de evento comercial (CyberDay…) no son normales: fuera de la
+  // revisión, o una semana de CyberDay se lee como "deja plata, subir"
+  const dias = diasConEventos.filter((d) => !d.evento)
   const r = revisarCampanaSinClic(dias, eco, p, opciones)
   if (!r) return r
   const clic = diagnosticoClic(dias, opciones.ctrCuenta, opciones.mercado)
@@ -424,6 +427,8 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const beta = (await AprendizajePublicidad.findOne().sort({ dia: -1 }).select('efecto.beta efecto.estado').lean())?.efecto
   const betaUsable = beta?.estado === 'aprendido' ? beta.beta : null
   const envioReal = await envioRealPorItem({ dias: 60 }).catch(() => new Map())
+  // los días de evento comercial (services/eventosComerciales.js)
+  const diasEvento = await import('../eventosComerciales.js').then((m) => m.diasDeEvento()).catch(() => new Set())
   // todos: los pausados no llevan plan, pero su historia de publicidad enseña
   const propios = await ProductoPropio.find({}).lean()
   const ids = propios.map((x) => x.itemIdMl ?? x.sku)
@@ -463,14 +468,15 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       for (let t = +new Date(`${primer}T12:00:00Z`); new Date(t).toISOString().slice(0, 10) < hoy; t += DIA) {
         const dia = new Date(t).toISOString().slice(0, 10)
         const a = porDia.get(dia)
-        dias.push({ dia, gasto: a?.costo ?? 0, unidadesAds: a?.unidadesAds ?? 0, ventaAds: a?.ventaAds ?? 0, unidades: ventas.get(dia) ?? 0, prints: a?.prints ?? 0, clicks: a?.clicks ?? 0, precio: precioDia.get(`${id}|${dia}`) ?? null, stockFraccion: stockDia.get(`${id}|${dia}`) ?? null })
+        dias.push({ dia, evento: diasEvento.has(dia), gasto: a?.costo ?? 0, unidadesAds: a?.unidadesAds ?? 0, ventaAds: a?.ventaAds ?? 0, unidades: ventas.get(dia) ?? 0, prints: a?.prints ?? 0, clicks: a?.clicks ?? 0, precio: precioDia.get(`${id}|${dia}`) ?? null, stockFraccion: stockDia.get(`${id}|${dia}`) ?? null })
       }
       // una campaña apagada hace más de 7 días ya no se revisa como en curso
       const ultimoGasto = susAds.filter((a) => a.costo > 0).map((a) => a.dia).sort().at(-1)
       if (ultimoGasto && +new Date(hoy) - +new Date(ultimoGasto) > 7 * DIA) plan = { fase: 'apagada', accion: 'apagada', budgetDiario: 0, texto: `Sin gasto desde ${ultimoGasto}.` }
       else plan = { pendiente: true, desdeCampana: diaDeCampanaActual(susAds) }
       paraMarcador.push({ dias, eco, itemId: id, titulo: prop.titulo ?? null })
-      transiciones.push(...transicionesSemanales(dias, eco).map((t) => ({ ...t, itemId: id })))
+      // las reglas aprenden de semanas normales: el CyberDay les enseñaría que subir el gasto paga
+      transiciones.push(...transicionesSemanales(dias.filter((d) => !d.evento), eco).map((t) => ({ ...t, itemId: id })))
       diasPorItem.set(id, dias)
       ecoPorItem.set(id, eco)
     } else {
@@ -488,7 +494,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const clicCuenta = ctrDeCuenta(ads)
   // las ventanas del clic de cada producto (historia completa, mismas fechas):
   // de acá sale el mercado sin la mezcla para cada uno
-  const ventanasPorItem = new Map([...diasPorItem].map(([id, d]) => [id, ventanasClic(d)]))
+  const ventanasPorItem = new Map([...diasPorItem].map(([id, d]) => [id, ventanasClic(d.filter((x) => !x.evento))]))
   // la forma de campaña que rinde más, aprendida de toda la historia
   const nichoDe = new Map(propios.filter((x) => x.nichoId).map((x) => [x.itemIdMl ?? x.sku, String(x.nichoId)]))
   const formas = aprenderEstructura(observacionesEstructura(ads, ecoPorItem, nichoDe))
@@ -633,6 +639,7 @@ export function aprenderUmbral(transiciones, { ajustar, previo = UMBRAL_INICIAL 
 // `diasPorItem`: itemId → filas diarias.
 export function evaluarRecomendaciones(recs, diasPorItem, ecoPorItem, { hoy }) {
   const evaluadas = []
+  let conEvento = 0
   for (const r of recs) {
     const dias = diasPorItem.get(r.itemId) ?? []
     const eco = ecoPorItem.get(r.itemId)
@@ -641,6 +648,9 @@ export function evaluarRecomendaciones(recs, diasPorItem, ecoPorItem, { hoy }) {
     const despues = dias.slice(i, i + 7)
     if (despues.length < 7 || despues.at(-1).dia >= hoy) continue
     const antes = dias.slice(Math.max(0, i - 7), i)
+    // una ventana con días de evento comercial no dice si la recomendación
+    // sirvió: el CyberDay vende solo (8-oct-2026)
+    if ([...antes, ...despues].some((d) => d.evento)) { conEvento++; continue }
     const plataDe = (w) => w.reduce((a, d) => a + (d.unidades ?? 0), 0) * eco.deja - w.reduce((a, d) => a + (d.gasto ?? 0), 0)
     const gAntes = antes.reduce((a, d) => a + d.gasto, 0) / Math.max(1, antes.length), gDespues = despues.reduce((a, d) => a + d.gasto, 0) / 7
     const cambio = gAntes > 0 ? gDespues / gAntes : gDespues > 0 ? 2 : 1
@@ -653,6 +663,8 @@ export function evaluarRecomendaciones(recs, diasPorItem, ecoPorItem, { hoy }) {
     tasaAcierto: seguidas.length ? Math.round((seguidas.filter((e) => e.mejoro).length / seguidas.length) * 100) : null,
     // lo mismo para las que NO se siguieron: la comparación que dice si seguirlas sirve
     tasaSinSeguir: evaluadas.length - seguidas.length ? Math.round((evaluadas.filter((e) => !e.siguio && e.mejoro).length / (evaluadas.length - seguidas.length)) * 100) : null,
+    // las que no se evaluaron porque su ventana tocó un evento comercial
+    sinEvaluarPorEvento: conEvento,
     detalle: evaluadas.slice(-20) }
 }
 
@@ -668,6 +680,7 @@ export function evaluarRevisionAnuncio(recs, diasPorItem, { hoy }) {
     const despues = dias.slice(i, i + 7)
     if (despues.length < 7 || despues.at(-1).dia >= hoy) continue
     const antes = dias.slice(Math.max(0, i - 7), i)
+    if ([...antes, ...despues].some((d) => d.evento)) continue // el evento cambia el clic solo
     const ctr = (w) => ctrDe(w.reduce((a, d) => a + (d.clicks ?? 0), 0), w.reduce((a, d) => a + (d.prints ?? 0), 0))
     const a = ctr(antes), d = ctr(despues)
     if (a == null || d == null) continue
@@ -882,7 +895,8 @@ export function bitacoraProducto(dias, eco, recs = [], { desde = null, max = 12 
   for (const d of dias) {
     if (desde && d.dia < desde) continue
     const k = lunesDe(d.dia)
-    const s = porSemana.get(k) ?? { semana: k, dias: 0, gasto: 0, ventasAds: 0, ventaAds: 0, unidades: 0, prints: 0, clicks: 0 }
+    const s = porSemana.get(k) ?? { semana: k, dias: 0, gasto: 0, ventasAds: 0, ventaAds: 0, unidades: 0, prints: 0, clicks: 0, evento: false }
+    if (d.evento) s.evento = true
     s.dias++; s.gasto += d.gasto ?? 0; s.ventasAds += d.unidadesAds ?? 0; s.ventaAds += d.ventaAds ?? 0; s.unidades += d.unidades ?? 0
     s.prints += d.prints ?? 0; s.clicks += d.clicks ?? 0
     porSemana.set(k, s)
@@ -893,7 +907,7 @@ export function bitacoraProducto(dias, eco, recs = [], { desde = null, max = 12 
     const r = recsPorSemana.get(s.semana)
     return { semana: s.semana, dias: s.dias, gasto: Math.round(s.gasto), gastoDiario: Math.round(s.gasto / Math.max(1, s.dias)), ventasAds: s.ventasAds, ventas: s.unidades,
       roas: s.gasto > 0 ? r2(s.ventaAds / s.gasto) : null, plata: eco ? Math.round(dejaronDe(s.ventaAds, s.ventasAds, eco) - s.gasto) : null,
-      impresiones: s.prints, clicks: s.clicks, ctr: ctrDe(s.clicks, s.prints),
+      impresiones: s.prints, clicks: s.clicks, ctr: ctrDe(s.clicks, s.prints), evento: s.evento,
       recomendo: r ? { accion: r.accion, budgetDiario: r.budgetDiario ?? null } : null }
   }).slice(-max)
   const conGasto = semanas.filter((s) => s.gasto > 0)

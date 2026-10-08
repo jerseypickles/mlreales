@@ -190,7 +190,10 @@ async function entrenarEfectoDesdeBase({ titulos, envio }) {
   const itemsConAds = [...new Set(ads.filter((a) => a.costo > 0).map((a) => a.itemId))]
   const libro = await DiaProductoMl.find({ itemId: { $in: itemsConAds } }).select('itemId dia unidades precio promo stockFraccion').lean()
   const adsPorDia = new Map(ads.map((a) => [`${a.itemId}|${a.dia}`, a]))
-  const dias = libro.map((d) => {
+  // los días de evento comercial no entran: el CyberDay vende solo y el modelo
+  // se lo atribuiría a la publicidad (services/eventosComerciales.js)
+  const diasEvento = await import('../eventosComerciales.js').then((m) => m.diasDeEvento()).catch(() => new Set())
+  const dias = libro.filter((d) => !diasEvento.has(d.dia)).map((d) => {
     const a = adsPorDia.get(`${d.itemId}|${d.dia}`)
     return { itemId: d.itemId, dia: d.dia, unidades: d.unidades, precio: d.precio, promo: d.promo, stockFraccion: d.stockFraccion, gasto: a?.costo ?? 0, unidadesAds: a?.unidadesAds ?? 0 }
   })

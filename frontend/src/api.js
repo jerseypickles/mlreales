@@ -65,6 +65,8 @@ export const api = {
   aprendizajePronosticos: (opciones) => pedir('/api/aprendizaje/pronosticos', opciones),
   demandaPropia: () => pedir('/api/aprendizaje/demanda-propia'),
   rankingPropios: () => pedir('/api/aprendizaje/ranking-propios'),
+  eventos: () => pedir('/api/aprendizaje/eventos'),
+  guardarEvento: (cuerpo) => pedir('/api/aprendizaje/eventos', json(cuerpo)),
   seguimiento: (nicho, opciones) => pedir(`/api/seguimiento${nicho ? `?nicho=${encodeURIComponent(nicho)}` : ''}`, opciones),
   masVendidos: (nicho, opciones) => pedir(`/api/mas-vendidos${nicho ? `?nicho=${encodeURIComponent(nicho)}` : ''}`, opciones),
   aprendizajePronosticosNichos: (opciones) => pedir('/api/aprendizaje/pronosticos-nichos', opciones),

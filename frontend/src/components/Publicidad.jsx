@@ -516,6 +516,8 @@ function LearningMachine({ plan, aprendido, fotos }) {
 
       <FormasCampana formas={plan?.formas} />
 
+      <EventosComerciales />
+
       <ClicCuenta plan={plan} />
 
       <DemandaPropia />
@@ -746,6 +748,7 @@ const LECTURA = {
   'cambio-config': { c: 'pub-dp-limitada', t: 'cambió el presupuesto o el ROAS en la semana' },
   'sin-dato-campana': { c: 'pub-dp-sindato', t: 'sin dato de la campaña (antes del 8-oct): se lee con cuidado' },
   'poca-muestra': { c: 'pub-dp-sindato', t: 'menos de 3.000 impresiones' },
+  evento: { c: 'pub-dp-evento', t: 'semana con evento comercial (CyberDay…): no es demanda normal' },
 }
 const CONTRASTE = {
   'pocos-meses': (x) => `contraste con Google: faltan ${x.faltan} mes(es) de datos`,
@@ -812,6 +815,59 @@ function RankingPropios() {
           </div>
         ))}
       </div>
+    </section>
+  )
+}
+
+// EVENTOS COMERCIALES (8-oct-2026): el calendario con lo que movió cada uno y
+// los saltos que el sistema detectó sin explicación. Los días de evento no
+// entran a las comparaciones del learning machine.
+const ESTADO_EV = { confirmado: ['confirmado', 'bien'], inferido: ['fechas por confirmar', 'medio'], 'por-revisar': ['¿qué fue?', 'mal'], descartado: ['descartado', 'neutro'] }
+const factor = (f, s = '×') => (f == null ? '—' : `${s}${String(f).replace('.', ',')}`)
+function EventosComerciales() {
+  const [d, setD] = useState(null)
+  const [nuevo, setNuevo] = useState({ nombre: '', desde: '', hasta: '' })
+  const [ocupado, setOcupado] = useState(false)
+  const cargar = useCallback(() => api.eventos().then(setD).catch(() => setD({ eventos: [] })), [])
+  useEffect(() => { cargar() }, [cargar])
+  const guardar = async (cuerpo) => { setOcupado(true); try { await api.guardarEvento(cuerpo); await cargar() } finally { setOcupado(false) } }
+  const evs = (d?.eventos ?? []).filter((e) => e.estado !== 'descartado')
+  return (
+    <section className="pub-caja">
+      <h4>Eventos comerciales</h4>
+      <p className="pub-texto">Días que no son normales (CyberDay, Black Friday…). El learning machine los saca de sus comparaciones —si no, un CyberDay parece que la recomendación funcionó— y mide cuánto movió cada uno para planificar el siguiente. Si vende o visitan mucho más un día sin evento anotado, lo marca y te pregunta.</p>
+      <div className="pub-ev">
+        {evs.map((e) => (
+          <div key={e.clave} className="pub-ev-fila">
+            <span className="pub-ev-cab">
+              <strong>{e.nombre}</strong>
+              <em className={`pub-accion ${ESTADO_EV[e.estado]?.[1] ?? 'neutro'}`}>{ESTADO_EV[e.estado]?.[0] ?? e.estado}</em>
+              <small>{e.desde === e.hasta ? e.desde : `${e.desde} al ${e.hasta}`}</small>
+            </span>
+            {e.efecto ? (
+              <span className="pub-ev-efecto">
+                ventas {factor(e.efecto.factorVentas)} <i>({e.efecto.ventasDiaBase} → {e.efecto.ventasDia}/día)</i> · visitas {factor(e.efecto.factorVisitas)} · impresiones {factor(e.efecto.factorImpresiones)} · CTR {factor(e.efecto.factorCtr)} · CPC {factor(e.efecto.factorCpc)} · conversión {factor(e.efecto.factorConversion)}
+              </span>
+            ) : <span className="pub-ev-efecto"><i>efecto: se mide en la revisión diaria</i></span>}
+            {e.nota && e.estado !== 'confirmado' ? <small className="pub-ev-nota">{e.nota}</small> : null}
+            {e.estado !== 'confirmado' ? (
+              <span className="pub-ev-acciones">
+                <button type="button" className="boton-secundario boton-chico" disabled={ocupado} onClick={() => {
+                  const nombre = e.estado === 'por-revisar' ? window.prompt('¿Qué fue? (ej: CyberDay, promoción propia, aparición en TV)', '') : e.nombre
+                  if (nombre) guardar({ clave: e.clave, nombre, estado: 'confirmado' })
+                }}>{e.estado === 'por-revisar' ? 'Ponerle nombre' : 'Confirmar fechas'}</button>
+                <button type="button" className="enlace-boton" disabled={ocupado} onClick={() => guardar({ clave: e.clave, estado: 'descartado' })}>{e.estado === 'por-revisar' ? 'No fue nada' : 'Descartar'}</button>
+              </span>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      <form className="pub-ev-form" onSubmit={(ev) => { ev.preventDefault(); if (nuevo.nombre && nuevo.desde && nuevo.hasta) guardar(nuevo).then(() => setNuevo({ nombre: '', desde: '', hasta: '' })) }}>
+        <input placeholder="Evento (ej: Black Friday 2026)" value={nuevo.nombre} onChange={(ev) => setNuevo({ ...nuevo, nombre: ev.target.value })} />
+        <input type="date" value={nuevo.desde} onChange={(ev) => setNuevo({ ...nuevo, desde: ev.target.value })} aria-label="desde" />
+        <input type="date" value={nuevo.hasta} onChange={(ev) => setNuevo({ ...nuevo, hasta: ev.target.value })} aria-label="hasta" />
+        <button type="submit" className="boton-secundario boton-chico" disabled={ocupado || !nuevo.nombre || !nuevo.desde || !nuevo.hasta}>Agregar</button>
+      </form>
     </section>
   )
 }
