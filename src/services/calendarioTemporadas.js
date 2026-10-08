@@ -133,13 +133,22 @@ export function calendarioParaPrompt(hoy = new Date()) {
 // clasificar "búsquedas que suben" hay que reconocerlas: sin esto "quitasol" en
 // diciembre o "polerón" en octubre se leían como novedad.
 const PALABRAS_ESTACION = {
-  verano: /verano|playa|piscina|quitasol|bloqueador|protector solar|traje de ba[nñ]o|bikini|sandalia|ojota|inflable|ventilador|climatizad|aire acondicionado|cooler|camping|carpa|hamaca|mosquiter/i,
-  invierno: /invierno|t[eé]rmic|poler[oó]n|parka|plum[oó]n|chaqueta|abrigo|bufanda|guatero|frazada|calefact|estufa|paraguas|impermeable|deshumidific/i,
+  // barrido del 8-oct-2026 sobre 36.556 búsquedas en tendencia de ML: palabras
+  // específicas, porque las sueltas cazaban otra cosa ("ventilador" de radiador
+  // o de PS5, "cooler" de PC, "playa" en Playadito, "bloqueador" de cámaras)
+  verano: /verano|\bplayas?\b|piscina|quitasol|bloqueador solar|protector(es)? solar|protetor solar|\bspf\b|traje de ba[nñ]o|bikini|sandalia|ojota|\binflable|ventiladore?s? (de )?(pie|torre|techo|pared|mesa|pedestal)|climatizad|aire acondicionado|hielera|\bcamping|\bcarpas?\b|hamaca|mosquiter/i,
+  invierno: /invierno|(ropa|camiseta|calza|polera|pantal[oó]n|calcet\w*|medias?|primera capa) t[eé]rmic|poler[oó]n|\bparkas?\b|\babrigos?\b|bufanda|guatero|frazada|calefac|estufa|salamandra|\ble[nñ]a\b|pellet|paraguas|impermeable|deshumidific|\bnieve\b|esqu[ií]|\bski\b|snowboard|pantufla/i,
 }
+// lo que, aunque traiga una palabra de temporada, es de otro mundo: autos y
+// motos, computación y consolas, cultivo indoor, caza
+const NO_ES_TEMPORADA = /electroventilador|radiador|evaporador|\bauto\b|vehic|cami[oó]n|motorhome|\bmoto\b|parabrisas|notebook|\bpc\b|\bps[345]\b|xbox|nintendo|consola|pasta t[eé]rmica|thermal|\bindoor\b|cultivo|mira telesc|monocular|airsoft|pedalboard|castillo inflable|\blona\b/i
 
 // La temporada a la que pertenece una búsqueda (si alguna) y su estado hoy.
-export function temporadaDe(keyword, hoy = new Date()) {
-  const k = String(keyword ?? '')
+// `texto`: el término y, a lo sumo, la ÚLTIMA categoría — la ruta completa
+// metía "Camping, Caza y Pesca" o "Fundas y Estuches" en todo lo que colgaba ahí.
+export function temporadaDe(texto, hoy = new Date()) {
+  const k = String(texto ?? '')
+  if (NO_ES_TEMPORADA.test(k)) return null
   return calendarioTemporadas(hoy).find((t) => (t.palabras ?? PALABRAS_ESTACION[t.id])?.test(k)) ?? null
 }
 

@@ -60,3 +60,26 @@ test('búsquedas que suben: lo de temporada que ya no se alcanza no es oportunid
   // el verano todavía se alcanza en octubre
   assert.equal(clasificarBusqueda('quitasol playa', temporadaDe('quitasol playa', oct)).tipo, 'estacional-a-tiempo')
 })
+
+test('vocabulario de temporada: casos reales del barrido del 8-oct (falsos positivos y verdaderos)', async () => {
+  const { temporadaDe } = await import('../src/services/calendarioTemporadas.js')
+  const oct = new Date('2026-10-08T12:00:00-03:00')
+  const id = (t) => temporadaDe(t, oct)?.id ?? null
+  // no son de temporada
+  for (const t of ['bulbo electroventilador vw Interruptores', 'ventilador ps5 Coolers', 'pasta termica mx 4 Pasta Térmica', 'carpa indoor 150x150x200 Carpas para Cultivo Interior',
+    'cooler master notepal x3 Coolers Externos', 'plumones para pizarra Marcadores', 'bloqueador de camaras seguridad vigilancia Kits de Seguridad', 'yerba mate playadito Yerba Mate',
+    'arpon pesca submarina Arpones', 'control de xbox deadpool Fundas y Estuches', 'protector solar parabrisas Cortinas Parasoles', 'castillo inflable usado Castillos', 'evaporador aire acondicionado mitsubishi l200 Paneles Evaporadores']) {
+    assert.equal(id(t), null, t)
+  }
+  // sí son
+  assert.equal(id('cloro granulado piscina Cloros'), 'verano')
+  assert.equal(id('protector solar piel grasa Protectores y Bloqueadores'), 'verano')
+  assert.equal(id('ventilador de pie Ventiladores'), 'verano')
+  assert.equal(id('salamandra a lena bosca A Leña'), 'invierno')
+  assert.equal(id('calefactor a gas A Gas'), 'invierno')
+  assert.equal(id('valvula calefaccion Grifos de Calefacción'), 'invierno')
+  assert.equal(id('patines de nieve Patines para Hielo'), 'invierno')
+  assert.equal(id('pantuflas elmo Pantuflas'), 'invierno')
+  assert.equal(id('camiseta termica hombre Camisetas'), 'invierno')
+  assert.equal(id('disfraces para bebes halloween Disfraces Completos'), 'halloween')
+})

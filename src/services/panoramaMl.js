@@ -236,7 +236,7 @@ export async function busquedasQueSuben({ max = 30 } = {}) {
     if (serie.length < 2) continue
     for (const t of terminosNuevos(serie[0].terminos, serie[1].terminos).slice(0, 3)) {
       const ruta = nombres.get(categoriaId)?.ruta ?? categoriaId
-      salida.push({ termino: t, categoria: ruta, totalItems: nombres.get(categoriaId)?.totalItems ?? 0, ...clasificarBusqueda(t, temporadaDe(`${t} ${ruta}`)) })
+      salida.push({ termino: t, categoria: ruta, totalItems: nombres.get(categoriaId)?.totalItems ?? 0, ...clasificarBusqueda(t, temporadaDe(`${t} ${String(ruta).split(' > ').at(-1)}`)) })
     }
   }
   return salida.sort((a, b) => b.totalItems - a.totalItems).slice(0, max)
@@ -258,7 +258,7 @@ export async function barridoVocabulario({ hoy = new Date(), max = 400 } = {}) {
     const ruta = rutas.get(categoriaId) ?? ''
     for (const t of d.terminos ?? []) {
       total++
-      const c = clasificarBusqueda(t, temporadaDe(`${t} ${ruta}`, hoy))
+      const c = clasificarBusqueda(t, temporadaDe(`${t} ${ruta.split(' > ').at(-1)}`, hoy))
       porTipo[c.tipo] = (porTipo[c.tipo] ?? 0) + 1
       if (c.temporada) porTemporada[c.temporada] = (porTemporada[c.temporada] ?? 0) + 1
       if (c.tipo !== 'novedad') {
