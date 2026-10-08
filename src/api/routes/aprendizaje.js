@@ -211,6 +211,13 @@ router.post('/demanda-ml', async (_req, res) => {
   const { medirDemandaActual } = await import('../../services/demandaActualMl.js')
   res.json(await medirDemandaActual())
 })
+// la demanda de ML medida con los anuncios propios: impresiones, CPC y CTR por
+// nicho y semana, marcando las semanas limitadas por la campaña, y el contraste
+// con Google (ml/demandaPropia.js). En sombra
+router.get('/demanda-propia', async (_req, res) => {
+  const { demandaPropia } = await import('../../services/ml/demandaPropia.js')
+  res.json(await demandaPropia())
+})
 router.get('/fuentes-radar', async (_req, res) => {
   const { fuentesDelRadar } = await import('../../services/ml/fuentesRadar.js')
   res.json(await fuentesDelRadar())

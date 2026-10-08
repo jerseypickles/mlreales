@@ -57,6 +57,26 @@ export async function actualizarAdsDiario({ ahora = new Date(), pedir = meliGet,
   return { dias, filas: filasEscritas, faltan: Math.max(0, RETENCION_DIAS - leidos.size - dias) }
 }
 
+// La configuración de las campañas HOY (presupuesto, ROAS objetivo, estado y
+// qué productos tiene cada una), una fila por campaña y día. ML no guarda la
+// historia de esto: si no se anota cada día, se pierde (ver CampanaDiaMl).
+export async function registrarCampanasDelDia({ ahora = new Date() } = {}) {
+  const { CampanaDiaMl } = await import('../../models/CampanaDiaMl.js')
+  const { resumenAds } = await import('../ads.js')
+  const r = await resumenAds({ dias: 1 })
+  if (!r?.campanas?.length) return { campanas: 0 }
+  const dia = diaChile(ahora)
+  const productosDe = new Map()
+  for (const [itemId, a] of Object.entries(r.porItem ?? {})) {
+    const id = a.campaign_id ?? a.campanaId
+    if (id != null) productosDe.set(id, [...(productosDe.get(id) ?? []), itemId])
+  }
+  await CampanaDiaMl.bulkWrite(r.campanas.map((c) => ({ updateOne: { filter: { campanaId: c.id, dia }, update: { $set: {
+    nombre: c.nombre ?? null, estado: c.estado ?? null, presupuestoDiario: c.presupuestoDiario ?? null, roasObjetivo: c.roasObjetivo ?? null,
+    estrategia: c.estrategia ?? null, productos: productosDe.get(c.id) ?? [], actualizadoEl: ahora } }, upsert: true } })))
+  return { campanas: r.campanas.length, dia }
+}
+
 export async function resumenAdsDiario({ ahora = new Date(), diasSerie = 42 } = {}) {
   const [t] = await AdsDiaMl.aggregate([{ $match: { itemId: '*' } },
     { $group: { _id: null, dias: { $sum: 1 }, desde: { $min: '$dia' }, hasta: { $max: '$dia' }, costo: { $sum: '$costo' }, clicks: { $sum: '$clicks' },

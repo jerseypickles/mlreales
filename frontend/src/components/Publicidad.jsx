@@ -518,6 +518,8 @@ function LearningMachine({ plan, aprendido, fotos }) {
 
       <ClicCuenta plan={plan} />
 
+      <DemandaPropia />
+
       <div className="pub-aprende-tarjetas">
         <div>
           <strong>Sus aciertos</strong>
@@ -729,6 +731,54 @@ function ClicCuenta({ plan }) {
         ))}
       </div>
       <p className="pub-ley">{ev?.evaluadas ? `"Revisar anuncio" recomendado ${ev.evaluadas} veces: el clic se recuperó en ${ev.recuperadas}.` : '"Revisar anuncio" se evalúa 7 días después: ¿el clic se recuperó al menos 30%?'}</p>
+    </section>
+  )
+}
+
+// LA DEMANDA DE ML CON TUS PROPIOS ANUNCIOS (8-oct-2026): impresiones por día de
+// cada nicho, semana a semana, y si esa semana se puede leer como demanda o la
+// limitó la campaña. Con meses, el contraste dice cuánto confiar en Google.
+const LECTURA = {
+  limpia: { c: 'pub-dp-limpia', t: 'se lee como demanda' },
+  limitada: { c: 'pub-dp-limitada', t: 'limitada por el presupuesto: no es demanda' },
+  'cambio-config': { c: 'pub-dp-limitada', t: 'cambió el presupuesto o el ROAS en la semana' },
+  'sin-dato-campana': { c: 'pub-dp-sindato', t: 'sin dato de la campaña (antes del 8-oct): se lee con cuidado' },
+  'poca-muestra': { c: 'pub-dp-sindato', t: 'menos de 3.000 impresiones' },
+}
+const CONTRASTE = {
+  'pocos-meses': (x) => `contraste con Google: faltan ${x.faltan} mes(es) de datos`,
+  'google-sirve': (x) => `Google anticipa bien tus impresiones aquí (orden ${String(x.spearman).replace('.', ',')})`,
+  'google-a-medias': (x) => `Google anticipa a medias (orden ${String(x.spearman).replace('.', ',')})`,
+  'google-no-sirve': (x) => `Google NO anticipa tus impresiones aquí (orden ${String(x.spearman).replace('.', ',')}): manda tu dato`,
+  'sin-dato': () => 'contraste con Google sin datos',
+}
+function DemandaPropia() {
+  const [d, setD] = useState(null)
+  useEffect(() => { api.demandaPropia().then(setD).catch(() => setD({ nichos: [] })) }, [])
+  if (!d?.nichos?.length) return null
+  return (
+    <section className="pub-caja">
+      <h4>Demanda de ML medida con tus anuncios <em className="pub-accion neutro">en sombra</em></h4>
+      <p className="pub-texto">Impresiones por día de cada nicho, semana a semana: cuánta gente buscó ese producto en ML y se le mostró tu anuncio. Las semanas en que la campaña gastó su presupuesto no cuentan como demanda (las impresiones las limitó la campaña, no la gente). {d.configCampanasDesde ? `La configuración de las campañas se registra desde el ${d.configCampanasDesde}.` : 'La configuración de las campañas se empieza a registrar hoy.'}</p>
+      <div className="pub-dp">
+        {d.nichos.map((n) => {
+          const max = Math.max(1, ...n.semanas.map((s) => s.impresionesDia))
+          return (
+            <div key={n.nichoId} className="pub-dp-nicho">
+              <strong>{n.keyword}</strong>
+              <small>{n.productos} producto(s){n.impresionesDiaLimpias ? ` · ${n.impresionesDiaLimpias.toLocaleString('es-CL')} impresiones/día en semanas limpias` : ''}</small>
+              <span className="pub-dp-barras">
+                {n.semanas.map((s) => (
+                  <i key={s.semana} className={LECTURA[s.lectura]?.c} style={{ height: `${Math.max(6, Math.round((100 * s.impresionesDia) / max))}%` }}
+                    title={`Semana del ${s.semana}: ${s.impresionesDia.toLocaleString('es-CL')} impresiones/día, CTR ${s.ctr ?? '—'}%, CPC ${s.cpc != null ? fmtPrecio(s.cpc) : '—'} · ${LECTURA[s.lectura]?.t ?? s.lectura}`} />
+                ))}
+              </span>
+              <small className="pub-dp-google">{CONTRASTE[n.contrasteGoogle?.estado]?.(n.contrasteGoogle) ?? ''}</small>
+            </div>
+          )
+        })}
+      </div>
+      <p className="pub-ley"><i className="pub-dp-limpia" /> se lee como demanda · <i className="pub-dp-limitada" /> limitada por la campaña · <i className="pub-dp-sindato" /> sin dato de la campaña</p>
     </section>
   )
 }

@@ -340,6 +340,10 @@ export async function escanearPropios({ soloOficial = false } = {}) {
       const { actualizarAdsDiario } = await import('./ml/adsDiario.js')
       const ads = await actualizarAdsDiario()
       if (ads.dias) console.log(`[ml] publicidad diaria: ${ads.dias} día(s) leídos, ${ads.filas} fila(s) por producto, faltan ${ads.faltan} por recuperar`)
+      // y con qué presupuesto y ROAS corría cada campaña hoy: sin eso las
+      // impresiones no se pueden leer como demanda (ml/demandaPropia.js)
+      const { registrarCampanasDelDia } = await import('./ml/adsDiario.js')
+      await registrarCampanasDelDia().catch((e) => console.warn('[ml] campañas del día no registradas:', e.message))
     } catch (err) {
       console.warn('[ml] publicidad diaria no actualizada:', err.message)
     }
