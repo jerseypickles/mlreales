@@ -41,7 +41,7 @@ export const TEMPORADAS = [
     palabras: /navidad|navide|pascuero|adviento|pesebre|a[nñ]o nuevo/i },
   { id: 'vuelta-a-clases', nombre: 'Vuelta a clases', pico: [2, 5], fin: [3, 15], finDuro: true,
     productos: 'mochilas, loncheras, estuches, útiles, organización de escritorio, botellas, uniformes genéricos',
-    palabras: /escolar|colegio|[uú]tiles|lonchera|estuche|cotona/i },
+    palabras: /escolar|colegio|[uú]tiles|lonchera|estuches? (escolar|de l[aá]pices|para l[aá]pices)|cotona/i },
   { id: 'san-valentin', nombre: 'San Valentín', pico: [2, 1], fin: [2, 14], finDuro: true,
     productos: 'regalos de pareja, peluches, flores eternas, joyería de fantasía',
     palabras: /san valent|enamorados/i },
@@ -141,7 +141,7 @@ const PALABRAS_ESTACION = {
 }
 // lo que, aunque traiga una palabra de temporada, es de otro mundo: autos y
 // motos, computación y consolas, cultivo indoor, caza
-const NO_ES_TEMPORADA = /electroventilador|radiador|evaporador|\bauto\b|vehic|cami[oó]n|motorhome|\bmoto\b|parabrisas|notebook|\bpc\b|\bps[345]\b|xbox|nintendo|consola|pasta t[eé]rmica|thermal|\bindoor\b|cultivo|mira telesc|monocular|airsoft|pedalboard|castillo inflable|\blona\b/i
+const NO_ES_TEMPORADA = /electroventilador|radiador|evaporador|\bautos?\b|\bsuv\b|sustrato|vehic|cami[oó]n|motorhome|\bmoto\b|parabrisas|notebook|\bpc\b|\bps[345]\b|xbox|nintendo|consola|pasta t[eé]rmica|thermal|\bindoor\b|cultivo|mira telesc|monocular|airsoft|pedalboard|castillo inflable|\blona\b/i
 
 // La temporada a la que pertenece una búsqueda (si alguna) y su estado hoy.
 // `texto`: el término y, a lo sumo, la ÚLTIMA categoría — la ruta completa

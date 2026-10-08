@@ -68,7 +68,8 @@ test('vocabulario de temporada: casos reales del barrido del 8-oct (falsos posit
   // no son de temporada
   for (const t of ['bulbo electroventilador vw Interruptores', 'ventilador ps5 Coolers', 'pasta termica mx 4 Pasta Térmica', 'carpa indoor 150x150x200 Carpas para Cultivo Interior',
     'cooler master notepal x3 Coolers Externos', 'plumones para pizarra Marcadores', 'bloqueador de camaras seguridad vigilancia Kits de Seguridad', 'yerba mate playadito Yerba Mate',
-    'arpon pesca submarina Arpones', 'control de xbox deadpool Fundas y Estuches', 'protector solar parabrisas Cortinas Parasoles', 'castillo inflable usado Castillos', 'evaporador aire acondicionado mitsubishi l200 Paneles Evaporadores']) {
+    'arpon pesca submarina Arpones', 'control de xbox deadpool Fundas y Estuches', 'estuche rigido para lentes Fundas y Estuches', 'bolso canon Bolsos y Estuches',
+    'carpa para hyundai tucson Cubre Autos', 'sustrato de pellet de madera para conejos Sustratos', 'protector solar parabrisas Cortinas Parasoles', 'castillo inflable usado Castillos', 'evaporador aire acondicionado mitsubishi l200 Paneles Evaporadores']) {
     assert.equal(id(t), null, t)
   }
   // sí son
@@ -82,4 +83,6 @@ test('vocabulario de temporada: casos reales del barrido del 8-oct (falsos posit
   assert.equal(id('pantuflas elmo Pantuflas'), 'invierno')
   assert.equal(id('camiseta termica hombre Camisetas'), 'invierno')
   assert.equal(id('disfraces para bebes halloween Disfraces Completos'), 'halloween')
+  assert.equal(id('estuches escolares para ninas Estuches de Lápices'), 'vuelta-a-clases')
+  assert.equal(id('lonchera con divisiones Loncheras Escolares'), 'vuelta-a-clases')
 })
