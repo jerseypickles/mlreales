@@ -520,6 +520,15 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     if (anuncio?.estado === 'hold' && fila.accion !== 'apagada') {
       Object.assign(fila, { pendiente: false, accion: 'sin-stock', budgetDiario: 0, texto: 'ML tiene el anuncio detenido (sin stock o pausado): sin recomendación hasta que vuelva a estar activo.' })
     }
+    // APAGADO POR EL IMPORTADOR (15-oct-2026): con la campaña o el anuncio en
+    // pausa, el plan lo reconoce ese mismo día. Antes esperaba 7 días sin gasto y
+    // mientras tanto seguía recomendando "apagar" algo ya apagado (Set 10).
+    const campanaDelAnuncio = anuncio?.campanaId != null ? (adsVivos?.campanas ?? []).find((c) => c.id === anuncio.campanaId) : null
+    const pausado = anuncio?.estado === 'paused' || (campanaDelAnuncio && campanaDelAnuncio.estado !== 'active')
+    if (pausado && fila.accion !== 'apagada' && fila.accion !== 'sin-stock') {
+      Object.assign(fila, { pendiente: false, fase: 'apagada', accion: 'apagada', budgetDiario: 0,
+        texto: `Publicidad apagada${campanaDelAnuncio && campanaDelAnuncio.estado !== 'active' ? ` (campaña «${campanaDelAnuncio.nombre}» en pausa)` : ''}. Se sigue midiendo cómo vende sin anuncio: si las ventas orgánicas se sostienen, la publicidad no hacía falta.` })
+    }
     if (fila.pendiente) {
       // la fase cuenta desde que el producto está en su campaña ACTUAL: si se
       // lo pasó a una campaña propia, arranca su prueba de 2 semanas ahí
