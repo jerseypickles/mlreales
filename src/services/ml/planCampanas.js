@@ -645,14 +645,17 @@ export function evaluarRecomendaciones(recs, diasPorItem, ecoPorItem, { hoy }) {
     const eco = ecoPorItem.get(r.itemId)
     const i = dias.findIndex((d) => d.dia > r.dia)
     if (i < 0 || !eco) continue
-    const despues = dias.slice(i, i + 7)
-    if (despues.length < 7 || despues.at(-1).dia >= hoy) continue
-    const antes = dias.slice(Math.max(0, i - 7), i)
-    // una ventana con días de evento comercial no dice si la recomendación
-    // sirvió: el CyberDay vende solo (8-oct-2026)
-    if ([...antes, ...despues].some((d) => d.evento)) { conEvento++; continue }
-    const plataDe = (w) => w.reduce((a, d) => a + (d.unidades ?? 0), 0) * eco.deja - w.reduce((a, d) => a + (d.gasto ?? 0), 0)
-    const gAntes = antes.reduce((a, d) => a + d.gasto, 0) / Math.max(1, antes.length), gDespues = despues.reduce((a, d) => a + d.gasto, 0) / 7
+    const despuesTodos = dias.slice(i, i + 7)
+    if (despuesTodos.length < 7 || despuesTodos.at(-1).dia >= hoy) continue
+    // LOS DÍAS DE EVENTO COMERCIAL SALEN, LA VENTANA NO (15-oct-2026). La primera
+    // versión botaba toda ventana que tocara el CyberDay y dejó 64
+    // recomendaciones sin evaluar: dos semanas a ciegas. Ahora se comparan los
+    // días normales que quedan, por día, si son al menos 4 de cada lado.
+    const antes = dias.slice(Math.max(0, i - 7), i).filter((d) => !d.evento)
+    const despues = despuesTodos.filter((d) => !d.evento)
+    if (antes.length < 4 || despues.length < 4) { conEvento++; continue }
+    const plataDe = (w) => (w.reduce((a, d) => a + (d.unidades ?? 0), 0) * eco.deja - w.reduce((a, d) => a + (d.gasto ?? 0), 0)) / w.length * 7
+    const gAntes = antes.reduce((a, d) => a + d.gasto, 0) / Math.max(1, antes.length), gDespues = despues.reduce((a, d) => a + d.gasto, 0) / despues.length
     const cambio = gAntes > 0 ? gDespues / gAntes : gDespues > 0 ? 2 : 1
     const siguio = { subir: cambio >= 1.15, bajar: cambio <= 0.85, apagar: gDespues < 100, mantener: cambio > 0.85 && cambio < 1.15, esperar: cambio > 0.85 && cambio < 1.15 }[r.accion]
     if (siguio == null) continue
@@ -677,10 +680,12 @@ export function evaluarRevisionAnuncio(recs, diasPorItem, { hoy }) {
     const dias = diasPorItem.get(r.itemId) ?? []
     const i = dias.findIndex((d) => d.dia > r.dia)
     if (i < 0) continue
-    const despues = dias.slice(i, i + 7)
-    if (despues.length < 7 || despues.at(-1).dia >= hoy) continue
-    const antes = dias.slice(Math.max(0, i - 7), i)
-    if ([...antes, ...despues].some((d) => d.evento)) continue // el evento cambia el clic solo
+    const despuesTodos = dias.slice(i, i + 7)
+    if (despuesTodos.length < 7 || despuesTodos.at(-1).dia >= hoy) continue
+    // el evento cambia el clic solo: sus días salen, la ventana no
+    const antes = dias.slice(Math.max(0, i - 7), i).filter((d) => !d.evento)
+    const despues = despuesTodos.filter((d) => !d.evento)
+    if (antes.length < 4 || despues.length < 4) continue
     const ctr = (w) => ctrDe(w.reduce((a, d) => a + (d.clicks ?? 0), 0), w.reduce((a, d) => a + (d.prints ?? 0), 0))
     const a = ctr(antes), d = ctr(despues)
     if (a == null || d == null) continue

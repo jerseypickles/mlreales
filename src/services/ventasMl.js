@@ -114,10 +114,17 @@ export async function sincronizarOrdenes({ dias = 90 } = {}) {
 
 // Ventas reales por item en una ventana: Map itemId → {unidades, ingresosClp,
 // ultimaVenta}. Para Mis productos (clave: itemIdMl ?? sku del propio).
-export async function ventasPorItem({ dias = 30 } = {}) {
+// `excluirDias`: días de Chile (AAAA-MM-DD) que no cuentan, como los de un
+// evento comercial: el CyberDay vende 3,5 veces más con el mismo gasto y, dentro
+// de 30 días, hacía ver la publicidad mucho más barata de lo que es (8-oct-2026)
+export async function ventasPorItem({ dias = 30, excluirDias = [] } = {}) {
   const desde = new Date(Date.now() - dias * 24 * 3600e3)
   const filas = await VentaMl.aggregate([
     { $match: { fecha: { $gte: desde }, estado: { $ne: 'cancelled' } } },
+    ...(excluirDias.length ? [
+      { $addFields: { _diaChile: { $dateToString: { format: '%Y-%m-%d', date: '$fecha', timezone: 'America/Santiago' } } } },
+      { $match: { _diaChile: { $nin: excluirDias } } },
+    ] : []),
     { $unwind: '$items' },
     {
       $group: {

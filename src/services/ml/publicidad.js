@@ -137,8 +137,11 @@ export function planPublicidad({ precio, costoUnitario = null, comisionPct = nul
 // Una vez al día: todo lo que la cuenta gastó en anuncios, acumulado por
 // producto, más el envío real cruzado orden a orden.
 export async function actualizarAprendizajePublicidad({ ahora = new Date() } = {}) {
+  // sin los días de evento comercial: los parámetros arman el plan de los
+  // productos que vienen y tienen que describir un día normal
+  const diasEventoAds = [...(await import('../eventosComerciales.js').then((m) => m.diasDeEvento()).catch(() => new Set()))]
   const filas = await AdsDiaMl.aggregate([
-    { $match: { itemId: { $ne: '*' } } },
+    { $match: { itemId: { $ne: '*' }, dia: { $nin: diasEventoAds } } },
     { $group: { _id: '$itemId', costo: { $sum: '$costo' }, clicks: { $sum: '$clicks' }, unidadesAds: { $sum: '$unidadesAds' },
       unidadesOrganicas: { $sum: '$unidadesOrganicas' }, ventaAds: { $sum: '$ventaAds' }, dias: { $sum: { $cond: [{ $gt: ['$costo', 0] }, 1, 0] } } } },
   ])
@@ -523,13 +526,17 @@ async function aprenderTicket({ envio }) {
   const { ventasPorItem } = await import('../ventasMl.js')
   const { comisionMlExacta } = await import('../comisionesMl.js')
   const { costoEnvioFull } = await import('../envioFull.js')
-  const ventas = await ventasPorItem({ dias: 30 })
+  // la economía de un día NORMAL: los días de evento comercial no entran (el
+  // CyberDay de octubre bajó la publicidad de ~35% a 28% de lo vendido y el
+  // mínimo para quedar con 40% de $9.980 a $5.990, que el radar usa como piso)
+  const diasEvento = [...(await import('../eventosComerciales.js').then((m) => m.diasDeEvento()).catch(() => new Set()))]
+  const ventas = await ventasPorItem({ dias: 30, excluirDias: diasEvento })
   // la comisión que ML FACTURÓ por item (las publicaciones propias son
   // Premium, 17%; el tarifario sin tipo devolvía la Clásica, 13%)
   const { cargosPorItem } = await import('../cargosMl.js')
   const cargos = await cargosPorItem({ dias: 30 }).catch(() => new Map())
   const desde = new Date(Date.now() - 30 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
-  const gasto = new Map((await AdsDiaMl.aggregate([{ $match: { itemId: { $ne: '*' }, dia: { $gte: desde } } }, { $group: { _id: '$itemId', costo: { $sum: '$costo' } } }])).map((g) => [g._id, g.costo]))
+  const gasto = new Map((await AdsDiaMl.aggregate([{ $match: { itemId: { $ne: '*' }, dia: { $gte: desde, $nin: diasEvento } } }, { $group: { _id: '$itemId', costo: { $sum: '$costo' } } }])).map((g) => [g._id, g.costo]))
   const filas = []
   for (const p of await ProductoPropio.find().select('itemIdMl sku titulo categoriaMl').lean()) {
     const id = p.itemIdMl ?? p.sku

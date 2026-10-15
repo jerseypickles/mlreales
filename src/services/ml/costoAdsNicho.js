@@ -137,8 +137,10 @@ export async function actualizarCostoAdsNicho({ ahora = new Date() } = {}) {
     import('../../models/CurvaEstacional.js'), import('../../models/Reporte.js'), import('../../models/Aprendizaje.js'),
   ])
   const desde = new Date(+ahora - DIAS * 86400e3).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
+  // sin días de evento comercial: el CyberDay abarata la venta por anuncio
+  const diasEvento = [...(await import('../eventosComerciales.js').then((m) => m.diasDeEvento()).catch(() => new Set()))]
   const ads = await AdsDiaMl.aggregate([
-    { $match: { itemId: { $ne: '*' }, dia: { $gte: desde } } },
+    { $match: { itemId: { $ne: '*' }, dia: { $gte: desde, $nin: diasEvento } } },
     { $group: { _id: '$itemId', costo: { $sum: '$costo' }, clicks: { $sum: '$clicks' }, unidades: { $sum: '$unidadesAds' } } },
   ])
   const totalCosto = ads.reduce((s, a) => s + a.costo, 0)

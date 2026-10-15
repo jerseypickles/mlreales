@@ -363,3 +363,23 @@ test('clic de la cuenta: si sale un producto de clic alto, el bruto cae y el de 
   assert.equal(s1.ctrMezclaConstante, 0.2, 'con los productos de hoy, antes también era 0,2%: el anuncio no cambió')
   assert.deepEqual(s2.salieron, ['Brochas Set 9'])
 })
+
+test('evaluarRecomendaciones: los días de evento salen de la ventana, la ventana no (CyberDay del 5 al 7-oct)', () => {
+  const eco = { deja: 2000 }
+  // antes 1 venta y $1.000 al día; después 2 ventas y $2.000; el 9 y el 10 son
+  // CyberDay con 10 ventas que, si contaran, harían parecer un acierto enorme
+  const dias = Array.from({ length: 20 }, (_, i) => {
+    const dia = `2026-10-${String(i + 1).padStart(2, '0')}`
+    const evento = i === 8 || i === 9
+    return { dia, evento, gasto: i < 7 ? 1000 : 2000, unidades: evento ? 10 : i < 7 ? 1 : 2 }
+  })
+  const e = evaluarRecomendaciones([{ itemId: 'A', dia: '2026-10-07', accion: 'subir' }], new Map([['A', dias]]), new Map([['A', eco]]), { hoy: '2026-10-30' })
+  assert.equal(e.evaluadas, 1, 'se evalúa con los 5 días normales que quedan')
+  assert.equal(e.sinEvaluarPorEvento, 0)
+  assert.equal(e.detalle[0].plataDespues, Math.round((2 * 2000 - 2000) * 7), 'por día, sin los 10 del CyberDay')
+  // si el evento se come la ventana (quedan menos de 4 días normales), no se evalúa
+  const largo = dias.map((d, i) => ({ ...d, evento: i >= 7 && i <= 10 }))
+  const e2 = evaluarRecomendaciones([{ itemId: 'A', dia: '2026-10-07', accion: 'subir' }], new Map([['A', largo]]), new Map([['A', eco]]), { hoy: '2026-10-30' })
+  assert.equal(e2.evaluadas, 0)
+  assert.equal(e2.sinEvaluarPorEvento, 1)
+})
