@@ -755,6 +755,14 @@ export async function tableroOportunidades({ todos = false } = {}) {
   }
 
   marcarConversion(oportunidades)
+  // la venta en ML en la escala de Google (demandaMlVsGoogle.js): para los que
+  // no pasan la vara de búsqueda pero se compran dentro de ML sin googlearlos
+  try {
+    const { aplicarDemandaMlVsGoogle } = await import('./demandaMlVsGoogle.js')
+    await aplicarDemandaMlVsGoogle(oportunidades)
+  } catch (err) {
+    console.warn(`[tablero] venta en ML vs Google no calculada: ${err.message}`)
+  }
   return oportunidades
 }
 

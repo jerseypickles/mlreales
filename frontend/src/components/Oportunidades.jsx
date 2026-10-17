@@ -260,6 +260,14 @@ const ORDEN_TONO = { mal: 0, aviso: 1, bien: 2, info: 3 }
 // borran —Google subestima lo que se compra dentro de ML: la pistola de juguete
 // mide 1.600 y vendía 22 u en 30 días—, llevan esta alerta y él decide.
 const VARA_BUSQUEDAS = 5000
+// La venta en ML dicha en palabras: la cifra contada, de dónde sale y su escala.
+function textoMl(ml) {
+  return `gana ${String(ml.resenasDia).replace('.', ',')} reseñas nuevas al día (mediana de ${ml.scans} ${ml.scans === 1 ? 'scan' : 'scans'} en 45 días): vende más que el ${ml.percentil}% de tus nichos, y un nicho en ese puesto suele tener ~${fmtNum(ml.equivalente)} búsquedas al mes en Google.`
+}
+function tituloMl(ml) {
+  if (ml?.equivalente == null) return 'Sin reseñas medidas en los últimos 45 días'
+  return `Lo que se vende en ML, en la escala de Google: ${textoMl(ml)}${ml.firme ? '' : ' Con un solo scan es una primera lectura.'}${ml.acuerdo != null ? ` En tus nichos Google y la venta en ML ordenan parecido solo ${String(ml.acuerdo).replace('.', ',')} (1 sería igual): por eso se miran las dos.` : ''}`
+}
 // umbral INICIAL de clic disputado: falta calibrarlo contra el costo por venta
 // real de las campañas propias (con los productos nuevos de octubre)
 const TOP_PAGA_DISPUTADO = 50
@@ -306,9 +314,18 @@ function avisosDe(o, tendencia) {
   // lo que despega. "Estable" es el caso normal y no informa.
   const salud = chipSalud(c)
   if (salud) a.push({ id: 'salud', Icono: salud.clase === 'bien' ? ArrowUpRight : ArrowDownRight, tono: salud.clase === 'bien' ? 'bien' : salud.clase, corto: `Google: ${salud.texto}`, ayuda: salud.ayuda })
-  if (Number.isFinite(c?.busquedasMes) && c.busquedasMes < VARA_BUSQUEDAS) {
+  // la vara por los dos lados (17-oct): lo que se vende en ML, en la escala de
+  // Google (services/demandaMlVsGoogle.js); con un solo scan no se afirma nada
+  const ml = o.demandaMlVsGoogle?.firme ? o.demandaMlVsGoogle : null
+  if (Number.isFinite(c?.busquedasMes) && c.busquedasMes < VARA_BUSQUEDAS && ml?.lectura === 'pasa-por-ml') {
+    a.push({ id: 'vara', Icono: TrendingUp, tono: 'bien', corto: `Pasa la vara por ML: vende como ~${fmtNum(ml.equivalente)} búsquedas/mes`,
+      ayuda: `En Google tiene ${fmtNum(c.busquedasMes)} búsquedas al mes, bajo tu vara de ${fmtNum(VARA_BUSQUEDAS)}. En ML ${textoMl(ml)} Se compra dentro de ML sin googlearlo.` })
+  } else if (Number.isFinite(c?.busquedasMes) && c.busquedasMes < VARA_BUSQUEDAS) {
     a.push({ id: 'vara', Icono: Search, tono: 'aviso', corto: `Bajo la vara: ${fmtNum(c.busquedasMes)} búsquedas/mes (mínimo ${fmtNum(VARA_BUSQUEDAS)})`,
-      ayuda: `Tu vara para nichos nuevos es ${fmtNum(VARA_BUSQUEDAS)} búsquedas al mes en Google Chile: bajo eso el mercado es chico para repartir y entrar sin historia depende de publicidad. No lo descarta solo: hay productos que se compran dentro de ML sin googlearlos (mira "convierte" en las cifras).` })
+      ayuda: `Tu vara para nichos nuevos es ${fmtNum(VARA_BUSQUEDAS)} búsquedas al mes en Google Chile: bajo eso el mercado es chico para repartir y entrar sin historia depende de publicidad. Tampoco la pasa por lo que vende en ML${ml ? ` (~${fmtNum(ml.equivalente)})` : o.demandaMlVsGoogle?.equivalente != null ? ' (con un solo scan todavía no se sabe)' : ''}: mira "En ML" en las cifras.` })
+  } else if (ml?.lectura === 'flojo-en-ml') {
+    a.push({ id: 'flojo-ml', Icono: TrendingDown, tono: 'aviso', corto: `Mucho Google, poca venta en ML (~${fmtNum(ml.equivalente)} búsquedas)`,
+      ayuda: `Se busca en Google (${fmtNum(c.busquedasMes)} al mes), pero en ML ${textoMl(ml)} Google mide intención de investigar: puede terminar comprándose en otra parte.${ml.factorTemporada != null && ml.factorTemporada < 0.75 ? ` Ojo: según Google este período pesa ${String(ml.factorTemporada).replace('.', ',')} de su promedio del año; parte de la poca venta es temporada.` : ''}` })
   }
   // ¿se vende HOY en ML? (services/demandaActualMl.js) Solo nichos abiertos
   // desde la regla del 4-oct y con 2 semanas para mostrarlo
@@ -537,6 +554,13 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
           title={c?.busquedasMes ? `${fmtNum(c.busquedasMes)} búsquedas al mes en Chile (Google Ads, promedio de 12 meses)${c.keywordMedida ? `, medido sobre «${c.keywordMedida}»` : ''}.` : 'Todavía sin medir contra Google Ads'}
         >
           {c?.busquedasMes ? <>{fmtNum(c.busquedasMes)}<small>/mes</small></> : <em className="opt-nada">sin medir</em>}
+        </Cifra>
+        <Cifra etiqueta="En ML" title={tituloMl(o.demandaMlVsGoogle)}>
+          {o.demandaMlVsGoogle?.equivalente != null ? (
+            <span className={o.demandaMlVsGoogle.firme ? { 'pasa-por-ml': 'opt-ml-mas', 'flojo-en-ml': 'opt-ml-menos' }[o.demandaMlVsGoogle.lectura] : 'opt-ml-tenue'}>
+              ≈{fmtNum(o.demandaMlVsGoogle.equivalente)}<small>/mes</small>
+            </span>
+          ) : <em className="opt-nada">—</em>}
         </Cifra>
         <Cifra etiqueta="El año" title={c?.curva?.length ? `Forma del año según Google: pico en ${c.nombreMesPico ?? '—'}, ${c.ratioPico}× el promedio. En azul, el mes de hoy.` : undefined}>
           <MiniCurva c={c} />
@@ -990,6 +1014,7 @@ const GRUPOS_OP = [
 
 const FILTROS = [
   ['vara', `Sobre ${fmtNum(VARA_BUSQUEDAS)} búsquedas`, (o) => (o.curvaAnual?.busquedasMes ?? 0) >= VARA_BUSQUEDAS],
+  ['pasa-ml', 'Pasa la vara por ML', (o) => o.demandaMlVsGoogle?.firme && o.demandaMlVsGoogle.lectura === 'pasa-por-ml'],
   ['buscados', 'Búsqueda alta', (o) => o.nivelBusqueda?.nivel === 'alto'],
   ['confirmados', 'Confirmados', (o) => o.confirmacion === 'confirmado'],
   ['cotizando', 'En cotización', (o) => ['cotizando', 'pedido'].includes(o.etapaCompra)],
@@ -1106,6 +1131,13 @@ function ResumenNicho({ o, tendencia }) {
       <h4 className="opp-sub">Para decidir la compra <small>· historia de 12–24 meses y estructura del mercado</small></h4>
       <div className="op-hechos">
         <Hecho etiqueta="búsquedas/mes">{c?.busquedasMes ? fmtNum(c.busquedasMes) : null}</Hecho>
+        <Hecho etiqueta="venta en ML">
+          {o.demandaMlVsGoogle?.equivalente != null ? (
+            <span title={tituloMl(o.demandaMlVsGoogle)}>
+              ≈{fmtNum(o.demandaMlVsGoogle.equivalente)} búsquedas<i> · {String(o.demandaMlVsGoogle.resenasDia).replace('.', ',')} reseñas/día · más que el {o.demandaMlVsGoogle.percentil}% de tus nichos{o.demandaMlVsGoogle.firme ? '' : ' · 1 scan'}</i>
+            </span>
+          ) : null}
+        </Hecho>
         {Number.isFinite(c?.variacionInteranualPct) ? (
           <Hecho etiqueta="Google 12 meses">
             <span title={`Búsquedas de los últimos 12 meses contra los 12 anteriores: cada estación aparece una vez en cada lado, así que no la mueve la temporada.${Number.isFinite(c.variacionRelativaPct) ? ` Todo el mercado hizo ${c.variacionMercadoPct > 0 ? '+' : ''}${c.variacionMercadoPct}%; contra el mercado queda ${c.variacionRelativaPct > 0 ? '+' : ''}${c.variacionRelativaPct}%.` : ''}`}>

@@ -7916,7 +7916,12 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .opt-etapa.e-vendiendo { background: var(--exito-tenue); color: var(--exito-tinta); }
 .opt-etapa.e-descartado { background: transparent; color: var(--tinta-3); text-decoration: line-through; }
 
-.opt-cifras { grid-area: cifras; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--borde); }
+.opt-cifras { grid-area: cifras; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--borde); }
+/* la venta en ML en la escala de Google: verde si pasa la vara que Google no
+   pasa, ámbar si Google la pasa y ML no; tenue con un solo scan */
+.opt-ml-mas { color: var(--exito-tinta); }
+.opt-ml-menos { color: var(--avisa-tinta); }
+.opt-ml-tenue { color: var(--tinta-3); }
 .opt-cifra { display: grid; gap: 3px; min-width: 0; }
 .opt-cifra > small { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--tinta-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .opt-cifra-v { display: flex; align-items: center; min-height: 22px; font-size: 14.5px; font-weight: 600; color: var(--tinta); font-variant-numeric: tabular-nums; white-space: nowrap; }
