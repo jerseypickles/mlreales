@@ -87,3 +87,17 @@ test('ranking de tus productos: el día sin captura de su categoría no es "fuer
   assert.deepEqual(serieConCaptura(serie, 'MLC389306', capturadas), [{ dia: 'd1', puesto: 11 }, { dia: 'd2', puesto: null }, { dia: 'd3', puesto: null, sinCaptura: true }])
   assert.deepEqual(serieConCaptura(serie, null, capturadas).map((d) => d.sinCaptura), [undefined, undefined, undefined], 'sin categoría conocida no se inventa')
 })
+
+test('ranking en el tiempo: la tendencia pide las dos ventanas casi completas (un día sin captura promedia como cero)', async () => {
+  const { hayTendencia } = await import('../src/services/demandaActualMl.js')
+  const dias = Array.from({ length: 21 }, (_, k) => new Date(Date.UTC(2026, 8, 26 + k)).toISOString().slice(0, 10)) // 26-sep → 16-oct
+  const completo = new Map(dias.map((d) => [d, 1700]))
+  assert.equal(hayTendencia(completo, dias), true)
+  const unHueco = new Map(completo); unHueco.set('2026-10-12', 0)
+  assert.equal(hayTendencia(unHueco, dias), true, 'un día perdido en la semana se tolera')
+  // el cierre: capturas reales del 14 al 16-oct
+  const cierre = new Map(completo); cierre.set('2026-10-14', 1); cierre.set('2026-10-15', 2); cierre.set('2026-10-16', 2)
+  assert.equal(hayTendencia(cierre, dias), false)
+  const antesFlojo = new Map(completo); for (const d of dias.slice(0, 3)) antesFlojo.set(d, 0)
+  assert.equal(hayTendencia(antesFlojo, dias), false, 'tres días perdidos en las dos semanas de antes tampoco')
+})

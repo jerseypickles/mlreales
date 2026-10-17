@@ -48,6 +48,13 @@ export const MIN_CATEGORIAS_DIA = 100
 export function huboRanking(porDia, dias, minDias = 4) {
   return dias.filter((d) => (porDia.get(d) ?? 0) >= MIN_CATEGORIAS_DIA).length >= minDias
 }
+// Pura. La TENDENCIA pide las ventanas casi completas: promedia productos por
+// día, y un día sin captura cuenta como cero. El 17-oct "billetera hombre cuero"
+// y "arnes perro" (2 de las categorías que se colaron después del cierre) salían
+// bajando 37% y 22% con 5 de 7 días capturados: −2 al score por falta de dato.
+export function hayTendencia(porDia, dias, ventana = 7) {
+  return huboRanking(porDia, dias.slice(-ventana), ventana - 1) && huboRanking(porDia, dias.slice(0, -ventana), dias.length - ventana - 2)
+}
 
 // ─── EL RANKING EN EL TIEMPO (8-oct-2026) ─────────────────────────────────────
 // El importador pidió tres usos que faltaban: ver si SUS productos están en el
@@ -147,6 +154,7 @@ export async function medirDemandaActual({ ahora = new Date() } = {}) {
   }
   const dias = Array.from({ length: DIAS_TENDENCIA }, (_, k) => diaChile(+ahora - (DIAS_TENDENCIA - k) * DIA))
   const hayRanking = huboRanking(porDia, dias.slice(-VENTANA_DIAS))
+  const conTendencia = hayTendencia(porDia, dias, VENTANA_DIAS)
   let porKeyword = new Map()
   try {
     const { resumenSeguimiento } = await import('./seguimientoStock.js')
@@ -165,12 +173,12 @@ export async function medirDemandaActual({ ahora = new Date() } = {}) {
     const lectura = lecturaDemanda({ ranking: enRanking(ids, ranking), stock: porKeyword.get(n.keyword) ?? null, rankingDisponible: hayRanking })
     if (lectura.hayDemanda) conDemanda++
     // sin categorías capturadas parejo no hay con qué comparar: ni sube ni está fuera
-    const tendencia = hayRanking && pareja.size ? tendenciaRanking(serieRanking(ids, indice, dias)) : { estado: 'sin-dato' }
+    const tendencia = conTendencia && pareja.size ? tendenciaRanking(serieRanking(ids, indice, dias)) : { estado: 'sin-dato' }
     await Nicho.updateOne({ _id: n._id }, { $set: { demandaMl: { ...lectura, tendenciaRanking: tendencia, ventanaDias: VENTANA_DIAS, medidoEl: ahora } } })
   }
   console.log(`[demanda-ml] ${conDemanda}/${nichos.length} nichos con demanda actual en ML (ranking ${VENTANA_DIAS} días o baja de stock)${hayRanking ? '' : ' · SIN ranking en la ventana: no aparecer no cuenta como falta de demanda'}`)
-  const propios = await rankingDePropios({ ahora, indice: indiceTodo, dias, categoriasPorDia, hayRanking }).catch((e) => ({ error: e.message }))
-  return { nichos: nichos.length, conDemanda, rankingDisponible: hayRanking, propios }
+  const propios = await rankingDePropios({ ahora, indice: indiceTodo, dias, categoriasPorDia, conTendencia }).catch((e) => ({ error: e.message }))
+  return { nichos: nichos.length, conDemanda, rankingDisponible: hayRanking, tendenciaDisponible: conTendencia, propios }
 }
 
 // Pura. La serie de tu producto con los días en que su categoría no se capturó
@@ -183,7 +191,7 @@ export function serieConCaptura(serie, categoriaId, categoriasPorDia) {
 // TUS PRODUCTOS EN EL RANKING. El ranking no usa el id de la publicación: usa
 // el del producto de usuario (MLCU…) o el de catálogo. Se piden una vez por
 // producto a /items (gratis) y se guardan; después, el puesto de cada día.
-export async function rankingDePropios({ ahora = new Date(), indice, dias, categoriasPorDia = null, hayRanking = true, pedir = null } = {}) {
+export async function rankingDePropios({ ahora = new Date(), indice, dias, categoriasPorDia = null, conTendencia = true, pedir = null } = {}) {
   const { ProductoPropio } = await import('../models/ProductoPropio.js')
   const obtener = pedir ?? (await import('./meli.js')).meliGet
   const propios = await ProductoPropio.find({}).select('itemIdMl sku titulo idsRanking').lean()
@@ -207,7 +215,7 @@ export async function rankingDePropios({ ahora = new Date(), indice, dias, categ
     for (let k = conCaptura.length - 1; k >= 0 && conCaptura[k].sinCaptura; k--) sinCapturaDesde = conCaptura[k].dia
     await ProductoPropio.updateOne({ _id: p._id }, { $set: { idsRanking: ids, rankingMl: {
       puestoActual: serie.at(-1)?.mejor ?? null, ultimoVisto: ultimo, serie: conCaptura, sinCapturaDesde,
-      tendencia: hayRanking ? tendenciaRanking(serie) : { estado: 'sin-dato' },
+      tendencia: conTendencia ? tendenciaRanking(serie) : { estado: 'sin-dato' },
       categoriaCapturada: ids.categoriaId ? capturadas.has(ids.categoriaId) : null, medidoEl: ahora } } })
   }
   return { productos: propios.length, conPuesto }
