@@ -33,12 +33,28 @@ const PAUSA_429_MS = 6000
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // una consulta que distingue "ML me frenó" (reintentar después) de "no hay dato"
+// y de "ML no me deja" (403)
 async function pedir(ruta, obtener = meliGet) {
   try {
     return { datos: await obtener(ruta) }
   } catch (err) {
-    return { frenado: /\b429\b|too many/i.test(err.message), error: err.message }
+    return { frenado: /\b429\b|too many/i.test(err.message), denegado: /\b403\b|unauthorized|forbidden|access denied/i.test(err.message), error: err.message }
   }
+}
+
+// ML CERRÓ EL RANKING DE MÁS VENDIDOS EL 14-OCT-2026: `/highlights` responde
+// 403 "At least one policy returned UNAUTHORIZED" para toda categoría (las
+// tendencias siguen abiertas), como las reseñas ajenas el 29-sep. Un 403 no es
+// un 404, así que no se anotaba: ~220 pedidos por hora, 0 capturas y una pasada
+// que decía "0 frenos". Si una tanda arranca con puros 403, el ranking se deja
+// 24 horas y después se reprueba con unas pocas.
+export const MUESTRA_CIERRE = 8
+const CIERRE_MS = 24 * 3600e3
+let cierreRanking = null // { desde, hasta, ejemplo }
+
+// Pura. ¿Las primeras respuestas de la tanda dicen que ML cerró el ranking?
+export function rankingCerrado(respuestas) {
+  return respuestas.length >= MUESTRA_CIERRE && respuestas.slice(0, MUESTRA_CIERRE).every((r) => r?.denegado)
 }
 
 // Pura. ¿ML dice que esa categoría no tiene el dato publicado? Un 404 ("Not
@@ -173,11 +189,25 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, pres
     await esperar(PAUSA_MS)
   }
   const presupuestoRanking = presupuestoMs
-  let capturadas = 0, movidas = 0, sinRanking = 0
-  for (const { id } of pendientes) {
+  let capturadas = 0, movidas = 0, sinRanking = 0, denegadas = 0
+  const primeras = []
+  const cerrado = cierreRanking && +ahora < cierreRanking.hasta
+  for (const { id } of cerrado ? [] : pendientes) {
     if (Date.now() - inicio > presupuestoRanking) break
     const r = await pedir(`/highlights/MLC/category/${id}`, obtener)
+    if (primeras.length < MUESTRA_CIERRE) primeras.push(r)
     if (r.frenado) { frenos++; await esperar(PAUSA_429_MS); continue }
+    if (r.denegado) {
+      denegadas++
+      if (rankingCerrado(primeras)) {
+        cierreRanking = { desde: cierreRanking?.desde ?? +ahora, hasta: +ahora + CIERRE_MS, ejemplo: String(r.error ?? '').slice(0, 120) }
+        console.warn(`[panorama] ML niega el ranking de más vendidos (${MUESTRA_CIERRE}/${MUESTRA_CIERRE} con 403): pausa de 24 h`)
+        break
+      }
+      await esperar(PAUSA_MS)
+      continue
+    }
+    if (!r.error) cierreRanking = null // ML volvió a responder
     const items = normalizarDestacados(r.datos)
     if (noPublicado(r, !items.length)) {
       await CategoriaMl.updateOne({ id }, { $set: { sinRankingHasta: new Date(+ahora + SIN_RANKING_DIAS * DIA) } })
@@ -195,12 +225,13 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, pres
     }
     await esperar(PAUSA_MS)
   }
-  const resultado = { dia, arbol, hojasConVolumen: hojas.length, rankingHoy: hechas.size + capturadas, capturadas, movidas, sinRanking, tendencias, frenos,
+  const resultado = { dia, arbol, hojasConVolumen: hojas.length, rankingHoy: hechas.size + capturadas, capturadas, movidas, sinRanking, tendencias, frenos, denegadas,
+    rankingCerrado: cierreRanking ? { desde: new Date(cierreRanking.desde), hasta: new Date(cierreRanking.hasta), ejemplo: cierreRanking.ejemplo } : null,
     tendenciaDiag: { candidatas: candidatasTendencia, errores: erroresTendencia, vacias: vaciasTendencia, sinTendencias, ultimoError: ultimoErrorTendencia, segundos: Math.round((Date.now() - inicio) / 1000) } }
   ultimaPasada = { ...resultado, en: new Date() }
   // la API corre en otro proceso: sin esto solo se veía en el log
   await PasadaPanorama.create({ en: ultimaPasada.en, dia, resultado }).catch(() => null)
-  console.log(`[panorama] ${dia}: ranking ${resultado.rankingHoy}/${hojas.length} categorías (+${capturadas}, ${movidas} movimientos), ${tendencias} tendencias, ${frenos} frenos${arbol ? ` · árbol ${arbol.total} (${arbol.pendientes} por leer)` : ''}`)
+  console.log(`[panorama] ${dia}: ranking ${resultado.rankingHoy}/${hojas.length} categorías (+${capturadas}, ${movidas} movimientos), ${tendencias} tendencias, ${frenos} frenos${denegadas ? `, ${denegadas} denegadas (403)` : ''}${cierreRanking ? ' · ranking CERRADO por ML' : ''}${arbol ? ` · árbol ${arbol.total} (${arbol.pendientes} por leer)` : ''}`)
   return resultado
 }
 

@@ -56,3 +56,34 @@ test('ranking en el tiempo: un cambio chico no es tendencia (19,9 → 18,6 produ
   const serie = [...Array.from({ length: 14 }, (_, k) => ({ dia: `a${k}`, productos: 20, mejor: 1 })), ...Array.from({ length: 7 }, (_, k) => ({ dia: `b${k}`, productos: 18.6, mejor: 1 }))]
   assert.equal(tendenciaRanking(serie).estado, 'estable')
 })
+
+// El 14-oct-2026 ML cerró el ranking a la app (403). Sin esto, a los pocos días
+// todo nicho sin baja de stock pasaba a "no se ve" y los abiertos desde el 4-oct
+// recibían la alerta de nicho muerto por falta de dato, no de venta.
+test('demanda actual: sin ranking en la ventana, no aparecer no es falta de demanda', async () => {
+  assert.equal(lecturaDemanda({ ranking: { productos: 0 }, stock: null, rankingDisponible: false }).hayDemanda, null)
+  assert.equal(lecturaDemanda({ ranking: { productos: 0 }, stock: { vendiendo: 0 }, rankingDisponible: false }).hayDemanda, null)
+  assert.equal(lecturaDemanda({ ranking: { productos: 0 }, stock: { vendiendo: 1 }, rankingDisponible: false }).hayDemanda, true, 'la baja de stock sigue diciendo que sí')
+  assert.equal(lecturaDemanda({ ranking: { productos: 2 }, stock: null, rankingDisponible: false }).hayDemanda, true, 'lo visto antes del cierre cuenta')
+  assert.equal(lecturaDemanda({ ranking: { productos: 0 }, stock: null }).ranking.disponible, true)
+  const ahora = new Date('2026-11-01T12:00:00Z')
+  assert.equal(sinDemandaActual({ demandaMl: { hayDemanda: null }, creadoEl: new Date('2026-10-10') }, ahora), false, 'sin dato no hay alerta')
+})
+
+test('demanda actual: un día con 1 o 2 categorías sueltas no es un día con ranking', async () => {
+  const { huboRanking } = await import('../src/services/demandaActualMl.js')
+  const semana = (desde) => Array.from({ length: 7 }, (_, k) => `2026-10-${String(desde + k).padStart(2, '0')}`)
+  // capturas reales por día alrededor del cierre
+  const porDia = new Map([['2026-10-10', 1729], ['2026-10-11', 1723], ['2026-10-12', 1717], ['2026-10-13', 1709], ['2026-10-14', 1], ['2026-10-15', 2], ['2026-10-16', 2]])
+  assert.equal(huboRanking(new Map(semana(1).map((d) => [d, 1700])), semana(1)), true)
+  assert.equal(huboRanking(porDia, semana(10)), true, '4 días con ranking todavía alcanzan')
+  assert.equal(huboRanking(porDia, semana(11)), false, '3 no')
+})
+
+test('ranking de tus productos: el día sin captura de su categoría no es "fuera del top 20"', async () => {
+  const { serieConCaptura } = await import('../src/services/demandaActualMl.js')
+  const serie = [{ dia: 'd1', mejor: 11 }, { dia: 'd2', mejor: null }, { dia: 'd3', mejor: null }]
+  const capturadas = new Map([['d1', new Set(['MLC389306'])], ['d2', new Set(['MLC389306'])], ['d3', new Set(['OTRA'])]])
+  assert.deepEqual(serieConCaptura(serie, 'MLC389306', capturadas), [{ dia: 'd1', puesto: 11 }, { dia: 'd2', puesto: null }, { dia: 'd3', puesto: null, sinCaptura: true }])
+  assert.deepEqual(serieConCaptura(serie, null, capturadas).map((d) => d.sinCaptura), [undefined, undefined, undefined], 'sin categoría conocida no se inventa')
+})

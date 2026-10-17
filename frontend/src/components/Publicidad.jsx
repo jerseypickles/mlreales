@@ -796,21 +796,21 @@ function RankingPropios() {
   useEffect(() => { api.rankingPropios().then(setD).catch(() => setD({ productos: [] })) }, [])
   const ps = (d?.productos ?? []).filter((p) => p.ranking)
   if (!ps.length) return null
-  const TXT = { sube: 'subiendo', baja: 'bajando', estable: 'estable', nuevo: 'recién entró', fuera: 'fuera del top 20' }
+  const TXT = { sube: 'subiendo', baja: 'bajando', estable: 'estable', nuevo: 'recién entró', fuera: 'fuera del top 20', 'sin-dato': 'sin dato para la tendencia' }
   return (
     <section className="pub-caja">
       <h4>Tus productos en el ranking de más vendidos</h4>
-      <p className="pub-texto">El puesto de cada día en el top 20 oficial de su categoría (últimas 3 semanas). Arriba es mejor; sin barra, ese día no estuvo en el top 20.</p>
+      <p className="pub-texto">El puesto de cada día en el top 20 oficial de su categoría (últimas 3 semanas). Arriba es mejor; sin barra, ese día no estuvo en el top 20; con borde punteado, ese día ML no entregó el ranking (desde el 14-oct responde 403 a la app).</p>
       <div className="pub-rk">
         {ps.map((p) => (
           <div key={p.itemId} className="pub-rk-prod">
             {p.imagen ? <img src={p.imagen} alt="" width="36" height="36" /> : null}
             <span className="pub-rk-txt">
               <strong>{nombreCorto(p.titulo ?? p.itemId)}</strong>
-              <small>{p.ranking.puestoActual ? `#${p.ranking.puestoActual} hoy` : p.ranking.ultimoVisto ? `último visto #${p.ranking.ultimoVisto.mejor} el ${p.ranking.ultimoVisto.dia}` : 'no está en el top 20'} · {TXT[p.ranking.tendencia?.estado] ?? '—'}{p.ranking.categoriaCapturada === false ? ' · su categoría todavía no se captura' : ''}</small>
+              <small>{p.ranking.puestoActual ? `#${p.ranking.puestoActual} hoy` : p.ranking.ultimoVisto ? `último visto #${p.ranking.ultimoVisto.mejor} el ${p.ranking.ultimoVisto.dia}` : p.ranking.sinCapturaDesde ? 'sin dato' : 'no está en el top 20'} · {TXT[p.ranking.tendencia?.estado] ?? '—'}{p.ranking.categoriaCapturada === false ? ' · su categoría todavía no se captura' : p.ranking.sinCapturaDesde ? ` · sin ranking de su categoría desde el ${p.ranking.sinCapturaDesde}` : ''}</small>
             </span>
             <span className="pub-rk-serie" aria-hidden="true">
-              {(p.ranking.serie ?? []).map((x) => <i key={x.dia} title={`${x.dia}: ${x.puesto ? `#${x.puesto}` : 'fuera del top 20'}`} style={{ height: x.puesto ? `${Math.max(8, Math.round(((21 - x.puesto) / 20) * 100))}%` : '0%' }} />)}
+              {(p.ranking.serie ?? []).map((x) => <i key={x.dia} className={x.sinCaptura ? 'sin' : undefined} title={`${x.dia}: ${x.puesto ? `#${x.puesto}` : x.sinCaptura ? 'sin dato (ML no entregó el ranking)' : 'fuera del top 20'}`} style={{ height: x.puesto ? `${Math.max(8, Math.round(((21 - x.puesto) / 20) * 100))}%` : '0%' }} />)}
             </span>
           </div>
         ))}
