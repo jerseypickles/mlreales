@@ -558,7 +558,7 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
         <Cifra etiqueta="En ML" title={tituloMl(o.demandaMlVsGoogle)}>
           {o.demandaMlVsGoogle?.equivalente != null ? (
             <span className={o.demandaMlVsGoogle.firme ? { 'pasa-por-ml': 'opt-ml-mas', 'flojo-en-ml': 'opt-ml-menos' }[o.demandaMlVsGoogle.lectura] : 'opt-ml-tenue'}>
-              ≈{fmtNum(o.demandaMlVsGoogle.equivalente)}<small>/mes</small>
+              ≈{fmtNum(o.demandaMlVsGoogle.equivalente)}
             </span>
           ) : <em className="opt-nada">—</em>}
         </Cifra>
