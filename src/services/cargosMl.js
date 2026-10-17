@@ -181,9 +181,14 @@ export function tipoDelOriginal(tipoAnulacion) {
   return { BFF: 'CFF', BV: 'CV', BPAD: 'PADS' }[tipoAnulacion] ?? tipoAnulacion
 }
 
-export async function cargosPorItem({ dias = 30 } = {}) {
+// `excluirDias`: días de Chile (AAAA-MM-DD) que no cuentan, los mismos que se
+// le sacan a ventasPorItem. Sin esto la comisión de 30 días enteros se dividía
+// por las ventas sin los días de evento: el 17-oct-2026 daba 24,4% cuando la
+// facturada en días normales era 15,7% (Set 8) y 16,7% (pistola).
+export async function cargosPorItem({ dias = 30, excluirDias = [] } = {}) {
   const desde = new Date(Date.now() - dias * 86400e3)
-  const base = { fecha: { $gte: desde }, itemId: { $ne: null } }
+  const base = { fecha: { $gte: desde }, itemId: { $ne: null },
+    ...(excluirDias.length ? { $expr: { $not: { $in: [{ $dateToString: { format: '%Y-%m-%d', date: '$fecha', timezone: 'America/Santiago' } }, excluirDias] } } } : {}) }
 
   // Los cargos reales: ni los anulados ni las líneas de anulación.
   const filas = await CargoMl.aggregate([

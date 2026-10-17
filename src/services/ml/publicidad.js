@@ -534,7 +534,7 @@ async function aprenderTicket({ envio }) {
   // la comisión que ML FACTURÓ por item (las publicaciones propias son
   // Premium, 17%; el tarifario sin tipo devolvía la Clásica, 13%)
   const { cargosPorItem } = await import('../cargosMl.js')
-  const cargos = await cargosPorItem({ dias: 30 }).catch(() => new Map())
+  const cargos = await cargosPorItem({ dias: 30, excluirDias: diasEvento }).catch(() => new Map())
   const desde = new Date(Date.now() - 30 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
   const gasto = new Map((await AdsDiaMl.aggregate([{ $match: { itemId: { $ne: '*' }, dia: { $gte: desde, $nin: diasEvento } } }, { $group: { _id: '$itemId', costo: { $sum: '$costo' } } }])).map((g) => [g._id, g.costo]))
   const filas = []
