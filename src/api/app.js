@@ -16,6 +16,7 @@ import rutasMasVendidos from './routes/masVendidos.js'
 import rutasSeguimiento from './routes/seguimiento.js'
 import { obtenerColas } from '../jobs/queues.js'
 import { gastoDelMes, mesActual } from '../services/gastos.js'
+import { invalidarAlEscribir } from '../services/tableroCache.js'
 import { config } from '../config/env.js'
 
 export function crearApp() {
@@ -138,6 +139,9 @@ export function crearApp() {
     } catch (err) { next(err) }
   })
 
+  // la mesa de Oportunidades se sirve guardada: lo que escribe en nichos,
+  // compras, propios o publicaciones la invalida (ver services/tableroCache.js)
+  app.use(['/api/nichos', '/api/oportunidades', '/api/propios', '/api/meli'], invalidarAlEscribir)
   app.use('/api/nichos', rutasNichos)
   app.use('/api/productos', rutasProductos)
   app.use('/api/propios', rutasPropios)

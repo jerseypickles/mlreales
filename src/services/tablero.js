@@ -12,7 +12,7 @@ import {
 } from './oportunidades.js'
 import { config } from '../config/env.js'
 import { calcularMargen } from './margen.js'
-import { comisionMlExacta, categoriaDominante } from './comisionesMl.js'
+import { comisionMlExacta, categoriaDominanteGuardada } from './comisionesMl.js'
 import { topSkusPorKeyword, agruparFamilias } from './familias.js'
 import { puntajeBusqueda, explicar } from './nivelBusqueda.js'
 import { sinDemandaActual, ajustePorRanking } from './demandaActualMl.js'
@@ -265,7 +265,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       .map(async (n) => {
         try {
           const rec = n.conAnalisis[0].analisis.recomendacion ?? {}
-          const categoria = await categoriaDominante(n.keyword)
+          const categoria = await categoriaDominanteGuardada(n.keyword)
           const c = await comisionMlExacta({ precioClp: rec.precioVentaClp, categoriaId: categoria, tipoPublicacion: 'gold_pro' })
           if (c?.pct != null) comisionPorKeyword.set(n.keyword, c.pct)
         } catch {

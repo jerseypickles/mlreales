@@ -67,3 +67,17 @@ export async function categoriaDominante(keyword) {
   ])
   return filas[0]?._id ?? null
 }
+
+// La mesa de Oportunidades la pedía por cada nicho cotizado en CADA armado (40
+// agregaciones, ~0,3 s en local y más en producción). La categoría dominante
+// casi no se mueve entre scans: para la mesa se guarda 6 h. El analista sigue
+// leyendo la del momento.
+const cacheCategoria = new Map()
+const TTL_CATEGORIA_MS = 6 * 3600e3
+export async function categoriaDominanteGuardada(keyword) {
+  const hit = cacheCategoria.get(keyword)
+  if (hit && Date.now() - hit.el < TTL_CATEGORIA_MS) return hit.valor
+  const valor = await categoriaDominante(keyword)
+  cacheCategoria.set(keyword, { valor, el: Date.now() })
+  return valor
+}

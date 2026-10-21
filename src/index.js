@@ -96,6 +96,8 @@ console.log('[bullmq] workers: scan-nicho, scan-detalle, calcular-metricas, anal
 
 const servidor = crearApp().listen(config.port, () => {
   console.log(`[api] MELI Intel escuchando en http://localhost:${config.port}`)
+  // la primera visita a Oportunidades tras un deploy no paga el armado entero
+  import('./services/tableroCache.js').then(({ calentarTablero }) => calentarTablero()).catch(() => {})
 })
 
 async function apagar(senal) {

@@ -491,6 +491,9 @@ export async function procesarCalcularMetricas(job) {
     },
     { upsert: true, new: true },
   )
+  // la mesa de Oportunidades guardada se rearma con este reporte
+  const { envejecerTablero } = await import('../services/tableroCache.js')
+  envejecerTablero()
 
   // embudo del radar: en screening el score decide — bajo el umbral se pausa sin
   // gastar LLM; sobre el umbral se gradúa a detalle completo y sigue al análisis
@@ -568,6 +571,8 @@ export async function procesarAnalisisNicho(job) {
   if (nicho.estado !== 'activo') return { omitido: true, motivo: `nicho en estado "${nicho.estado}"` }
 
   const analisis = await analizarNicho(nicho)
+  const { envejecerTablero } = await import('../services/tableroCache.js')
+  envejecerTablero()
 
   // los descubrimientos del radar que no dan se pausan solos: dejan de gastar
   // scans. PERO un no_entrar sobre una keyword que la gente SÍ busca no cierra

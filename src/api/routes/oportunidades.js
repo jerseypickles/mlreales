@@ -1,21 +1,23 @@
 import { Router } from 'express'
 import { Nicho } from '../../models/Nicho.js'
 import { cambiosPorEtapa, ETAPAS_COMPRA } from '../../services/oportunidades.js'
-import { tableroOportunidades } from '../../services/tablero.js'
+import { leerTablero } from '../../services/tableroCache.js'
 import { claveRespaldo } from '../../services/claveCompra.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 
 // Panel de decisión (el armado vive en services/tablero.js, compartido con el
-// estratega semanal). Con ?todos=1 devuelve TODO lo analizado — fuente de la
-// planilla de recomendaciones IA.
+// estratega semanal; la pantalla lo lee guardado, ver services/tableroCache.js).
+// Con ?todos=1 devuelve TODO lo analizado — fuente de la planilla de
+// recomendaciones IA. `refrescando`: se entregó la mesa guardada y se está
+// rearmando atrás; la pantalla la vuelve a pedir en unos segundos.
 router.get(
   '/',
   manejar(async (req, res) => {
     const todos = req.query.todos === '1' || req.query.todos === 'true'
-    const oportunidades = await tableroOportunidades({ todos })
-    res.json({ total: oportunidades.length, oportunidades })
+    const { oportunidades, calculadoEl, refrescando } = await leerTablero({ todos })
+    res.json({ total: oportunidades.length, oportunidades, calculadoEl, refrescando })
   }),
 )
 

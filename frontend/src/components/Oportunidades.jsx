@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarClock, Check, CircleDollarSign, FileText, ImageOff, Lightbulb, MousePointerClick, PencilLine, Search, ShieldAlert, ShoppingBag, Sparkles, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
@@ -225,7 +225,7 @@ function claseTramo(mediana) {
 // El marcador escribe la MISMA etapaCompra de siempre, así que el sidebar de
 // Nichos, el estratega y el cupo del radar lo ven igual. Solo cambia dónde se
 // toca.
-function MarcaCotizando({ o, onRecargar }) {
+function MarcaCotizando({ o, onEtapa }) {
   const activo = o.etapaCompra === 'cotizando'
   return (
     <button
@@ -233,10 +233,9 @@ function MarcaCotizando({ o, onRecargar }) {
       className={`opt-marca${activo ? ' activa' : ''}`}
       title={activo ? 'Lo estás cotizando — clic para desmarcar' : 'Marcar que estás cotizando este nicho'}
       aria-pressed={activo}
-      onClick={async (e) => {
+      onClick={(e) => {
         e.stopPropagation()
-        await api.ajustarNicho(o.nichoId, { etapaCompra: activo ? 'evaluando' : 'cotizando' })
-        onRecargar()
+        onEtapa(o, activo ? 'evaluando' : 'cotizando')
       }}
     >
       {activo ? <><Check size={12} aria-hidden="true" />Cotizando</> : '+ cotizar'}
@@ -436,14 +435,14 @@ const ETAPA_TEXTO = { cotizando: 'Cotizando', pedido: 'Pedido', vendiendo: 'Vend
 // misma etapaCompra de siempre, así que Nichos y el radar lo ven igual.
 const enCotizacion = (o) => ['cotizando', 'pedido'].includes(o.etapaCompra)
 
-function EstadoCompra({ o, onRecargar }) {
+function EstadoCompra({ o, onEtapa }) {
   // lo que está en cotización lo dice la franja de arriba, con su costo
   if (enCotizacion(o)) return <span className="opt-compra" />
   const etapa = o.etapaCompra && o.etapaCompra !== 'evaluando' ? o.etapaCompra : null
   const costo = costoCorto(o.cotizacion)
   return (
     <span className="opt-compra">
-      {etapa ? <b className={`opt-etapa e-${etapa}`}>{ETAPA_TEXTO[etapa] ?? etapa}</b> : <MarcaCotizando o={o} onRecargar={onRecargar} />}
+      {etapa ? <b className={`opt-etapa e-${etapa}`}>{ETAPA_TEXTO[etapa] ?? etapa}</b> : <MarcaCotizando o={o} onEtapa={onEtapa} />}
       {costo ? <small className={o.cotizacion?.costoPuestoClp != null ? 'real' : undefined}>{costo}</small> : null}
     </span>
   )
@@ -453,7 +452,7 @@ function EstadoCompra({ o, onRecargar }) {
 // "Cotizando" en la esquina se perdía: "que los identifique mejor el
 // contenedor, se ve bien chiquito". Ahora la tarjeta entera lleva borde y
 // franja azul con el costo, y desde la franja se quita la marca.
-function BandaCotizando({ o, onRecargar }) {
+function BandaCotizando({ o, onEtapa }) {
   const pedido = o.etapaCompra === 'pedido'
   const costo = costoCorto(o.cotizacion)
   return (
@@ -466,10 +465,9 @@ function BandaCotizando({ o, onRecargar }) {
           type="button"
           className="opt-banda-quitar"
           title="Quitar la marca de cotizando"
-          onClick={async (e) => {
+          onClick={(e) => {
             e.stopPropagation()
-            await api.ajustarNicho(o.nichoId, { etapaCompra: 'evaluando' })
-            onRecargar()
+            onEtapa(o, 'evaluando')
           }}
         >
           quitar
@@ -507,7 +505,7 @@ function MiniCurva({ c }) {
 // LA TARJETA DEL NICHO (2-oct-2026): foto, nombre, UNA línea de por qué traerlo
 // ahora, las alertas en íconos, el score y el estado de la compra, y abajo las
 // cinco cifras que deciden si vale abrirla. Todo lo demás está en el panel.
-function TarjetaNicho({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
+function TarjetaNicho({ o, rank, abierta, onAlternar, onEtapa, tendencia }) {
   const m = momentoDeCompra(o)
   const c = o.curvaAnual
   const avisos = avisosDe(o, tendencia).filter((x) => !x.soloPanel)
@@ -523,7 +521,7 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
       }}
       aria-expanded={abierta}
     >
-      {enCotizacion(o) ? <BandaCotizando o={o} onRecargar={onRecargar} /> : null}
+      {enCotizacion(o) ? <BandaCotizando o={o} onEtapa={onEtapa} /> : null}
       <span className="opt-foto">
         {o.imagen ? <Miniatura src={o.imagen} lado={72} /> : <ImageOff size={20} aria-hidden="true" />}
         <i className="opt-rank">{rank}</i>
@@ -547,7 +545,7 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onRecargar, tendencia }) {
           </span>
         ) : <em className="opt-nada">—</em>}
       </span>
-      <EstadoCompra o={o} onRecargar={onRecargar} />
+      <EstadoCompra o={o} onEtapa={onEtapa} />
       <span className="opt-cifras">
         <Cifra
           etiqueta="Búsquedas"
@@ -1037,7 +1035,7 @@ const FILTROS = [
 // de la compra uno debajo del otro. Ahora una cabecera fija dice qué es y por
 // qué, y el resto va en pestañas: lo que se lee para decidir (Resumen), cuándo
 // y a qué precio, contra quién, y lo que se hace para comprarlo.
-function PanelNicho({ o, rank, mismaCompraQue, porKeyword, onAbrir, onRecargar, onCerrar, pronostico, modeloGana, tendencia }) {
+function PanelNicho({ o, rank, mismaCompraQue, porKeyword, onAbrir, onRecargar, onEtapa, onCerrar, pronostico, modeloGana, tendencia }) {
   const [pestana, setPestana] = useState('resumen')
   const m = momentoDeCompra(o)
   const pestanas = [
@@ -1104,7 +1102,7 @@ function PanelNicho({ o, rank, mismaCompraQue, porKeyword, onAbrir, onRecargar, 
             </div>
           ) : null}
           {pestana === 'competencia' ? <CompetenciaNicho o={o} /> : null}
-          {pestana === 'compra' ? <CompraNicho o={o} onRecargar={onRecargar} mismaCompraQue={mismaCompraQue} /> : null}
+          {pestana === 'compra' ? <CompraNicho o={o} onRecargar={onRecargar} onEtapa={onEtapa} mismaCompraQue={mismaCompraQue} /> : null}
           {pestana === 'mejoras' && o.mejoras?.length ? <MejorasNicho o={o} onRecargar={onRecargar} /> : null}
         </>
       )}
@@ -1231,7 +1229,7 @@ function ResumenNicho({ o, tendencia }) {
 }
 
 // LO QUE SE HACE PARA COMPRARLO: etapa, costo, flete y el plan.
-function CompraNicho({ o, onRecargar, mismaCompraQue }) {
+function CompraNicho({ o, onRecargar, onEtapa, mismaCompraQue }) {
   return (
     <div className="opp-compra">
       <div className="opp-campos">
@@ -1241,10 +1239,7 @@ function CompraNicho({ o, onRecargar, mismaCompraQue }) {
             className="etapa-select"
             value={o.etapaCompra ?? 'evaluando'}
             title={o.notaEtapa ?? 'Etapa del embudo de compra'}
-            onChange={async (e) => {
-              await api.ajustarNicho(o.nichoId, { etapaCompra: e.target.value })
-              onRecargar()
-            }}
+            onChange={(e) => onEtapa(o, e.target.value)}
           >
             {ETAPAS.map((et) => <option key={et} value={et}>{et.replace(/-/g, ' ')}</option>)}
           </select>
@@ -1535,9 +1530,16 @@ function ProductosEscaneados({ nichoId }) {
   )
 }
 
+// LA ÚLTIMA MESA QUEDA EN MEMORIA (21-oct-2026): volver a Oportunidades la
+// muestra al tiro y se actualiza por detrás, en vez de "Cargando…" por los 7 a
+// 16 s que tardaba armarla en el servidor.
+let mesaGuardada = null
+
 export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
-  const [datos, setDatos] = useState(null)
+  const [datos, setDatosEstado] = useState(mesaGuardada)
   const [error, setError] = useState(null)
+  // un cambio que no se pudo guardar: la tarjeta vuelve sola con la recarga
+  const [aviso, setAviso] = useState(null)
   const [activos, setActivos] = useState([])
   const [grupo, setGrupo] = useState('ahora')
   // LISTA + PANEL: la tarjeta elegida se ve entera a la derecha, sin acordeón
@@ -1566,16 +1568,57 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
       .catch(() => {}) // sin pronósticos la mesa funciona igual
   }, [])
 
+  const setDatos = useCallback((d) => {
+    mesaGuardada = d
+    setDatosEstado(d)
+  }, [])
+  // cada cambio local (cotizar, etapa) sube el contador: una respuesta pedida
+  // antes del cambio trae la mesa de antes y no debe pisar la tarjeta ya cambiada
+  const cambios = useRef(0)
+  const repaso = useRef(null)
+  const recargaDiferida = useRef(null)
+  useEffect(() => () => { clearTimeout(repaso.current); clearTimeout(recargaDiferida.current) }, [])
+
+  const traer = useCallback((intentos = 0) => {
+    const marca = cambios.current
+    return api.oportunidades().then((d) => {
+      if (marca !== cambios.current) return
+      setDatos(d)
+      clearTimeout(repaso.current)
+      // el servidor entregó la mesa guardada y la está rearmando: se vuelve a pedir
+      if (d.refrescando && intentos < 3) repaso.current = setTimeout(() => traer(intentos + 1).catch(() => {}), 8000)
+    })
+  }, [setDatos])
+
   const cargar = useCallback(() => {
-    api
-      .oportunidades()
-      .then(setDatos)
-      .catch((err) => setError(err.message))
+    traer().catch((err) => (mesaGuardada ? setAviso(`No se pudo actualizar la mesa: ${err.message}`) : setError(err.message)))
     alCambiarNichos?.()
-  }, [alCambiarNichos])
+  }, [traer, alCambiarNichos])
 
   useEffect(() => {
     cargar()
+  }, [cargar])
+
+  // COTIZAR SIN ESPERAR LA MESA (21-oct-2026). Antes cada clic guardaba y volvía
+  // a pedir la mesa entera: la tarjeta no cambiaba hasta 7-16 s después. Ahora
+  // cambia al tiro y la mesa se vuelve a pedir por detrás, una sola vez aunque
+  // se marquen varias seguidas.
+  const cambiarEtapa = useCallback(async (o, etapa) => {
+    cambios.current++
+    setAviso(null)
+    setDatosEstado((d) => {
+      if (!d) return d
+      const nuevo = { ...d, oportunidades: d.oportunidades.map((x) => (x.nichoId === o.nichoId ? { ...x, etapaCompra: etapa } : x)) }
+      mesaGuardada = nuevo
+      return nuevo
+    })
+    try {
+      await api.ajustarNicho(o.nichoId, { etapaCompra: etapa })
+    } catch (err) {
+      setAviso(`No se pudo cambiar "${o.keyword}": ${err.message}`)
+    }
+    clearTimeout(recargaDiferida.current)
+    recargaDiferida.current = setTimeout(cargar, 1200)
   }, [cargar])
 
   // AL VOLVER A LA PESTAÑA, LOS DATOS SE REFRESCAN. Una cotización cargada por
@@ -1585,12 +1628,12 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
     const alVolver = () => {
       if (document.visibilityState !== 'visible' || Date.now() - ultima < 60_000) return
       ultima = Date.now()
-      api.oportunidades().then(setDatos).catch(() => {})
+      traer().catch(() => {})
     }
     document.addEventListener('visibilitychange', alVolver)
     window.addEventListener('focus', alVolver)
     return () => { document.removeEventListener('visibilitychange', alVolver); window.removeEventListener('focus', alVolver) }
-  }, [])
+  }, [traer])
 
   if (error) return <main><p className="error-bloque">Error: {error}</p></main>
   if (!datos) return <main><Cargando texto="Cargando oportunidades…" /></main>
@@ -1638,6 +1681,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
           </p>
         </div>
       </div>
+      {aviso ? <p className="error-bloque">{aviso}</p> : null}
 
       <div className="opx-barra">
         <div className="opx-tabs" role="tablist" aria-label="Momento de compra">
@@ -1685,14 +1729,14 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
             {elegido ? <NavegarConFlechas orden={orden} actual={elegido} onElegir={(o) => { setSeleccion(o.nichoId); document.getElementById(`op-${o.nichoId}`)?.scrollIntoView({ block: 'nearest' }) }} /> : null}
             {orden.map((o) => (
               <div key={o.nichoId} id={`op-${o.nichoId}`}>
-                <TarjetaNicho o={o} rank={rankDe.get(o.nichoId)} abierta={elegido?.nichoId === o.nichoId} onAlternar={() => elegir(o)} onRecargar={cargar} tendencia={tendenciaDe(o)} />
+                <TarjetaNicho o={o} rank={rankDe.get(o.nichoId)} abierta={elegido?.nichoId === o.nichoId} onAlternar={() => elegir(o)} onEtapa={cambiarEtapa} tendencia={tendenciaDe(o)} />
               </div>
             ))}
           </div>
           {elegido ? (
             <aside className="op-panel abierto" aria-label="Detalle del nicho elegido">
               <PanelNicho key={elegido.nichoId} o={elegido} rank={rankDe.get(elegido.nichoId) ?? '—'} mismaCompraQue={mismaDe.get(elegido.nichoId)}
-                porKeyword={porKeyword} onAbrir={onAbrirNicho} onRecargar={cargar} onCerrar={() => setSeleccion(null)}
+                porKeyword={porKeyword} onAbrir={onAbrirNicho} onRecargar={cargar} onEtapa={cambiarEtapa} onCerrar={() => setSeleccion(null)}
                 pronostico={pron.porNicho.get(String(elegido.nichoId))} modeloGana={pron.modeloGana} tendencia={tendenciaDe(elegido)} />
             </aside>
           ) : null}

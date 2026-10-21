@@ -17,10 +17,12 @@ export function solape(a, b) {
 // Set de SKUs del último scan de cada keyword (top N por posición).
 // Consultas index-backed EN PARALELO (una agregación que ordena todos los
 // snapshots tardaba segundos y corría en cada carga del tablero Y del
-// sidebar) + cache 10 min por combinación de keywords: las familias cambian
-// con los scans, no con cada refresco de página.
+// sidebar) + cache por combinación de keywords: las familias cambian con los
+// scans, no con cada refresco de página. 60 min desde el 21-oct-2026: con 10, el
+// sidebar (que se refresca cada 15 s) y la mesa volvían a pagar las ~250
+// consultas casi en cada visita (~1 s en local).
 const cacheSkus = new Map() // clave → {hasta, mapa}
-const TTL_SKUS_MS = 10 * 60e3
+const TTL_SKUS_MS = 60 * 60e3
 
 // LÍMITE: el listado completo, no el top 30.
 //
