@@ -21,6 +21,26 @@ const MAX_FOTOS_POR_RIVAL = 2
 const MAX_CHARS_DESCRIPCION_RIVAL = 2500
 const MAX_CHARS_DESCRIPCION_PROPIA = 4000
 
+// LAS FOTOS SE BAJAN ACÁ Y VAN EN BASE64 (21-oct-2026). Con la URL, la API de
+// Anthropic respondía "Unable to download the file" a las fotos de mlstatic
+// —las mismas que desde el servidor bajan con 200— y cada auditoría del 13 y
+// el 20-oct cayó a solo texto aunque quedara marcada con fotos analizadas.
+// Una foto que no baja se deja fuera sin botar las demás.
+const TIPOS_IMAGEN = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+export async function imagenEnLinea(url, { bajar = fetch } = {}) {
+  try {
+    const r = await bajar(url, { signal: AbortSignal.timeout(15_000) })
+    if (!r.ok) return null
+    const tipo = (r.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
+    if (!TIPOS_IMAGEN.has(tipo)) return null
+    const datos = Buffer.from(await r.arrayBuffer())
+    if (!datos.length || datos.length > 3_500_000) return null // la API acepta hasta 5 MB en base64
+    return { type: 'image', source: { type: 'base64', media_type: tipo, data: datos.toString('base64') } }
+  } catch {
+    return null
+  }
+}
+
 // Elige los rivales a auditar: top por reseñas acumuladas (ganadores
 // históricos) + el que más vende AHORA (ventas/día) si no quedó ya adentro.
 export function elegirGanadores(productos, { excluirSkus = [], max = 4 } = {}) {
@@ -393,7 +413,8 @@ export async function auditarPropio(propio) {
     preguntasRealesDeCompradores: preguntasCompradores,
     medianaPrecioNicho: reporte?.metricas?.precio?.mediana ?? null,
     miPublicacion: { ...mio, fotos: undefined, numFotos: mio.fotos.length },
-    ganadoresDelNicho: rivales.map((r) => ({ ...r, url: undefined, imagen: undefined, fotos: undefined, numFotos: r.fotos.length })),
+    // sin el detalle del rival no se sabe cuántas fotos tiene: null, no 0
+    ganadoresDelNicho: rivales.map((r) => ({ ...r, url: undefined, imagen: undefined, fotos: undefined, numFotos: r.fotos.length || null })),
   }
 
   // las fotos van como imágenes reales, etiquetadas e intercaladas
@@ -405,17 +426,21 @@ export async function auditarPropio(propio) {
   ]
   const esHttp = (u) => typeof u === 'string' && u.startsWith('http')
   const fotosMias = mio.fotos.filter(esHttp).slice(0, MAX_FOTOS_PROPIAS)
-  if (fotosMias.length) {
-    bloques.push({ type: 'text', text: `FOTOS DE MI PUBLICACIÓN (${fotosMias.length} de ${mio.fotos.length}):` })
-    for (const url of fotosMias) bloques.push({ type: 'image', source: { type: 'url', url } })
+  const imagenesMias = (await Promise.all(fotosMias.map(imagenEnLinea))).filter(Boolean)
+  if (imagenesMias.length) {
+    bloques.push({ type: 'text', text: `FOTOS DE MI PUBLICACIÓN (${imagenesMias.length} de ${mio.fotos.length}):` })
+    bloques.push(...imagenesMias)
   }
   for (const r of rivales) {
-    const fotos = r.fotos.filter(esHttp).slice(0, MAX_FOTOS_POR_RIVAL)
-    if (!fotos.length) continue
-    bloques.push({ type: 'text', text: `FOTOS DEL GANADOR "${recortar(r.titulo, 70)}" (${fotos.length} de ${r.fotos.length}):` })
-    for (const url of fotos) bloques.push({ type: 'image', source: { type: 'url', url } })
+    // sin el detalle del rival queda la foto principal del listado
+    const urls = (r.fotos.length ? r.fotos : [r.imagen]).filter(esHttp).slice(0, MAX_FOTOS_POR_RIVAL)
+    const imagenes = (await Promise.all(urls.map(imagenEnLinea))).filter(Boolean)
+    if (!imagenes.length) continue
+    const de = r.fotos.length ? ` de ${r.fotos.length}` : ', la principal'
+    bloques.push({ type: 'text', text: `FOTOS DEL GANADOR "${recortar(r.titulo, 70)}" (${imagenes.length}${de}):` })
+    bloques.push(...imagenes)
   }
-  const fotosAnalizadas = bloques.some((b) => b.type === 'image')
+  let fotosAnalizadas = bloques.some((b) => b.type === 'image')
 
   let llm
   try {
@@ -428,9 +453,10 @@ export async function auditarPropio(propio) {
     })
   } catch (err) {
     if (!fotosAnalizadas) throw err
-    // una URL de imagen rechazada por la API no debe botar la auditoría:
+    // una imagen rechazada por la API no debe botar la auditoría:
     // reintento solo texto (el diagnóstico de fotos queda por cantidad)
     console.warn(`[auditor] llamada con imágenes falló (${err.message}): reintentando solo texto`)
+    fotosAnalizadas = false
     llm = await pedirJSON({
       system: SYSTEM_AUDITOR,
       user: bloques.filter((b) => b.type === 'text').slice(0, 1),

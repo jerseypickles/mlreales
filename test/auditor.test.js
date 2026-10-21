@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { elegirGanadores } from '../src/services/auditor.js'
+import { elegirGanadores, imagenEnLinea } from '../src/services/auditor.js'
 
 const p = (sku, numReviews, ventasDia = null, extra = {}) => ({
   sku,
@@ -66,4 +66,18 @@ test('arranqueValido: rechaza arranques que nadie busca', () => {
   assert.ok(!arranqueValido('Lanzador De Dardos Juguete Niños', busquedas)) // "lanzador de dardos" no existe
   assert.ok(!arranqueValido('Set Tiro Al Blanco Juguete', busquedas))
   assert.ok(!arranqueValido('Pistola Juguete X', [])) // sin lista no valida nada
+})
+
+test('imagenEnLinea: la foto va en base64; la que no baja o no es imagen queda fuera', async () => {
+  // con la URL, Anthropic respondía "Unable to download the file" a mlstatic (13 y 20-oct-2026)
+  const respuesta = (status, tipo, bytes) => ({
+    ok: status === 200,
+    headers: { get: (h) => (h === 'content-type' ? tipo : null) },
+    arrayBuffer: async () => new Uint8Array(bytes).buffer,
+  })
+  const webp = await imagenEnLinea('https://http2.mlstatic.com/D_1-O.webp', { bajar: async () => respuesta(200, 'image/webp', [82, 73, 70, 70]) })
+  assert.deepEqual(webp, { type: 'image', source: { type: 'base64', media_type: 'image/webp', data: 'UklGRg==' } })
+  assert.equal(await imagenEnLinea('https://x/404.jpg', { bajar: async () => respuesta(404, 'text/html', [1]) }), null)
+  assert.equal(await imagenEnLinea('https://x/pagina', { bajar: async () => respuesta(200, 'text/html; charset=utf-8', [1]) }), null)
+  assert.equal(await imagenEnLinea('https://x/caida.jpg', { bajar: async () => { throw new Error('timeout') } }), null)
 })
