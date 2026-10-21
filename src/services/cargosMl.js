@@ -17,8 +17,28 @@ import { CargoMl } from '../models/CargoMl.js'
 // una carga de página; se sincroniza una vez al día y se lee de la base.
 const PAUSA_MS = 13_000 // 5 req/min con holgura
 const POR_PAGINA = 100
+// Y aun con la pausa ML responde 429 "local_rate_limited": del 15 al 21-oct-2026
+// el período abierto no se completó en ninguna de 6 pasadas (0 líneas en 4,
+// cortado en la 3ª página en 2) y los cargos quedaron en el 14-oct. Con un solo
+// intento por página, un 429 botaba el período hasta el día siguiente: la
+// comisión aprendida bajó a 12,45% (la facturada era 17,9%) porque las ventas
+// nuevas entraban sin su cargo. Ahora la página se reintenta con esperas largas.
+const ESPERAS_429_MS = [30_000, 60_000, 120_000]
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// Pide una ruta y, si ML frena con 429, espera y reintenta; cualquier otro
+// error sale tal cual. `pedir` y `dormir` se inyectan en los tests.
+export async function pedirConReintento(ruta, { pedir = meliGet, dormir = esperar, esperas = ESPERAS_429_MS } = {}) {
+  for (let intento = 0; ; intento++) {
+    try {
+      return await pedir(ruta)
+    } catch (err) {
+      if (!/\b429\b/.test(err?.message ?? '') || intento >= esperas.length) throw err
+      await dormir(esperas[intento])
+    }
+  }
+}
 const numero = (v) => (Number.isFinite(v) ? v : null)
 
 // Aplana una línea del detalle al documento que guardamos.
@@ -70,16 +90,23 @@ export async function periodosFacturacion() {
 
 // Trae y guarda el detalle de un período. Idempotente: upsert por detalleId, así
 // que re-sincronizar un período abierto actualiza montos sin duplicar líneas.
-export async function sincronizarPeriodo(key, { max = 600 } = {}) {
+// `max` alto: con el contenedor a la venta un mes pasa de las 600 líneas
+// (cada venta trae comisión y envío, más publicidad y almacenaje diarios).
+export async function sincronizarPeriodo(key, { max = 3000, cerrado = false } = {}) {
   let offset = 0
   let guardados = 0
   let total = null
   while (offset < max) {
     if (offset > 0) await esperar(PAUSA_MS)
-    const r = await meliGet(
+    const r = await pedirConReintento(
       `/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=${POR_PAGINA}&offset=${offset}`,
     )
     total = r?.total ?? total
+    // un período cerrado ya no cambia: si la base tiene todas sus líneas, con
+    // la primera página basta (ahorra 4 de 5 pedidos de una cuota de 5/min)
+    if (cerrado && offset === 0 && total != null && (await CargoMl.countDocuments({ periodo: key })) >= total) {
+      return { periodo: key, guardados: 0, total, yaCompleto: true }
+    }
     const filas = r?.results ?? []
     if (!filas.length) break
 
@@ -111,10 +138,12 @@ export async function sincronizarCargosMl({ periodosMax = 2 } = {}) {
   if (!periodos.length) return { omitido: true, motivo: 'sin períodos de facturación' }
 
   const resultados = []
-  for (const [i, p] of periodos.slice(0, periodosMax).entries()) {
-    if (i > 0) await esperar(PAUSA_MS)
+  for (const p of periodos.slice(0, periodosMax)) {
+    // también antes del primero: la lista de períodos recién gastó un pedido,
+    // y la primera página pegada a ella era la que más 429 recibía
+    await esperar(PAUSA_MS)
     try {
-      resultados.push({ ...(await sincronizarPeriodo(p.key)), estado: p.estado })
+      resultados.push({ ...(await sincronizarPeriodo(p.key, { cerrado: p.estado === 'CLOSED' })), estado: p.estado })
     } catch (err) {
       console.warn(`[cargos-ml] período ${p.key} falló: ${err.message}`)
       resultados.push({ periodo: p.key, error: err.message })

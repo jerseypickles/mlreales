@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizarCargo, bolsilloDe, acumular, tipoDelOriginal } from '../src/services/cargosMl.js'
+import { normalizarCargo, bolsilloDe, acumular, tipoDelOriginal, pedirConReintento } from '../src/services/cargosMl.js'
 
 // Líneas REALES del detalle de facturación de la cuenta, sondeadas el
 // 10-ago-2026 (período 2026-08-01). Son la referencia del mapeo.
@@ -174,4 +174,29 @@ test('normalizarCargo marca la anulación y a quién anula', () => {
   // el cargo normal no lleva la marca
   assert.equal(normalizarCargo(CARGO_VENTA).esAnulacion, false)
   assert.equal(normalizarCargo(CARGO_VENTA).bonificaA, null)
+})
+
+test('un 429 de facturación se espera y se reintenta; otro error o el 429 que no cede salen', async () => {
+  // del 15 al 21-oct-2026 cada 429 botaba el período entero hasta el día siguiente
+  const mensaje429 = '/billing/integration/periods/key/2026-10-01/group/ML/details?offset=200 → 429: local_rate_limited'
+  const dormidas = []
+  const dormir = async (ms) => { dormidas.push(ms) }
+  let pedidos = 0
+  const cedeAlTercero = async () => {
+    pedidos++
+    if (pedidos < 3) throw new Error(mensaje429)
+    return { total: 250, results: [] }
+  }
+  const r = await pedirConReintento('/ruta', { pedir: cedeAlTercero, dormir, esperas: [30, 60, 120] })
+  assert.equal(r.total, 250)
+  assert.equal(pedidos, 3)
+  assert.deepEqual(dormidas, [30, 60], 'espera más largo en cada intento')
+
+  const noCede = async () => { throw new Error(mensaje429) }
+  await assert.rejects(pedirConReintento('/ruta', { pedir: noCede, dormir, esperas: [1, 2] }), /429/)
+
+  let otros = 0
+  const otroError = async () => { otros++; throw new Error('/ruta → 500: internal') }
+  await assert.rejects(pedirConReintento('/ruta', { pedir: otroError, dormir, esperas: [1, 2] }), /500/)
+  assert.equal(otros, 1, 'un error que no es freno no se reintenta')
 })
