@@ -121,17 +121,105 @@ export function aplicarCambioGama(gama, cambio = {}) {
   return { ...g, actualizadoEl: new Date() }
 }
 
+// LAS GAMAS DE UN NICHO, PARA DECIDIR QUÉ TRAER (21-oct-2026). La otra mitad
+// del pedido: "para el sistema es complicado cuando se trata de calidad del
+// producto: cuando ve lo mismo se va a ir por lo más barato". La mesa medía el
+// nicho con una sola mediana, y la idea de "entrar por calidad" quedaba en el
+// texto del analista. Ahora el nicho se parte en tres gamas de precio con el
+// mismo número de publicaciones (tercios) y de cada una se mide cuánto vende:
+// reseñas acumuladas (la historia), reseñas nuevas por día (lo de hoy), rating
+// y quiénes la lideran. Son tercios de precio porque los títulos no dicen la
+// calidad.
+export const GAMAS = [
+  { clave: 'economica', nombre: 'Económica' },
+  { clave: 'media', nombre: 'Media' },
+  { clave: 'alta', nombre: 'Alta' },
+]
+const MIN_PUBLICACIONES_GAMAS = 15
+
+// Pura. productos: los del último scan (obtenerProductosUltimoScan).
+export function gamasDelNicho(productos, { lideres = 2 } = {}) {
+  const conPrecio = (productos ?? []).filter((p) => finito(p.precio) && p.precio > 0 && !p.fueraDelNicho)
+  if (conPrecio.length < MIN_PUBLICACIONES_GAMAS) return null
+  const precios = conPrecio.map((p) => p.precio).sort((a, b) => a - b)
+  const corte = (q) => precios[Math.floor((precios.length - 1) * q)]
+  const cortes = { economicaHasta: corte(1 / 3), mediaHasta: corte(2 / 3) }
+  const indice = (precio) => (precio <= cortes.economicaHasta ? 0 : precio <= cortes.mediaHasta ? 1 : 2)
+  const reseniasNicho = suma(conPrecio.map((p) => p.numReviews))
+  const conVentaHoy = conPrecio.filter((p) => finito(p.resenasNuevasDia))
+  const hoyNicho = suma(conVentaHoy.map((p) => p.resenasNuevasDia))
+  const hayHoy = conVentaHoy.length >= 5 && hoyNicho > 0
+  const gamas = GAMAS.map((g, i) => {
+    const xs = conPrecio.filter((p) => indice(p.precio) === i)
+    const resenias = suma(xs.map((p) => p.numReviews))
+    const hoy = suma(xs.map((p) => p.resenasNuevasDia))
+    const conRating = xs.filter((p) => finito(p.rating) && (p.numReviews ?? 0) >= 5)
+    return {
+      ...g,
+      desde: i === 0 ? precios[0] : i === 1 ? cortes.economicaHasta : cortes.mediaHasta,
+      // la gama alta no tiene tope: su máximo suele ser un accesorio o un kit
+      hasta: i === 0 ? cortes.economicaHasta : i === 1 ? cortes.mediaHasta : null,
+      publicaciones: xs.length,
+      medianaPrecio: mediana(xs.map((p) => p.precio)),
+      resenias,
+      reseniasPct: pct(resenias, reseniasNicho),
+      ventaHoyDia: Math.round(hoy * 10) / 10,
+      ventaHoyPct: hayHoy ? pct(hoy, hoyNicho) : null,
+      ratingPromedio: conRating.length ? Math.round((suma(conRating.map((p) => p.rating)) / conRating.length) * 100) / 100 : null,
+      enTop20: xs.filter((p) => finito(p.posicion) && p.posicion <= 20).length,
+      conVendidos100: xs.filter((p) => (p.vendidos ?? 0) >= 100).length,
+      lideres: [...xs]
+        .sort((a, b) => (b.numReviews ?? 0) - (a.numReviews ?? 0) || (b.vendidos ?? 0) - (a.vendidos ?? 0))
+        .slice(0, lideres)
+        .map((p) => ({ sku: p.sku, titulo: p.titulo, precio: p.precio, numReviews: p.numReviews ?? null, rating: p.rating ?? null,
+          vendidos: p.vendidos ?? null, resenasNuevasDia: p.resenasNuevasDia ?? null, imagen: p.imagen ?? null, url: p.url ?? null })),
+    }
+  })
+  return { publicaciones: conPrecio.length, cortes, conVentaHoy: conVentaHoy.length, gamas }
+}
+
+// Pura. En qué gama cae un precio (el objetivo de la cotización o el del
+// análisis) y lo que vende esa gama. Sirve también con las gamas guardadas.
+export function gamaDelPrecio(resumen, precio) {
+  if (!resumen?.gamas?.length || !resumen.cortes || !finito(precio) || precio <= 0) return null
+  const i = precio <= resumen.cortes.economicaHasta ? 0 : precio <= resumen.cortes.mediaHasta ? 1 : 2
+  const g = resumen.gamas[i]
+  return { clave: g.clave, nombre: g.nombre, precio, desde: g.desde, hasta: g.hasta, publicaciones: g.publicaciones,
+    medianaPrecio: g.medianaPrecio, reseniasPct: g.reseniasPct, ventaHoyPct: g.ventaHoyPct, ratingPromedio: g.ratingPromedio }
+}
+
+// Pura. Lo que lee el analista: sin fotos ni links, que solo gastan tokens.
+export function gamasParaAnalista(resumen) {
+  if (!resumen) return undefined
+  return {
+    nota: 'tercios de precio con el mismo número de publicaciones; ventaHoyPct = parte de las reseñas nuevas por día del nicho',
+    cortes: resumen.cortes,
+    gamas: resumen.gamas.map(({ lideres, ...g }) => ({ ...g, lideres: lideres.map(({ imagen, url, sku, ...l }) => l) })),
+  }
+}
+
 // el último scan de un nicho cambia una vez al día: 10 minutos de caché bastan
 // para que abrir varias tarjetas del mismo nicho no repita las agregaciones
 const cacheScan = new Map()
 const TTL_SCAN_MS = 10 * 60e3
-async function vistaDelNicho(nicho) {
+async function vistaDelNicho(nicho, { fresca = false } = {}) {
   const k = String(nicho._id)
   const hit = cacheScan.get(k)
-  if (hit && Date.now() - hit.en < TTL_SCAN_MS) return hit.vista
+  if (!fresca && hit && Date.now() - hit.en < TTL_SCAN_MS) return hit.vista
   const vista = await obtenerProductosUltimoScan(nicho)
   cacheScan.set(k, { en: Date.now(), vista })
   return vista
+}
+
+// Las gamas de un nicho para su panel. `fresca`: recién escaneado (el worker
+// de métricas), sin usar lo guardado en caché.
+export async function gamasDeNicho(nicho, { fresca = false } = {}) {
+  const vista = await vistaDelNicho(nicho, { fresca })
+  if (!vista?.productos?.length) return { estado: 'sin-scan', keyword: nicho.keyword }
+  const resumen = gamasDelNicho(vista.productos)
+  if (!resumen) return { estado: 'pocas-publicaciones', keyword: nicho.keyword, fechaScan: vista.fechaScan }
+  return { estado: 'ok', keyword: nicho.keyword, fechaScan: vista.fechaScan, resumen,
+    preciosNicho: vista.productos.filter((p) => !p.fueraDelNicho).map((p) => p.precio).filter((x) => finito(x) && x > 0) }
 }
 
 export async function gamaDePropio(propio) {

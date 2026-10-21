@@ -9,6 +9,7 @@ import { criteriosActivos } from './criterios.js'
 import { leccionesAprendidas } from './aprendizajes.js'
 import { movimientosRecientes, lineasEnAlza, prefijoDeKeyword } from './tendencias.js'
 import { comisionMlExacta, categoriaDominante } from './comisionesMl.js'
+import { gamasDelNicho, gamasParaAnalista } from './gama.js'
 import { config } from '../config/env.js'
 
 const SCHEMA_ANALISIS = {
@@ -213,6 +214,7 @@ Reglas:
 - EL ENVÍO CUESTA LO MISMO DESDE FULL QUE DESDE LA BODEGA. Medido con la cuenta el 2-sep-2026: Mercado Envíos cobra la MISMA tarifa por peso facturable (el mayor entre el real y el volumétrico a 4.000 cm³ por kilo: una caja de 40x30x30 factura 9 kg aunque contenga plumas) sea Full, colecta o punto de despacho. Despachar desde bodega no ahorra envío dentro de Mercado Envíos; lo que sí cambia la cuenta es el FLETE PROPIO (courier propio / envío a convenir), permitido donde ML marca el envío como opcional, a costa de ranking y etiquetas de envío. Recibes tarifaMercadoEnviosPorPeso (la curva REAL de la cuenta a la mediana del nicho) y, si el importador lo declaró, logisticaDeclaradaPorElImportador con su flete propio por bulto: USA ESOS NÚMEROS para el perfil físico que propongas. Prohibido descartar "porque 27 kg se comen el margen" sin leer la tarifa de esa fila: una caja de 15 kg facturables paga la mitad que una de 27. Lo inflable, lo voluminoso y lo que viaja con aire —carpas, colchonetas, piscinas, muebles— paga envío de producto pesado: dilo con el número, no con el adjetivo.
 - En tu recomendación DECLARA el perfil físico del producto que propones en recomendacion.perfilFisico (medidas del empaque, peso real, peso facturable y la tarifa que le corresponde) y por qué logística se vende. Si el envío por Mercado Envíos supera ~40% del precio y no hay flete propio declarado, dilo como condición dura: el nicho puede seguir siendo entrar_con_condiciones si el top demuestra que se vende así, pero la condición es tener despacho propio resuelto.
 - Segmenta el nicho leyendo los títulos: potencia (watts), packs/unidades, tamaño, tipo de producto. Los watts y packs cambian el producto y su costo — no los mezcles.
+- GAMAS DE PRECIO (campo gamasDePrecio): el nicho viene partido en tres gamas de precio con el mismo número de publicaciones —económica, media y alta— y de cada una cuánto vende: reseñas acumuladas (reseniasPct), reseñas nuevas por día (ventaHoyPct, lo de hoy), rating promedio y sus líderes. La mediana del nicho MEZCLA CALIDADES: no asumas que todo compite igual ni empujes por defecto a la gama más barata. Que la económica concentre las reseñas no la hace la jugada: ahí suele estar el margen de centavos. Una gama más cara con buena venta de hoy, o una económica con rating bajo y quejas, es espacio para calidad. Si recomiendas una gama (segmento, precioVentaClp, titular), cita sus números. Sin gamasDePrecio (pocas publicaciones), sigue como siempre.
 - RESEÑAS ACUMULADAS: NO las conviertas en "ventas históricas". El factor 25 nunca se calibró y la medición propia del importador lo desmiente (54 ventas reales produjeron 3 reseñas: factor 18, con muestra de 3). Peor: el acumulado del top está dominado por items de CATÁLOGO, que muestran el agregado de TODOS los vendedores de ese producto — medido en "lampara para uñas", 94% de las 6.528 reseñas venían de catálogo, y dos listings hermanos repetían el mismo 1.293. Los duplicados ya se filtran, pero el agregado sigue ahí: esas reseñas NO son del vendedor que aparece. Úsalas para comparar segmentos ENTRE SÍ (share relativo) y jamás para afirmar un volumen absoluto de ventas. Está prohibido escribir frases del tipo "≈ N mil ventas históricas".
 - COBERTURA (metricas.demanda.coberturaReviews): el conteo de reseñas solo llega en el detalle pagado, que corre sobre una fracción del listado — en el caso citado fueron 30 de 96 items (31%). Si la cobertura es baja, dilo al citar cualquier cifra de reseñas: describe ese tercio, no el nicho.
 - Los items con origenCrossBorder=true son sellers chinos despachando directo: son a la vez señal de que el producto se puede importar barato y competencia difícil de ganar en precio.
@@ -484,7 +486,9 @@ export async function analizarNicho(nicho) {
     nichosYaMedidos: nichosYaMedidos.length ? nichosYaMedidos : undefined,
     busquedasEnAlza,
     comisionMlRealPct: comisionReal?.pct ?? undefined,
-    metricas: reporte.metricas,
+    // las gamas viajan aparte y sin fotos ni links (gamasDePrecio)
+    metricas: { ...reporte.metricas, gamas: undefined },
+    gamasDePrecio: gamasParaAnalista(gamasDelNicho(vista.productos)),
     desglosePorMarcaVehiculo,
     marcasMasBuscadasEnMl,
     tablaExwMaximo: tablaExwMaximo(reporte.metricas, comisionReal?.pct ?? null),

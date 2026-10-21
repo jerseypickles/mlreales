@@ -31,6 +31,8 @@ export const api = {
   crearNicho: (keyword) => pedir('/api/nichos', json({ keyword })),
   reporte: (id) => pedir(`/api/nichos/${id}/reporte`),
   productosNicho: (id, limite) => pedir(`/api/nichos/${id}/productos${limite ? `?limite=${limite}` : ''}`),
+  // económica, media y alta con cuánto vende cada una; `precio` marca su gama
+  gamasNicho: (id, precio) => pedir(`/api/nichos/${id}/gamas${precio ? `?precio=${precio}` : ''}`),
   escanear: (id) => pedir(`/api/nichos/${id}/scan`, { method: 'POST' }),
   ajustarNicho: (id, cambios) => pedir(`/api/nichos/${id}`, { ...json(cambios), method: 'PATCH' }),
   aplicarMejoraMedicion: (id, keyword) => pedir(`/api/nichos/${id}/mejoras/medicion/aplicar`, { ...json({ keyword }), method: 'POST' }),

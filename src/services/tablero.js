@@ -17,6 +17,7 @@ import { topSkusPorKeyword, agruparFamilias } from './familias.js'
 import { puntajeBusqueda, explicar } from './nivelBusqueda.js'
 import { sinDemandaActual, ajustePorRanking } from './demandaActualMl.js'
 import { ventanaDeCompra } from './ventana.js'
+import { gamaDelPrecio } from './gama.js'
 
 // Margen estimado si compras al EXW que cotizó el proveedor, con los mismos
 // supuestos estándar de la tabla del análisis (volumen 0.003 m³/u, marítimo).
@@ -383,6 +384,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
         veredicto: null,
         mediana: met?.precio?.mediana ?? null,
         precios: preciosDe(met?.precio),
+        _gamas: met?.gamas ?? null,
         vendidosHistoricos: met?.vendidosHistoricos ?? null,
         profundidadStock: met?.profundidadStock ?? null,
         presionAds: met?.publicidad ?? null,
@@ -521,6 +523,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       fechaScan: ultimo?.fecha ?? null,
       mediana: ultimo?.metricas?.precio?.mediana ?? null,
       precios: preciosDe(ultimo?.metricas?.precio),
+      _gamas: ultimo?.metricas?.gamas ?? null,
       // LO CONTADO va primero y LO DERIVADO va marcado. `ventasDia` es delta de
       // reseñas × factor 25 — un factor que la calibración propia desmiente (54
       // ventas reales dieron 3 reseñas: factor 18) y que en 41 de 367 mediciones
@@ -695,6 +698,14 @@ export async function tableroOportunidades({ todos = false } = {}) {
   oportunidades.sort(
     (a, b) => (b.score ?? -1) - (a.score ?? -1) || (b.ventasDia ?? 0) - (a.ventasDia ?? 0),
   )
+
+  // LA GAMA DEL PRECIO OBJETIVO (services/gama.js): en qué tercio de precio del
+  // nicho cae lo que se piensa vender y cuánto vende ese tercio. Las gamas
+  // completas, con sus líderes, se piden al abrir el panel.
+  for (const o of oportunidades) {
+    o.gamaObjetivo = gamaDelPrecio(o._gamas, o.cotizacion?.precioObjetivoClp ?? o.precioVentaClp)
+    delete o._gamas
+  }
 
   // PLAN DE PUBLICIDAD ANTES DE ANUNCIAR (ml/publicidad.js): lo que la cuenta
   // aprendió de sus anuncios aplicado al precio, costo y caja de cada producto

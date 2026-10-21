@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { rangoGama, marcarGama, lecturaGama, rivalesDeGama, aplicarCambioGama, precioDePropio } from '../src/services/gama.js'
+import { rangoGama, marcarGama, lecturaGama, rivalesDeGama, aplicarCambioGama, precioDePropio, gamasDelNicho, gamaDelPrecio, gamasParaAnalista } from '../src/services/gama.js'
 import { elegirGanadores } from '../src/services/auditor.js'
 
 // el scan de "manguera extensible" del 15-oct-2026, resumido: las económicas
@@ -94,4 +94,52 @@ test('precioDePropio: la promo vigente, si no el precio efectivo, si no el de li
   assert.equal(precioDePropio({ mediciones: [{ precio: 13990, precioEfectivo: 12990 }] }), 12990)
   assert.equal(precioDePropio({ promoMl: { activa: { precio: 11990 } }, mediciones: [{ precio: 13990 }] }), 11990)
   assert.equal(precioDePropio({}), null)
+})
+
+// un nicho de 18 publicaciones: las baratas tienen la historia; la gama alta vende hoy
+const nicho = [
+  ...[4000, 4500, 5000, 5200, 5500, 6000].map((precio, i) => p(`bar${i}`, precio, 500, { posicion: i + 1, rating: 4.0, resenasNuevasDia: 0.5 })),
+  ...[7000, 7500, 8000, 8200, 8600, 9000].map((precio, i) => p(`med${i}`, precio, 100, { posicion: i + 7, rating: 4.4, resenasNuevasDia: 0.5 })),
+  ...[12000, 13990, 15000, 17000, 19000, 163352].map((precio, i) => p(`alt${i}`, precio, i < 2 ? 40 : null, { posicion: i + 13, rating: i < 2 ? 4.7 : null, resenasNuevasDia: i < 2 ? 3 : null, vendidos: 100 })),
+]
+
+test('gamasDelNicho: tres tercios de precio con cuánto vende cada uno, y sus líderes', () => {
+  const r = gamasDelNicho(nicho)
+  assert.equal(r.publicaciones, 18)
+  assert.deepEqual(r.gamas.map((g) => g.publicaciones), [6, 6, 6])
+  assert.equal(r.cortes.economicaHasta, 6000)
+  assert.equal(r.cortes.mediaHasta, 9000)
+  const [eco, med, alta] = r.gamas
+  assert.equal(eco.reseniasPct, Math.round((3000 / 3680) * 1000) / 10, 'la económica tiene la historia')
+  assert.equal(alta.ventaHoyPct, Math.round((6 / 12) * 1000) / 10, 'la alta se lleva la mitad de la venta de hoy')
+  assert.equal(alta.hasta, null, 'la gama alta no tiene tope: su máximo es un kit de $163.352')
+  assert.equal(eco.ratingPromedio, 4)
+  assert.equal(alta.ratingPromedio, 4.7)
+  assert.equal(alta.lideres.length, 2)
+  assert.equal(alta.lideres[0].numReviews, 40)
+  assert.equal(med.enTop20, 6)
+  assert.equal(gamasDelNicho(nicho.slice(0, 10)), null, 'con pocas publicaciones no se parte')
+})
+
+test('gamaDelPrecio: el precio objetivo cae en su tercio, también con las gamas guardadas', () => {
+  const r = gamasDelNicho(nicho)
+  assert.equal(gamaDelPrecio(r, 10990).clave, 'alta')
+  assert.equal(gamaDelPrecio(r, 9000).clave, 'media', 'el corte es parte de la gama de abajo')
+  assert.equal(gamaDelPrecio(r, 3990).clave, 'economica')
+  assert.equal(gamaDelPrecio(r, 10990).ventaHoyPct, 50)
+  assert.equal(gamaDelPrecio(JSON.parse(JSON.stringify(r)), 10990).clave, 'alta', 'lo guardado en el reporte sirve igual')
+  assert.equal(gamaDelPrecio(null, 10990), null)
+  assert.equal(gamaDelPrecio(r, null), null)
+})
+
+test('gamasParaAnalista: sin fotos ni links, con la nota de cómo se leen', () => {
+  const a = gamasParaAnalista(gamasDelNicho(nicho))
+  assert.ok(a.nota.includes('tercios'))
+  assert.equal(a.gamas.length, 3)
+  for (const l of a.gamas.flatMap((g) => g.lideres)) {
+    assert.equal(l.imagen, undefined)
+    assert.equal(l.url, undefined)
+    assert.ok(l.titulo)
+  }
+  assert.equal(gamasParaAnalista(null), undefined)
 })

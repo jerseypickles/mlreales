@@ -491,6 +491,15 @@ export async function procesarCalcularMetricas(job) {
     },
     { upsert: true, new: true },
   )
+  // LAS GAMAS DEL NICHO con el scan recién medido (services/gama.js): la mesa
+  // marca la gama del precio objetivo leyéndolas del reporte, sin rearmarlas
+  try {
+    const { gamasDeNicho } = await import('../services/gama.js')
+    const g = await gamasDeNicho(nicho, { fresca: true })
+    if (g.resumen) await Reporte.updateOne({ _id: doc._id }, { $set: { 'metricas.gamas': g.resumen } })
+  } catch (err) {
+    console.warn(`[metricas] "${nicho.keyword}": gamas de precio no calculadas: ${err.message}`)
+  }
   // la mesa de Oportunidades guardada se rearma con este reporte
   const { envejecerTablero } = await import('../services/tableroCache.js')
   envejecerTablero()

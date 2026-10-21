@@ -8101,3 +8101,23 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .marca-precio { stroke: var(--tinta); stroke-width: 1.5px; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
 .marca-etiqueta { position: absolute; top: 2px; transform: translateX(-50%); font-size: 10.5px; font-weight: 600; color: var(--tinta); background: var(--superficie); border: 1px solid var(--borde); border-radius: 6px; padding: 1px 5px; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
 @media (max-width: 520px) { .gama-lista { grid-template-columns: 1fr; } .gama-rango input { width: 80px; } }
+
+/* Gamas de precio del nicho (Oportunidades): qué vende cada calidad */
+.opt-gama-chip { justify-self: start; display: inline-flex; align-items: center; width: fit-content; margin-top: 3px; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--borde); background: var(--superficie-2); color: var(--tinta-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.opt-gama-chip.g-alta { border-color: var(--acento-borde); background: var(--acento-tenue); color: var(--acento); }
+.opt-gama-chip.g-media { border-color: var(--borde-fuerte); }
+.opp-gamas { display: grid; gap: 10px; margin: 4px 0 14px; }
+.opp-gamas-grilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.opp-gama { display: grid; gap: 8px; align-content: start; min-width: 0; padding: 10px; border: 1px solid var(--borde); border-radius: 12px; background: var(--superficie); }
+.opp-gama.es-tuya { border-color: var(--acento); box-shadow: inset 0 0 0 1px var(--acento); }
+.opp-gama-cab { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.opp-gama-cab strong { font-size: 14px; color: var(--tinta); }
+.opp-gama-cab span { font-size: 11.5px; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
+.opp-gama-tuya { margin-left: auto; font-size: 11px; color: var(--acento); }
+.opp-gama-cifras { display: grid; gap: 2px; font-size: 12px; color: var(--tinta-2); }
+.opp-gama-cifras b { color: var(--tinta); font-variant-numeric: tabular-nums; }
+.opp-gama-lideres { display: grid; gap: 6px; }
+.opp-gama-lideres a { display: flex; align-items: center; gap: 8px; min-width: 0; text-decoration: none; color: inherit; }
+.opp-gama-lideres img { flex: none; border-radius: 7px; object-fit: contain; background: #fff; }
+.opp-gama-lideres span { display: grid; min-width: 0; font-size: 11.5px; }
+.opp-gama-lideres i { font-style: normal; font-size: 11px; color: var(--tinta-3); }

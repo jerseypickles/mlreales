@@ -9,6 +9,7 @@ import { GraficoTemporada, GraficoPrecio, GraficoPronostico } from './PanelOport
 import { calzaConBusqueda } from '../lib/calzaConBusqueda.js'
 import { tituloTrae } from '../lib/tituloTrae.js'
 import { PlanPublicidad } from './PlanPublicidad.jsx'
+import { HistogramaPrecios } from './graficos.jsx'
 import { momentoDeCompra, compararPorMomento } from '../lib/momentoCompra.js'
 
 // LA MESA DE COMPRA. El orden es el mensaje: primero si la gente BUSCA eso
@@ -502,6 +503,93 @@ function MiniCurva({ c }) {
   )
 }
 
+// LAS GAMAS DE PRECIO DEL NICHO (src/services/gama.js). El importador,
+// 21-oct-2026: "para el sistema es complicado cuando se trata de calidad del
+// producto: cuando ve lo mismo se va a ir por lo más barato". La mesa medía el
+// nicho con una sola mediana y "entrar por calidad" quedaba en el texto del
+// analista. Ahora el nicho se parte en tres gamas (tercios de precio) con
+// cuánto vende cada una, y se marca la del precio objetivo.
+const rangoGamaTexto = (g) => (g.hasta ? `${fmtPrecio(g.desde)}–${fmtPrecio(g.hasta)}` : `desde ${fmtPrecio(g.desde)}`)
+
+function ChipGama({ g }) {
+  if (!g) return null
+  const venta = g.ventaHoyPct ?? g.reseniasPct
+  return (
+    <span
+      className={`opt-gama-chip g-${g.clave}`}
+      title={`Tu precio objetivo (${fmtPrecio(g.precio)}) cae en la gama ${g.nombre.toLowerCase()} del nicho (${rangoGamaTexto(g)}): ${g.publicaciones} publicaciones${g.ventaHoyPct != null ? `, ${g.ventaHoyPct}% de la venta de hoy` : ''}${g.reseniasPct != null ? `, ${g.reseniasPct}% de las reseñas` : ''}.`}
+    >
+      gama {g.nombre.toLowerCase()}{venta != null ? ` · ${fmtNum(venta)}%` : ''}
+    </span>
+  )
+}
+
+function GamasNicho({ o }) {
+  const precio = o.cotizacion?.precioObjetivoClp ?? o.precioVentaClp ?? null
+  const [d, setD] = useState(null)
+  const [error, setError] = useState(null)
+  useEffect(() => {
+    let vivo = true
+    setD(null)
+    api.gamasNicho(o.nichoId, precio).then((x) => vivo && setD(x)).catch((e) => vivo && setError(e.message))
+    return () => {
+      vivo = false
+    }
+  }, [o.nichoId, precio])
+  if (error) return <p className="vacio">Gamas no disponibles: {error}</p>
+  if (!d) return <Cargando texto="Partiendo el nicho por gamas de precio…" />
+  if (d.estado !== 'ok') {
+    return <p className="vacio">{d.estado === 'pocas-publicaciones' ? 'Pocas publicaciones para partir el nicho en gamas.' : 'El nicho todavía no tiene scan.'}</p>
+  }
+  const tuya = d.tuGama?.clave ?? null
+  // el gráfico sin los extremos: un accesorio de $160.000 aplasta todo lo demás
+  const ordenados = [...d.preciosNicho].sort((a, b) => a - b)
+  const tope = ordenados[Math.floor((ordenados.length - 1) * 0.95)]
+  return (
+    <div className="opp-gamas">
+      <div className="opp-gamas-grilla">
+        {d.resumen.gamas.map((g) => (
+          <div key={g.clave} className={`opp-gama${g.clave === tuya ? ' es-tuya' : ''}`}>
+            <div className="opp-gama-cab">
+              <strong>{g.nombre}</strong>
+              <span>{rangoGamaTexto(g)}</span>
+              {g.clave === tuya ? <b className="opp-gama-tuya">tu precio {fmtPrecio(precio)}</b> : null}
+            </div>
+            <div className="opp-gama-cifras">
+              <span><b>{g.ventaHoyPct != null ? `${fmtNum(g.ventaHoyPct)}%` : '—'}</b> de la venta de hoy</span>
+              <span><b>{g.reseniasPct != null ? `${fmtNum(g.reseniasPct)}%` : '—'}</b> de las reseñas</span>
+              <span><b>{g.ratingPromedio != null ? `★ ${String(g.ratingPromedio).replace('.', ',')}` : '—'}</b> rating</span>
+              <span><b>{fmtNum(g.publicaciones)}</b> publicaciones · {g.enTop20} en el top 20</span>
+            </div>
+            <div className="opp-gama-lideres">
+              {g.lideres.map((l) => (
+                <a key={l.sku} href={l.url ?? undefined} target="_blank" rel="noreferrer" title={l.titulo}>
+                  {l.imagen ? <img src={l.imagen} alt="" loading="lazy" width="44" height="44" /> : <ImageOff size={18} aria-hidden="true" />}
+                  <span>
+                    <b>{fmtPrecio(l.precio)}</b>
+                    <i>{l.numReviews ? `${fmtNum(l.numReviews)} reseñas` : l.vendidos ? `+${fmtNum(l.vendidos)} vendidos` : 'sin reseñas'}</i>
+                  </span>
+                </a>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <HistogramaPrecios
+        precios={ordenados.filter((x) => x <= tope)}
+        bandaDominante={d.tuGama ? { desde: d.tuGama.desde, hasta: d.tuGama.hasta ?? tope } : null}
+        titulo="Precios del nicho"
+        etiquetaBanda={d.tuGama ? `gama ${d.tuGama.nombre.toLowerCase()}` : ''}
+        marca={precio && precio <= tope ? { precio, etiqueta: `tu precio ${fmtPrecio(precio)}` } : null}
+        alto={100}
+      />
+      <p className="opp-pie">
+        Tercios de precio con el mismo número de publicaciones: los títulos no dicen la calidad, el precio la separa mejor. {d.resumen.conVentaHoy} publicaciones con venta de hoy medida.
+      </p>
+    </div>
+  )
+}
+
 // LA TARJETA DEL NICHO (2-oct-2026): foto, nombre, UNA línea de por qué traerlo
 // ahora, las alertas en íconos, el score y el estado de la compra, y abajo las
 // cinco cifras que deciden si vale abrirla. Todo lo demás está en el panel.
@@ -533,6 +621,7 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onEtapa, tendencia }) {
           <span>{o.midiendo ? `faltan ${o.faltanScans} ${o.faltanScans === 1 ? 'scan' : 'scans'} para el veredicto` : m.motivo}</span>
         </span>
         <AvisosIconos lista={avisos} />
+        <ChipGama g={o.gamaObjetivo} />
       </span>
       <span className="opt-score">
         {o.midiendo ? (
@@ -1182,6 +1271,8 @@ function ResumenNicho({ o, tendencia }) {
           </Hecho>
         ) : null}
       </div>
+      <h4 className="opp-sub">Gamas de precio <small>· qué vende cada calidad y dónde cae tu precio</small></h4>
+      <GamasNicho o={o} />
       <h4 className="opp-sub">Para confirmar que se vende hoy <small>· últimos días: confirma, no decide</small></h4>
       <div className="op-hechos">
         <Hecho etiqueta="se vende hoy en ML">

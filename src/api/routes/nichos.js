@@ -472,6 +472,21 @@ router.get(
   }),
 )
 
+// LAS GAMAS DE PRECIO DEL NICHO (services/gama.js): económica, media y alta con
+// cuánto vende cada una y sus líderes. `?precio=` marca la gama de ese precio
+// (el objetivo de la cotización o el del análisis).
+router.get(
+  '/:id/gamas',
+  manejar(async (req, res) => {
+    const nicho = await Nicho.findById(req.params.id).select('keyword competenciaExcluida').lean()
+    if (!nicho) return res.status(404).json({ error: 'nicho no encontrado' })
+    const { gamasDeNicho, gamaDelPrecio } = await import('../../services/gama.js')
+    const g = await gamasDeNicho(nicho)
+    const precio = Number(req.query.precio)
+    res.json({ ...g, tuGama: g.resumen && precio > 0 ? gamaDelPrecio(g.resumen, precio) : null })
+  }),
+)
+
 // Todos los productos del último scan (para la tabla del dashboard)
 router.get(
   '/:id/productos',
