@@ -278,7 +278,7 @@ router.get(
     // un A/B natural — qué convierte mejor, qué trae más tráfico y qué copiar
     const carteras = {}
     try {
-      const { compararCartera } = await import('../../services/cartera.js')
+      const { compararCartera, filasCartera } = await import('../../services/cartera.js')
       const { Reporte } = await import('../../models/Reporte.js')
       const porNicho = new Map()
       for (const p of lista) {
@@ -290,18 +290,10 @@ router.get(
         if (hermanos.length < 2) continue
         const nicho = await Nicho.findById(nichoId).select('keyword').lean()
         const rep = await Reporte.findOne({ nichoId }).sort({ fecha: -1 }).select('metricas.demanda').lean()
-        const c = compararCartera(
-          hermanos.map((p) => ({
-            sku: p.sku,
-            titulo: p.titulo,
-            visitas7d: (p.mediciones ?? []).at(-1)?.visitas,
-            ventas7d: p.ventas7d?.unidades ?? 0,
-            conversion7d: p.conversion7d,
-            precioEfectivo: (p.mediciones ?? []).at(-1)?.precioEfectivo,
-            esFull: p.envioMl?.logistica === 'fulfillment',
-          })),
-          { demandaNichoDia: rep?.metricas?.demanda?.resenasNuevasPorDia ?? null },
-        )
+        // los colores de una familia cuentan como un producto
+        const c = compararCartera(filasCartera(hermanos), {
+          demandaNichoDia: rep?.metricas?.demanda?.resenasNuevasPorDia ?? null,
+        })
         if (c) {
           // POR NICHO: lo que ML cobró de verdad por los productos cableados acá
           const delNicho = hermanos.reduce(

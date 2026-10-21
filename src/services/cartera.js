@@ -84,3 +84,42 @@ export function compararCartera(productos, { demandaNichoDia = null } = {}) {
     lecciones,
   }
 }
+
+// UNA FILA POR PRODUCTO, NO POR COLOR (21-oct-2026). Los colores de una
+// familia de ML comparten página, ficha y precio: compararlos como un A/B
+// ("copia la página del verde al rojo") no enseña nada. Se suman sus visitas y
+// ventas, y la conversión se recalcula con los totales.
+export function filasCartera(propios) {
+  const fila = (p) => ({
+    sku: p.sku,
+    titulo: p.titulo,
+    visitas7d: (p.mediciones ?? []).at(-1)?.visitas,
+    ventas7d: p.ventas7d?.unidades ?? 0,
+    conversion7d: p.conversion7d,
+    precioEfectivo: (p.mediciones ?? []).at(-1)?.precioEfectivo,
+    esFull: p.envioMl?.logistica === 'fulfillment',
+  })
+  const grupos = new Map()
+  for (const p of propios) {
+    const clave = p.familiaMl?.id ? `familia:${p.familiaMl.id}` : `sku:${p.sku}`
+    grupos.set(clave, [...(grupos.get(clave) ?? []), p])
+  }
+  return [...grupos.values()].map((grupo) => {
+    if (grupo.length === 1) return fila(grupo[0])
+    // la primera publicada da la cara, igual que en la tarjeta
+    const miembros = [...grupo].sort((a, b) => new Date(a.creadoEl ?? 0) - new Date(b.creadoEl ?? 0))
+    const filas = miembros.map(fila)
+    const conVisitas = filas.filter((f) => Number.isFinite(f.visitas7d))
+    const visitas7d = conVisitas.length ? conVisitas.reduce((s, f) => s + f.visitas7d, 0) : null
+    const ventas7d = filas.reduce((s, f) => s + f.ventas7d, 0)
+    return {
+      sku: filas[0].sku,
+      titulo: miembros[0].familiaMl.nombre ?? filas[0].titulo,
+      visitas7d,
+      ventas7d,
+      conversion7d: ventas7d > 0 && visitas7d > 0 ? Math.min(100, pct((ventas7d / visitas7d) * 100)) : null,
+      precioEfectivo: filas[0].precioEfectivo,
+      esFull: filas.every((f) => f.esFull),
+    }
+  })
+}

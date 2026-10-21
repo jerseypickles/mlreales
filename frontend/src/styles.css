@@ -4199,6 +4199,80 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
 .pc-mini-mal { border-color: var(--peligro-borde, #fecaca); }
 .pc-mini-aviso { border-color: #fde68a; }
 
+/* LOS COLORES DE UN PRODUCTO (21-oct-2026). Abajo a la derecha de la foto,
+   como el selector de la página de ML: la foto dice qué producto es y los
+   círculos dicen que adentro hay más de una publicación. Va con más
+   especificidad que `.pc-mini-foto img`, que llena la foto entera. */
+.pc-mini-foto .pc-mini-variantes {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.pc-mini-foto .pc-mini-variantes img {
+  width: 26px;
+  height: 26px;
+  padding: 2px;
+  border-radius: 50%;
+  border: 1px solid var(--borde);
+  background: #fff;
+  object-fit: contain;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.pc-mini-variantes b { font-size: 10.5px; color: var(--tinta-3); padding-left: 2px; }
+/* en el teléfono la tarjeta mide ~150px: círculos más chicos, la foto manda */
+@media (max-width: 560px) {
+  .pc-mini-foto .pc-mini-variantes { right: 6px; bottom: 6px; gap: 2px; }
+  .pc-mini-foto .pc-mini-variantes img { width: 20px; height: 20px; padding: 1px; }
+}
+.pc-mini-nvar {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--tinta-3);
+  white-space: nowrap;
+}
+
+/* CADA COLOR CON SU STOCK: en la tarjeta abierta, una fila por publicación
+   con su foto, sus ventas y su propia banda de reposición */
+.pc-variantes { display: flex; flex-direction: column; gap: 8px; margin: 0 0 10px; }
+.pc-variante {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.pc-variante-foto {
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 2px;
+  background: #fff;
+  cursor: pointer;
+}
+.pc-variante-foto img { display: block; width: 38px; height: 38px; object-fit: contain; border-radius: 8px; }
+.pc-variante-cuerpo { min-width: 0; }
+.pc-variante-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--tinta-3);
+}
+.pc-variante-head b { font-size: 13px; color: var(--tinta); }
+.pc-variante-head .icono-boton { margin-left: auto; }
+.pc-variante .pc-repo { margin: 0; padding: 6px 10px; }
+.gan-aplica {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--tinta-3);
+}
+
 .pc-abierta {
   animation: pc-abrir 260ms ease-out;
   transform-origin: top center;

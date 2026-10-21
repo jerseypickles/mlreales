@@ -31,6 +31,7 @@ import {
 import { BotonCopiar } from './Listing.jsx'
 import { PlanPublicidad } from './PlanPublicidad.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
+import { agruparPorFamilia, ordenarEntradas, metricasDe, etiquetaVariantes, nombreVariante } from '../lib/familiasPropias.js'
 
 const FACTOR_VENTAS = 25 // misma heurística del score: ~1 reseña por cada 25 ventas
 
@@ -158,7 +159,9 @@ function Seccion({ icono: Icono, titulo, resumen, tono, children, abiertaPorDefe
 // producto. Es la pregunta que el importador hace de verdad: "¿en cuánto me
 // tiene que llegar para que esto valga la pena?". El techo se muestra aunque
 // todavía no haya costo cargado — sirve para decidir la compra.
-function GananciaUnidad({ p, onGuardarCosto, onCambiarPrecio }) {
+// `aplicaA`: en un producto con colores, el precio y el costo que se escriben
+// acá van a todas sus publicaciones, y se dice
+function GananciaUnidad({ p, aplicaA = null, onGuardarCosto, onCambiarPrecio }) {
   const e = p.economiaUnidad
   const [costo, setCosto] = useState(p.costoUnitarioClp ?? '')
   const [guardando, setGuardando] = useState(false)
@@ -227,6 +230,7 @@ function GananciaUnidad({ p, onGuardarCosto, onCambiarPrecio }) {
           >
             cambiar
           </button>
+          {aplicaA ? <span className="gan-aplica">precio y costo valen para {aplicaA}</span> : null}
         </div>
       )}
       <ul className="gan-desglose">
@@ -234,7 +238,10 @@ function GananciaUnidad({ p, onGuardarCosto, onCambiarPrecio }) {
           <span>comisión ML{e.comisionPct ? ` ${e.comisionPct}%` : ''}</span>
           <b>{e.comisionClp != null ? `−${fmtPrecio(e.comisionClp)}` : 'sin dato'}</b>
         </li>
-        {e.esFull ? (
+        {/* Mercado Envíos cobra lo mismo desde la bodega que desde Full, y el
+            servidor ya lo descuenta para los dos (21-oct): la línea decía "no
+            incluido (no es Full)" mientras "te queda" ya lo restaba. */}
+        {e.esFull || e.envioClp != null || e.faltaEnvio ? (
           <li>
             {/* El envío facturado le gana a la tarifa, cruzado orden a orden:
                 la mayoría paga la base ($799) y una parte paga el despacho
@@ -247,19 +254,22 @@ function GananciaUnidad({ p, onGuardarCosto, onCambiarPrecio }) {
                     }${
                       e.envioTarifarioClp != null ? ` El tarifario estimaba ${fmtPrecio(e.envioTarifarioClp)}.` : ''
                     }`
-                  : 'Estimado del tarifario de ML: todavía no hay envíos facturados de este producto.'
+                  : `Estimado del tarifario de ML: todavía no hay envíos facturados de este producto.${
+                      e.esFull ? '' : ' Mercado Envíos cobra lo mismo desde tu bodega que desde Full.'
+                    }`
               }
             >
-              envío Full{e.envioBase === 'facturado' ? (e.envioBaseClp != null ? ` (base ${fmtPrecio(e.envioBaseClp)}, promedio)` : ' (facturado)') : e.envioSupuesto ? ' (caja estimada)' : ''}
+              {e.esFull ? 'envío Full' : 'envío'}
+              {e.envioBase === 'facturado' ? (e.envioBaseClp != null ? ` (base ${fmtPrecio(e.envioBaseClp)}, promedio)` : ' (facturado)') : e.envioSupuesto ? ' (caja estimada)' : ''}
             </span>
             <b>{e.envioClp != null ? `−${fmtPrecio(e.envioClp)}` : 'sin dato'}</b>
           </li>
         ) : (
-          // sin Full el cargo de despacho existe igual pero ML no lo tarifica
-          // acá: decirlo, o el techo se lee como si fuera completo
+          // Flex o envío a convenir: el despacho se paga por otro lado y acá
+          // no se tarifica. Decirlo, o el techo se lee como si fuera completo
           <li className="gan-ojo">
             <span>envío</span>
-            <b>no incluido (no es Full)</b>
+            <b>no incluido (no es Mercado Envíos)</b>
           </li>
         )}
         <li className="gan-queda">
@@ -403,16 +413,19 @@ function Reposicion({ r, p, onGuardarEnCamino }) {
     }
   }
 
+  const detalle = [
+    // sin ventas el stock ya va en el texto principal: no repetirlo
+    r.urgencia === 'sin_ventas' ? null : `${fmtNum(r.stock)} en bodega`,
+    r.enCamino ? `${fmtNum(r.enCamino)} en camino` : null,
+    r.velocidadDia > 0 ? `${r.velocidadDia}/día (${r.base})` : null,
+    // un quiebre no es caída de demanda: se descuentan los días sin stock
+    r.diasSinStock30 >= 1 ? `${Math.round(r.diasSinStock30)} día(s) sin stock descontados` : null,
+  ].filter(Boolean)
+
   return (
     <div className={`pc-repo${tono ? ` pc-repo-${tono}` : ''}`}>
       <strong>{texto}</strong>
-      <span>
-        {fmtNum(r.stock)} en bodega
-        {r.enCamino ? ` · ${fmtNum(r.enCamino)} en camino` : ''}
-        {r.velocidadDia > 0 ? ` · ${r.velocidadDia}/día (${r.base})` : ''}
-        {/* un quiebre no es caída de demanda: se descuentan los días sin stock */}
-        {r.diasSinStock30 >= 1 ? ` · ${Math.round(r.diasSinStock30)} día(s) sin stock descontados` : ''}
-      </span>
+      {detalle.length ? <span>{detalle.join(' · ')}</span> : null}
       {r.aEnviar > 0 ? <b className="pc-repo-accion">enviar {fmtNum(r.aEnviar)}</b> : null}
       {onGuardarEnCamino ? (
         <div className="pc-repo-camino" onClick={(ev) => ev.stopPropagation()}>
@@ -657,15 +670,61 @@ function SeccionGama({ p }) {
 
 const PRINCIPALES = new Set(['Ventas 7d', 'Margen 30d', 'ML cobra 30d'])
 
-function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, onGuardarEnCamino, expandida = false, onExpandir, prefijos = null }) {
+// CADA COLOR TIENE SU STOCK. El producto se decide junto (precio, costo,
+// nicho), pero ML vende y despacha cada color como publicación aparte: lo que
+// se quiebra, lo que hay que mandar a Full y lo que ya va en camino es de cada
+// uno, y por eso cada color lleva su propia banda de reposición.
+function VariantesFamilia({ variantes, mostrarPrecio, onAbrir, onGuardarEnCamino }) {
+  return (
+    <div className="pc-variantes">
+      {variantes.map((v) => {
+        const mv = metricasDe(v)
+        const nombre = nombreVariante(v)
+        return (
+          <div key={v._id} className="pc-variante">
+            <button type="button" className="pc-variante-foto" onClick={() => onAbrir(v)} aria-label={`Ver series de ${nombre}`}>
+              {v.imagen ? <img src={v.imagen} alt="" loading="lazy" width="40" height="40" /> : <span className="sin-imagen" />}
+            </button>
+            <div className="pc-variante-cuerpo">
+              <div className="pc-variante-head">
+                <b>{nombre}</b>
+                {mostrarPrecio && mv.precio != null ? <span>{fmtPrecio(mv.precio)}</span> : null}
+                <span>
+                  {fmtNum(mv.ventas7 ?? 0)} vend. 7d · {fmtNum(mv.visitas7 ?? 0)} {mv.visitas7 === 1 ? 'visita' : 'visitas'}
+                  {mv.conversion7d != null ? ` · ${mv.conversion7d}% conv.` : ''}
+                  {!v.reposicion && mv.stock != null ? ` · ${fmtNum(mv.stock)} en stock` : ''}
+                  {mv.pausada ? ' · pausada' : ''}
+                </span>
+                <a href={v.url} target="_blank" rel="noreferrer" className="icono-boton" aria-label={`Abrir ${nombre} en Mercado Libre`}>
+                  <ExternalLink aria-hidden="true" />
+                </a>
+              </div>
+              <Reposicion r={v.reposicion} p={v} onGuardarEnCamino={onGuardarEnCamino} />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// `familia` ({ nombre, variantes }) cuando el producto tiene varios colores en
+// ML: la tarjeta es del producto, con sus números sumados (`m`), y lo que se
+// decide en ella (precio, costo, nicho) se aplica a todos los colores. `p` es
+// la publicación que da la cara: su economía, su gama y su auditoría valen
+// para todas, porque comparten precio y página.
+function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, onGuardarEnCamino, expandida = false, onExpandir, prefijos = null }) {
   const d = deltas(p.mediciones)
+  const m = metricas ?? metricasDe(p)
   const a = p.auditoria
   const generando =
     a?.estado === 'generando' &&
     (!a.solicitadaEl || Date.now() - new Date(a.solicitadaEl).getTime() < 30 * 60e3)
-  const ventas7 = p.ventas7d?.unidades ?? (p.ventas30d ? 0 : null)
-  const promo = p.promoMl?.activa ?? null
-  const precioEfectivo = promo?.precio ?? d?.ultima?.precioEfectivo ?? d?.ultima?.precio
+  const titulo = familia?.nombre ?? p.titulo ?? p.sku
+  const ventas7 = m.ventas7
+  // con colores a distinto precio no hay UN precio con su tachado: va el rango
+  const promo = m.precioHasta == null ? p.promoMl?.activa ?? null : null
+  const precioEfectivo = m.precio
   const intervenciones = p.impacto?.intervenciones ?? []
   const midiendo = intervenciones.filter((i) => i.veredicto === 'midiendo').length
 
@@ -683,7 +742,7 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
   const kpis = [
     {
       k: 'Precio',
-      v: fmtPrecio(precioEfectivo),
+      v: m.precioHasta != null ? `${fmtPrecio(precioEfectivo)}–${fmtPrecio(m.precioHasta)}` : fmtPrecio(precioEfectivo),
       extra: promo ? <span className="precio-lista">{fmtPrecio(d?.ultima?.precio)}</span> : null,
       Icono: Tag,
       tono: promo ? 'aviso' : null,
@@ -696,53 +755,53 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
     },
     {
       k: 'Conversión',
-      v: p.conversion7d != null ? `${p.conversion7d}%` : '—',
+      v: m.conversion7d != null ? `${m.conversion7d}%` : '—',
       Icono: Percent,
-      tono: p.conversion7d >= 3 ? 'bien' : null,
+      tono: m.conversion7d >= 3 ? 'bien' : null,
     },
-    { k: 'Visitas 7d', v: fmtNum(d?.ultima?.visitas), Icono: Eye, tono: (d?.ultima?.visitas ?? 0) < 10 ? 'mal' : null },
+    { k: 'Visitas 7d', v: fmtNum(m.visitas7), Icono: Eye, tono: (m.visitas7 ?? 0) < 10 ? 'mal' : null },
     {
       k: 'Margen 30d',
-      v: p.margen30d ? fmtPrecio(p.margen30d.margenClp) : p.ventas30d ? 'falta costo' : '—',
+      v: m.margen30d ? fmtPrecio(m.margen30d.margenClp) : m.ventas30d ? 'falta costo' : '—',
       Icono: PiggyBank,
-      tono: p.margen30d ? (p.margen30d.margenClp < 0 ? 'mal' : 'bien') : p.ventas30d ? 'aviso' : null,
-      ayuda: p.margen30d
-        ? `Base: ${p.margen30d.base ?? '—'}\ningresos ${fmtPrecio(p.ventas30d?.ingresosClp)}\n− ML ${fmtPrecio(p.margen30d.cargosMlClp ?? p.margen30d.comisionClp)}\n− costo ${fmtPrecio(p.margen30d.costoClp)}`
+      tono: m.margen30d ? (m.margen30d.margenClp < 0 ? 'mal' : 'bien') : m.ventas30d ? 'aviso' : null,
+      ayuda: m.margen30d
+        ? `Base: ${m.margen30d.base ?? '—'}\ningresos ${fmtPrecio(m.ventas30d?.ingresosClp)}\n− ML ${fmtPrecio(m.margen30d.cargosMlClp ?? m.margen30d.comisionClp)}\n− costo ${fmtPrecio(m.margen30d.costoClp)}`
         : 'Carga el costo por unidad (clic en la tarjeta) para ver el margen real',
     },
     // lo que ML cobra DE VERDAD: comisión + envío + ads, del detalle de facturación
     {
       k: 'ML cobra 30d',
-      v: p.cargosMl30d ? fmtPrecio(p.cargosMl30d.totalClp) : '—',
+      v: m.cargosMl30d ? fmtPrecio(m.cargosMl30d.totalClp) : '—',
       Icono: Percent,
-      tono: p.cargosMl30d && p.ventas30d?.ingresosClp
-        ? p.cargosMl30d.totalClp / p.ventas30d.ingresosClp > 0.5
+      tono: m.cargosMl30d && m.ventas30d?.ingresosClp
+        ? m.cargosMl30d.totalClp / m.ventas30d.ingresosClp > 0.5
           ? 'mal'
           : 'aviso'
         : null,
-      ayuda: p.cargosMl30d
+      ayuda: m.cargosMl30d
         ? [
-            `comisión ${fmtPrecio(p.cargosMl30d.comisionClp)}`,
-            `envío ${fmtPrecio(p.cargosMl30d.envioClp)}`,
-            `publicidad ${fmtPrecio(p.cargosMl30d.adsClp)}`,
+            `comisión ${fmtPrecio(m.cargosMl30d.comisionClp)}`,
+            `envío ${fmtPrecio(m.cargosMl30d.envioClp)}`,
+            `publicidad ${fmtPrecio(m.cargosMl30d.adsClp)}`,
             // bolsillos que antes caían en "otros" y no se veían
-            p.cargosMl30d.colectaClp ? `colecta ${fmtPrecio(p.cargosMl30d.colectaClp)}` : null,
-            p.cargosMl30d.almacenajeClp ? `almacenaje ${fmtPrecio(p.cargosMl30d.almacenajeClp)}` : null,
-            p.cargosMl30d.otrosClp ? `otros ${fmtPrecio(p.cargosMl30d.otrosClp)}` : null,
-            `${p.cargosMl30d.lineas} línea(s) facturadas`,
+            m.cargosMl30d.colectaClp ? `colecta ${fmtPrecio(m.cargosMl30d.colectaClp)}` : null,
+            m.cargosMl30d.almacenajeClp ? `almacenaje ${fmtPrecio(m.cargosMl30d.almacenajeClp)}` : null,
+            m.cargosMl30d.otrosClp ? `otros ${fmtPrecio(m.cargosMl30d.otrosClp)}` : null,
+            `${m.cargosMl30d.lineas} línea(s) facturadas`,
           ]
             .filter(Boolean)
             .join('\n')
         : 'Se sincroniza a diario desde el detalle de facturación de ML',
     },
-    { k: 'Stock', v: fmtNum(d?.ultima?.stock), Icono: Package, tono: d?.ultima?.stock <= 3 ? 'aviso' : null },
+    { k: 'Stock', v: fmtNum(m.stock), Icono: Package, tono: m.stock != null && m.stock <= 3 ? 'aviso' : null },
     {
       k: 'Reseñas',
-      v: `${fmtNum(d?.ultima?.numReviews)}${d?.ultima?.rating ? ` ★${d.ultima.rating}` : ''}`,
+      v: `${fmtNum(m.numReviews)}${m.rating ? ` ★${m.rating}` : ''}`,
       Icono: Star,
-      tono: d?.ultima?.numReviews ? 'bien' : 'mal',
+      tono: m.numReviews ? 'bien' : 'mal',
     },
-    { k: 'Ingresos 30d', v: p.ventas30d ? fmtPrecio(p.ventas30d.ingresosClp) : '—', Icono: DollarSign },
+    { k: 'Ingresos 30d', v: m.ventas30d ? fmtPrecio(m.ventas30d.ingresosClp) : '—', Icono: DollarSign },
   ]
 
   // COLAPSADA: la foto manda y el resto se resume.
@@ -753,15 +812,18 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
   // otra parte, expande en su lugar. Eso conserva el contexto: sigues viendo
   // dónde estabas en la grilla.
   if (!expandida) {
-    const r = p.reposicion
+    const r = m.reposicion
     const urg = r ? TONO_URGENCIA[r.urgencia] : null
+    // en un producto con colores el sello dice CUÁL se quiebra, salvo que
+    // estén todos igual
+    const cual = familia && r?.variante && !r.todas ? <i> · {r.variante}</i> : null
     return (
       <article className={`propio-card pc-mini${urg ? ` pc-mini-${urg}` : ''}`}>
         <button
           className="pc-mini-abrir"
           onClick={() => onExpandir?.(p._id)}
           aria-expanded={false}
-          aria-label={`Abrir ${p.titulo ?? p.sku}`}
+          aria-label={`Abrir ${titulo}${familia ? ` (${etiquetaVariantes(familia.variantes)})` : ''}`}
         >
           <span className="pc-mini-foto">
             {p.imagen ? (
@@ -778,12 +840,23 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
                 consecuencia como letra chica. */}
             {r?.urgencia === 'quebrado' ? (
               <span className="pc-mini-sello pc-mini-sello-mal">
-                sin stock{p.estadoMl === 'paused' ? <i> · pausada</i> : null}
+                sin stock{cual ?? (m.pausada ? <i> · pausada</i> : null)}
               </span>
             ) : r && r.urgencia !== 'holgado' && r.urgencia !== 'sin_ventas' ? (
-              <span className={`pc-mini-sello pc-mini-sello-${urg}`}>{r.diasCobertura} días</span>
-            ) : p.estadoMl === 'paused' ? (
+              <span className={`pc-mini-sello pc-mini-sello-${urg}`}>
+                {r.diasCobertura} días{cual}
+              </span>
+            ) : m.pausada ? (
               <span className="pc-mini-sello pc-mini-sello-pausa">pausada</span>
+            ) : null}
+            {/* los colores, como el selector de la página de ML */}
+            {familia ? (
+              <span className="pc-mini-variantes" aria-hidden="true">
+                {familia.variantes.slice(0, 4).map((v) => (
+                  <img key={v._id} src={v.imagen} alt="" loading="lazy" title={nombreVariante(v)} />
+                ))}
+                {familia.variantes.length > 4 ? <b>+{familia.variantes.length - 4}</b> : null}
+              </span>
             ) : null}
           </span>
           {/* EL PRECIO AL QUE SE ESTÁ VENDIENDO HOY, justo bajo la foto.
@@ -796,35 +869,37 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
               lado, igual que se ve en ML. */}
           {Number.isFinite(precioEfectivo) ? (
             <span className="pc-mini-precio">
-              <b>{fmtPrecio(precioEfectivo)}</b>
+              <b>
+                {fmtPrecio(precioEfectivo)}
+                {m.precioHasta != null ? `–${fmtPrecio(m.precioHasta)}` : ''}
+              </b>
               {promo?.precioOriginal > precioEfectivo ? (
                 <s title={`${promo.nombre ?? 'Promoción'}: el cliente paga ${fmtPrecio(precioEfectivo)}`}>
                   {fmtPrecio(promo.precioOriginal)}
                 </s>
               ) : null}
+              {familia ? <span className="pc-mini-nvar">{etiquetaVariantes(familia.variantes)}</span> : null}
             </span>
           ) : null}
-          <span className="pc-mini-titulo" title={p.titulo ?? p.sku}>
-            {tituloCorto(p.titulo ?? p.sku, prefijos?.get(p.titulo) ?? '')}
+          <span className="pc-mini-titulo" title={titulo}>
+            {tituloCorto(titulo, prefijos?.get(titulo) ?? '')}
           </span>
           {/* SEMÁFORO DE LOS ÚLTIMOS 7 DÍAS: ¿este producto va bien AHORA?
               Verde vende y convierte, rojo no vende, ámbar convierte poco o le
               falta el costo para saber si gana. El stock no está acá porque ya
-              vive sobre la foto. */}
+              vive sobre la foto. En un producto con colores, los suma. */}
           <span className="pc-mini-kpis">
             <em className={`k-${ventas7 > 0 ? 'bien' : ventas7 === 0 ? 'mal' : 'neutro'}`}>
               <b>{ventas7 != null ? fmtNum(ventas7) : '—'}</b> vend. 7d
             </em>
-            <em className={`k-${p.conversion7d == null ? 'neutro' : p.conversion7d >= 3 ? 'bien' : p.conversion7d >= 1.5 ? 'aviso' : 'mal'}`}>
-              <b>{p.conversion7d != null ? `${p.conversion7d}%` : '—'}</b> conv.
+            <em className={`k-${m.conversion7d == null ? 'neutro' : m.conversion7d >= 3 ? 'bien' : m.conversion7d >= 1.5 ? 'aviso' : 'mal'}`}>
+              <b>{m.conversion7d != null ? `${m.conversion7d}%` : '—'}</b> conv.
             </em>
-            <em className={`k-${p.margen30d ? (p.margen30d.margenClp > 0 ? 'bien' : 'mal') : p.ventas30d ? 'aviso' : 'neutro'}`}>
-              <b>{p.margen30d ? fmtPrecio(p.margen30d.margenClp) : p.ventas30d ? 'falta costo' : '—'}</b> margen
+            <em className={`k-${m.margen30d ? (m.margen30d.margenClp > 0 ? 'bien' : 'mal') : m.ventas30d ? 'aviso' : 'neutro'}`}>
+              <b>{m.margen30d ? fmtPrecio(m.margen30d.margenClp) : m.ventas30d ? 'falta costo' : '—'}</b> margen
             </em>
           </span>
-          {p.reposicion?.aEnviar > 0 ? (
-            <span className="pc-mini-accion">enviar {fmtNum(p.reposicion.aEnviar)}</span>
-          ) : null}
+          {m.aEnviar > 0 ? <span className="pc-mini-accion">enviar {fmtNum(m.aEnviar)}</span> : null}
         </button>
       </article>
     )
@@ -837,8 +912,9 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
           {p.imagen ? <img src={p.imagen} alt="" loading="lazy" width="64" height="64" /> : <span className="sin-imagen" />}
         </button>
         <div className="pc-ident">
-          <h3 onClick={() => onAbrir(p)}>{p.titulo ?? p.sku}</h3>
+          <h3 onClick={() => onAbrir(p)}>{titulo}</h3>
           <div className="pc-chips">
+            {familia ? <span className="badge badge-neutro">{etiquetaVariantes(familia.variantes)}</span> : null}
             {p.envioMl?.logistica === 'fulfillment' ? (
               <span className="chip-full">
                 <Zap aria-hidden="true" />
@@ -847,13 +923,15 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
             ) : p.envioMl?.logistica ? (
               <span className="badge badge-neutro">{p.envioMl.flex ? 'Flex' : 'colecta'}</span>
             ) : null}
-            {p.estadoMl && p.estadoMl !== 'active' ? (
+            {familia ? (
+              m.pausada ? <span className="badge badge-neutro">pausada</span> : null
+            ) : p.estadoMl && p.estadoMl !== 'active' ? (
               <span className="badge badge-neutro">{p.estadoMl === 'paused' ? 'pausada' : p.estadoMl}</span>
             ) : null}
             {promo ? <span className="chip-promo">–{Math.round((1 - promo.precio / promo.precioOriginal) * 100)}%</span> : null}
             <span className="pc-pos">
-              {p.posicionReciente
-                ? `#${p.posicionReciente.posicion} en “${p.posicionReciente.keyword}”`
+              {m.posicionReciente
+                ? `#${m.posicionReciente.posicion} en “${m.posicionReciente.keyword}”`
                 : 'fuera de los listados trackeados'}
             </span>
           </div>
@@ -874,7 +952,16 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
         </div>
       </header>
 
-      <Reposicion r={p.reposicion} p={p} onGuardarEnCamino={onGuardarEnCamino} />
+      {familia ? (
+        <VariantesFamilia
+          variantes={familia.variantes}
+          mostrarPrecio={m.precioHasta != null}
+          onAbrir={onAbrir}
+          onGuardarEnCamino={onGuardarEnCamino}
+        />
+      ) : (
+        <Reposicion r={p.reposicion} p={p} onGuardarEnCamino={onGuardarEnCamino} />
+      )}
 
       <div className="pc-kpis" onClick={() => onAbrir(p)}>
         {kpis.filter((x) => PRINCIPALES.has(x.k)).map(({ k, v, extra, Icono, tono, ayuda }) => (
@@ -911,7 +998,12 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
         </div>
       </details>
 
-      <GananciaUnidad p={p} onGuardarCosto={onGuardarCosto} onCambiarPrecio={onCambiarPrecio} />
+      <GananciaUnidad
+        p={p}
+        aplicaA={familia ? etiquetaVariantes(familia.variantes, { conArticulo: true }) : null}
+        onGuardarCosto={onGuardarCosto}
+        onCambiarPrecio={onCambiarPrecio}
+      />
       <PlanPublicidad plan={p.planPublicidad} compacto />
 
       <div className="pc-optimizador">
@@ -1517,6 +1609,16 @@ export function MisProductos() {
     api.meliEstado().then(setMeli).catch(() => setMeli(null))
   }, [])
 
+  // UN PRODUCTO, VARIOS COLORES: las publicaciones de una misma familia de ML
+  // van en una sola tarjeta (lib/familiasPropias.js)
+  const entradas = agruparPorFamilia(datos?.propios ?? [])
+  const entradaDe = new Map(entradas.flatMap((e) => (e.variantes ?? [e.p]).map((v) => [v._id, e])))
+  // lo que se decide para el producto —precio, costo, nicho, dejar de
+  // seguirlo— vale para todos sus colores; el stock, "ya lo envié" y la
+  // auditoría siguen siendo de cada publicación
+  const miembrosDe = (p) => entradaDe.get(p._id)?.variantes ?? [p]
+  const nombreDe = (p) => entradaDe.get(p._id)?.titulo ?? p.titulo ?? p.sku
+
   async function conectarMeli() {
     setError(null)
     try {
@@ -1562,23 +1664,28 @@ export function MisProductos() {
   }
 
   async function eliminar(p) {
-    if (!confirm(`¿Dejar de seguir "${p.titulo ?? p.sku}"?`)) return
+    const miembros = miembrosDe(p)
+    const pregunta =
+      miembros.length > 1
+        ? `¿Dejar de seguir "${nombreDe(p)}" y sus ${miembros.length} publicaciones (${miembros.map(nombreVariante).join(', ')})?`
+        : `¿Dejar de seguir "${p.titulo ?? p.sku}"?`
+    if (!confirm(pregunta)) return
     try {
-      await api.eliminarPropio(p._id)
-      cargar()
+      for (const v of miembros) await api.eliminarPropio(v._id)
     } catch (err) {
       setError(err.message)
     }
+    cargar()
   }
 
   async function cablearNicho(p, nichoId) {
     setError(null)
     try {
-      await api.ajustarPropio(p._id, { nichoId })
-      cargar()
+      for (const v of miembrosDe(p)) await api.ajustarPropio(v._id, { nichoId })
     } catch (err) {
       setError(err.message)
     }
+    cargar()
   }
 
   // costo real puesto en bodega: el dato que solo el importador conoce, y el
@@ -1586,11 +1693,11 @@ export function MisProductos() {
   async function guardarCosto(p, costo) {
     setError(null)
     try {
-      await api.ajustarPropio(p._id, { costoUnitarioClp: costo })
-      cargar()
+      for (const v of miembrosDe(p)) await api.ajustarPropio(v._id, { costoUnitarioClp: costo })
     } catch (err) {
       setError(err.message)
     }
+    cargar()
   }
 
   // lo que ya salió hacia Full y la bodega todavía no recibió: cuenta como
@@ -1606,29 +1713,43 @@ export function MisProductos() {
   }
 
   // escribe el precio EN Mercado Libre (no es un campo local): se confirma
-  // antes porque lo ve el comprador en cuanto ML lo procesa
+  // antes porque lo ve el comprador en cuanto ML lo procesa. En un producto
+  // con colores va a todas sus publicaciones: cada color tiene su precio en ML
   async function cambiarPrecio(p, precioClp) {
     setError(null)
     if (!Number.isFinite(precioClp) || precioClp <= 0) {
       setError('precio inválido')
       return
     }
+    const miembros = miembrosDe(p)
+    const varios = miembros.length > 1
     const actual = p.economiaUnidad?.precioClp
-    if (!confirm(`¿Cambiar el precio en Mercado Libre de ${fmtPrecio(actual)} a ${fmtPrecio(precioClp)}?\n\n${p.titulo ?? p.sku}`)) {
+    const cuales = varios ? `\n\nSe cambia en sus ${miembros.length} publicaciones: ${miembros.map(nombreVariante).join(', ')}.` : ''
+    if (!confirm(`¿Cambiar el precio en Mercado Libre de ${fmtPrecio(actual)} a ${fmtPrecio(precioClp)}?\n\n${nombreDe(p)}${cuales}`)) {
       return
     }
-    try {
-      const { resultado } = await api.cambiarPrecio(p._id, precioClp)
-      if (resultado?.sinStock) {
-        setAviso(
-          `Precio actualizado a ${fmtPrecio(resultado.precio)}. La publicación está pausada por falta de stock: ` +
-            'ML la reactivará a este precio cuando llegue mercadería a Full.',
-        )
+    const pausadas = []
+    const fallas = []
+    for (const v of miembros) {
+      try {
+        const { resultado } = await api.cambiarPrecio(v._id, precioClp)
+        if (resultado?.sinStock) pausadas.push(nombreVariante(v))
+      } catch (err) {
+        fallas.push(varios ? `${nombreVariante(v)}: ${err.message}` : err.message)
       }
-      cargar()
-    } catch (err) {
-      setError(err.message)
     }
+    if (fallas.length) setError(varios ? `El precio no cambió en ${fallas.join(' · ')}` : fallas[0])
+    if (pausadas.length) {
+      setAviso(
+        `Precio actualizado a ${fmtPrecio(precioClp)}. ` +
+          (!varios
+            ? 'La publicación está pausada por falta de stock: ML la reactivará a este precio cuando llegue mercadería a Full.'
+            : pausadas.length === 1
+              ? `${pausadas[0]} está pausada por falta de stock: ML la reactivará a este precio cuando llegue mercadería a Full.`
+              : `${pausadas.join(', ')} están pausadas por falta de stock: ML las reactivará a este precio cuando llegue mercadería a Full.`),
+      )
+    }
+    cargar()
   }
 
   async function autoCablear() {
@@ -1710,17 +1831,9 @@ export function MisProductos() {
 
   // ORDEN. Por defecto lo que se quiebra antes: sin ventas al final, porque un
   // producto que no vende no tiene urgencia de reposición aunque tenga 0 stock.
-  const PESO_URGENCIA = { quebrado: 0, critico: 1, reponer: 2, holgado: 3, sin_ventas: 4 }
-  const prefijoTitulos = prefijosPorFamilia((datos?.propios ?? []).map((x) => x.titulo))
-  const ordenados = [...(datos?.propios ?? [])].sort((a, b) => {
-    if (orden === 'ventas') return (b.ventas7d?.unidades ?? 0) - (a.ventas7d?.unidades ?? 0)
-    if (orden === 'margen') return (b.margen30d?.margenClp ?? -Infinity) - (a.margen30d?.margenClp ?? -Infinity)
-    if (orden === 'alfabetico') return (a.titulo ?? '').localeCompare(b.titulo ?? '')
-    const pa = PESO_URGENCIA[a.reposicion?.urgencia] ?? 5
-    const pb = PESO_URGENCIA[b.reposicion?.urgencia] ?? 5
-    if (pa !== pb) return pa - pb
-    return (a.reposicion?.diasCobertura ?? 9999) - (b.reposicion?.diasCobertura ?? 9999)
-  })
+  // Un producto con colores se ordena por el color que se quiebra antes.
+  const prefijoTitulos = prefijosPorFamilia(entradas.map((e) => e.titulo))
+  const ordenadas = ordenarEntradas(entradas, orden)
 
   return (
     <main>
@@ -1825,14 +1938,19 @@ export function MisProductos() {
                 <option value="alfabetico">Nombre</option>
               </select>
             </label>
-            <span className="propios-cuenta">{ordenados.length} producto(s)</span>
+            <span className="propios-cuenta">
+              {ordenadas.length} producto(s)
+              {ordenadas.length !== datos.propios.length ? ` · ${datos.propios.length} publicaciones` : ''}
+            </span>
           </div>
 
           <div className="propios-grilla">
-            {ordenados.map((p) => (
+            {ordenadas.map((e) => (
               <TarjetaPropio
-                key={p._id}
-                p={p}
+                key={e.clave}
+                p={e.p}
+                familia={e.variantes ? { nombre: e.titulo, variantes: e.variantes } : null}
+                m={e.m}
                 nichos={nichos}
                 onEliminar={eliminar}
                 onAbrir={setAbierto}
@@ -1842,8 +1960,8 @@ export function MisProductos() {
                 onGuardarCosto={guardarCosto}
                 onGuardarEnCamino={guardarEnCamino}
                 onCambiarPrecio={cambiarPrecio}
-                expandida={expandido === p._id}
-                onExpandir={setExpandido}
+                expandida={expandido === e.clave}
+                onExpandir={(abrir) => setExpandido(abrir ? e.clave : null)}
                 prefijos={prefijoTitulos}
               />
             ))}

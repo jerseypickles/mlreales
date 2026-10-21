@@ -96,6 +96,47 @@ export async function costoDesdeCotizacion() {
   return { copiados }
 }
 
+// LA FAMILIA DE ML DE UNA PUBLICACIÓN. El family_id no viene en el item: sale
+// del producto de usuario (/user-products/:id), una llamada más. Se pide cuando
+// falta o cambió el producto de usuario, y en la pasada completa (una vez al
+// día), porque ML cambia un item de familia si cambian sus atributos de familia
+// (le pasó a la manguera verde y la azul el 21-oct-2026). Si ML no responde se
+// queda la familia que ya estaba guardada.
+export async function familiaDeItem(item, guardada = null, { refrescar = false, pedir = meliGet } = {}) {
+  const userProductId = item?.user_product_id ?? null
+  if (!userProductId) return guardada
+  const nombre = item.family_name ?? guardada?.nombre ?? null
+  const titulo = item.title ?? ''
+  // ML arma el título con el nombre de la familia más lo que distingue a la
+  // variante: "… 30 M Con Pistola" + "Rojo"
+  const resto = nombre && titulo.toLowerCase().startsWith(nombre.toLowerCase()) ? titulo.slice(nombre.length).trim() : ''
+  const color = (item.attributes ?? []).find((a) => a.id === 'COLOR')?.value_name ?? null
+  const variante = resto || color || null
+  const mismoProducto = guardada?.userProductId === userProductId
+  let id = mismoProducto ? guardada.id ?? null : null
+  let fecha = mismoProducto ? guardada.fecha ?? null : null
+  if (!id || refrescar) {
+    try {
+      const up = await pedir(`/user-products/${userProductId}`)
+      if (up?.family_id != null) {
+        id = String(up.family_id)
+        fecha = new Date()
+      }
+    } catch (err) {
+      console.warn(`[propios] familia de ${item.id ?? userProductId} no leída: ${err.message}`)
+    }
+  }
+  if (!id) return null
+  return {
+    id,
+    nombre,
+    userProductId,
+    variante,
+    porColor: Boolean(variante && color && variante.toLowerCase() === color.toLowerCase()),
+    fecha,
+  }
+}
+
 export function extraerSkuDeUrl(url) {
   const m = String(url ?? '').match(/MLCU?-?\d{6,}/)
   return m ? m[0].replace('-', '') : null
@@ -227,6 +268,9 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     if (imagen) propio.imagen = imagen
     if (oficial?.status) propio.estadoMl = oficial.status
     if (oficial?.category_id) propio.categoriaMl = oficial.category_id
+    // los colores de un producto son publicaciones aparte: la familia de ML
+    // es la que los junta en una sola tarjeta de Mis productos
+    if (oficial) propio.familiaMl = await familiaDeItem(oficial, propio.familiaMl, { refrescar: !soloOficial })
     if (oficial?.shipping) {
       // logística de la publicación: colecta/Flex/Full. El cambio (ej: ML activa
       // el stock de bodega y pasa a fulfillment) es una intervención medible

@@ -28,6 +28,12 @@ const productoPropioSchema = new mongoose.Schema({
   // puesto diario (services/demandaActualMl.js, 8-oct-2026)
   idsRanking: { type: mongoose.Schema.Types.Mixed, default: null }, // { userProductId, catalogProductId, categoriaId }
   rankingMl: { type: mongoose.Schema.Types.Mixed, default: null },
+  // SU FAMILIA EN ML (21-oct-2026). Con los productos de usuario cada color es
+  // una publicación aparte —su item, su stock, sus ventas— y ML las junta en
+  // una sola página con selector. Mis productos las junta igual:
+  // { id (family_id), nombre (family_name), userProductId, variante ("Rojo"),
+  // porColor, fecha } — la variante es lo que el título agrega al nombre.
+  familiaMl: { type: mongoose.Schema.Types.Mixed, default: null },
   // costo real por unidad puesto en bodega (lo ingresa el usuario): habilita
   // el margen real por venta — sin esto, ingresos ≠ ganancia
   costoUnitarioClp: { type: Number, default: null },
