@@ -5,6 +5,7 @@ import { ProductoPropio } from '../../models/ProductoPropio.js'
 import { Nicho } from '../../models/Nicho.js'
 import { Snapshot } from '../../models/Snapshot.js'
 import { extraerSkuDeUrl, posicionesRecientes } from '../../services/propios.js'
+import { rangoGama, precioDePropio } from '../../services/gama.js'
 import { ventasPorItem, primeraVentaPorItem } from '../../services/ventasMl.js'
 import {
   velocidadPonderada,
@@ -47,6 +48,8 @@ async function tipoPublicacionDe(propio) {
   return valor
 }
 
+const LOGISTICAS_MERCADO_ENVIOS = new Set(['fulfillment', 'cross_docking', 'drop_off', 'xd_drop_off'])
+
 // `medido` es lo que ML FACTURÓ de envío por este item, cruzado orden a orden
 // (cargosMl.envioRealPorItem): { envioClp, unidades, base, pctOrdenesSobreBase }.
 async function economiaUnidad(propio, medido = null) {
@@ -63,10 +66,15 @@ async function economiaUnidad(propio, medido = null) {
     ? Math.round((com.pct / 100) * precioClp + (com.cargoFijoClp ?? 0))
     : null
 
-  // solo Full paga el cargo por envío de ML; colecta/Flex se despachan distinto
+  // MERCADO ENVÍOS COBRA LO MISMO DESDE FULL QUE DESDE LA BODEGA (medido el
+  // 2-sep-2026: la tarifa es idéntica para fulfillment, cross_docking, drop_off
+  // y xd_drop_off). Hasta el 21-oct solo Full pagaba envío acá, y la manguera
+  // —la primera que se despacha desde la bodega— salía dejando $5.119 por venta
+  // en vez de ~$4.100. Flex y el envío a convenir se pagan por otro lado.
   const esFull = propio.envioMl?.logistica === 'fulfillment'
+  const porMercadoEnvios = LOGISTICAS_MERCADO_ENVIOS.has(propio.envioMl?.logistica)
   const declaradas = dimensionesDeItem({ shipping: { dimensions: propio.envioMl?.dimensiones ?? null } })
-  const env = esFull
+  const env = porMercadoEnvios
     ? await costoEnvioFull({
         precioClp,
         dimensiones: declaradas ?? DIMENSIONES_POR_DEFECTO,
@@ -108,7 +116,7 @@ async function economiaUnidad(propio, medido = null) {
     // sin dimensiones declaradas la tarifa sale de una caja chica supuesta: el
     // tramo de precio manda, pero conviene decirlo en pantalla. Con envío
     // facturado el supuesto ya no aplica.
-    envioSupuesto: envioMedidoClp == null && esFull && !declaradas,
+    envioSupuesto: envioMedidoClp == null && porMercadoEnvios && !declaradas,
     esFull,
     mlTotalClp,
     mlPct: Math.round((mlTotalClp / precioClp) * 1000) / 10,
@@ -116,7 +124,7 @@ async function economiaUnidad(propio, medido = null) {
     costoClp,
     gananciaClp,
     gananciaPct: gananciaClp === null ? null : Math.round((gananciaClp / precioClp) * 1000) / 10,
-    faltaEnvio: esFull && envioClp === null,
+    faltaEnvio: porMercadoEnvios && envioClp === null,
   }
 }
 
@@ -235,6 +243,8 @@ router.get(
           ? planPublicidad({ precio: eu.precioClp, costoUnitario: eu.costoClp, comisionPct: eu.comisionPct,
               envioConocido: eu.envioBase === 'facturado' ? eu.envioClp : null, envioTarifa: eu.envioTarifarioClp }, paramAds)
           : null,
+        // el rango de su gama, para el resumen de la tarjeta (el detalle se pide aparte)
+        gamaRango: rangoGama(precioDePropio(p), p.gama),
         // REPOSICIÓN: cuánto aguanta y cuánto mandar (ver services/inventarioFull)
         reposicion: reposicionSegura(p, v30, v7, { primeraVenta: primeras.get(p.itemIdMl ?? p.sku) ?? null }),
         impacto: evaluarImpacto(p),
@@ -546,6 +556,59 @@ router.patch(
       await propio.save()
     }
     res.json({ propio })
+  }),
+)
+
+// SU GAMA DENTRO DEL NICHO (services/gama.js): los comparables de su rango de
+// precio, contra qué mediana se compara y cuánto se vende ahí. Se pide al
+// abrir la tarjeta, no con la lista: lee el último scan del nicho.
+const fichaGama = (p) => ({ sku: p.sku, titulo: p.titulo, precio: p.precio, imagen: p.imagen, url: p.url, posicion: p.posicion,
+  numReviews: p.numReviews ?? null, vendidos: p.vendidos ?? null, resenasNuevasDia: p.resenasNuevasDia ?? null,
+  esFull: p.esFull ?? null, esAnuncio: p.esAnuncio ?? null, origenGama: p.origenGama })
+async function vistaGama(propio) {
+  const { gamaDePropio } = await import('../../services/gama.js')
+  const g = await gamaDePropio(propio)
+  if (g.estado !== 'ok') return { ...g, gama: propio.gama ?? null }
+  const porPuesto = (a, b) => (a.posicion ?? 999) - (b.posicion ?? 999)
+  return {
+    estado: 'ok', keyword: g.keyword, fechaScan: g.fechaScan, precio: g.precio, rango: g.rango, lectura: g.lectura,
+    gama: propio.gama ?? null,
+    comparables: g.productos.filter((p) => p.enGama).sort(porPuesto).map(fichaGama),
+    // lo de fuera, por si hay que sumar alguna a mano: primero las más cercanas en precio
+    fuera: g.productos.filter((p) => p.origenGama === 'fuera' && Number.isFinite(p.precio)).sort((a, b) => Math.abs(a.precio - g.precio) - Math.abs(b.precio - g.precio)).slice(0, 40).map(fichaGama),
+    sacadas: g.productos.filter((p) => p.origenGama === 'sacada').map(fichaGama),
+    // para el histograma: todo el nicho menos lo que se sacó a mano
+    preciosNicho: g.productos.filter((p) => p.origenGama !== 'sacada').map((p) => p.precio).filter(Number.isFinite),
+  }
+}
+
+router.get(
+  '/:id/gama',
+  manejar(async (req, res) => {
+    const propio = await ProductoPropio.findById(req.params.id).lean()
+    if (!propio) return res.status(404).json({ error: 'producto propio no encontrado' })
+    res.json(await vistaGama(propio))
+  }),
+)
+
+// { desde, hasta } fija el rango; { automatico: true } vuelve al de su precio;
+// { agregar | sacar | restaurar: sku } corrige una publicación a mano
+router.patch(
+  '/:id/gama',
+  manejar(async (req, res) => {
+    const propio = await ProductoPropio.findById(req.params.id)
+    if (!propio) return res.status(404).json({ error: 'producto propio no encontrado' })
+    const { aplicarCambioGama } = await import('../../services/gama.js')
+    const cambio = req.body ?? {}
+    for (const k of ['desde', 'hasta']) {
+      if (k in cambio && cambio[k] !== null && (!Number.isFinite(cambio[k]) || cambio[k] <= 0)) {
+        return res.status(400).json({ error: `${k} debe ser un precio > 0` })
+      }
+    }
+    propio.gama = aplicarCambioGama(propio.gama, cambio)
+    propio.markModified('gama')
+    await propio.save()
+    res.json(await vistaGama(propio.toObject()))
   }),
 )
 

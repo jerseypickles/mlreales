@@ -10,6 +10,7 @@ import { buscarDetalle } from './scraper.js'
 import { indexarDetallesPorSku } from './normalizadorDetalle.js'
 import { itemOficialSeguro, descripcionOficialSegura } from './meli.js'
 import { registrarGasto } from './gastos.js'
+import { marcarGama, lecturaGama, rivalesDeGama, precioDePropio } from './gama.js'
 
 // Auditoría de listing: compara MI publicación contra los ganadores del nicho
 // cableado (los que más han vendido — reseñas acumuladas — y el que más vende
@@ -173,7 +174,9 @@ MEMORIA (cambiosYaAplicadosYSuResultado): te paso lo que YA se cambió en esta p
 - Si "empeoró" o quedó "sin cambio", no vuelvas a proponer la misma palanca: cambia de frente (fotos, precio, ficha, Full) y dilo en el veredicto.
 - Si dice "midiendo", el cambio es reciente: respétalo, no lo revuelvas, y concentra las acciones en otra palanca mientras se lee el efecto.
 
-OTRAS BRECHAS: precio vs mediana del nicho, rating, Full/envío, cuotas, ficha técnica incompleta — solo las que muevan la aguja.
+GAMA (miGama): no todo el nicho es mi competencia. Te paso mi rango de precio, cuántas publicaciones caen ahí y su mediana; los ganadores salen de esa gama cuando hay con qué comparar (ganadoresElegidosDe). Si estoy dentro de mi gama, no me empujes a bajar el precio hacia la mediana del nicho, que mezcla productos más baratos y de otra calidad: compite en lo que mi gama valora (materiales, accesorios, durabilidad) y haz que mis fotos y mi descripción lo muestren.
+
+OTRAS BRECHAS: precio vs la mediana de MI GAMA (la del nicho solo como contexto), rating, Full/envío, cuotas, ficha técnica incompleta — solo las que muevan la aguja.
 
 Sé directo y específico (nada de "podrías considerar"). Todo en español de Chile.`
 
@@ -208,7 +211,16 @@ export async function auditarPropio(propio) {
     throw Object.assign(new Error(`el nicho "${nicho.keyword}" no tiene snapshots; corre un scan primero`), { status: 409 })
   }
 
-  const ganadores = elegirGanadores(vista.productos, { excluirSkus: [propio.sku, propio.itemIdMl] })
+  // LOS RIVALES SALEN DE SU GAMA (services/gama.js): la manguera de $13.990 con
+  // cabezales de aluminio no compite con las de $5.700 que tienen las reseñas.
+  // Si la gama no tiene con qué comparar, se usa el nicho y se le dice al modelo.
+  const excluirSkus = [propio.sku, propio.itemIdMl]
+  const precioPropio = precioDePropio(propio)
+  const { rango: rangoDeGama, productos: marcados } = marcarGama(vista.productos, { precio: precioPropio, gama: propio.gama, propios: excluirSkus })
+  const { ganadores, de: rivalesDe } = rangoDeGama
+    ? rivalesDeGama(marcados, elegirGanadores, { excluirSkus })
+    : { ganadores: elegirGanadores(vista.productos, { excluirSkus }), de: 'nicho' }
+  const lecturaDeGama = rangoDeGama ? lecturaGama(marcados, { precio: precioPropio }) : null
   if (!ganadores.length) {
     throw Object.assign(
       new Error(`el nicho "${nicho.keyword}" no tiene rivales con reseñas medidas todavía (falta el nivel 2)`),
@@ -412,6 +424,16 @@ export async function auditarPropio(propio) {
     pesoDeCadaKeyword: pesos,
     preguntasRealesDeCompradores: preguntasCompradores,
     medianaPrecioNicho: reporte?.metricas?.precio?.mediana ?? null,
+    miGama: rangoDeGama
+      ? {
+          rangoDePrecio: `${rangoDeGama.desde}-${rangoDeGama.hasta}`,
+          publicaciones: lecturaDeGama.publicaciones,
+          delNicho: lecturaDeGama.delNicho,
+          medianaPrecio: lecturaDeGama.medianaPrecio,
+          reseniasPctDelNicho: lecturaDeGama.reseniasPct,
+          ganadoresElegidosDe: rivalesDe === 'gama' ? 'mi gama de precio' : 'todo el nicho: mi gama no tiene rivales con reseñas',
+        }
+      : null,
     miPublicacion: { ...mio, fotos: undefined, numFotos: mio.fotos.length },
     // sin el detalle del rival no se sabe cuántas fotos tiene: null, no 0
     ganadoresDelNicho: rivales.map((r) => ({ ...r, url: undefined, imagen: undefined, fotos: undefined, numFotos: r.fotos.length || null })),
@@ -513,6 +535,8 @@ export async function auditarPropio(propio) {
     keyword: nicho.keyword,
     nichoId: String(nicho._id),
     fotosAnalizadas,
+    // contra qué gama se auditó y de dónde salieron los rivales
+    gama: rangoDeGama ? { ...rangoDeGama, rivalesDe, lectura: lecturaDeGama } : null,
     busquedasReales,
     pesos,
     arranquesSinVolumen: arranquesSinVolumen.length ? arranquesSinVolumen : undefined,

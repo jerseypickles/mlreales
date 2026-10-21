@@ -88,6 +88,9 @@ export const api = {
   ventasResumen: () => pedir('/api/propios/ventas-resumen'),
   eliminarPropio: (id) => pedir(`/api/propios/${id}`, { method: 'DELETE' }),
   ajustarPropio: (id, cambios) => pedir(`/api/propios/${id}`, { ...json(cambios), method: 'PATCH' }),
+  // su gama dentro del nicho: { desde, hasta } | { automatico } | { agregar | sacar | restaurar: sku }
+  gamaPropio: (id) => pedir(`/api/propios/${id}/gama`),
+  ajustarGama: (id, cambio) => pedir(`/api/propios/${id}/gama`, { ...json(cambio), method: 'PATCH' }),
   auditarPropio: (id) => pedir(`/api/propios/${id}/auditar`, { method: 'POST' }),
   autoCablearPropios: () => pedir('/api/propios/auto-cablear', { method: 'POST' }),
   aplicarPropio: (id, cambios) => pedir(`/api/propios/${id}/aplicar`, json(cambios)),

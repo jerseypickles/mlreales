@@ -3,7 +3,9 @@ import { fmtNum, fmtPrecio, fmtFechaCorta } from '../lib/formato.js'
 
 // Histograma de precios: un solo matiz secuencial; el bin dominante en el paso fuerte.
 // Tooltip por barra al hover (regla dataviz: capa de hover por defecto).
-export function HistogramaPrecios({ precios, bandaDominante, alto = 150 }) {
+// `marca` ({ precio, etiqueta }) pinta una línea en un precio (ej: el propio, en
+// la gama de Mis productos); `titulo` y `etiquetaBanda` cambian los textos.
+export function HistogramaPrecios({ precios, bandaDominante, alto = 150, titulo = 'Distribución de precios del top 50', etiquetaBanda = 'banda dominante', marca = null }) {
   const [activo, setActivo] = useState(null)
   const tituloId = useId()
 
@@ -24,6 +26,9 @@ export function HistogramaPrecios({ precios, bandaDominante, alto = 150 }) {
 
   const maxCuenta = Math.max(...bins.cuentas)
   const anchoBarra = 100 / bins.cuentas.length
+  const xMarca = Number.isFinite(marca?.precio) && marca.precio >= bins.min && marca.precio <= bins.max
+    ? ((marca.precio - bins.min) / (bins.max - bins.min)) * 100
+    : null
   const esDominante = (i) => {
     if (!bandaDominante) return false
     const desde = bins.min + i * bins.ancho
@@ -33,7 +38,7 @@ export function HistogramaPrecios({ precios, bandaDominante, alto = 150 }) {
 
   return (
     <figure className="grafico" role="img" aria-labelledby={tituloId}>
-      <figcaption id={tituloId}>Distribución de precios del top 50</figcaption>
+      <figcaption id={tituloId}>{titulo}</figcaption>
       <div className="grafico-area" style={{ height: alto }}>
         <svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 100 100">
           {bins.cuentas.map((cuenta, i) => {
@@ -52,7 +57,13 @@ export function HistogramaPrecios({ precios, bandaDominante, alto = 150 }) {
               />
             )
           })}
+          {xMarca != null ? <line x1={xMarca} x2={xMarca} y1="0" y2="100" className="marca-precio" /> : null}
         </svg>
+        {xMarca != null ? (
+          <span className="marca-etiqueta" style={{ left: `calc(10px + (100% - 20px) * ${xMarca / 100})` }}>
+            {marca.etiqueta ?? fmtPrecio(marca.precio)}
+          </span>
+        ) : null}
         {activo != null ? (
           <div className="tooltip" style={{ left: `${(activo + 0.5) * anchoBarra}%` }}>
             <strong>{bins.cuentas[activo]}</strong> productos
@@ -66,7 +77,7 @@ export function HistogramaPrecios({ precios, bandaDominante, alto = 150 }) {
         <span>{fmtPrecio(bins.min)}</span>
         {bandaDominante ? (
           <span className="eje-destacado">
-            banda dominante {fmtPrecio(bandaDominante.desde)}–{fmtPrecio(bandaDominante.hasta)}
+            {etiquetaBanda} {fmtPrecio(bandaDominante.desde)}–{fmtPrecio(bandaDominante.hasta)}
           </span>
         ) : null}
         <span>{fmtPrecio(bins.max)}</span>

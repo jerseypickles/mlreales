@@ -2,12 +2,15 @@ import { Megaphone } from 'lucide-react'
 import { fmtPrecio } from '../lib/formato.js'
 
 // EL PLAN DE PUBLICIDAD ANTES DE ANUNCIAR (src/services/ml/publicidad.js): lo
-// que los anuncios de la cuenta enseñaron —el ROAS que ML entrega, lo que
-// cuesta cada venta por anuncio, el envío real— aplicado a este producto.
+// que los anuncios de la cuenta enseñaron —lo que cuesta cada venta por
+// anuncio, el envío real— aplicado a este producto. Desde el 21-oct-2026 manda
+// lo que una venta AGUANTA de publicidad contra lo que cuesta una venta por
+// anuncio, no el ROAS de las brochas: a otro precio, el plan es una prueba.
 const TONOS = {
   anunciar: { clase: 'bien', titulo: 'Anunciar' },
   'anunciar-con-cuidado': { clase: 'medio', titulo: 'Anunciar con cuidado' },
   'depende-del-costo': { clase: 'medio', titulo: 'Depende del costo' },
+  probar: { clase: 'medio', titulo: 'Probar con presupuesto chico' },
   'solo-organico': { clase: 'mal', titulo: 'Vender orgánico, sin publicidad' },
   'no-cierra': { clase: 'mal', titulo: 'No cierra ni sin publicidad' },
 }
@@ -33,12 +36,19 @@ export function PlanPublicidad({ plan, compacto = false }) {
         {plan.costoUnitario != null ? (
           <>
             <div><dt>costo puesto</dt><dd>{fmtPrecio(plan.costoUnitario)}</dd></div>
-            <div title="Bajo este ROAS cada venta por anuncio pierde"><dt>ROAS de empate</dt><dd>{x(plan.roasEquilibrio)}</dd></div>
-            <div title="El empate con 20% de aire: es el que se pone en la campaña"><dt>ROAS objetivo</dt><dd><b>{x(plan.roasObjetivo)}</b></dd></div>
+            {plan.aguantaPorVenta != null ? (
+              <div title="Lo que una venta puede pagar de publicidad sin perder plata"><dt>aguanta de publicidad</dt><dd><b>{fmtPrecio(plan.aguantaPorVenta)}</b></dd></div>
+            ) : null}
+            {plan.referencia?.mediana ? (
+              <div title={`Lo que costó cada venta por anuncio en tu cuenta${plan.referencia.precioDesde ? `, medido en productos de ${fmtPrecio(plan.referencia.precioDesde)}-${fmtPrecio(plan.referencia.precioHasta)}` : ''}`}>
+                <dt>venta por anuncio (cuenta)</dt><dd>{fmtPrecio(plan.referencia.mediana)}</dd>
+              </div>
+            ) : null}
+            <div title={`El empate (${x(plan.roasEquilibrio)}) con 20% de aire: es el que se pone en la campaña`}><dt>ROAS objetivo</dt><dd><b>{x(plan.roasObjetivo)}</b></dd></div>
             <div><dt>gana por venta con anuncio</dt><dd className={plan.gananciaPorVentaAds > 0 ? 'bien' : 'mal'}>{plan.gananciaPorVentaAds != null ? fmtPrecio(plan.gananciaPorVentaAds) : '—'}</dd></div>
           </>
         ) : (
-          <div title="Con el ROAS que ML suele entregar en tu cuenta"><dt>puede costar hasta</dt><dd className={plan.costoMaximo > 0 ? '' : 'mal'}><b>{plan.costoMaximo > 0 ? fmtPrecio(plan.costoMaximo) : 'nada'}</b></dd></div>
+          <div title="Para que una venta por anuncio típica de tu cuenta no pierda"><dt>puede costar hasta</dt><dd className={plan.costoMaximo > 0 ? '' : 'mal'}><b>{plan.costoMaximo > 0 ? fmtPrecio(plan.costoMaximo) : 'nada'}</b></dd></div>
         )}
         {plan.presupuestoDiario > 0 ? (
           <div title={`Cada venta por anuncio costaría ~${fmtPrecio(plan.costoPorVentaEsperado)}. La prueba de 14 días es lo mínimo para que ML aprenda y para leer el resultado.`}>

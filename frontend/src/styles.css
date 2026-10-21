@@ -8075,3 +8075,29 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .pub-ev-form input { font: inherit; font-size: 12.5px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--borde); background: var(--superficie); color: var(--tinta); }
 .pub-ev-form input:first-child { flex: 1 1 200px; }
 .pub-dp-evento { background: var(--avisa-tinta); }
+
+/* Tu gama (Mis productos): contra qué publicaciones compite de verdad */
+.gama { display: grid; gap: 12px; }
+.gama-cifras { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.gama-cifra { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); min-width: 0; }
+.gama-cifra span { font-size: 11px; color: var(--tinta-2); }
+.gama-cifra strong { font-size: 17px; font-variant-numeric: tabular-nums; color: var(--tinta); }
+.gama-cifra small { font-size: 11px; color: var(--tinta-3); }
+.gama-rango { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--tinta-2); }
+.gama-rango label { display: flex; align-items: center; gap: 5px; }
+.gama-rango input { width: 92px; font: inherit; font-size: 12.5px; padding: 4px 7px; border-radius: 8px; border: 1px solid var(--borde); background: var(--superficie); color: var(--tinta); font-variant-numeric: tabular-nums; }
+.gama-rango small { color: var(--tinta-3); }
+.gama-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.gama-item { display: flex; align-items: center; gap: 9px; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); padding: 6px 8px; min-width: 0; }
+.gama-item img { border-radius: 7px; object-fit: contain; background: #fff; flex: none; display: block; }
+.gama-item .surtido-datos { flex: 1; }
+.gama-sumada { border-color: var(--acento-borde); background: var(--acento-tenue); }
+.gama-titulo { font-size: 11px; color: var(--tinta-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gama-accion { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--borde); background: var(--superficie-2); color: var(--tinta-2); cursor: pointer; }
+.gama-accion:hover:not(:disabled) { border-color: var(--borde-fuerte); color: var(--tinta); }
+.gama-accion:disabled { opacity: 0.5; cursor: progress; }
+.gama-accion svg { width: 14px; height: 14px; }
+.gama-mas summary { cursor: pointer; font-size: 12px; color: var(--tinta-2); margin-bottom: 8px; }
+.marca-precio { stroke: var(--tinta); stroke-width: 1.5px; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
+.marca-etiqueta { position: absolute; top: 2px; transform: translateX(-50%); font-size: 10.5px; font-weight: 600; color: var(--tinta); background: var(--superficie); border: 1px solid var(--borde); border-radius: 6px; padding: 1px 5px; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .gama-lista { grid-template-columns: 1fr; } .gama-rango input { width: 80px; } }

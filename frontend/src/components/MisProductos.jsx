@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import * as Collapsible from '@radix-ui/react-collapsible'
 import { api } from '../api.js'
 import { IconoExterno, Cargando } from './ui.jsx'
-import { MiniSerie } from './graficos.jsx'
+import { MiniSerie, HistogramaPrecios } from './graficos.jsx'
 import {
   Tag,
   ShoppingCart,
@@ -24,6 +24,9 @@ import {
   ArrowLeftRight,
   X,
   ArrowDownWideNarrow,
+  Layers,
+  Plus,
+  RotateCcw,
 } from 'lucide-react'
 import { BotonCopiar } from './Listing.jsx'
 import { PlanPublicidad } from './PlanPublicidad.jsx'
@@ -469,6 +472,189 @@ function Reposicion({ r, p, onGuardarEnCamino }) {
 }
 
 // los tres que se miran para decidir; el resto baja al pliegue
+// SU GAMA DENTRO DEL NICHO (src/services/gama.js). El importador, 21-oct-2026:
+// "la manguera que estamos mostrando es diferente a las demás, calidad,
+// material… el sistema piensa que todo es igual". El sistema compara por
+// búsqueda; acá se ve contra qué publicaciones compite de verdad —las de su
+// rango de precio— y se corrige a mano: sacar la que no es comparable, sumar
+// la que sí. El auditor elige a sus rivales de esta gama.
+const SIN_GAMA = {
+  'sin-nicho': 'Cablea un nicho para ver tu gama.',
+  'sin-scan': 'El nicho todavía no tiene scan.',
+  'sin-precio': 'Falta el precio del producto para ubicar su gama.',
+}
+const AYUDA_GAMA = {
+  sacar: 'No es comparable: sacarla de tu gama',
+  agregar: 'Sí es comparable: sumarla a tu gama',
+  restaurar: 'Devolverla a donde la ubica el precio',
+}
+
+function FichaGama({ x, accion, onAccion, ocupado }) {
+  const Icono = accion === 'sacar' ? X : accion === 'agregar' ? Plus : RotateCcw
+  return (
+    <div className={`gama-item${x.origenGama === 'agregada' ? ' gama-sumada' : ''}`}>
+      <a href={x.url} target="_blank" rel="noreferrer" title={x.titulo}>
+        <img src={x.imagen} alt="" loading="lazy" width="52" height="52" />
+      </a>
+      <span className="surtido-datos">
+        <strong>{fmtPrecio(x.precio)}</strong>
+        <span className="surtido-prueba">
+          {x.numReviews ? `${fmtNum(x.numReviews)} reseñas` : x.vendidos ? `+${fmtNum(x.vendidos)} vendidos` : 'sin reseñas'}
+          {x.posicion ? ` · #${x.posicion}` : ''}
+        </span>
+        <span className="gama-titulo">{x.titulo}</span>
+      </span>
+      <button type="button" className="gama-accion" title={AYUDA_GAMA[accion]} aria-label={AYUDA_GAMA[accion]} disabled={ocupado} onClick={() => onAccion(x.sku)}>
+        <Icono aria-hidden="true" />
+      </button>
+    </div>
+  )
+}
+
+function DetalleGama({ propioId }) {
+  const [v, setV] = useState(null)
+  const [error, setError] = useState(null)
+  const [ocupado, setOcupado] = useState(false)
+  const [rango, setRango] = useState({ desde: '', hasta: '' })
+  const tomar = (x) => {
+    setV(x)
+    setRango({ desde: x.rango?.desde ?? '', hasta: x.rango?.hasta ?? '' })
+  }
+  useEffect(() => {
+    let vivo = true
+    api.gamaPropio(propioId).then((x) => vivo && tomar(x)).catch((e) => vivo && setError(e.message))
+    return () => {
+      vivo = false
+    }
+  }, [propioId])
+  async function cambiar(cambio) {
+    setOcupado(true)
+    setError(null)
+    try {
+      tomar(await api.ajustarGama(propioId, cambio))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setOcupado(false)
+    }
+  }
+  if (error && !v) return <p className="vacio">{error}</p>
+  if (!v) return <Cargando texto="leyendo el último scan del nicho…" />
+  if (v.estado !== 'ok') return <p className="vacio">{SIN_GAMA[v.estado] ?? v.estado}</p>
+  const l = v.lectura
+  const desde = Number(rango.desde)
+  const hasta = Number(rango.hasta)
+  const rangoValido = desde > 0 && hasta > desde
+  return (
+    <div className="gama">
+      <div className="gama-cifras">
+        <div className="gama-cifra">
+          <span>Comparables</span>
+          <strong>{fmtNum(l.publicaciones)}</strong>
+          <small>de {fmtNum(l.delNicho)} en “{v.keyword}”</small>
+        </div>
+        <div className="gama-cifra">
+          <span>Mediana de tu gama</span>
+          <strong>{fmtPrecio(l.medianaPrecio)}</strong>
+          <small>la del nicho: {fmtPrecio(l.medianaPrecioNicho)}</small>
+        </div>
+        <div className="gama-cifra">
+          <span>Tu precio</span>
+          <strong>{fmtPrecio(v.precio)}</strong>
+          <small>{l.masBaratasQueTuPct != null ? `${fmtNum(l.masBaratasQueTuPct)}% de tu gama cobra menos` : '—'}</small>
+        </div>
+        <div className="gama-cifra">
+          <span>Se vende en tu gama</span>
+          <strong>{l.reseniasPct != null ? `${fmtNum(l.reseniasPct)}%` : '—'}</strong>
+          <small>
+            de las reseñas del nicho{l.ventaHoyPct != null ? ` · ${fmtNum(l.ventaHoyPct)}% de la venta de hoy` : ''}
+          </small>
+        </div>
+      </div>
+      <HistogramaPrecios
+        precios={v.preciosNicho}
+        bandaDominante={v.rango}
+        titulo={`Precios en “${v.keyword}” y tu gama`}
+        etiquetaBanda="tu gama"
+        marca={{ precio: v.precio, etiqueta: `tú ${fmtPrecio(v.precio)}` }}
+        alto={110}
+      />
+      <form
+        className="gama-rango"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (rangoValido) cambiar({ desde, hasta })
+        }}
+      >
+        <label>
+          desde
+          <input type="number" min="0" step="100" value={rango.desde} onChange={(e) => setRango((r) => ({ ...r, desde: e.target.value }))} />
+        </label>
+        <label>
+          hasta
+          <input type="number" min="0" step="100" value={rango.hasta} onChange={(e) => setRango((r) => ({ ...r, hasta: e.target.value }))} />
+        </label>
+        <button type="submit" className="boton-secundario boton-chico" disabled={ocupado || !rangoValido}>
+          usar este rango
+        </button>
+        {v.rango.manual ? (
+          <button type="button" className="boton-secundario boton-chico" disabled={ocupado} onClick={() => cambiar({ automatico: true })}>
+            volver al de tu precio
+          </button>
+        ) : (
+          <small>automático: de 0,7× a 1,6× tu precio</small>
+        )}
+      </form>
+      {error ? <p className="vacio">{error}</p> : null}
+      <div className="gama-lista">
+        {v.comparables.map((x) => (
+          <FichaGama
+            key={x.sku}
+            x={x}
+            accion={x.origenGama === 'agregada' ? 'restaurar' : 'sacar'}
+            onAccion={(sku) => cambiar(x.origenGama === 'agregada' ? { restaurar: sku } : { sacar: sku })}
+            ocupado={ocupado}
+          />
+        ))}
+      </div>
+      {v.fuera.length ? (
+        <details className="gama-mas">
+          <summary>Fuera de tu gama: las {v.fuera.length} más cercanas en precio</summary>
+          <div className="gama-lista">
+            {v.fuera.map((x) => (
+              <FichaGama key={x.sku} x={x} accion="agregar" onAccion={(sku) => cambiar({ agregar: sku })} ocupado={ocupado} />
+            ))}
+          </div>
+        </details>
+      ) : null}
+      {v.sacadas.length ? (
+        <details className="gama-mas">
+          <summary>Sacadas a mano ({v.sacadas.length})</summary>
+          <div className="gama-lista">
+            {v.sacadas.map((x) => (
+              <FichaGama key={x.sku} x={x} accion="restaurar" onAccion={(sku) => cambiar({ restaurar: sku })} ocupado={ocupado} />
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  )
+}
+
+function SeccionGama({ p }) {
+  const r = p.gamaRango
+  if (!p.nichoId || !r) return null
+  return (
+    <Seccion
+      icono={Layers}
+      titulo="Tu gama"
+      resumen={`compite con lo de ${fmtPrecio(r.desde)}–${fmtPrecio(r.hasta)}${r.manual ? ' · rango tuyo' : ''}`}
+    >
+      <DetalleGama propioId={p._id} />
+    </Seccion>
+  )
+}
+
 const PRINCIPALES = new Set(['Ventas 7d', 'Margen 30d', 'ML cobra 30d'])
 
 function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, onGuardarEnCamino, expandida = false, onExpandir, prefijos = null }) {
@@ -771,6 +957,8 @@ function TarjetaPropio({ p, nichos, onEliminar, onAbrir, onCablear, onAuditar, o
           </button>
         )}
       </div>
+
+      <SeccionGama p={p} />
 
       {promo || p.promoMl?.ofertaPropia || p.promoMl?.campanasDisponibles?.length ? (
         <Seccion

@@ -72,8 +72,8 @@ export function aprenderDeAnuncios(filas, envio = new Map()) {
       roas: { mediana: r2(cuantil(conMuestra.map((p) => p.roas), 0.5)), p25: r2(cuantil(conMuestra.map((p) => p.roas), 0.25)),
         p75: r2(cuantil(conMuestra.map((p) => p.roas), 0.75)), cuenta: gasto > 0 ? r2(venta / gasto) : null },
       acosCuenta: venta > 0 ? r2((gasto / venta) * 100) : null,
-      costoPorVenta: { mediana: Math.round(cuantil(conMuestra.map((p) => p.costoPorVenta), 0.5) ?? 0) || null,
-        min: Math.round(cuantil(conMuestra.map((p) => p.costoPorVenta), 0) ?? 0) || null, max: Math.round(cuantil(conMuestra.map((p) => p.costoPorVenta), 1) ?? 0) || null },
+      // con sus cuantiles y el rango de precios donde se midió (planPublicidad)
+      costoPorVenta: referenciaCosto(porProducto) ?? { mediana: null, min: null, max: null },
       cpcMediano: Math.round(cuantil(conMuestra.map((p) => p.cpc), 0.5) ?? 0) || null,
       conversionMediana: r2(cuantil(conMuestra.map((p) => p.conversion), 0.5)),
       ventasAdsPorDia: r2(cuantil(conMuestra.map((p) => p.ventasAdsPorDia), 0.5)),
@@ -84,6 +84,43 @@ export function aprenderDeAnuncios(filas, envio = new Map()) {
     },
     porProducto,
   }
+}
+
+// EL COSTO POR VENTA, NO EL ROAS, ES LO QUE PASA DE UN PRODUCTO A OTRO
+// (21-oct-2026). El plan comparaba el ROAS que necesita el producto contra el
+// que ML entregó en la cuenta: 2,37 de mediana, medido en productos de $3.392 a
+// $4.990. Pero el ROAS lleva el precio adentro (venta / gasto), así que a la
+// manguera de $13.990 le exigía lo mismo que a una brocha de $4.000 y la mandaba
+// a "orgánico" con un empate de 3,6x. Lo que se repite entre productos es lo
+// que cuesta cada venta por anuncio ($1.100-1.900 casi sin importar el precio,
+// medido el 28-sep): a ese costo la manguera daría ~9x. Ahora se compara lo que
+// una venta AGUANTA de publicidad contra lo que cuesta una venta por anuncio en
+// la cuenta. Fuera del rango de precios medido la conversión puede ser otra
+// —una manguera de $13.990 no convierte como una brocha de $4.000—, así que el
+// plan es una prueba chica que mide la suya.
+const FUERA_DEBAJO = 0.6
+const FUERA_ENCIMA = 1.6
+const plata = (x) => `${x < 0 ? '−' : ''}$${Math.abs(Math.round(x)).toLocaleString('es-CL')}`
+
+// Pura. Cuánto cuesta una venta por anuncio en la cuenta (cuantiles de los
+// anuncios con muestra) y en qué rango de precios se midió.
+export function referenciaCosto(porProducto) {
+  const con = (porProducto ?? []).filter((x) => x.unidadesAds >= MIN_UNIDADES_PRODUCTO && Number.isFinite(x.costoPorVenta))
+  if (!con.length) return null
+  const costos = con.map((x) => x.costoPorVenta)
+  const precios = con.map((x) => x.precioPorVenta).filter(Number.isFinite)
+  return {
+    mediana: Math.round(cuantil(costos, 0.5)), p25: Math.round(cuantil(costos, 0.25)), p75: Math.round(cuantil(costos, 0.75)),
+    min: Math.round(cuantil(costos, 0)), max: Math.round(cuantil(costos, 1)),
+    precioDesde: precios.length ? Math.round(Math.min(...precios)) : null,
+    precioHasta: precios.length ? Math.round(Math.max(...precios)) : null,
+  }
+}
+
+// Pura. ¿El precio queda lejos de los productos donde se midió el costo por venta?
+export function fueraDelRangoMedido(precio, ref) {
+  if (!Number.isFinite(precio) || !(ref?.precioDesde > 0) || !(ref?.precioHasta > 0)) return false
+  return precio < ref.precioDesde * FUERA_DEBAJO || precio > ref.precioHasta * FUERA_ENCIMA
 }
 
 // Pura. El plan de publicidad de un producto que todavía no se anuncia.
@@ -98,38 +135,55 @@ export function planPublicidad({ precio, costoUnitario = null, comisionPct = nul
   const envioOrigen = Number.isFinite(envioConocido) ? 'medido' : Number.isFinite(envioTarifa) ? 'tarifa ajustada' : 'sin dato'
   const queda = precio - comision - (envio ?? 0)
   const costo = Number.isFinite(costoUnitario) ? costoUnitario : null
-  // lo que el producto puede costar para que una venta por anuncio empate,
-  // con el ROAS que ML suele entregar
-  const costoMaximo = Math.round(queda - precio / p.roas.mediana)
+  // lo que cuesta una venta por anuncio en la cuenta; sin esa medida, lo que
+  // implica el ROAS a este precio (la regla anterior)
+  const ref = p.costoPorVenta?.mediana ? p.costoPorVenta : null
+  const tipico = ref?.mediana ?? Math.round(precio / p.roas.mediana)
+  const barato = ref ? (ref.p25 ?? ref.min ?? ref.mediana) : Math.round(precio / (p.roas.p75 ?? p.roas.mediana))
+  const fuera = fueraDelRangoMedido(precio, ref)
+  const medidoEn = ref?.precioDesde ? `productos de ${plata(ref.precioDesde)}-${plata(ref.precioHasta)}` : 'tus anuncios'
+  // lo que el producto puede costar para que una venta por anuncio típica empate
+  const costoMaximo = Math.round(queda - tipico)
+  // lo que una venta aguanta de publicidad, y con 20% de aire lo que se le
+  // deja pagar a ML; el ROAS objetivo de la campaña es ese mismo número
   const contribucion = costo != null ? queda - costo : null
-  const roasEquilibrio = contribucion != null ? (contribucion > 0 ? r2(precio / contribucion) : null) : null
+  const roasEquilibrio = contribucion > 0 ? r2(precio / contribucion) : null
+  const costoObjetivo = contribucion > 0 ? Math.round(contribucion / MARGEN_SOBRE_EQUILIBRIO) : null
   const roasObjetivo = roasEquilibrio != null ? Math.ceil(roasEquilibrio * MARGEN_SOBRE_EQUILIBRIO * 10) / 10 : null
   let veredicto, texto
   if (costo == null) {
     veredicto = costoMaximo <= 0 ? 'solo-organico' : 'depende-del-costo'
     texto = costoMaximo <= 0
-      ? `Aunque el producto fuera gratis, con el ROAS que entrega ML (${p.roas.mediana}x) cada venta por anuncio pierde`
-      : `Conviene anunciar solo si el producto puesto en bodega cuesta menos de $${costoMaximo.toLocaleString('es-CL')}`
+      ? `Aunque el producto fuera gratis, una venta por anuncio (~${plata(tipico)} en tu cuenta) se come lo que deja`
+      : `Conviene anunciar solo si el producto puesto en bodega cuesta menos de ${plata(costoMaximo)}`
   } else if (contribucion <= 0) {
     veredicto = 'no-cierra'; texto = 'No deja plata ni sin publicidad: revisar precio o costo'
-  } else if (roasObjetivo <= p.roas.mediana) {
-    veredicto = 'anunciar'; texto = `Anunciar con ROAS objetivo ${roasObjetivo}x: ML lo entrega normalmente (mediana ${p.roas.mediana}x)`
-  } else if (roasObjetivo <= (p.roas.p75 ?? p.roas.mediana)) {
-    veredicto = 'anunciar-con-cuidado'; texto = `Necesita ROAS ${roasObjetivo}x: se ha logrado, pero con menos volumen`
+  } else if (costoObjetivo < barato) {
+    veredicto = 'solo-organico'
+    texto = `Cada venta aguanta ${plata(contribucion)} de publicidad y en tu cuenta hasta las ventas por anuncio más baratas cuestan ~${plata(barato)}: vender orgánico`
+  } else if (fuera) {
+    veredicto = 'probar'
+    texto = `Cada venta aguanta ${plata(contribucion)} de publicidad y en tu cuenta una venta por anuncio cuesta ~${plata(tipico)}, pero eso se midió en ${medidoEn}: a ${plata(precio)} la conversión puede ser otra. Prueba 14 días con ROAS objetivo ${roasObjetivo}x y mide la suya`
+  } else if (costoObjetivo >= tipico) {
+    veredicto = 'anunciar'
+    texto = `Anunciar con ROAS objetivo ${roasObjetivo}x: cada venta aguanta ${plata(contribucion)} de publicidad y en tu cuenta una venta por anuncio cuesta ~${plata(tipico)}`
   } else {
-    veredicto = 'solo-organico'; texto = `Necesitaría ROAS ${roasObjetivo}x y ML no ha sostenido más de ${p.roas.p75 ?? p.roas.mediana}x: vender orgánico`
+    veredicto = 'anunciar-con-cuidado'
+    texto = `Necesita ventas por anuncio de hasta ${plata(costoObjetivo)}: las más baratas de la cuenta (~${plata(barato)}) lo logran, la típica (~${plata(tipico)}) no; habrá menos volumen`
   }
-  // presupuesto: lo que cuesta la venta por anuncio al objetivo, por las
-  // ventas por día que un anuncio suele traer, redondeado a $500
-  const roasParaPresupuesto = roasObjetivo ?? p.roas.mediana
-  const costoPorVenta = Math.round(precio / roasParaPresupuesto)
-  const presupuestoDiario = ['anunciar', 'anunciar-con-cuidado', 'depende-del-costo'].includes(veredicto)
+  // presupuesto: lo que ML puede pagar por venta (la prueba, lo típico de la
+  // cuenta) por las ventas por día que un anuncio suele traer, a $500
+  const costoPorVenta = veredicto === 'probar' || costoObjetivo == null ? tipico : costoObjetivo
+  const presupuestoDiario = ['anunciar', 'anunciar-con-cuidado', 'probar', 'depende-del-costo'].includes(veredicto)
     ? Math.max(1000, Math.ceil((costoPorVenta * Math.max(1, p.ventasAdsPorDia ?? 1)) / 500) * 500) : 0
   return {
     precio, comision, envio, envioOrigen, quedaTrasMl: queda, costoUnitario: costo, costoMaximo,
     roasEquilibrio, roasObjetivo, costoPorVentaEsperado: costoPorVenta,
+    aguantaPorVenta: contribucion != null ? Math.round(contribucion) : null, costoObjetivo,
+    referencia: ref ? { mediana: ref.mediana, barato, precioDesde: ref.precioDesde ?? null, precioHasta: ref.precioHasta ?? null } : null,
+    fueraDelRangoMedido: fuera,
     presupuestoDiario, presupuestoPrueba14Dias: presupuestoDiario * 14,
-    gananciaPorVentaAds: contribucion != null ? Math.round(contribucion - costoPorVenta) : null,
+    gananciaPorVentaAds: contribucion != null ? Math.round(contribucion - tipico) : null,
     veredicto, texto, confianza: p.confianza, aprendidoDe: p.productosConMuestra,
   }
 }
@@ -232,7 +286,14 @@ let cache = null
 export async function parametrosPublicidad() {
   if (cache && Date.now() - cache.en < 30 * 60e3) return cache.valor
   const ultimo = await AprendizajePublicidad.findOne().sort({ dia: -1 }).lean()
-  cache = { en: Date.now(), valor: ultimo ? { ...ultimo.parametros, dia: ultimo.dia } : null }
+  const valor = ultimo ? { ...ultimo.parametros, dia: ultimo.dia } : null
+  // los guardados antes del 21-oct-2026 no traen los cuantiles ni el rango de
+  // precios: salen de los mismos anuncios guardados en el día
+  if (valor && valor.costoPorVenta?.p25 == null) {
+    const ref = referenciaCosto(ultimo.porProducto)
+    if (ref) valor.costoPorVenta = { ...valor.costoPorVenta, ...ref }
+  }
+  cache = { en: Date.now(), valor }
   return cache.valor
 }
 

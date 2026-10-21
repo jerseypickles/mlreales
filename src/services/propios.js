@@ -8,6 +8,10 @@ import { reviewsOficialesSeguro, itemOficialSeguro, visitasConVentanaSeguro, pre
 import { promocionesDeItem } from './promociones.js'
 import { sincronizarOrdenes } from './ventasMl.js'
 import { diaChile } from './inventarioFull.js'
+import { dimensionesDeItem } from './envioFull.js'
+
+// { largoCm, anchoCm, altoCm, gramos } → "LxAxH,g", el formato de shipping.dimensions
+const comoTextoDimensiones = (d) => (d ? `${d.largoCm}x${d.anchoCm}x${d.altoCm},${d.gramos}` : null)
 
 const MAX_MEDICIONES = 180 // con el ciclo de 45 min son ~6 días; la serie larga es stockDiario
 const MAX_STOCK_DIARIO = 120 // un registro por día
@@ -237,8 +241,10 @@ export async function escanearPropios({ soloOficial = false } = {}) {
         flex: (oficial.tags ?? []).includes('self_service_in') || logistica === 'self_service',
         envioGratis: oficial.shipping.free_shipping === true,
         // dimensiones declaradas ("30x20x10,500"): con ellas el costo de envío
-        // Full se consulta exacto; sin ellas se usa la caja chica por defecto
-        dimensiones: oficial.shipping.dimensions ?? null,
+        // Full se consulta exacto; sin ellas se usa la caja chica por defecto.
+        // Los items de producto de usuario las traen solo como atributos
+        // SELLER_PACKAGE_* (la manguera: 20x10x20 y 1 kg, no la caja de 300 g)
+        dimensiones: oficial.shipping.dimensions ?? comoTextoDimensiones(dimensionesDeItem(oficial)),
         tipoPublicacion: oficial.listing_type_id ?? null,
         fecha,
       }

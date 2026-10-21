@@ -18,6 +18,11 @@ const productoPropioSchema = new mongoose.Schema({
   buyBox: { type: mongoose.Schema.Types.Mixed, default: null },
   // nicho del tablero contra el que se compara este producto (auditoría de listing)
   nichoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Nicho', default: null },
+  // SU GAMA DENTRO DEL NICHO (services/gama.js): no todo el nicho es su
+  // competencia. { desde, hasta, agregadas: [sku], sacadas: [sku], actualizadoEl }
+  // — sin rango propio va de 0,7× a 1,6× su precio; lo que el importador suma
+  // o saca a mano manda sobre el precio.
+  gama: { type: mongoose.Schema.Types.Mixed, default: null },
   // cómo aparece en el ranking de más vendidos de ML, que no usa el id de la
   // publicación sino el del producto de usuario (MLCU…) o el de catálogo, y su
   // puesto diario (services/demandaActualMl.js, 8-oct-2026)

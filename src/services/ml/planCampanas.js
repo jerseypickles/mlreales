@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 import { AdsDiaMl } from '../../models/AdsDiaMl.js'
+import { fueraDelRangoMedido } from './publicidad.js'
 
 // "COMIENZA CON ESTO Y VAMOS ANALIZANDO". El plan de campaña del learning machine.
 //
@@ -74,7 +75,35 @@ export function planDeArranque(eco, p) {
   }
   // a un decimal y hacia arriba: así se escribe en ML
   const roasObjetivo = Math.ceil(Math.max(p.roas.mediana * 0.9, eco.roasEmpate * MARGEN_OBJETIVO) * 10) / 10
-  // ML no ha sostenido volumen sobre su p75: pedirle más es pagar y no vender
+  // CON EL COSTO POR VENTA MEDIDO, ESE MANDA Y NO EL ROAS (21-oct-2026, ver
+  // planPublicidad): el ROAS de la cuenta se midió en productos de ~$4.000 y a
+  // un producto de $13.990 le exigía lo mismo que a una brocha
+  const ref = p.costoPorVenta?.mediana ? p.costoPorVenta : null
+  if (ref) {
+    const costoObjetivo = eco.precio / roasObjetivo
+    const barato = ref.p25 ?? ref.min ?? ref.mediana
+    if (costoObjetivo < barato) {
+      return { accion: 'organico', fase: 'arranque', budgetDiario: 0, roasObjetivo: r2(roasObjetivo),
+        texto: `Vender orgánico primero: una venta puede pagarle a ML hasta ${plata(costoObjetivo)} y en tu cuenta hasta las ventas por anuncio más baratas cuestan ~${plata(barato)}. Si en 2 semanas no vende solo, prueba chica de $1.000/día con ROAS ${r2(roasObjetivo)}x.` }
+    }
+    const base = redondear500(ref.mediana * Math.max(1, p.ventasAdsPorDia ?? 1))
+    if (fueraDelRangoMedido(eco.precio, ref)) {
+      // a otro precio la conversión es otra: una prueba chica la mide antes de escalar
+      return { accion: 'arrancar-con-cuidado', prueba: true, fase: 'arranque', budgetDiario: base, roasObjetivo: r2(roasObjetivo),
+        niveles: { semana1: base, semana2: base },
+        texto: `Prueba 14 días con ${plata(base)}/día y ROAS objetivo ${r2(roasObjetivo)}x, en su propia campaña. Cada venta deja ${plata(eco.deja)}${eco.esTecho ? ' antes del costo del producto' : ''} y en tu cuenta una venta por anuncio cuesta ~${plata(ref.mediana)}, `
+          + `pero eso se midió en productos de ${plata(ref.precioDesde)}-${plata(ref.precioHasta)}: a ${plata(eco.precio)} la conversión puede ser otra. Con su costo por venta medido se decide si sube.` }
+    }
+    return {
+      accion: costoObjetivo < ref.mediana ? 'arrancar-con-cuidado' : 'arrancar',
+      fase: 'arranque', budgetDiario: base, roasObjetivo: r2(roasObjetivo),
+      niveles: { semana1: base, semana2: base * 2 },
+      texto: `Comienza con ${plata(base)}/día y ROAS objetivo ${r2(roasObjetivo)}x, en su propia campaña. Semana 2: sube a ${plata(base * 2)}/día para medir si más gasto deja más plata. `
+        + `Cada venta deja ${plata(eco.deja)}${eco.esTecho ? ' antes del costo del producto' : ''} y en tu cuenta una venta por anuncio cuesta ~${plata(ref.mediana)}.`,
+    }
+  }
+  // sin el costo por venta medido, la regla por ROAS: ML no ha sostenido
+  // volumen sobre su p75 y pedirle más es pagar y no vender
   const alcanzable = p.roas.p75 ?? p.roas.mediana
   if (roasObjetivo > alcanzable * 1.3) {
     return { accion: 'organico', fase: 'arranque', budgetDiario: 0, roasObjetivo: r2(roasObjetivo),

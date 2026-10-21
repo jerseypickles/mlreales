@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { aprenderDeAnuncios, planPublicidad } from '../src/services/ml/publicidad.js'
+import { aprenderDeAnuncios, planPublicidad, referenciaCosto, fueraDelRangoMedido } from '../src/services/ml/publicidad.js'
 
 // los anuncios reales al 28-sep-2026 (acumulado), redondeados
 const FILAS = [
@@ -141,4 +141,33 @@ test('curvaTicket: el valle cubre los precios entre puntos hasta que vuelve al 4
   const t = curvaTicket(m, [9990, 19990, 24990], (p) => (p >= 19990 ? 3064 : 1004))
   assert.deepEqual(t.valles, [{ desde: 19990, hasta: 24989 }])
   assert.equal(dejaAPrecio({ ...t, medido: m }, 22990).enValle, true)
+})
+
+test('referenciaCosto: lo que cuesta una venta por anuncio y en qué precios se midió', () => {
+  const { porProducto, parametros } = aprenderDeAnuncios(FILAS, ENVIO)
+  const ref = referenciaCosto(porProducto)
+  assert.equal(ref.mediana, parametros.costoPorVenta.mediana)
+  assert.ok(ref.p25 < ref.mediana && ref.mediana < ref.p75)
+  assert.equal(ref.precioDesde, Math.round(92242 / 31)) // el Set 10, el más barato con muestra
+  assert.equal(ref.precioHasta, Math.round(100047 / 14)) // la lámpara
+  assert.equal(referenciaCosto([]), null)
+})
+
+test('planPublicidad: a otro precio manda lo que aguanta la venta, no el ROAS de las brochas (la manguera)', () => {
+  // la manguera de $13.990 con costo de $6.772: el plan por ROAS la mandaba a orgánico
+  const { parametros: p } = aprenderDeAnuncios(FILAS, ENVIO)
+  const manguera = { precio: 13990, costoUnitario: 6772, comisionPct: 15, envioTarifa: 1000 }
+  const plan = planPublicidad(manguera, p)
+  assert.equal(plan.veredicto, 'probar')
+  assert.equal(plan.fueraDelRangoMedido, true)
+  assert.ok(plan.aguantaPorVenta > p.costoPorVenta.mediana, 'aguanta más que una venta típica de la cuenta')
+  assert.equal(plan.costoPorVentaEsperado, p.costoPorVenta.mediana, 'la prueba se presupuesta con lo típico')
+  assert.ok(plan.presupuestoDiario >= 1000 && plan.presupuestoDiario <= 2500)
+  assert.ok(plan.roasObjetivo > plan.roasEquilibrio)
+  // con los parámetros viejos (sin costo por venta medido) queda la regla por ROAS
+  assert.equal(planPublicidad(manguera, { ...p, costoPorVenta: null }).veredicto, 'solo-organico')
+  // dentro del rango medido no hay prueba: se anuncia o no
+  assert.equal(planPublicidad({ precio: 4990, costoUnitario: 900, comisionPct: 15, envioConocido: 900 }, p).veredicto, 'anunciar')
+  assert.equal(fueraDelRangoMedido(5000, p.costoPorVenta), false)
+  assert.equal(fueraDelRangoMedido(5000, null), false)
 })

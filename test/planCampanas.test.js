@@ -383,3 +383,21 @@ test('evaluarRecomendaciones: los días de evento salen de la ventana, la ventan
   assert.equal(e2.evaluadas, 0)
   assert.equal(e2.sinEvaluarPorEvento, 1)
 })
+
+test('planDeArranque con costo por venta medido: la manguera va a prueba, no a orgánico; lo barato sigue orgánico', () => {
+  // medido en la cuenta al 21-oct-2026: $1.488 la venta por anuncio, en productos de $3.392-4.990
+  const P2 = { ...P, costoPorVenta: { mediana: 1488, p25: 1105, precioDesde: 3392, precioHasta: 4990 } }
+  const eco = economiaVenta({ precio: 13990, envio: 1000, costo: 6772 })
+  assert.equal(planDeArranque(eco, P).accion, 'organico', 'con la regla por ROAS')
+  const manguera = planDeArranque(eco, P2)
+  assert.equal(manguera.accion, 'arrancar-con-cuidado')
+  assert.equal(manguera.prueba, true)
+  assert.equal(manguera.budgetDiario, 1500)
+  assert.equal(manguera.niveles.semana2, manguera.niveles.semana1, 'la prueba no dobla: primero se mide')
+  assert.ok(manguera.roasObjetivo >= eco.roasEmpate)
+  const barato = planDeArranque(economiaVenta({ precio: 3990, envio: 800, costo: 1200 }), P2)
+  assert.equal(barato.accion, 'organico')
+  const sano = planDeArranque(economiaVenta({ precio: 4990, envio: 800, costo: 1000 }), P2)
+  assert.equal(sano.accion, 'arrancar')
+  assert.equal(sano.prueba, undefined)
+})
