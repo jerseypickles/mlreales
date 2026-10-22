@@ -34,6 +34,7 @@ export async function importarMisItems() {
   }
   let importados = 0
   let yaSeguidos = 0
+  let finalizados = 0
   for (const sku of ids) {
     if (await ProductoPropio.exists({ sku })) {
       yaSeguidos++
@@ -44,6 +45,14 @@ export async function importarMisItems() {
       det = await meliGet(`/items/${sku}`)
     } catch (err) {
       console.warn(`[meli] detalle de ${sku} no disponible al importar: ${err.message}`)
+    }
+    // Una publicación finalizada no se importa. /items/search también entrega
+    // las cerradas, y al republicar con otro título la vieja se cierra: el
+    // 22-oct volvieron seis así ("Foco Solar Calle 100w", "Set 12 Brochas…")
+    // y el importador las veía en Mis productos como si estuvieran a la venta.
+    if (det?.status === 'closed') {
+      finalizados++
+      continue
     }
     const userProductId = det?.user_product_id ?? null
     if (userProductId) {
@@ -67,7 +76,7 @@ export async function importarMisItems() {
     })
     importados++
   }
-  return { total: ids.length, importados, yaSeguidos }
+  return { total: ids.length, importados, yaSeguidos, finalizados }
 }
 
 // EL COSTO LLEGA CON EL PRODUCTO (30-sep-2026). Los productos nuevos traen
