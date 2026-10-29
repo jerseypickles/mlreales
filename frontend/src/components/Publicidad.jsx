@@ -3,6 +3,7 @@ import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
 import { PauseCircle, Split, PlusCircle, TrendingUp, TrendingDown, Target, Layers, Hourglass, Megaphone, CheckCircle2, XCircle, CircleDot, MousePointerClick } from 'lucide-react'
 import { fmtPrecio } from '../lib/formato.js'
+import MesaPublicidad from './MesaPublicidad.jsx'
 
 // PUBLICIDAD EN CUATRO PESTAÑAS (30-sep-2026). El importador pidió, tras un
 // primer rediseño demasiado escueto: vista por campaña, gráficos en el tiempo,
@@ -35,6 +36,7 @@ const ACCION = {
   organico: { t: 'solo orgánico', c: 'mal' }, 'no-anunciar': { t: 'no anunciar', c: 'mal' },
   esperar: { t: 'esperar', c: 'neutro' }, mantener: { t: 'mantener', c: 'bien' }, subir: { t: 'subir', c: 'bien' },
   'subir-roas': { t: 'subir ROAS', c: 'medio' }, bajar: { t: 'bajar', c: 'medio' }, apagar: { t: 'apagar', c: 'mal' },
+  'no-disponible': { t: 'no disponible', c: 'neutro' }, 'completar-economia': { t: 'completar costos', c: 'medio' }, 'reponer-stock': { t: 'revisar stock', c: 'medio' },
   'revisar-anuncio': { t: 'revisar anuncio', c: 'medio' },
   apagada: { t: 'sin anuncio', c: 'neutro' }, 'sin-stock': { t: 'sin stock', c: 'neutro' }, 'sin-economia': { t: 'sin precio', c: 'neutro' }, 'sin-datos': { t: 'sin datos', c: 'neutro' },
 }
@@ -60,12 +62,15 @@ const FASE = { arranque: 'antes de anunciar', 'semana-1': 'prueba · semana 1', 
 function dejaron(ventaAds, unidadesAds, eco) {
   if (!eco || !(unidadesAds > 0)) return 0
   const venta = ventaAds > 0 ? ventaAds : eco.precio * unidadesAds
-  return venta * (1 - (eco.comisionPct ?? 17) / 100) - unidadesAds * ((eco.envio ?? 800) + (eco.costo ?? 0))
+  return venta * (1 - (eco.comisionPct ?? 17) / 100) - unidadesAds * ((eco.envio ?? 800) + (eco.costo ?? 0) + (eco.cargoFijo ?? 0))
 }
 
 // ¿DEBERÍA TENER CAMPAÑA? El veredicto del estudio por producto, armado con
 // lo que ya decidió el plan (acción y estructura) y la economía de su precio.
 function veredictoCampana(p, acciones, ticket) {
+  if (p.disponibilidad && !p.disponibilidad.disponible) return { tipo: 'pausado', titulo: p.disponibilidad.motivo, razones: [p.texto] }
+  if (p.accion === 'completar-economia') return { tipo: 'pendiente', titulo: 'Completar la economía antes de decidir', razones: [p.texto] }
+  if (p.accion === 'reponer-stock') return { tipo: 'pendiente', titulo: 'Revisar stock antes de aumentar', razones: [p.texto] }
   const suyas = acciones.filter((a) => a.itemId === p.itemId || a.itemIds?.includes(p.itemId))
   const razones = []
   const deja = p.economia?.deja
@@ -74,13 +79,13 @@ function veredictoCampana(p, acciones, ticket) {
   const m = p.metricas ?? {}
   if (m.resultado30 != null) razones.push(`En 30 días la publicidad dejó ${conSigno(m.resultado30)}.`)
   else if (m.resultado7 != null) razones.push(`En los últimos 7 días dejó ${conSigno(m.resultado7)} con ROAS ${x(m.roas7)}.`)
-  if (p.accion === 'apagada') return { tipo: 'pausado', titulo: 'Hoy no tiene anuncio (sin stock o pausado)', razones: [...razones, 'Sin gasto en la última semana. Cuando vuelva el stock, el learning machine lo revisa de nuevo.'] }
+  if (p.accion === 'apagada') return { tipo: 'pausado', titulo: 'Publicidad pausada o sin gasto reciente', razones: [...razones, p.texto] }
   if (suyas.some((a) => a.tipo === 'pausar-anuncio') || ['apagar', 'organico', 'no-anunciar'].includes(p.accion)) {
     return { tipo: 'no', titulo: 'No: que venda orgánico', razones }
   }
   if (suyas.some((a) => ['separar', 'campana-propia', 'crear'].includes(a.tipo))) {
     const a = suyas.find((y) => ['separar', 'campana-propia', 'crear'].includes(y.tipo))
-    return { tipo: 'propia', titulo: `Sí: campaña propia${p.budgetDiario ? ` de ${fmtPrecio(p.budgetDiario)}/día` : ''}`, razones: [...razones, a.tipo === 'separar' ? 'Es el que más budget merece: la campaña actual debería quedar solo para él.' : 'Mezclado con otros, ML le reparte el gasto a su criterio y no se puede medir.'] }
+    return { tipo: 'propia', titulo: a.itemIds?.length > 1 ? `Propuesta compartida de ${fmtPrecio(a.budgetDiario)}/día` : `Sí: campaña propia${p.budgetDiario ? ` de ${fmtPrecio(p.budgetDiario)}/día` : ''}`, razones: [...razones, a.texto] }
   }
   if (suyas.some((a) => a.tipo === 'agrupar-chicos')) {
     const a = suyas.find((y) => y.tipo === 'agrupar-chicos')
@@ -271,6 +276,8 @@ function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
         const g = gastoHoy.get(c.id) ?? 0
         const acciones = (plan?.estructura?.acciones ?? []).filter((a) => a.campana === c.nombre)
         const activa = c.estado === 'active'
+        const salud = plan?.cartera?.campanas.find(x => x.id === c.id)
+        const avisos = plan?.cartera?.alertas.filter(x => x.campanaId === c.id) ?? []
         return (
           <section key={c.id} className={`pub-campana${activa ? '' : ' pausada'}`}>
             <header>
@@ -279,10 +286,11 @@ function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
                 <small>{productos.length} {productos.length === 1 ? 'producto' : 'productos'}{productos.length > 1 && activa ? ' mezclados: ML reparte el gasto entre ellos a su criterio' : ''}</small>
               </div>
               <div className="pub-diales">
-                <div><span>budget</span><strong>{fmtPrecio(c.presupuestoDiario ?? 0)}/día</strong></div>
+                <div><span>presupuesto</span><strong>{fmtPrecio(c.presupuestoDiario ?? 0)}/día</strong></div>
                 <div><span>ROAS objetivo → real</span><strong>{x(c.roasObjetivo)} → <b className={roasReal != null && c.roasObjetivo && roasReal >= c.roasObjetivo ? 'bien' : 'mal'}>{x(roasReal)}</b></strong></div>
               </div>
             </header>
+            {salud ? <div className={`pub-campana-stock${salud.atencion ? ' alerta' : ''}`}><strong>{salud.aptos} anuncios disponibles · {salud.bloqueados} detenidos o por revisar</strong>{avisos.map((a, i) => <p key={i}>{a.texto}</p>)}</div> : null}
             {activa ? (
               <div className="pub-hoy" title="Lo gastado hoy contra el presupuesto diario">
                 <div className="pub-hoy-barra"><i style={{ width: `${Math.min(100, (g / Math.max(1, c.presupuestoDiario ?? 1)) * 100)}%` }} /></div>
@@ -300,13 +308,13 @@ function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
                 {productos.map(([id, a]) => {
                   const p = planDe.get(id)
                   const s = serie?.porProducto?.[id]?.slice(-30) ?? []
-                  const ac = ACCION[p?.accion] ?? { t: a.estado === 'hold' ? 'sin stock' : '—', c: 'neutro' }
+                  const ac = ACCION[p?.accion] ?? { t: a.estado === 'hold' ? 'detenido por ML' : '—', c: 'neutro' }
                   const eco = ecoDe.get(id)
                   const plata30 = s.reduce((acc, d) => acc + dejaron(d.ventaAds, d.unidadesAds, eco) - d.gasto, 0)
                   return (
                     <button type="button" key={id} className="pub-mini" onClick={() => onProducto(id)}>
                       {fotos.get(id) ? <img src={fotos.get(id)} alt="" width="40" height="40" loading="lazy" /> : <span className="pub-foto-vacia" />}
-                      <span className="pub-mini-nombre">{nombreCorto(a.titulo ?? p?.titulo)}</span>
+                      <span className="pub-mini-nombre">{nombreCorto(a.titulo ?? p?.titulo)}<small>{p?.disponibilidad ? `${p.disponibilidad.stock ?? '—'} u · ${p.disponibilidad.motivo}` : 'Stock por verificar'}</small></span>
                       <Sparkline valores={s.map((d) => d.gasto)} />
                       <span className="pub-mini-pie"><em className={`pub-accion ${ac.c}`}>{ac.t}</em><b className={plata30 >= 0 ? 'bien' : 'mal'}>{eco ? conSigno(plata30) : '—'}</b></span>
                     </button>
@@ -419,28 +427,32 @@ function Productos({ plan, datos, aprendido, serie, fotos, sel, onSel }) {
     return { precio, pctConAds: Math.round((conAds / precio) * 100) }
   }
   const actual = productos.find((p) => p.itemId === sel) ?? productos[0]
+  const grupos = plan?.cartera?.grupos ?? productos.map(p => ({ id: p.itemId, titulo: p.titulo, miembros: [p] }))
+  const grupoActual = grupos.find(g => g.miembros.some(p => p.itemId === actual?.itemId))
   if (!actual) return <p className="pub-vacio">Sin productos propios.</p>
   const veredictos = new Map(productos.map((p) => [p.itemId, veredictoCampana(p, acciones, ticketDe(p.precio))]))
-  const ETIQUETA = { propia: 'campaña propia', agrupada: 'campaña agrupada', no: 'sin campaña', ya: 'con campaña', pausado: 'sin stock / pausado' }
+  const ETIQUETA = { propia: 'campaña propia', agrupada: 'campaña agrupada', no: 'sin campaña', ya: 'con campaña', pausado: 'pausado / no disponible', pendiente: 'por revisar' }
   return (
     <div className="pub-productos-vista">
       <nav className="pub-lista" aria-label="Productos">
-        {productos.map((p) => {
+        {grupos.map((g) => {
+          const p = g.miembros.find(p => p.itemId === actual.itemId) ?? g.miembros[0]
           const a = ACCION[p.accion] ?? { t: p.accion, c: 'neutro' }
           const v = veredictos.get(p.itemId)
           return (
             <button key={p.itemId} type="button" className={p.itemId === actual.itemId ? 'activo' : ''} onClick={() => onSel(p.itemId)}>
               {fotos.get(p.itemId) ? <img src={fotos.get(p.itemId)} alt="" width="40" height="40" loading="lazy" /> : <span className="pub-foto-vacia" />}
               <span>
-                <strong>{nombreCorto(p.titulo)}</strong>
-                <small><em className={`pub-accion ${a.c}`}>{a.t}</em> <i className={`pub-v ${v.tipo}`}>{ETIQUETA[v.tipo]}</i></small>
+                <strong>{g.titulo}</strong>
+                <small>{g.miembros.length > 1 ? `${g.miembros.length} variantes · ` : ''}<em className={`pub-accion ${a.c}`}>{a.t}</em> <i className={`pub-v ${v.tipo}`}>{ETIQUETA[v.tipo]}</i></small>
               </span>
             </button>
           )
         })}
       </nav>
-      <Estudio p={actual} ad={datos.economia?.[actual.itemId] ? { ...datos.economia[actual.itemId], metricas: datos.porItem?.[actual.itemId]?.metricas } : null}
-        efecto={efectoDe.get(actual.itemId)} serie={serie?.porProducto?.[actual.itemId]} veredicto={veredictos.get(actual.itemId)} ticket={ticketDe(actual.precio)} />
+      <div className="pub-estudio-con-variantes">{grupoActual?.miembros.length > 1 ? <nav className="pub-variantes-selector" aria-label="Variante del producto">{grupoActual.miembros.map(p => <button key={p.itemId} aria-pressed={p.itemId === actual.itemId} onClick={() => onSel(p.itemId)}>{p.familia?.variante ?? p.titulo}<small>{p.disponibilidad?.stock ?? '—'} u</small></button>)}</nav> : null}
+      <Estudio p={actual} ad={{ ...datos.economia?.[actual.itemId], foto: fotos.get(actual.itemId), metricas: datos.porItem?.[actual.itemId]?.metricas }}
+        efecto={efectoDe.get(actual.itemId)} serie={serie?.porProducto?.[actual.itemId]} veredicto={veredictos.get(actual.itemId)} ticket={ticketDe(actual.precio)} /></div>
     </div>
   )
 }
@@ -631,22 +643,25 @@ function FormasCampana({ formas }) {
 }
 
 // ── la página ────────────────────────────────────────────────────────────────
-const PESTANAS = [['resumen', 'Resumen'], ['campanas', 'Campañas'], ['productos', 'Productos'], ['lm', 'Learning machine']]
+const PESTANAS = [['plan', 'Plan de inicio'], ['resumen', 'Resultados'], ['campanas', 'Campañas'], ['productos', 'Productos'], ['lm', 'Learning machine']]
 
 export function Publicidad() {
   const [datos, setDatos] = useState(null)
   const [hoy, setHoy] = useState(null)
   const [plan, setPlan] = useState(null)
+  const [errorPlan, setErrorPlan] = useState(null)
+  const [cargandoPlan, setCargandoPlan] = useState(true)
   const [aprendido, setAprendido] = useState(null)
   const [serie, setSerie] = useState(null)
+  const [errorSerie, setErrorSerie] = useState(null)
   const [error, setError] = useState(null)
   const [dias, setDias] = useState(30)
   const [cargando, setCargando] = useState(false)
-  const [pestana, setPestana] = useState(() => { try { return localStorage.getItem('pub-pestana') || 'resumen' } catch { return 'resumen' } })
+  const [pestana, setPestana] = useState(() => { try { return localStorage.getItem('pub-pestana-v2') || 'plan' } catch { return 'plan' } })
   const [sel, setSel] = useState(null)
   const [, setTic] = useState(0)
 
-  const ir = (p) => { setPestana(p); try { localStorage.setItem('pub-pestana', p) } catch { /* sin almacenamiento */ } }
+  const ir = (p) => { setPestana(p); try { localStorage.setItem('pub-pestana-v2', p) } catch { /* sin almacenamiento */ } }
   const traer = useCallback((forzar = false) => {
     setCargando(true)
     return Promise.all([api.ads(dias, forzar), api.ads(1, forzar).catch(() => null)])
@@ -654,11 +669,17 @@ export function Publicidad() {
       .catch((e) => setError(e.message)).finally(() => setCargando(false))
   }, [dias])
   useEffect(() => { traer() }, [traer])
-  useEffect(() => {
-    api.aprendizajeCampanas().then(setPlan).catch(() => setPlan(null))
-    api.aprendizajePublicidad().then(setAprendido).catch(() => setAprendido(null))
-    api.publicidadSerie(60).then(setSerie).catch(() => setSerie(null))
+  const traerPlan = useCallback(async () => {
+    setCargandoPlan(true)
+    const rs = await Promise.allSettled([api.aprendizajeCampanas(), api.aprendizajePublicidad(), api.publicidadSerie(60)])
+    if (rs[0].status === 'fulfilled') { setPlan(rs[0].value); setErrorPlan(null) }
+    else setErrorPlan(rs[0].reason.message)
+    if (rs[1].status === 'fulfilled') setAprendido(rs[1].value)
+    if (rs[2].status === 'fulfilled') { setSerie(rs[2].value); setErrorSerie(null) }
+    else setErrorSerie('No se pudo actualizar el historial diario; las propuestas siguen disponibles.')
+    setCargandoPlan(false)
   }, [])
+  useEffect(() => { traerPlan(); const id = setInterval(traerPlan, 300_000); return () => clearInterval(id) }, [traerPlan])
   useEffect(() => { const id = setInterval(() => traer(), 60_000); return () => clearInterval(id) }, [traer])
   useEffect(() => { const id = setInterval(() => setTic((t) => t + 1), 15_000); return () => clearInterval(id) }, [])
 
@@ -680,14 +701,14 @@ export function Publicidad() {
 
   if (error && !datos) return <main><p className="error-inline">{error}</p></main>
   if (!datos) return <Cargando texto="Leyendo campañas de Product Ads…" />
-  const fotos = new Map(Object.entries(datos.economia ?? {}).map(([id, f]) => [id, f.foto]))
+  const fotos = new Map([...Object.entries(datos.economia ?? {}).map(([id, f]) => [id, f.foto]), ...(plan?.productos ?? []).filter(p => p.foto).map(p => [p.itemId, p.foto])])
 
   return (
     <main className={`pub${cargando ? ' ads-refrescando' : ''}`}>
       <header className="pub-cabeza">
         <h2>Publicidad</h2>
         <div className="pub-controles">
-          <button type="button" className="pub-refrescar" onClick={() => traer(true)} disabled={cargando} title="Vuelve a preguntarle a ML">
+          <button type="button" className="pub-refrescar" onClick={() => { traer(true); traerPlan() }} disabled={cargando || cargandoPlan} title="Vuelve a preguntarle a ML">
             {cargando ? 'actualizando…' : haceCuanto(datos.refrescoEl) ?? 'actualizar'}
           </button>
           <div className="segmentado" role="group" aria-label="Período">
@@ -700,6 +721,9 @@ export function Publicidad() {
       </nav>
       {error ? <p className="ads-error-suave">No se pudo actualizar: {error}. Se muestra la última lectura.</p> : null}
 
+      {errorSerie ? <p className="ads-error-suave">{errorSerie}</p> : null}
+      {pestana === 'plan' ? <MesaPublicidad plan={plan} serie={serie} error={errorPlan} cargando={cargandoPlan} onReintentar={traerPlan} onCampanas={() => ir('campanas')} onProducto={(id) => { setSel(id); ir('productos') }} /> : null}
+      {pestana !== 'plan' && errorPlan ? <p className="ads-error-suave">No se pudo actualizar el plan: {errorPlan}</p> : null}
       {pestana === 'resumen' ? <Resumen datos={datos} plan={plan} serieTotal={serieTotal} fotos={fotos} onIr={ir} /> : null}
       {pestana === 'campanas' ? <Campanas datos={datos} hoy={hoy} plan={plan} serie={serie} fotos={fotos} ecoDe={ecoDe} onProducto={(id) => { setSel(id); ir('productos') }} /> : null}
       {pestana === 'productos' ? <Productos plan={plan} datos={datos} aprendido={aprendido} serie={serie} fotos={fotos} sel={sel} onSel={setSel} /> : null}

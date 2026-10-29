@@ -1,6 +1,9 @@
 import mongoose from 'mongoose'
 import { AdsDiaMl } from '../../models/AdsDiaMl.js'
 import { fueraDelRangoMedido } from './publicidad.js'
+import { economiaUnidad } from '../economiaUnidad.js'
+import { publicacionVigente } from '../../../frontend/src/lib/catalogoPropios.js'
+import { protegerPlanPublicidad, carteraCampanas } from './carteraCampanas.js'
 
 // "COMIENZA CON ESTO Y VAMOS ANALIZANDO". El plan de campaña del learning machine.
 //
@@ -48,11 +51,11 @@ export const RecomendacionAds = mongoose.models.RecomendacionAds ?? mongoose.mod
 
 // Pura. Lo que deja UNA venta antes de publicidad. Sin costo cargado es un
 // techo (mercadería gratis) y se dice.
-export function economiaVenta({ precio, comisionPct = 17, envio = 800, costo = null }) {
+export function economiaVenta({ precio, comisionPct = 17, comisionClp = null, envio = 800, costo = null }) {
   if (!Number.isFinite(precio) || precio <= 0) return null
-  const comision = Math.round(precio * (comisionPct / 100))
+  const comision = Number.isFinite(comisionClp) ? comisionClp : Math.round(precio * (comisionPct / 100))
   const deja = precio - comision - (Number.isFinite(envio) ? envio : 800) - (Number.isFinite(costo) ? costo : 0)
-  return { precio, comision, comisionPct, envio: Math.round(envio ?? 800), costo: Number.isFinite(costo) ? costo : null, deja: Math.round(deja), esTecho: !Number.isFinite(costo),
+  return { precio, comision, comisionPct, cargoFijo: Math.max(0, comision - Math.round(precio * comisionPct / 100)), envio: Math.round(envio ?? 800), costo: Number.isFinite(costo) ? costo : null, deja: Math.round(deja), esTecho: !Number.isFinite(costo),
     roasEmpate: deja > 0 ? r2(precio / deja) : null }
 }
 
@@ -62,7 +65,7 @@ export function economiaVenta({ precio, comisionPct = 17, envio = 800, costo = n
 export function dejaronDe(ventaAds, unidadesAds, eco) {
   if (!eco || !(unidadesAds > 0)) return 0
   const venta = ventaAds > 0 ? ventaAds : eco.precio * unidadesAds
-  return venta * (1 - (eco.comisionPct ?? 17) / 100) - unidadesAds * ((eco.envio ?? 800) + (eco.costo ?? 0))
+  return venta * (1 - (eco.comisionPct ?? 17) / 100) - unidadesAds * ((eco.envio ?? 800) + (eco.costo ?? 0) + (eco.cargoFijo ?? 0))
 }
 
 // Pura. El plan de arranque. `p` son los parámetros aprendidos (roas.mediana,
@@ -450,7 +453,6 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const { DiaProductoMl } = await import('../../models/DiaProductoMl.js')
   const { parametrosPublicidad, AprendizajePublicidad } = await import('./publicidad.js')
   const { envioRealPorItem } = await import('../cargosMl.js')
-  const { costoEnvioFull } = await import('../envioFull.js')
   const p = await parametrosPublicidad()
   if (!p) return { motivo: 'todavía no hay aprendizaje de publicidad' }
   const beta = (await AprendizajePublicidad.findOne().sort({ dia: -1 }).select('efecto.beta efecto.estado').lean())?.efecto
@@ -478,14 +480,15 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     const id = prop.itemIdMl ?? prop.sku
     const ult = [...(prop.mediciones ?? [])].sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha)).at(-1)
     const precio = prop.promoMl?.activa?.precio ?? ult?.precioEfectivo ?? ult?.precio ?? null
-    let envio = envioReal.get(id)?.porUnidad ?? null
-    if (envio == null && Number.isFinite(precio)) envio = (await costoEnvioFull({ precioClp: precio }).catch(() => null))?.clp ?? null
     // el precio que SE COBRA (con promociones) de las ventas por anuncio de las
     // últimas 2 semanas; sin ventas, el de lista
     const recientes = ads.filter((a) => a.itemId === id && a.unidadesAds > 0 && a.dia >= new Date(+ahora - 14 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }))
     const u14 = recientes.reduce((a, x) => a + x.unidadesAds, 0)
     const precioCobrado = u14 >= 2 ? Math.round(recientes.reduce((a, x) => a + x.ventaAds, 0) / u14) : null
-    const eco = economiaVenta({ precio: precioCobrado ?? precio, envio, costo: prop.costoUnitarioClp ?? null })
+    const e = envioReal.get(id)
+    const eu = await economiaUnidad(prop, e ? { envioClp: e.cobrado, unidades: e.unidades, base: e.base, pctOrdenesSobreBase: e.pctOrdenesSobreBase } : null, { precio: precioCobrado ?? precio }).catch(() => null)
+    const eco = eu && Number.isFinite(eu.comisionClp) && Number.isFinite(eu.envioClp) ? { ...economiaVenta({ precio: eu.precioClp, comisionPct: eu.comisionPct, comisionClp: eu.comisionClp, envio: eu.envioClp, costo: eu.costoClp }),
+      incompleta: !Number.isFinite(eu.comisionClp) || !Number.isFinite(eu.envioClp), envioBase: eu.envioBase, envioSupuesto: eu.envioSupuesto } : null
     // la serie desde el primer día con gasto (o vacía si nunca se anunció)
     const susAds = ads.filter((a) => a.itemId === id)
     const primer = susAds.filter((a) => a.costo > 0).map((a) => a.dia).sort()[0] ?? null
@@ -511,7 +514,8 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     } else {
       plan = planDeArranque(eco, p)
     }
-    if (!plan || prop.estado !== 'activo') continue
+    if (!publicacionVigente(prop) || prop.estado !== 'activo') continue
+    plan ??= { fase: 'arranque', accion: 'sin-datos', budgetDiario: null, texto: 'Faltan datos para calcular el plan de arranque.' }
     salida.push({ itemId: id, titulo: prop.titulo ?? null, precio: precioCobrado ?? precio, precioLista: precio, economia: eco, _dias: dias, ...plan })
   }
 
@@ -526,7 +530,8 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const ventanasPorItem = new Map([...diasPorItem].map(([id, d]) => [id, ventanasClic(d.filter((x) => !x.evento))]))
   // la forma de campaña que rinde más, aprendida de toda la historia
   const nichoDe = new Map(propios.filter((x) => x.nichoId).map((x) => [x.itemIdMl ?? x.sku, String(x.nichoId)]))
-  const formas = aprenderEstructura(observacionesEstructura(ads, ecoPorItem, nichoDe))
+  const familiaDe = new Map(propios.filter(x => x.familiaMl?.id).map(x => [x.itemIdMl ?? x.sku, `familia:${x.familiaMl.id}`]))
+  const formas = aprenderEstructura(observacionesEstructura(ads, ecoPorItem, nichoDe, familiaDe))
   const recsViejas = await RecomendacionAds.find({ dia: { $lt: hoy } }).select('itemId dia accion budgetDiario').lean()
   const evaluacion = evaluarRecomendaciones(recsViejas, diasPorItem, ecoPorItem, { hoy })
   evaluacion.clic = evaluarRevisionAnuncio(recsViejas, diasPorItem, { hoy })
@@ -576,6 +581,8 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       delete fila.desdeCampana
       Object.assign(fila, r ?? { accion: 'sin-datos', texto: 'Sin datos suficientes.' })
     }
+    const propio = propios.find(x => (x.itemIdMl ?? x.sku) === fila.itemId)
+    Object.assign(fila, protegerPlanPublicidad(fila, propio, anuncio, campanaDelAnuncio, { ahora, dias: fila._dias }))
     // la bitácora de largo plazo, desde que está en su campaña actual
     if (fila._dias?.length) fila.bitacora = bitacoraProducto(fila._dias, fila.economia, recsViejas.filter((r) => r.itemId === fila.itemId), { desde: fila.desdeCampanaBitacora ?? null })
     delete fila._dias
@@ -602,7 +609,13 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   } catch (err) {
     console.warn(`[plan-campanas] estructura de campañas no leída: ${err.message}`)
   }
-  return { dia: hoy, productos: salida, marcador, estructura, sinCosto: salida.filter((x) => x.economia?.esTecho).length,
+  const cartera = adsVivos ? carteraCampanas({ productos: salida, campanas: adsVivos.campanas ?? [], porItem: adsVivos.porItem ?? {}, formas, ahora }) : null
+  if (estructura && cartera) {
+    const familias = new Set(cartera.grupos.filter(g => g.miembros.length > 1).flatMap(g => g.miembros.map(p => p.itemId)))
+    estructura.acciones = estructura.acciones.filter(a => a.tipo !== 'crear' && !(['separar', 'campana-propia', 'agrupar-chicos'].includes(a.tipo) && [a.itemId, ...(a.itemIds ?? [])].some(id => familias.has(id))))
+    for (const g of cartera.propuestas) estructura.acciones.push({ prioridad: 2, tipo: 'crear', itemIds: g.itemIds, budgetDiario: g.presupuestoDiario, roasObjetivo: g.roasObjetivo, texto: `${g.titulo}: prueba con ${plata(g.presupuestoDiario)}/día compartidos y ROAS ${g.roasObjetivo}x. ${g.revision}` })
+  }
+  return { dia: hoy, productos: salida, marcador, estructura, cartera, motivo: adsVivos ? null : 'No se pudieron leer las campañas actuales. Vuelve a consultar antes de decidir.', sinCosto: salida.filter((x) => x.economia?.esTecho).length,
     reglas: { ...decision, transiciones: transiciones.length, ultimas: transiciones.slice(-12) }, evaluacion, formas, clicCuenta }
 }
 
@@ -830,7 +843,7 @@ export function estructuraCampanas({ campanas = [], porItem = {}, planes = [], f
   }
   // 3. productos con plan de arranque que no tienen anuncio: campaña nueva
   for (const p of planes.filter((x) => ['arrancar', 'arrancar-con-cuidado'].includes(x.accion) && !porItem[x.itemId]?.campanaId)) {
-    acciones.push({ prioridad: 2, tipo: 'crear', itemId: p.itemId, texto: `Crea una campaña solo para ${corto(p.titulo)}: ${plata(p.budgetDiario)}/día y ROAS objetivo ${String(p.roasObjetivo).replace('.', ',')}x (prueba de 2 semanas; la segunda al doble).` })
+    acciones.push({ prioridad: 2, tipo: 'crear', itemId: p.itemId, texto: `Crea una campaña solo para ${corto(p.titulo)}: ${plata(p.budgetDiario)}/día y ROAS objetivo ${String(p.roasObjetivo).replace('.', ',')}x (prueba de 2 semanas; revisar resultados antes de aumentar).` })
   }
   return { campanas: resumen, acciones: acciones.sort((a, b) => a.prioridad - b.prioridad) }
 }
@@ -854,7 +867,7 @@ const formaDe = (n) => (n <= 1 ? 'sola' : n <= 3 ? 'chica' : 'grande')
 
 // Pura. filas: AdsDiaMl de productos { itemId, dia, campanaId, costo,
 // unidadesAds, ventaAds }; ecoDe: itemId → economía; nichoDe: itemId → nicho.
-export function observacionesEstructura(filas, ecoDe, nichoDe = new Map()) {
+export function observacionesEstructura(filas, ecoDe, nichoDe = new Map(), familiaDe = new Map()) {
   const lunes = (dia) => { const t = new Date(`${dia}T12:00:00Z`); return new Date(+t - ((t.getUTCDay() + 6) % 7) * DIA).toISOString().slice(0, 10) }
   const porSemana = new Map() // semana|campaña → Map(itemId → acumulado)
   for (const f of filas) {
@@ -870,14 +883,23 @@ export function observacionesEstructura(filas, ecoDe, nichoDe = new Map()) {
   for (const [k, m] of porSemana) {
     const [semana, campanaId] = k.split('|')
     const ids = [...m.keys()]
+    const familias = new Map()
+    for (const [id, a] of m) {
+      const clave = familiaDe.get(id) ?? id
+      const g = familias.get(clave) ?? { gasto: 0, contribucion: 0, completa: true }
+      const eco = ecoDe.get(id)
+      g.gasto += a.gasto
+      g.contribucion += eco ? dejaronDe(a.ventaAds, a.unidadesAds, eco) : 0
+      g.completa &&= Boolean(eco && !eco.esTecho && !eco.incompleta)
+      familias.set(clave, g)
+    }
     const nichos = new Set(ids.map((id) => nichoDe.get(id) ?? `sin-${id}`))
     const gastoCampana = [...m.values()].reduce((a, x) => a + x.gasto, 0)
-    for (const [itemId, a] of m) {
-      const eco = ecoDe.get(itemId)
-      if (!eco || a.gasto < 500) continue // una semana con $300 de gasto no enseña
-      obs.push({ semana, campanaId, itemId, productos: ids.length, forma: formaDe(ids.length),
-        mismoNicho: ids.length > 1 ? nichos.size === 1 : null, partGasto: Math.round((a.gasto / gastoCampana) * 100),
-        gasto: Math.round(a.gasto), rinde: r2((dejaronDe(a.ventaAds, a.unidadesAds, eco) - a.gasto) / a.gasto) })
+    for (const [itemId, a] of familias) {
+      if (!a.completa || a.gasto < 500) continue
+      obs.push({ semana, campanaId, itemId, productos: familias.size, forma: formaDe(familias.size),
+        mismoNicho: familias.size > 1 ? nichos.size === 1 : null, partGasto: Math.round((a.gasto / gastoCampana) * 100),
+        gasto: Math.round(a.gasto), rinde: r2((a.contribucion - a.gasto) / a.gasto) })
     }
   }
   return obs

@@ -102,7 +102,8 @@ export async function adsPorItem({ dias = 30 } = {}) {
       foto: ad.thumbnail ? ad.thumbnail.replace(/^http:/, 'https:') : null,
       permalink: ad.permalink ?? null,
       precio: ad.price ?? null,
-      campanaId: ad.campaign_id ?? null,
+      // Product Ads: idle está disponible, pero fuera de una campaña vigente.
+      campanaId: ad.status === 'idle' ? null : ad.campaign_id ?? null,
       creadoEl: ad.date_created ?? null,
       tipoPublicacion: ad.listing_type_id ?? null,
       esCatalogo: ad.catalog_listing ?? null,
