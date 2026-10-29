@@ -261,10 +261,7 @@ function Resumen({ datos, plan, serieTotal, fotos, onIr }) {
 
 // ── pestaña Campañas ─────────────────────────────────────────────────────────
 function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
-  // las pausadas sin productos no aportan: van a una línea al final
-  const conProductos = (c) => Object.values(datos.porItem ?? {}).some((a) => a.campanaId === c.id)
-  const vacias = (datos.campanas ?? []).filter((c) => c.estado !== 'active' && !conProductos(c))
-  const campanas = [...(datos.campanas ?? [])].filter((c) => !vacias.includes(c)).sort((a, b) => (a.estado === 'active' ? -1 : 1) - (b.estado === 'active' ? -1 : 1) || (b.metricas?.cost ?? 0) - (a.metricas?.cost ?? 0))
+  const campanas = (datos.campanas ?? []).filter((c) => c.estado === 'active').sort((a, b) => (b.metricas?.cost ?? 0) - (a.metricas?.cost ?? 0))
   const gastoHoy = new Map((hoy?.campanas ?? []).map((c) => [c.id, c.metricas?.cost ?? 0]))
   const planDe = new Map((plan?.productos ?? []).map((p) => [p.itemId, p]))
   return (
@@ -275,15 +272,14 @@ function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
         const roasReal = m.cost ? (m.total_amount ?? 0) / m.cost : null
         const g = gastoHoy.get(c.id) ?? 0
         const acciones = (plan?.estructura?.acciones ?? []).filter((a) => a.campana === c.nombre)
-        const activa = c.estado === 'active'
         const salud = plan?.cartera?.campanas.find(x => x.id === c.id)
         const avisos = plan?.cartera?.alertas.filter(x => x.campanaId === c.id) ?? []
         return (
-          <section key={c.id} className={`pub-campana${activa ? '' : ' pausada'}`}>
+          <section key={c.id} className="pub-campana">
             <header>
               <div>
-                <h3>{c.nombre} <em className={`pub-accion ${activa ? 'bien' : 'neutro'}`}>{activa ? 'activa' : 'pausada'}</em></h3>
-                <small>{productos.length} {productos.length === 1 ? 'producto' : 'productos'}{productos.length > 1 && activa ? ' mezclados: ML reparte el gasto entre ellos a su criterio' : ''}</small>
+                <h3>{c.nombre} <em className="pub-accion bien">activa</em></h3>
+                <small>{productos.length} {productos.length === 1 ? 'producto' : 'productos'}{productos.length > 1 ? ' mezclados: ML reparte el gasto entre ellos a su criterio' : ''}</small>
               </div>
               <div className="pub-diales">
                 <div><span>presupuesto</span><strong>{fmtPrecio(c.presupuestoDiario ?? 0)}/día</strong></div>
@@ -291,12 +287,10 @@ function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
               </div>
             </header>
             {salud ? <div className={`pub-campana-stock${salud.atencion ? ' alerta' : ''}`}><strong>{salud.aptos} anuncios disponibles · {salud.bloqueados} detenidos o por revisar</strong>{avisos.map((a, i) => <p key={i}>{a.texto}</p>)}</div> : null}
-            {activa ? (
-              <div className="pub-hoy" title="Lo gastado hoy contra el presupuesto diario">
-                <div className="pub-hoy-barra"><i style={{ width: `${Math.min(100, (g / Math.max(1, c.presupuestoDiario ?? 1)) * 100)}%` }} /></div>
-                <span>hoy lleva {fmtPrecio(Math.round(g))} de {fmtPrecio(c.presupuestoDiario ?? 0)}</span>
-              </div>
-            ) : null}
+            <div className="pub-hoy" title="Lo gastado hoy contra el presupuesto diario">
+              <div className="pub-hoy-barra"><i style={{ width: `${Math.min(100, (g / Math.max(1, c.presupuestoDiario ?? 1)) * 100)}%` }} /></div>
+              <span>hoy lleva {fmtPrecio(Math.round(g))} de {fmtPrecio(c.presupuestoDiario ?? 0)}</span>
+            </div>
             <Metricas m={m} />
             {acciones.length ? (
               <ul className="pub-campana-acciones">
@@ -325,7 +319,7 @@ function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
           </section>
         )
       })}
-      {vacias.length ? <p className="pub-vacio">{vacias.length} {vacias.length === 1 ? 'campaña pausada' : 'campañas pausadas'} sin productos: {vacias.map((c) => `«${c.nombre}»`).join(', ')}.</p> : null}
+      {!campanas.length ? <p className="pub-vacio">No hay campañas activas.</p> : null}
     </div>
   )
 }
