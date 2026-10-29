@@ -27,7 +27,12 @@ import {
   Layers,
   Plus,
   RotateCcw,
+  Search,
+  Warehouse,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
+import { publicacionVigente, inventarioEntrada, coincideFiltro, filtrarEntradas, paginarEntradas, seriePrecioEntrada } from '../lib/catalogoPropios.js'
 import { BotonCopiar } from './Listing.jsx'
 import { PlanPublicidad } from './PlanPublicidad.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -713,6 +718,14 @@ function VariantesFamilia({ variantes, mostrarPrecio, onAbrir, onGuardarEnCamino
 // decide en ella (precio, costo, nicho) se aplica a todos los colores. `p` es
 // la publicación que da la cara: su economía, su gama y su auditoría valen
 // para todas, porque comparten precio y página.
+function TendenciaPrecio({ puntos, familia }) {
+  if (puntos.length < 2) return null
+  const valores = puntos.map((p) => p.valor)
+  const min = Math.min(...valores), max = Math.max(...valores)
+  const trayectoria = valores.map((valor, i) => `${i ? 'L' : 'M'}${2 + i / (valores.length - 1) * 72},${max === min ? 14 : 25 - (valor - min) / (max - min) * 22}`).join(' ')
+  return <svg className="pc-tendencia" viewBox="0 0 76 28" role="img" aria-label={`${familia ? 'Precio mínimo entre variantes' : 'Precio'}: últimas ${puntos.length} mediciones`}><title>Historial de precio · {fmtPrecio(valores[0])} → {fmtPrecio(valores.at(-1))}</title><path d={trayectoria} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+}
+
 function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, onGuardarEnCamino, expandida = false, onExpandir, prefijos = null }) {
   const d = deltas(p.mediciones)
   const m = metricas ?? metricasDe(p)
@@ -804,102 +817,39 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
     { k: 'Ingresos 30d', v: m.ventas30d ? fmtPrecio(m.ventas30d.ingresosClp) : '—', Icono: DollarSign },
   ]
 
-  // COLAPSADA: la foto manda y el resto se resume.
-  //
-  // Con 8 productos la lista vertical se leía; con 40 es scroll infinito. El
-  // importador lo pidió así: grilla con la foto del producto, que se abra.
-  // Acá la tarjeta tiene DOS estados y la misma identidad — abrir no navega a
-  // otra parte, expande en su lugar. Eso conserva el contexto: sigues viendo
-  // dónde estabas en la grilla.
   if (!expandida) {
     const r = m.reposicion
     const urg = r ? TONO_URGENCIA[r.urgencia] : null
-    // en un producto con colores el sello dice CUÁL se quiebra, salvo que
-    // estén todos igual
-    const cual = familia && r?.variante && !r.todas ? <i> · {r.variante}</i> : null
+    const entrada = { p, variantes: familia?.variantes, m }
+    const inventario = inventarioEntrada(entrada)
+    const alerta = r?.urgencia === 'quebrado' ? 'Sin stock en Full'
+      : r && ['critico', 'reponer'].includes(r.urgencia) ? `${r.diasCobertura ?? '—'} días de cobertura`
+      : m.pausada ? 'Publicación pausada' : null
     return (
-      <article className={`propio-card pc-mini${urg ? ` pc-mini-${urg}` : ''}`}>
-        <button
-          className="pc-mini-abrir"
-          onClick={() => onExpandir?.(p._id)}
-          aria-expanded={false}
-          aria-label={`Abrir ${titulo}${familia ? ` (${etiquetaVariantes(familia.variantes)})` : ''}`}
-        >
-          <span className="pc-mini-foto">
-            {p.imagen ? (
-              <img src={p.imagen} alt="" loading="lazy" />
-            ) : (
-              <span className="sin-imagen" />
-            )}
-            {/* el estado de quiebre va SOBRE la foto: es lo único que hay que
-                ver sin abrir nada, y desde lejos */}
-            {/* UN SELLO, NO DOS. Una publicación pausada casi siempre lo está
-                PORQUE se quedó sin stock en Full — mostrar "sin stock" y
-                "pausada" una al lado de la otra dice lo mismo dos veces y
-                ensucia la foto. Cuando coinciden gana la causa, con la
-                consecuencia como letra chica. */}
-            {r?.urgencia === 'quebrado' ? (
-              <span className="pc-mini-sello pc-mini-sello-mal">
-                sin stock{cual ?? (m.pausada ? <i> · pausada</i> : null)}
-              </span>
-            ) : r && r.urgencia !== 'holgado' && r.urgencia !== 'sin_ventas' ? (
-              <span className={`pc-mini-sello pc-mini-sello-${urg}`}>
-                {r.diasCobertura} días{cual}
-              </span>
-            ) : m.pausada ? (
-              <span className="pc-mini-sello pc-mini-sello-pausa">pausada</span>
-            ) : null}
-            {/* los colores, como el selector de la página de ML */}
-            {familia ? (
-              <span className="pc-mini-variantes" aria-hidden="true">
-                {familia.variantes.slice(0, 4).map((v) => (
-                  <img key={v._id} src={v.imagen} alt="" loading="lazy" title={nombreVariante(v)} />
-                ))}
-                {familia.variantes.length > 4 ? <b>+{familia.variantes.length - 4}</b> : null}
-              </span>
-            ) : null}
+      <article className={`propio-card pc-mini pc-compacta${urg ? ` pc-mini-${urg}` : ''}`}>
+        <button className="pc-compacta-abrir" onClick={() => onExpandir?.(p._id)} aria-expanded={false} aria-label={`Abrir ${titulo}`}>
+          <span className="pc-compacta-foto">
+            {p.imagen ? <img src={p.imagen} alt="" loading="lazy" /> : <Package aria-hidden="true" />}
+            {familia ? <span className="pc-compacta-variantes">{familia.variantes.slice(0, 3).map((v) => v.imagen ? <img key={v._id} src={v.imagen} alt="" loading="lazy" /> : null)}</span> : null}
           </span>
-          {/* EL PRECIO AL QUE SE ESTÁ VENDIENDO HOY, justo bajo la foto.
-              Es el dato con el que se leen todos los demás: una conversión de
-              4% dice cosas muy distintas a $2.960 que a $6.780. Va antes del
-              título porque se busca con la vista junto con la imagen, no
-              leyendo.
-              Con promoción activa manda el precio EFECTIVO —lo que el comprador
-              paga y sobre lo que ML cobra comisión— con el de lista tachado al
-              lado, igual que se ve en ML. */}
-          {Number.isFinite(precioEfectivo) ? (
-            <span className="pc-mini-precio">
-              <b>
-                {fmtPrecio(precioEfectivo)}
-                {m.precioHasta != null ? `–${fmtPrecio(m.precioHasta)}` : ''}
-              </b>
-              {promo?.precioOriginal > precioEfectivo ? (
-                <s title={`${promo.nombre ?? 'Promoción'}: el cliente paga ${fmtPrecio(precioEfectivo)}`}>
-                  {fmtPrecio(promo.precioOriginal)}
-                </s>
-              ) : null}
-              {familia ? <span className="pc-mini-nvar">{etiquetaVariantes(familia.variantes)}</span> : null}
+          <span className="pc-compacta-info">
+            <span className="pc-compacta-titulo" title={titulo}>{titulo}</span>
+            <span className="pc-compacta-precio">{fmtPrecio(precioEfectivo)}{m.precioHasta != null ? `–${fmtPrecio(m.precioHasta)}` : ''}{promo?.precioOriginal > precioEfectivo ? <s>{fmtPrecio(promo.precioOriginal)}</s> : null}</span>
+            <span className="pc-compacta-inventario">
+              {inventario.tieneFull ? <span className="pc-stock-full"><Zap aria-hidden="true" />Full <b>{fmtNum(inventario.full)}</b></span> : null}
+              {inventario.tieneBodega ? <span><Warehouse aria-hidden="true" />Bodega <b>{fmtNum(inventario.bodega)}</b></span> : null}
+              {!inventario.tieneFull && !inventario.tieneBodega ? <span><Package aria-hidden="true" />Stock <b>{fmtNum(m.stock)}</b></span> : null}
+              {familia ? <span className="pc-compacta-nvar">{etiquetaVariantes(familia.variantes)}</span> : null}
             </span>
-          ) : null}
-          <span className="pc-mini-titulo" title={titulo}>
-            {tituloCorto(titulo, prefijos?.get(titulo) ?? '')}
           </span>
-          {/* SEMÁFORO DE LOS ÚLTIMOS 7 DÍAS: ¿este producto va bien AHORA?
-              Verde vende y convierte, rojo no vende, ámbar convierte poco o le
-              falta el costo para saber si gana. El stock no está acá porque ya
-              vive sobre la foto. En un producto con colores, los suma. */}
-          <span className="pc-mini-kpis">
-            <em className={`k-${ventas7 > 0 ? 'bien' : ventas7 === 0 ? 'mal' : 'neutro'}`}>
-              <b>{ventas7 != null ? fmtNum(ventas7) : '—'}</b> vend. 7d
-            </em>
-            <em className={`k-${m.conversion7d == null ? 'neutro' : m.conversion7d >= 3 ? 'bien' : m.conversion7d >= 1.5 ? 'aviso' : 'mal'}`}>
-              <b>{m.conversion7d != null ? `${m.conversion7d}%` : '—'}</b> conv.
-            </em>
-            <em className={`k-${m.margen30d ? (m.margen30d.margenClp > 0 ? 'bien' : 'mal') : m.ventas30d ? 'aviso' : 'neutro'}`}>
-              <b>{m.margen30d ? fmtPrecio(m.margen30d.margenClp) : m.ventas30d ? 'falta costo' : '—'}</b> margen
-            </em>
+          <span className="pc-compacta-metricas">
+            <span><b>{ventas7 == null ? '—' : fmtNum(ventas7)}</b><small>ventas · 7 días</small></span>
+            <span><b className={m.margen30d?.margenClp < 0 ? 'pc-numero-negativo' : undefined}>{m.margen30d ? fmtPrecio(m.margen30d.margenClp) : '—'}</b><small>margen · 30 días</small></span>
+            <TendenciaPrecio puntos={seriePrecioEntrada(entrada)} familia={Boolean(familia)} />
           </span>
-          {m.aEnviar > 0 ? <span className="pc-mini-accion">enviar {fmtNum(m.aEnviar)}</span> : null}
+          <span className={`pc-compacta-pie${alerta ? ` pc-alerta-${urg ?? 'pausa'}` : ''}`}>
+            <span>{alerta ?? 'Ver detalle'}{alerta && familia && r?.variante && !r.todas ? ` · ${r.variante}` : ''}{m.aEnviar > 0 ? ` · enviar ${fmtNum(m.aEnviar)} u` : ''}</span><ChevronRight aria-hidden="true" />
+          </span>
         </button>
       </article>
     )
@@ -1558,6 +1508,10 @@ export function MisProductos() {
   // una sola tarjeta abierta a la vez: dos expandidas vuelven a ser una lista
   const [expandido, setExpandido] = useState(null)
   const [orden, setOrden] = useState('urgencia')
+  const [busqueda, setBusqueda] = useState('')
+  const [filtro, setFiltro] = useState('todos')
+  const [pagina, setPagina] = useState(1)
+  useEffect(() => { setPagina(1); setExpandido(null) }, [busqueda, filtro, orden])
   const [meli, setMeli] = useState(null)
   const [aviso, setAviso] = useState(null)
   const [nichos, setNichos] = useState([])
@@ -1611,7 +1565,8 @@ export function MisProductos() {
 
   // UN PRODUCTO, VARIOS COLORES: las publicaciones de una misma familia de ML
   // van en una sola tarjeta (lib/familiasPropias.js)
-  const entradas = agruparPorFamilia(datos?.propios ?? [])
+  const propiosVigentes = (datos?.propios ?? []).filter(publicacionVigente)
+  const entradas = agruparPorFamilia(propiosVigentes)
   const entradaDe = new Map(entradas.flatMap((e) => (e.variantes ?? [e.p]).map((v) => [v._id, e])))
   // lo que se decide para el producto —precio, costo, nicho, dejar de
   // seguirlo— vale para todos sus colores; el stock, "ya lo envié" y la
@@ -1833,31 +1788,18 @@ export function MisProductos() {
   // producto que no vende no tiene urgencia de reposición aunque tenga 0 stock.
   // Un producto con colores se ordena por el color que se quiebra antes.
   const prefijoTitulos = prefijosPorFamilia(entradas.map((e) => e.titulo))
-  const ordenadas = ordenarEntradas(entradas, orden)
+  const ordenadas = ordenarEntradas(filtrarEntradas(entradas, { busqueda, filtro }), orden)
+  const paginaActual = paginarEntradas(ordenadas, pagina)
+  const filtros = [['todos', 'Todos'], ['full', 'Full'], ['bodega', 'Bodega'], ['reponer', 'Por reponer'], ['pausados', 'Pausados']]
 
   return (
-    <main>
-      <div className="reporte-encabezado">
+    <main className="mis-productos">
+      <div className="reporte-encabezado propios-encabezado">
         <div>
           <h2>Mis productos</h2>
-          <p className="reporte-fecha">
-            Se actualiza solo: ventas, visitas y stock por API oficial cada ~45 min; detalle completo y
-            publicaciones nuevas a diario; optimización los martes.
-          </p>
-          {datos?.calibracion ? (
-            <p
-              className="reporte-fecha"
-              title="Ventas reales de tu cuenta vs reseñas nuevas de tus publicaciones desde la primera venta: el ancla que convierte el factor teórico 25 en dato. Converge a medida que vendes."
-            >
-              Calibración reseñas→ventas: {fmtNum(datos.calibracion.ventas)} venta(s) real(es) ·{' '}
-              {fmtNum(datos.calibracion.resenasNuevas)} reseña(s) nueva(s) →{' '}
-              {datos.calibracion.factorObservado != null
-                ? `factor observado ${datos.calibracion.factorObservado} (teórico 25)`
-                : 'factor aún sin datos: falta la primera reseña propia (teórico 25)'}
-            </p>
-          ) : null}
+          <p className="reporte-fecha">{entradas.length} productos · {propiosVigentes.length} publicaciones vigentes</p>
         </div>
-        <div className="toolbar">
+        <details className="propios-gestion"><summary><Plus size={16} aria-hidden="true" />Gestionar publicaciones</summary><div className="toolbar">
           {meli?.conectado ? (
             <>
               {/* UN SOLO CONTROL, NO TRES PIEZAS SUELTAS.
@@ -1892,8 +1834,6 @@ export function MisProductos() {
             </button>
           ) : null}
         </div>
-      </div>
-
       <form className="form-propio" onSubmit={agregar}>
         <input
           type="text"
@@ -1907,26 +1847,25 @@ export function MisProductos() {
           Seguir producto
         </button>
       </form>
+      {datos?.calibracion ? <p className="nota">Calibración reseñas → ventas: {fmtNum(datos.calibracion.ventas)} ventas reales · {fmtNum(datos.calibracion.resenasNuevas)} reseñas nuevas · {datos.calibracion.factorObservado != null ? `factor observado ${datos.calibracion.factorObservado}` : 'factor aún sin datos'}.</p> : null}
+        </details>
+      </div>
       {error ? <p className="error-bloque">{error}</p> : null}
       {aviso ? <p className="nota">{aviso}</p> : null}
 
       {!datos ? (
         <Cargando texto="Cargando tus productos…" />
-      ) : !datos.propios.length ? (
+      ) : !propiosVigentes.length ? (
         <p className="vacio">
           Aún no sigues ningún producto. Pega la URL de una publicación tuya y el sistema la medirá
           todos los días: si aparece en los listados de tus nichos, también verás tu posición.
         </p>
       ) : (
         <>
-          {Object.entries(datos.carteras ?? {}).map(([nichoId, c]) => (
-            <CarteraNicho key={nichoId} c={c} />
-          ))}
-
-          {/* EL ORDEN ES LA MITAD DEL REDISEÑO.
-              Una grilla de 40 tarjetas sin ordenar es el mismo scroll infinito
-              con otra forma. Por defecto manda lo que se quiebra antes: eso es
-              lo que uno viene a resolver a esta pantalla. */}
+          <div className="propios-controles">
+            <label className="propios-buscador"><Search aria-hidden="true" /><span className="sr-solo">Buscar productos</span><input type="search" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por nombre, variante o publicación…" /></label>
+            <div className="propios-filtros" role="group" aria-label="Filtrar productos">{filtros.map(([valor, nombre]) => <button key={valor} type="button" aria-pressed={filtro === valor} onClick={() => setFiltro(valor)}>{valor === 'full' ? <Zap size={14} aria-hidden="true" /> : null}{nombre}<span>{entradas.filter((e) => coincideFiltro(e, valor)).length}</span></button>)}</div>
+          </div>
           <div className="propios-barra">
             <label>
               <ArrowDownWideNarrow aria-hidden="true" />
@@ -1938,14 +1877,13 @@ export function MisProductos() {
                 <option value="alfabetico">Nombre</option>
               </select>
             </label>
-            <span className="propios-cuenta">
-              {ordenadas.length} producto(s)
-              {ordenadas.length !== datos.propios.length ? ` · ${datos.propios.length} publicaciones` : ''}
+            <span className="propios-cuenta" role="status">
+              {paginaActual.desde}–{paginaActual.hasta} de {paginaActual.total} productos
             </span>
           </div>
 
-          <div className="propios-grilla">
-            {ordenadas.map((e) => (
+          <div className="propios-grilla propios-grilla-compacta">
+            {paginaActual.entradas.map((e) => (
               <TarjetaPropio
                 key={e.clave}
                 p={e.p}
@@ -1966,19 +1904,12 @@ export function MisProductos() {
               />
             ))}
           </div>
+          {!ordenadas.length ? <div className="propios-vacio"><Search aria-hidden="true" /><p>No hay productos con estos filtros.</p><button className="boton-secundario" onClick={() => { setBusqueda(''); setFiltro('todos') }}>Mostrar todos</button></div> : null}
+          {paginaActual.paginas > 1 ? <nav className="propios-paginacion" aria-label="Páginas de productos"><button type="button" disabled={paginaActual.pagina === 1} onClick={() => { setPagina(paginaActual.pagina - 1); setExpandido(null) }}><ChevronLeft size={16} />Anterior</button><span>Página {paginaActual.pagina} de {paginaActual.paginas}</span><button type="button" disabled={paginaActual.pagina === paginaActual.paginas} onClick={() => { setPagina(paginaActual.pagina + 1); setExpandido(null) }}>Siguiente<ChevronRight size={16} /></button></nav> : null}
+          {Object.keys(datos.carteras ?? {}).length ? <details className="propios-comparar"><summary><LineChart size={16} aria-hidden="true" />Comparar mis productos por nicho</summary>{Object.entries(datos.carteras).map(([nichoId, c]) => <CarteraNicho key={nichoId} c={c} />)}</details> : null}
         </>
       )}
 
-      <p className="nota">
-        Con la cuenta de Mercado Libre conectada, stock, ventas, visitas, ingresos y caja de compra
-        vienen de la API oficial (exactos). "Caja de compra" aplica a publicaciones de catálogo: si
-        no estás ganando, muestra el precio que la ganaría. "Ingresos 30d" suma tus órdenes pagadas
-        reales. La chapa "real" marca ventas del período medidas por ML; la cifra con ~ es la
-        estimación por reseñas (~{FACTOR_VENTAS} por reseña nueva). Cablea un nicho del tablero y
-        "optimizar con Opus 5" lee el título, la descripción, la ficha y las fotos reales de los
-        peces gordos del listado (los que más han vendido) y te dice dónde estás fallando, con
-        títulos, descripción y plan de fotos listos para pegar.
-      </p>
 
       {abierto ? (
         <PanelPropio propio={abierto} onCerrar={() => setAbierto(null)} onGuardarCosto={guardarCosto} />

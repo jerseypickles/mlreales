@@ -10,6 +10,8 @@
 // sigue teniendo su stock, sus ventas y su "enviar N", porque ML los vende y
 // los despacha por separado.
 
+import { publicacionVigente } from './catalogoPropios.js'
+
 export const PESO_URGENCIA = { quebrado: 0, critico: 1, reponer: 2, holgado: 3, sin_ventas: 4 }
 
 // lo que se quiebra antes va primero; a igual urgencia, menos días de cobertura
@@ -123,6 +125,7 @@ export function resumenFamilia(variantes) {
 // publicación que da la cara (la primera publicada); `variantes` es null
 // cuando el producto tiene una sola.
 export function agruparPorFamilia(propios = []) {
+  propios = propios.filter(publicacionVigente)
   const porFamilia = new Map()
   for (const p of propios) {
     const id = p.familiaMl?.id

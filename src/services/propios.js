@@ -9,6 +9,7 @@ import { promocionesDeItem } from './promociones.js'
 import { sincronizarOrdenes } from './ventasMl.js'
 import { diaChile } from './inventarioFull.js'
 import { dimensionesDeItem } from './envioFull.js'
+import { usaInventarioFull } from './stockPropio.js'
 
 // { largoCm, anchoCm, altoCm, gramos } → "LxAxH,g", el formato de shipping.dimensions
 const comoTextoDimensiones = (d) => (d ? `${d.largoCm}x${d.anchoCm}x${d.altoCm},${d.gramos}` : null)
@@ -207,7 +208,7 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     // quiebras. Si el item no es Full o la consulta falla, se cae al del item.
     let stock = Number.isFinite(oficial?.available_quantity) ? oficial.available_quantity : null
     let inventario = null
-    if (oficial?.inventory_id) {
+    if (oficial?.inventory_id && usaInventarioFull(oficial)) {
       try {
         const { stockFull } = await import('./inventarioFull.js')
         inventario = await stockFull(oficial.inventory_id)
@@ -216,6 +217,7 @@ export async function escanearPropios({ soloOficial = false } = {}) {
         console.warn(`[propios] stock de Full no leído para ${propio.sku}: ${err.message}`)
       }
     }
+    if (oficial?.shipping?.logistic_type && !usaInventarioFull(oficial)) propio.inventarioFull = null
     if (inventario) {
       // RECEPCIÓN EN BODEGA: si el total subió desde la lectura anterior, llegó
       // (parte de) lo que el importador anotó como en camino. Se descuenta y se

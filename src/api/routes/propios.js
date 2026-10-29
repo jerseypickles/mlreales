@@ -20,6 +20,8 @@ import {
 import { llmDisponible } from '../../services/llm.js'
 import { presupuesto } from '../../services/gastos.js'
 import { obtenerColas } from '../../jobs/queues.js'
+import { FILTRO_VIGENTES } from '../../../frontend/src/lib/catalogoPropios.js'
+import { normalizarStockPropio } from '../../services/stockPropio.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -151,7 +153,7 @@ router.post(
 router.get(
   '/',
   manejar(async (_req, res) => {
-    const propios = await ProductoPropio.find().sort({ creadoEl: -1 }).lean()
+    const propios = (await ProductoPropio.find(FILTRO_VIGENTES).sort({ creadoEl: -1 }).lean()).map(normalizarStockPropio)
     const posiciones = await posicionesRecientes(propios.map((p) => p.sku))
     const ventas = await ventasPorItem({ dias: 30 }).catch(() => new Map())
     const ventas7 = await ventasPorItem({ dias: 7 }).catch(() => new Map())
@@ -369,7 +371,7 @@ router.get(
   '/alertas-stock',
   manejar(async (_req, res) => {
     const hoy = new Date()
-    const propios = await ProductoPropio.find({ estado: 'activo' }).select('sku itemIdMl titulo imagen url estadoMl inventarioFull mediciones stockDiario enCamino').lean()
+    const propios = (await ProductoPropio.find({ estado: 'activo', ...FILTRO_VIGENTES }).select('sku itemIdMl titulo imagen url estadoMl envioMl inventarioFull mediciones stockDiario enCamino').lean()).map(normalizarStockPropio)
     const [ventas, ventas7, primeras] = await Promise.all([
       ventasPorItem({ dias: 30 }).catch(() => new Map()), ventasPorItem({ dias: 7 }).catch(() => new Map()), primeraVentaPorItem().catch(() => new Map()),
     ])
@@ -796,6 +798,7 @@ function reposicionDe(p, v30, v7, { primeraVenta = null, hoy = new Date() } = {}
 
 // un producto con datos raros no puede tumbar la lista entera
 function reposicionSegura(p, v30, v7, opciones) {
+  if (p.envioMl?.logistica && p.envioMl.logistica !== 'fulfillment') return null
   try {
     return reposicionDe(p, v30, v7, opciones)
   } catch (err) {

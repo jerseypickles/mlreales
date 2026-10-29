@@ -50,6 +50,7 @@ function Fila({ p, plazo }) {
 }
 
 export function AlertaStock({ datos, alAbrir }) {
+  const [verTodas, setVerTodas] = useState(false)
   const [abierta, setAbierta] = useState(() => { try { return localStorage.getItem('alerta-stock-abierta') === '1' } catch { return false } })
   useEffect(() => { try { localStorage.setItem('alerta-stock-abierta', abierta ? '1' : '0') } catch { /* sin almacenamiento */ } }, [abierta])
   const avisos = (datos?.productos ?? []).filter((p) => NIVELES[p.nivel])
@@ -72,7 +73,8 @@ export function AlertaStock({ datos, alAbrir }) {
       </div>
       {abierta ? (
         <>
-          <ul className="as-lista">{avisos.map((p) => <Fila key={p.id} p={p} plazo={datos.plazoEnvioFullDias} />)}</ul>
+          <ul className="as-lista">{(verTodas ? avisos : avisos.slice(0, 3)).map((p) => <Fila key={p.id} p={p} plazo={datos.plazoEnvioFullDias} />)}</ul>
+          {avisos.length > 3 ? <button type="button" className="as-ver-todas" aria-expanded={verTodas} onClick={() => setVerTodas((v) => !v)}>{verTodas ? 'Mostrar solo las 3 prioritarias' : `Ver las ${avisos.length} alertas de Full`}</button> : null}
           <p className="as-pie"><span className="as-pie-marca" />plazo de un envío a Full (~{datos.plazoEnvioFullDias} días): si la barra no llega a la marca, lo que despaches llega con la bodega vacía</p>
         </>
       ) : null}
