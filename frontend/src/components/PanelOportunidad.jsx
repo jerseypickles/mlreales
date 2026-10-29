@@ -144,20 +144,20 @@ export function GraficoPronostico({ pronostico, modeloGana }) {
     <div className="og">
       <div className="og-cab"><h4>Búsquedas de los próximos meses</h4>
         <span className={`og-cifra ${cambio >= 3 ? 'og-sube' : cambio <= -3 ? 'og-baja' : ''}`}>{cambio > 0 ? '+' : ''}{cambio}% vs año pasado</span></div>
-      <div className="og-pares" role="img" aria-label="Año pasado contra lo que espera el modelo">
+      <div className="og-pares" role="img" aria-label="Año pasado contra la guía seleccionada">
         {meses.map((m) => (
           <div key={m.periodo} className="og-par">
             <div className="og-par-barras">
               <span className="og-par-pasado" style={{ height: `${(m.referencia / max) * 100}%` }} title={`Año pasado: ${fmtNum(m.referencia)}`} />
-              <span className="og-par-modelo" style={{ height: `${((m.estimado ?? 0) / max) * 100}%` }} title={`Modelo: ${fmtNum(m.estimado)}`} />
+              <span className="og-par-modelo" style={{ height: `${((m.estimado ?? 0) / max) * 100}%` }} title={`Guía (${m.metodo ?? 'estacional'}): ${fmtNum(m.estimado)} · Candidato: ${fmtNum(m.estimadoModelo)}`} />
             </div>
             <strong>{MESES[Number(m.periodo.slice(5)) - 1]}</strong>
             <small>{fmtNum(m.referencia)} → {fmtNum(m.estimado)}</small>
           </div>
         ))}
       </div>
-      <p className="og-leyenda"><span><i className="og-l og-l-pasado" />año pasado</span><span><i className="og-l og-l-modelo" />lo que espera el modelo</span></p>
-      <p className="og-lectura">{modeloGana ? 'El modelo le gana a repetir el año pasado en la prueba.' : 'El modelo todavía se equivoca más que repetir el año pasado: para decidir cantidad, guíate por la barra gris.'}
+      <p className="og-leyenda"><span><i className="og-l og-l-pasado" />año pasado</span><span><i className="og-l og-l-modelo" />guía seleccionada</span></p>
+      <p className="og-lectura">{meses.every(m => m.metodo === 'modelo') ? 'La guía usa el modelo que superó las referencias en la prueba histórica; sigue pendiente la validación futura.' : 'La guía usa una referencia simple mientras el modelo no demuestre una mejora suficiente. El pronóstico experimental se conserva para evaluación.'}
         {pronostico.keywordMedida && pronostico.keywordMedida !== pronostico.nicho ? <> Medido como «{pronostico.keywordMedida}».</> : null}</p>
     </div>
   )

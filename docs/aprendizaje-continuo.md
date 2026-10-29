@@ -614,3 +614,34 @@ lo que no se vende.
 - Para el modelo de vendedores chicos (pendiente, tras la calibración): las lecturas
   crudas quedan en `LecturaStock`, así que la fuerza se deriva al entrenar. Hoy solo
   se informa en "Guardado, pero todavía no lo usa ningún modelo".
+
+## Evaluación verificable y fuentes vigentes (29-oct-2026)
+
+El gasto efectivo en clics no demuestra un cambio de presupuesto. Cada lectura
+operativa registra la configuración de las campañas en `CambioCampanaMl`;
+lecturas iguales actualizan la fecha de seguimiento. La primera lectura es una
+base, nunca un ajuste. Se conserva la recomendación anterior a cada transición,
+aunque después se recalcule el plan del día. Esta captura solo lee Mercado Libre.
+
+La evaluación de publicidad cuenta ajustes observados compatibles con una
+recomendación, sin afirmar quién los hizo. Compara siete días completos antes y
+después, excluyendo el día del ajuste. Exige costos completos congelados al
+recomendar, configuración comparable, seguimiento, ingresos cobrados y stock.
+Descarta eventos, cambios de precio/promoción/logística, campañas compartidas,
+cambios simultáneos y ventanas solapadas. Las recomendaciones antiguas sin esa
+evidencia no recuperan una supuesta adopción a partir del gasto. Se estima
+contribución después de costos y publicidad; no ganancia contable ni causalidad.
+Los ingresos y unidades usados para esa comparación respetan el día de Chile.
+
+La guía de demanda selecciona el modelo solo cuando supera ambas referencias en
+la validación histórica; mientras tanto usa una referencia disponible. Conserva
+por separado el candidato experimental, sus rangos y sus errores futuros. No
+reescribe emisiones anteriores. Los rangos del candidato no se transfieren a la
+referencia y el ranking experimental exige su propia validación.
+
+La pantalla de aprendizaje informa la última lectura persistida de cada fuente.
+Un modelo de competidores con etiquetas atrasadas queda como histórico. La
+falta de ranking cuenta como desconocida, salvo que ese nicho y día hayan sido
+medidos. Las reseñas extraídas de fichas no sustituyen a las reseñas por API:
+pueden corresponder a un catálogo agregado. Esto detecta una fuente detenida;
+no afirma haber recuperado un acceso que el proveedor todavía rechaza.

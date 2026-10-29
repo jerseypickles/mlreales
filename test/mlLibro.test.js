@@ -64,3 +64,14 @@ test('el libro congela el cierre del día y la campaña vigente, y la publicidad
   assert.deepEqual([filas[1].costo, filas[1].clicks, filas[1].anuncios, filas[0].unidadesOrganicas], [1500, 20, 2, 3])
   assert.deepEqual(filasDeAds({ results: [] }, '2026-08-01').map((f) => [f.itemId, f.costo]), [['*', 0]])
 })
+
+test('ingresos para publicidad usan lo cobrado y el día de Chile; un precio faltante no es mercadería gratis', () => {
+  const pagada = (fecha, precio) => ({ estado: 'paid', fecha, items: [{ itemId: 'MLC1', cantidad: 2, precioUnitClp: precio }] })
+  const v = [pagada('2026-09-11T01:00:00Z', 7000), pagada('2026-09-11T16:00:00Z', null),
+    { ...pagada('2026-09-12T16:00:00Z', 99999), estado: 'cancelled' }]
+  const ds = new Map(diasDelLibro(propio, visitasPorDia(respuesta), v, { ahora }).map(d => [d.dia, d]))
+  assert.equal(ds.get('2026-09-10').ingresosChileClp, 14000)
+  assert.equal(ds.get('2026-09-10').unidadesChile, 2)
+  assert.equal(ds.get('2026-09-11').ingresosChileClp, null)
+  assert.equal(ds.get('2026-09-12').ingresosChileClp, 0)
+})

@@ -254,3 +254,26 @@ test('panel de competidores: un salto de fuente (ML agrupa reseñas) no es venta
   assert.equal(pares.find((p) => p.sku === 'S').motivo, 'salto-fuente')
   assert.equal(pares.find((p) => p.sku === 'N').resenias, 90, 'un top que gana 90 en una semana es crecimiento real')
 })
+
+test('demanda conserva el candidato pero usa la referencia que gana; no traslada sus intervalos a otra guía', async () => {
+  const { seleccionarGuiaDemanda } = await import('../src/services/ml/demanda.js')
+  const datos = { estimado: 900, referencia: 400, persistencia: 300, inferior: 800, superior: 1000 }
+  const modelo = { evaluacion: { maeLog: 0.4, referenciaEstacional: 0.2, referenciaPersistencia: 0.3, ranking: { ordenaMejor: true } } }
+  const guia = seleccionarGuiaDemanda(datos, modelo)
+  assert.equal(guia.metodo, 'estacional'); assert.equal(guia.estimado, 400); assert.equal(guia.estimadoModelo, 900)
+  assert.equal(guia.inferior, null); assert.equal(guia.inferiorModelo, 800); assert.equal(guia.rankingValidado, true)
+  assert.equal(datos.estimado, 900, 'la emisión original no se modifica')
+  assert.deepEqual(seleccionarGuiaDemanda(guia, modelo), guia, 'la presentación es idempotente')
+  const persistencia = seleccionarGuiaDemanda(datos, { evaluacion: { ...modelo.evaluacion, referenciaPersistencia: 0.1 } })
+  assert.equal(persistencia.metodo, 'persistencia'); assert.equal(persistencia.estimado, 300)
+  const gana = seleccionarGuiaDemanda(datos, { evaluacion: { ...modelo.evaluacion, maeLog: 0.1 } })
+  assert.equal(gana.metodo, 'modelo'); assert.equal(gana.estimado, 900); assert.equal(gana.inferior, 800)
+  assert.equal(seleccionarGuiaDemanda(datos, null).metodo, 'estacional')
+  assert.equal(seleccionarGuiaDemanda(datos, { evaluacion: { ...modelo.evaluacion, referenciaEstacional: 0 } }).metodo, 'estacional')
+})
+
+test('no promueve el modelo si pierde contra una referencia cuyo valor falta en una emisión antigua', async () => {
+  const { seleccionarGuiaDemanda } = await import('../src/services/ml/demanda.js')
+  const guia = seleccionarGuiaDemanda({ estimado: 900, referencia: 400 }, { evaluacion: { maeLog: 0.2, referenciaEstacional: 0.4, referenciaPersistencia: 0.1 } })
+  assert.equal(guia.metodo, 'estacional')
+})

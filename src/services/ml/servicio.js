@@ -2,7 +2,7 @@ import { SerieNichoMl } from '../../models/SerieNichoMl.js'
 import { ObservacionProductoMl } from '../../models/ObservacionProductoMl.js'
 import { ModeloMl } from '../../models/ModeloMl.js'
 import { PrediccionMl } from '../../models/PrediccionMl.js'
-import { pronosticarDemanda, VERSION_DEMANDA } from './demanda.js'
+import { pronosticarDemanda, VERSION_DEMANDA, VERSION_GUIA_DEMANDA } from './demanda.js'
 import { ventanasIndependientes, VERSION_COMERCIAL, MINIMOS_COMERCIAL } from './comercial.js'
 import { ejecutarEntrenamiento } from './ejecutar.js'
 import { huellaDe, diagnosticoObservacionesPropias } from './registro.js'
@@ -12,6 +12,7 @@ import { datosConContexto, estadoIntegracion } from './integracion.js'
 import { OBJETIVO_CONTEXTO, VERSION_CONTEXTO } from './contexto.js'
 import { resumenLibro } from './libro.js'
 import { resumenAdsDiario } from './adsDiario.js'
+import { saludFuentesMl } from './fuentes.js'
 
 export async function seriesActuales({ keywords } = {}) {
   return SerieNichoMl.aggregate([
@@ -116,7 +117,7 @@ export async function registrarPronosticosMl(keywords, { ahora = new Date() } = 
     for (const datos of pronosticarDemanda(modelo.resultado, serie)) {
       // Exigir horizonte futuro: nunca registrar un hindcast como pronóstico.
       if (indiceMes(datos.periodo) <= mesActual) continue
-      const huella = huellaDe({ modelo: String(modelo._id), serie: String(serie._id), periodo: datos.periodo })
+      const huella = huellaDe({ modelo: String(modelo._id), serie: String(serie._id), periodo: datos.periodo, politica: VERSION_GUIA_DEMANDA })
       const doc = await PrediccionMl.findOneAndUpdate({ huella }, { $setOnInsert: {
         huella, modeloId: modelo._id, serieId: serie._id, keyword: serie.keyword, emitidoEl: ahora,
         periodo: datos.periodo, datos,
@@ -139,6 +140,9 @@ export async function evaluarPrediccionesMl() {
     if (!Number.isFinite(real) || +new Date(s.capturadoEl) <= +new Date(p.emitidoEl)) continue
     await PrediccionMl.updateOne({ _id: p._id, evaluacion: null }, { $set: { evaluacion: {
       real, errorAbsoluto: Math.abs(real - p.datos.estimado),
+      errorModelo: Math.abs(real - (p.datos.estimadoModelo ?? p.datos.estimado)),
+      errorPersistencia: Number.isFinite(p.datos.persistencia) ? Math.abs(real - p.datos.persistencia) : null,
+      metodo: p.datos.metodo ?? 'modelo-original',
       errorReferencia: Math.abs(real - p.datos.referencia), serieId: s._id, medidoEl: s.capturadoEl,
     } } })
     evaluadas++
@@ -204,7 +208,7 @@ export async function estadoMl({ ahora = new Date() } = {}) {
       reciente: ultimo !== null && mesActual - ultimo <= 2 }
   })
   const ultimaCaptura = series.reduce((ultima, s) => Math.max(ultima, +new Date(s.capturadoEl)), 0)
-  return { modo: 'sombra', usaParaDecidir: false, consultadoEl: ahora,
+  return { modo: 'sombra', usaParaDecidir: false, consultadoEl: ahora, saludFuentes: await saludFuentesMl({ ahora }),
     alcance: { usaCostoCompra: false, estimaRentabilidad: false }, integracion, minimos: MINIMOS_COMERCIAL,
     fuentes: { demanda: { ultimaCapturaEl: ultimaCaptura ? new Date(ultimaCaptura) : null },
       comercial: { ultimaVentanaEl: ventanas.at(-1)?.hasta ?? null, historialDias: 730, perfilDias: 90,

@@ -3,6 +3,7 @@ import { Snapshot } from '../../models/Snapshot.js'
 import { Producto } from '../../models/Producto.js'
 import { paresDeLecturas } from './competidores.js'
 import { ajustarRidge, predecirRidge, errorPorGrupo } from './regresion.js'
+import { frescuraFuente } from './fuentes.js'
 
 // ¿QUÉ HACE VENDER A UNA PUBLICACIÓN? Aprendido de la competencia.
 //
@@ -37,7 +38,7 @@ const enPrueba = (keyword) => createHash('sha256').update(String(keyword)).diges
 // → puesto), primerDiaRanking: 'AAAA-MM-DD' } — todo opcional
 export function filasCompetidores(snaps, productos, contexto = {}) {
   const ficha = new Map(productos.map((p) => [p.sku, p]))
-  const { estacion = new Map(), ranking = new Map(), primerDiaRanking = null } = contexto
+  const { estacion = new Map(), ranking = new Map(), coberturaRanking = new Set() } = contexto
   // el precio anterior del MISMO producto (la lectura previa a la del par)
   const precioPrevio = new Map()
   {
@@ -76,10 +77,11 @@ export function filasCompetidores(snaps, productos, contexto = {}) {
     const idx = Array.isArray(indices) && indices[mes - 1] > 0 ? indices[mes - 1] : null
     const prev = precioPrevio.get(`${p.sku}|${+new Date(a.fecha)}`)
     const cambio = prev > 0 ? Math.max(-1, Math.min(1, Math.log(a.precio / prev))) : 0
-    // antes del primer día guardado del ranking NO es "fuera del top": no se sabe
-    const conRanking = primerDiaRanking && diaChile(a.fecha) >= primerDiaRanking
-    const puesto = conRanking ? puestoEn(f, p.sku, a.fecha) : null
-    const puestoFin = primerDiaRanking && diaChile(p.hasta) >= primerDiaRanking ? puestoEn(f, p.sku, p.hasta) : undefined
+    // No aparecer cuenta como fuera del top solo si se leyó ese nicho ese día.
+    const puesto = puestoEn(f, p.sku, a.fecha)
+    const conRanking = puesto != null || coberturaRanking.has(`${a.keyword}|${diaChile(a.fecha)}`)
+    const encontradoFin = puestoEn(f, p.sku, p.hasta)
+    const puestoFin = encontradoFin != null || coberturaRanking.has(`${a.keyword}|${diaChile(p.hasta)}`) ? encontradoFin : undefined
     filas.push({ grupo: p.sku, keyword: p.keyword, fecha: +new Date(p.hasta), dias: p.dias,
       // para la segunda prueba: ¿estaba en el top al final del par? (undefined = sin ranking)
       enTopFin: puestoFin === undefined ? undefined : puestoFin != null,
@@ -219,18 +221,21 @@ export async function modeloCompetidores({ dias = 90, ahora = new Date() } = {})
   } catch { /* sin forma del año: la variable queda "sin dato" */ }
   // el ranking oficial por id y día
   const ranking = new Map()
-  let primerDiaRanking = null
+  const coberturaRanking = new Set()
   try {
     const { RankingMasVendidos } = await import('../../models/RankingMasVendidos.js')
-    const docs = await RankingMasVendidos.find({}).select('dia items -_id').lean()
+    const docs = await RankingMasVendidos.find({}).select('dia items nichos -_id').lean()
     for (const d of docs) {
-      if (!primerDiaRanking || d.dia < primerDiaRanking) primerDiaRanking = d.dia
+      for (const keyword of d.nichos ?? []) if (d.items?.length) coberturaRanking.add(`${keyword}|${d.dia}`)
       for (const i of d.items ?? []) if (i.id && i.posicion) ranking.set(`${i.id}|${d.dia}`, i.posicion)
     }
   } catch { /* sin ranking: todas las filas quedan "sin dato" */ }
-  const filas = filasCompetidores(snaps, productos, { estacion, ranking, primerDiaRanking })
+  const filas = filasCompetidores(snaps, productos, { estacion, ranking, coberturaRanking })
   const { ajuste, ...modelo } = entrenarCompetidores(filas)
-  const valor = { ...modelo, diagnostico: diagnosticoCompetidores(filas),
+  const ultimaEtiqueta = filas.length ? new Date(filas.reduce((t, f) => Math.max(t, f.fecha), 0)) : null
+  const fuente = frescuraFuente(ultimaEtiqueta, { ahora, maxDias: DIAS_MAX })
+  const valor = { ...modelo, fuente, vigente: modelo.estado === 'sombra' && fuente.estado === 'al-dia',
+    uso: fuente.estado === 'al-dia' ? 'sombra' : 'solo-historico', diagnostico: diagnosticoCompetidores(filas),
     datosNuevos: { nichosConForma: estacion.size, diasDeRanking: new Set([...ranking.keys()].map((k) => k.split('|')[1])).size,
       filasEnTop: filas.filter((f) => f.xs[VARIABLES_COMPETIDORES.indexOf('enTop')] === 1).length,
       filasConCambioPrecio: filas.filter((f) => f.xs[VARIABLES_COMPETIDORES.indexOf('cambioPrecioLog')] !== 0).length } }

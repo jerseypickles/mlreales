@@ -259,25 +259,23 @@ async function entrenarEfectoDesdeBase({ titulos, envio }) {
   // economía de cada producto: lo que deja una venta ANTES del costo de
   // mercadería (que no está cargado): precio mediano − comisión − envío real
   const { ProductoPropio } = await import('../../models/ProductoPropio.js')
-  const { comisionMlExacta } = await import('../comisionesMl.js')
-  const propios = new Map((await ProductoPropio.find({}).select('itemIdMl sku categoriaMl costoUnitarioClp').lean()).map((p) => [p.itemIdMl ?? p.sku, p]))
+  const { economiaUnidad } = await import('../economiaUnidad.js')
+  const propios = new Map((await ProductoPropio.find({}).lean()).map((p) => [p.itemIdMl ?? p.sku, p]))
   for (const p of efecto.productos) {
     p.titulo = titulos.get(p.itemId) ?? null
     const precios = dias.filter((d) => d.itemId === p.itemId && d.precio > 0).map((d) => d.precio).sort((a, b) => a - b)
     const precio = precios[Math.floor(precios.length / 2)] ?? null
     const prop = propios.get(p.itemId)
-    const com = precio ? await comisionMlExacta({ precioClp: precio, categoriaId: prop?.categoriaMl ?? null, tipoPublicacion: 'gold_pro' }).catch(() => null) : null
-    const comision = precio ? (Number.isFinite(com?.pct) ? Math.round((com.pct / 100) * precio + (com.cargoFijoClp ?? 0)) : Math.round(precio * 0.16)) : null
-    const env = envio.get(p.itemId)?.porUnidad ?? null
-    const costo = Number.isFinite(prop?.costoUnitarioClp) ? prop.costoUnitarioClp : null
+    const env = envio.get(p.itemId)
+    const eu = prop ? await economiaUnidad(prop, env ? { envioClp: env.cobrado, unidades: env.unidades } : null, { precio }).catch(() => null) : null
+    const completa = eu && Number.isFinite(eu.costoClp) && Number.isFinite(eu.comisionClp) && Number.isFinite(eu.envioClp) && !eu.envioSupuesto
     p.precio = precio
-    p.quedaTrasMl = precio && env != null ? precio - comision - env : null
-    p.costoUnitario = costo
-    const contribucion = p.quedaTrasMl != null ? p.quedaTrasMl - (costo ?? 0) : null
-    p.contribucion = contribucion
-    // con el costo sin cargar, el budget óptimo es un TECHO (mercadería gratis)
-    p.presupuestoOptimo = presupuestoOptimo({ beta: efecto.beta, media: p.ventasPorDia, contribucion })
-    p.presupuestoEsTecho = costo == null
+    p.quedaTrasMl = eu && Number.isFinite(eu.comisionClp) && Number.isFinite(eu.envioClp) ? eu.quedaParaProductoClp : null
+    p.costoUnitario = eu?.costoClp ?? null
+    p.contribucion = completa ? eu.gananciaClp : null
+    p.presupuestoOptimo = completa ? presupuestoOptimo({ beta: efecto.beta, media: p.ventasPorDia, contribucion: p.contribucion }) : null
+    p.presupuestoEsTecho = !completa
+    p.economiaVerificada = !!completa
   }
   return efecto
 }
@@ -300,6 +298,10 @@ export async function parametrosPublicidad() {
 export async function estadoPublicidad() {
   const serie = await AprendizajePublicidad.find().sort({ dia: -1 }).limit(30).lean()
   if (!serie.length) return { vacio: true }
+  // Los registros antiguos asumían mercadería gratis al calcular el óptimo.
+  for (const p of serie[0].efecto?.productos ?? []) if (!p.economiaVerificada) {
+    p.presupuestoOptimo = null; p.contribucion = null; p.presupuestoEsTecho = true
+  }
   return { ultimo: { dia: serie[0].dia, parametros: serie[0].parametros, porProducto: serie[0].porProducto, efecto: serie[0].efecto ?? null },
     evolucion: serie.map((s) => ({ dia: s.dia, roasMediana: s.parametros.roas?.mediana, costoPorVenta: s.parametros.costoPorVenta?.mediana, factorEnvio: s.parametros.factorEnvio, productos: s.parametros.productosConMuestra })).reverse() }
 }

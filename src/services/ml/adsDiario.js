@@ -2,6 +2,7 @@ import { AdsDiaMl } from '../../models/AdsDiaMl.js'
 import { meliGet, hayCuentaMeli } from '../meli.js'
 import { advertiserId, METRICAS_ADS } from '../ads.js'
 import { diaChile } from '../inventarioFull.js'
+import { lecturaCompletaAds } from './evaluacionAds.js'
 
 const DIA = 86400e3
 const RETENCION_DIAS = 90 // lo que Product Ads conserva
@@ -21,7 +22,7 @@ export function filasDeAds(respuesta, dia) {
       unidadesOrganicas: n(m.organic_units_quantity), ventaAds: n(m.total_amount) })
   }
   const suma = (k) => filas.reduce((a, f) => a + f[k], 0)
-  const total = { itemId: '*', dia, campanaId: null, estado: null, anuncios: filas.length }
+  const total = { itemId: '*', dia, campanaId: null, estado: null, anuncios: filas.length, completa: lecturaCompletaAds(respuesta) }
   for (const k of ['prints', 'clicks', 'costo', 'unidadesAds', 'unidadesDirectas', 'unidadesIndirectas', 'unidadesOrganicas', 'ventaAds']) total[k] = suma(k)
   // un anuncio sin impresiones ni gasto ese día no es una observación
   return [...filas.filter((f) => f.prints || f.clicks || f.costo || f.unidadesAds), total]
@@ -65,6 +66,9 @@ export async function registrarCampanasDelDia({ ahora = new Date() } = {}) {
   const { resumenAds } = await import('../ads.js')
   const r = await resumenAds({ dias: 1 })
   if (!r?.campanas?.length) return { campanas: 0 }
+  if (!r.lecturaAnunciosCompleta) return { campanas: 0, motivo: 'lectura de anuncios incompleta; configuración no registrada' }
+  const { registrarConfiguracionesAds } = await import('./evaluacionAds.js')
+  const cambios = await registrarConfiguracionesAds(r.campanas, r.porItem, { ahora })
   const dia = diaChile(ahora)
   const productosDe = new Map()
   for (const [itemId, a] of Object.entries(r.porItem ?? {})) {
@@ -74,7 +78,7 @@ export async function registrarCampanasDelDia({ ahora = new Date() } = {}) {
   await CampanaDiaMl.bulkWrite(r.campanas.map((c) => ({ updateOne: { filter: { campanaId: c.id, dia }, update: { $set: {
     nombre: c.nombre ?? null, estado: c.estado ?? null, presupuestoDiario: c.presupuestoDiario ?? null, roasObjetivo: c.roasObjetivo ?? null,
     estrategia: c.estrategia ?? null, productos: productosDe.get(c.id) ?? [], actualizadoEl: ahora } }, upsert: true } })))
-  return { campanas: r.campanas.length, dia }
+  return { campanas: r.campanas.length, dia, ...cambios }
 }
 
 export async function resumenAdsDiario({ ahora = new Date(), diasSerie = 42 } = {}) {

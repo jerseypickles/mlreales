@@ -8,6 +8,7 @@ import { predecirComercial } from '../../services/ml/comercial.js'
 import { isObjectIdOrHexString } from 'mongoose'
 import { contextoActual } from '../../services/ml/integracion.js'
 import { OBJETIVO_CONTEXTO } from '../../services/ml/contexto.js'
+import { seleccionarGuiaDemanda } from '../../services/ml/demanda.js'
 
 const router = Router()
 router.get('/', async (_req, res) => res.json({ activo: config.mlActivo, ...await estadoMl() }))
@@ -51,11 +52,11 @@ router.get('/pronosticos', async (req, res) => {
 // reciente y solo los meses que todavía no pasaron.
 export function ordenarPorTendencia(nichos) {
   const puntaje = (n) => {
-    const futuros = n.meses.filter((m) => m.real === null && m.estimado > 0 && m.referencia > 0)
+    const futuros = n.meses.filter((m) => m.rankingValidado !== false && m.real === null && (m.estimadoModelo ?? m.estimado) > 0 && m.referencia > 0)
     const ultima = Math.max(...futuros.map((m) => +new Date(m.emitidoEl)))
     const vigentes = futuros.filter((m) => ultima - +new Date(m.emitidoEl) < 2 * 86400e3)
     if (!vigentes.length) return null
-    return vigentes.reduce((a, m) => a + Math.log(m.estimado / m.referencia), 0) / vigentes.length
+    return vigentes.reduce((a, m) => a + Math.log((m.estimadoModelo ?? m.estimado) / m.referencia), 0) / vigentes.length
   }
   const conPuntaje = nichos.map((n) => ({ n, v: puntaje(n) })).filter((x) => x.v !== null).sort((a, b) => a.v - b.v)
   const lugar = new Map(conPuntaje.map((x, i) => [x.n, { percentil: conPuntaje.length > 1 ? i / (conPuntaje.length - 1) : 0.5,
@@ -79,6 +80,9 @@ router.get('/pronosticos-nichos', async (_req, res) => {
     { $group: { _id: { keyword: '$keyword', periodo: '$periodo' }, p: { $first: '$$ROOT' } } },
   ])
   const porKeyword = new Map()
+  const modelos = new Map((await ModeloMl.find({ _id: { $in: [...new Set(filas.map(({ p }) => String(p.modeloId)))] } })
+    .select('resultado.evaluacion').lean()).map(m => [String(m._id), m.resultado]))
+  for (const { p } of filas) p.guia = seleccionarGuiaDemanda(p.datos ?? {}, modelos.get(String(p.modeloId)))
   for (const { p } of filas) porKeyword.set(p.keyword, [...(porKeyword.get(p.keyword) ?? []), p])
   const salida = []
   for (const n of nichos) {
@@ -88,7 +92,7 @@ router.get('/pronosticos-nichos', async (_req, res) => {
     salida.push({ nichoId: n._id, nicho: n.keyword, keywordMedida: medida, veredicto: n.veredicto ?? null, etapaCompra: n.etapaCompra ?? null,
       busquedasMes: c?.busquedasMes ?? null, mesPico: c?.nombreMesPico ?? null, clasificacion: c?.clasificacion ?? null,
       meses: porKeyword.get(medida).sort((a, b) => a.periodo.localeCompare(b.periodo)).map((p) => ({ periodo: p.periodo,
-        estimado: p.datos?.estimado ?? null, referencia: p.datos?.referencia ?? null, inferior: p.datos?.inferior ?? null, superior: p.datos?.superior ?? null,
+        ...p.guia,
         real: p.evaluacion?.real ?? null, emitidoEl: p.emitidoEl })) })
   }
   res.json({ modo: 'sombra', nichos: ordenarPorTendencia(salida) })
@@ -181,6 +185,8 @@ router.get('/campanas', async (_req, res) => {
 // día): cuando se corrige una regla, la recomendación guardada con la regla
 // vieja no debe quedar para evaluarse 7 días después
 router.post('/campanas', async (_req, res) => {
+  const { registrarCampanasDelDia } = await import('../../services/ml/adsDiario.js')
+  await registrarCampanasDelDia()
   const { planesDeCampana } = await import('../../services/ml/planCampanas.js')
   const r = await planesDeCampana({ guardar: true })
   res.json({ dia: r.dia, guardadas: r.productos?.length ?? 0, acciones: (r.productos ?? []).map((p) => `${p.titulo?.slice(0, 30)}: ${p.accion}`) })

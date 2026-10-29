@@ -152,3 +152,29 @@ test('ciclo completo: entrenar, congelar, volver a entrenar sin duplicar y evalu
   const pred = await registrarPronosticosMl([antes.keyword], { ahora })
   assert.equal(pred.pronosticos.length, 0, 'una captura futura no entra a inferencia pasada')
 })
+
+test('configuración de campañas: persiste base, deduplica lecturas y congela el plan anterior al ajuste', async () => {
+  const { registrarConfiguracionesAds } = await import('../src/services/ml/evaluacionAds.js')
+  const { CambioCampanaMl } = await import('../src/models/CambioCampanaMl.js')
+  const { RecomendacionAds } = await import('../src/services/ml/planCampanas.js')
+  await Promise.all([CambioCampanaMl.init(), RecomendacionAds.init()])
+  const c = { id: 1, estado: 'active', presupuestoDiario: 1000 }
+  const anuncios = { A: { campanaId: 1, estado: 'active' } }
+  await registrarConfiguracionesAds([c], anuncios, { ahora: new Date('2025-01-01T16:00:00Z') })
+  await registrarConfiguracionesAds([c], anuncios, { ahora: new Date('2025-01-09T16:00:00Z') })
+  assert.equal(await CambioCampanaMl.countDocuments(), 1)
+  const base = await CambioCampanaMl.findOne().lean()
+  await RecomendacionAds.create({ itemId: 'A', dia: '2025-01-09', campanaId: 1, calculadoEl: new Date('2025-01-09T16:00:00Z'),
+    accion: 'subir', budgetDiario: 1500, configuracion: base.despues })
+  const cambiado = { ...c, presupuestoDiario: 1500 }
+  await registrarConfiguracionesAds([cambiado], anuncios, { ahora: new Date('2025-01-10T16:00:00Z') })
+  await registrarConfiguracionesAds([cambiado], anuncios, { ahora: new Date('2025-01-11T16:00:00Z') })
+  assert.equal(await CambioCampanaMl.countDocuments(), 2)
+  const ajuste = await CambioCampanaMl.findOne({ antes: { $ne: null } }).lean()
+  assert.equal(ajuste.antes.presupuestoDiario, 1000); assert.equal(ajuste.despues.presupuestoDiario, 1500)
+  assert.equal(ajuste.recomendaciones.length, 1)
+  await RecomendacionAds.updateMany({}, { $set: { budgetDiario: 2000 } })
+  assert.equal((await CambioCampanaMl.findById(ajuste._id).lean()).recomendaciones[0].budgetDiario, 1500)
+  await registrarConfiguracionesAds([c], anuncios, { ahora: new Date('2025-01-08T16:00:00Z') })
+  assert.equal(await CambioCampanaMl.countDocuments(), 2, 'una lectura vieja no revierte el estado observado')
+})

@@ -1,4 +1,5 @@
 import { meliGet, hayCuentaMeli } from './meli.js'
+import { lecturaCompletaAds } from './ml/evaluacionAds.js'
 
 // Product Ads de la cuenta conectada. Rutas /marketplace/advertising validadas
 // en vivo el 4-ago contra las campañas reales (Api-Version: 2 obligatorio).
@@ -88,7 +89,9 @@ export async function adsPorItem({ dias = 30 } = {}) {
     `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/ads/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS_ADS}`,
     { headers: { 'Api-Version': '2' } },
   )
+  if (!Array.isArray(r?.results)) throw new Error('Lectura de anuncios incompleta')
   const porItem = new Map()
+  porItem.completa = lecturaCompletaAds(r)
   for (const ad of r?.results ?? []) {
     const id = ad.item_id ?? ad.id
     if (!id) continue
@@ -149,8 +152,9 @@ async function construirResumenAds({ dias = 30 } = {}) {
   // el rango exacto viaja a la mesa: sin él no se puede cuadrar contra el panel
   // de ML, que por defecto muestra el MES EN CURSO y no 30 días rodantes
   const rango = rangoDias(dias)
-  const items = await adsPorItem({ dias }).catch(() => new Map())
-  const porItem = Object.fromEntries(items)
+  const items = await adsPorItem({ dias }).catch(() => null)
+  const lecturaAnunciosCompleta = items?.completa === true
+  const porItem = Object.fromEntries(items ?? [])
 
   // LA ECONOMÍA, que es lo que ML no puede darte: su panel compara el gasto
   // contra la VENTA, y lo que decide si ganas es la contribución. Con el precio
@@ -213,7 +217,7 @@ async function construirResumenAds({ dias = 30 } = {}) {
     { gasto: 0, venta: 0, unidades: 0, impresiones: 0, clicks: 0 },
   )
 
-  return { dias, rango, totales, campanas, porItem, economia, experimento }
+  return { dias, rango, totales, campanas, porItem, lecturaAnunciosCompleta, economia, experimento }
 }
 
 // Métricas de una campaña desde una fecha: el "después" del experimento, con la

@@ -4,6 +4,8 @@ import { fueraDelRangoMedido } from './publicidad.js'
 import { economiaUnidad } from '../economiaUnidad.js'
 import { publicacionVigente } from '../../../frontend/src/lib/catalogoPropios.js'
 import { protegerPlanPublicidad, carteraCampanas } from './carteraCampanas.js'
+import { configuracionCampana, economiaCompleta, evaluarAjustesAds } from './evaluacionAds.js'
+export { evaluarAjustesAds as evaluarRecomendaciones } from './evaluacionAds.js'
 
 // "COMIENZA CON ESTO Y VAMOS ANALIZANDO". El plan de campaña del learning machine.
 //
@@ -42,6 +44,8 @@ const schema = new mongoose.Schema({
   texto: String,
   budgetDiario: Number,
   roasObjetivo: Number,
+  campanaId: { type: Number, default: null },
+  configuracion: { type: mongoose.Schema.Types.Mixed, default: null },
   metricas: { type: mongoose.Schema.Types.Mixed, default: null },
   calculadoEl: { type: Date, required: true },
 }, { versionKey: false })
@@ -286,7 +290,7 @@ function revisarCampanaSinClic(dias, eco, p, { beta = null, diasCorriendo = dias
   // aplicado a una venta ínfima da "óptimo $0" contra un ROAS que dice otra cosa)
   const media = unidades7 / Math.max(1, ult7.length)
   const dejaReal = ventasAds7 > 0 ? dejaronDe(venta7, ventasAds7, eco) / ventasAds7 : eco.deja
-  const optimo = beta > 0 && media >= 1 && dejaReal > 0 ? Math.max(0, Math.round((beta * media * dejaReal - 1000) / 500) * 500) : null
+  const optimo = economiaCompleta(eco) && beta > 0 && media >= 1 && dejaReal > 0 ? Math.max(0, Math.round((beta * media * dejaReal - 1000) / 500) * 500) : null
   metricas.budgetOptimoAprendido = optimo
 
   if (diasCorriendo < 5 && !(gasto7 >= 3 * eco.deja && ventasAds7 === 0)) {
@@ -466,7 +470,8 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   // toda la historia que ML retiene de publicidad (~100 días)
   const desde = new Date(+ahora - 120 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
   const ads = await AdsDiaMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia costo unidadesAds ventaAds campanaId prints clicks').lean()
-  const libro = await DiaProductoMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia unidades').lean()
+  const libro = await DiaProductoMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia unidades unidadesChile ingresosChileClp promo cambioLogistica').lean()
+  const diasAdsMedidos = new Set(await AdsDiaMl.distinct('dia', { itemId: '*', completa: true, dia: { $gte: desde } }))
   const hoy = new Date(ahora).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
   const salida = []
   const paraMarcador = []
@@ -488,7 +493,8 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     const e = envioReal.get(id)
     const eu = await economiaUnidad(prop, e ? { envioClp: e.cobrado, unidades: e.unidades, base: e.base, pctOrdenesSobreBase: e.pctOrdenesSobreBase } : null, { precio: precioCobrado ?? precio }).catch(() => null)
     const eco = eu && Number.isFinite(eu.comisionClp) && Number.isFinite(eu.envioClp) ? { ...economiaVenta({ precio: eu.precioClp, comisionPct: eu.comisionPct, comisionClp: eu.comisionClp, envio: eu.envioClp, costo: eu.costoClp }),
-      incompleta: !Number.isFinite(eu.comisionClp) || !Number.isFinite(eu.envioClp), envioBase: eu.envioBase, envioSupuesto: eu.envioSupuesto } : null
+      incompleta: !Number.isFinite(eu.comisionClp) || !Number.isFinite(eu.envioClp), envioBase: eu.envioBase, envioSupuesto: eu.envioSupuesto,
+      costoVigenteDesde: prop.costoEl ? new Date(prop.costoEl).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }) : null } : null
     // la serie desde el primer día con gasto (o vacía si nunca se anunció)
     const susAds = ads.filter((a) => a.itemId === id)
     const primer = susAds.filter((a) => a.costo > 0).map((a) => a.dia).sort()[0] ?? null
@@ -496,11 +502,14 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     let dias = []
     if (primer) {
       const porDia = new Map(susAds.map((a) => [a.dia, a]))
-      const ventas = new Map(libro.filter((l) => l.itemId === id).map((l) => [l.dia, l.unidades]))
+      const ventas = new Map(libro.filter((l) => l.itemId === id).map((l) => [l.dia, l]))
       for (let t = +new Date(`${primer}T12:00:00Z`); new Date(t).toISOString().slice(0, 10) < hoy; t += DIA) {
         const dia = new Date(t).toISOString().slice(0, 10)
         const a = porDia.get(dia)
-        dias.push({ dia, evento: diasEvento.has(dia), gasto: a?.costo ?? 0, unidadesAds: a?.unidadesAds ?? 0, ventaAds: a?.ventaAds ?? 0, unidades: ventas.get(dia) ?? 0, prints: a?.prints ?? 0, clicks: a?.clicks ?? 0, precio: precioDia.get(`${id}|${dia}`) ?? null, stockFraccion: stockDia.get(`${id}|${dia}`) ?? null })
+        const venta = ventas.get(dia)
+        dias.push({ dia, evento: diasEvento.has(dia), gasto: a?.costo ?? 0, unidadesAds: a?.unidadesAds ?? 0, ventaAds: a?.ventaAds ?? 0,
+          unidades: venta?.unidadesChile ?? venta?.unidades ?? 0, ingresosClp: venta?.ingresosChileClp ?? null, promo: venta?.promo ?? null, cambioLogistica: venta?.cambioLogistica ?? false,
+          adsMedido: diasAdsMedidos.has(dia), prints: a?.prints ?? 0, clicks: a?.clicks ?? 0, precio: precioDia.get(`${id}|${dia}`) ?? null, stockFraccion: stockDia.get(`${id}|${dia}`) ?? null })
       }
       // una campaña apagada hace más de 7 días ya no se revisa como en curso
       const ultimoGasto = susAds.filter((a) => a.costo > 0).map((a) => a.dia).sort().at(-1)
@@ -508,7 +517,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
       else plan = { pendiente: true, desdeCampana: diaDeCampanaActual(susAds) }
       paraMarcador.push({ dias, eco, itemId: id, titulo: prop.titulo ?? null })
       // las reglas aprenden de semanas normales: el CyberDay les enseñaría que subir el gasto paga
-      transiciones.push(...transicionesSemanales(dias.filter((d) => !d.evento), eco).map((t) => ({ ...t, itemId: id })))
+      transiciones.push(...transicionesSemanales(dias, eco).map((t) => ({ ...t, itemId: id })))
       diasPorItem.set(id, dias)
       ecoPorItem.set(id, eco)
     } else {
@@ -532,8 +541,10 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const nichoDe = new Map(propios.filter((x) => x.nichoId).map((x) => [x.itemIdMl ?? x.sku, String(x.nichoId)]))
   const familiaDe = new Map(propios.filter(x => x.familiaMl?.id).map(x => [x.itemIdMl ?? x.sku, `familia:${x.familiaMl.id}`]))
   const formas = aprenderEstructura(observacionesEstructura(ads, ecoPorItem, nichoDe, familiaDe))
-  const recsViejas = await RecomendacionAds.find({ dia: { $lt: hoy } }).select('itemId dia accion budgetDiario').lean()
-  const evaluacion = evaluarRecomendaciones(recsViejas, diasPorItem, ecoPorItem, { hoy })
+  const recsViejas = await RecomendacionAds.find({ dia: { $lt: hoy } }).select('itemId dia accion budgetDiario roasObjetivo campanaId configuracion calculadoEl metricas.economia').lean()
+  const { CambioCampanaMl } = await import('../../models/CambioCampanaMl.js')
+  const cambios = await CambioCampanaMl.find({ observadoEl: { $gte: new Date(`${desde}T00:00:00Z`) } }).sort({ observadoEl: 1 }).lean()
+  const evaluacion = evaluarAjustesAds(recsViejas, diasPorItem, ecoPorItem, { hoy, cambios })
   evaluacion.clic = evaluarRevisionAnuncio(recsViejas, diasPorItem, { hoy })
   // las campañas tal como están HOY en ML: su fecha de creación y el estado de
   // cada anuncio. Hace falta antes de revisar, por dos trampas medidas el 1-oct:
@@ -590,6 +601,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     const id = fila.itemId, plan = fila
     if (guardar) {
       await RecomendacionAds.updateOne({ itemId: id, dia: hoy }, { $set: { titulo: fila.titulo, fase: plan.fase, accion: plan.accion, texto: plan.texto,
+        campanaId: campanaDelAnuncio?.id ?? null, configuracion: campanaDelAnuncio && adsVivos.lecturaAnunciosCompleta ? configuracionCampana(campanaDelAnuncio, adsVivos.porItem) : null,
         budgetDiario: plan.budgetDiario ?? null, roasObjetivo: plan.roasObjetivo ?? null, metricas: { ...(plan.metricas ?? {}), economia: plan.economia, umbral: decision.umbral }, calculadoEl: ahora } }, { upsert: true })
     }
   }
@@ -616,7 +628,8 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     for (const g of cartera.propuestas) estructura.acciones.push({ prioridad: 2, tipo: 'crear', itemIds: g.itemIds, budgetDiario: g.presupuestoDiario, roasObjetivo: g.roasObjetivo, texto: `${g.titulo}: prueba con ${plata(g.presupuestoDiario)}/día compartidos y ROAS ${g.roasObjetivo}x. ${g.revision}` })
   }
   return { dia: hoy, productos: salida, marcador, estructura, cartera, motivo: adsVivos ? null : 'No se pudieron leer las campañas actuales. Vuelve a consultar antes de decidir.', sinCosto: salida.filter((x) => x.economia?.esTecho).length,
-    reglas: { ...decision, transiciones: transiciones.length, ultimas: transiciones.slice(-12) }, evaluacion, formas, clicCuenta }
+    reglas: { ...decision, transiciones: transiciones.length, ultimas: transiciones.slice(-12) }, evaluacion, formas, clicCuenta,
+    cambiosObservados: cambios.filter(c => c.antes).slice(-20).reverse().map(({ clave, campanaId, observadoEl, antes, despues }) => ({ clave, campanaId, observadoEl, antes, despues })) }
 }
 
 // ─── LAS REGLAS TAMBIÉN SE APRENDEN ─────────────────────────────────────────
@@ -638,27 +651,29 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
 // Pura. semanas por producto desde su primer gasto; `dias` trae
 // { dia, gasto, unidadesAds, ventaAds, unidades, precio }.
 export function transicionesSemanales(dias, eco) {
-  if (!eco || !dias.length) return []
+  if (!economiaCompleta(eco) || !dias.length) return []
   const semanas = []
   for (let i = 0; i + 7 <= dias.length; i += 7) {
     const w = dias.slice(i, i + 7)
     const suma = (k) => w.reduce((a, d) => a + (d[k] ?? 0), 0)
     const unidades = suma('unidades'), gasto = suma('gasto'), ventaAds = suma('ventaAds')
+    if (w.some((d, j) => (eco.costoVigenteDesde && d.dia <= eco.costoVigenteDesde) || !Number.isFinite(d.ingresosClp) || !d.adsMedido || d.stockFraccion !== 1 || d.evento || d.cambioLogistica ||
+      +new Date(d.dia) - +new Date(w[0].dia) !== j * DIA)) continue
     const conPrecio = w.filter((d) => d.precio > 0)
     const precio = conPrecio.length ? conPrecio.reduce((a, d) => a + d.precio, 0) / conPrecio.length : eco.precio
-    const dejaUnidad = precio * (1 - (eco.comisionPct ?? 17) / 100) - (eco.envio ?? 800) - (eco.costo ?? 0)
+    const dejaUnidad = precio * (1 - eco.comisionPct / 100) - eco.envio - eco.costo - eco.cargoFijo
     // SIN STOCK NO ES "APAGAR LA PUBLICIDAD": stock medido bajo 50%, o una
     // semana entera sin ventas y sin gasto (el producto pausado o quebrado;
     // el stock diario solo se mide desde el 1-sep)
     const conStock = w.filter((d) => d.stockFraccion != null)
     const sinStock = (conStock.length && conStock.reduce((a, d) => a + d.stockFraccion, 0) / conStock.length < 0.5) || (unidades === 0 && gasto === 0)
     semanas.push({ desde: w[0].dia, sinStock, gasto, unidades, roas: gasto > 0 ? ventaAds / gasto : null, empate: dejaUnidad > 0 ? precio / dejaUnidad : null,
-      plata: unidades * dejaUnidad - gasto, escala: Math.max(1, Math.abs(dejaUnidad)) })
+      plata: suma('ingresosClp') * (1 - eco.comisionPct / 100) - unidades * (eco.envio + eco.costo + eco.cargoFijo) - gasto, escala: Math.max(1, Math.abs(dejaUnidad)) })
   }
   const salida = []
   for (let t = 0; t + 1 < semanas.length; t++) {
     const a = semanas[t], b = semanas[t + 1]
-    if (a.sinStock || b.sinStock || !(a.gasto > 0) || a.roas == null || !a.empate) continue
+    if (+new Date(b.desde) - +new Date(a.desde) !== 7 * DIA || a.sinStock || b.sinStock || !(a.gasto > 0) || a.roas == null || !a.empate) continue
     salida.push({ desde: a.desde, ratio: a.roas / a.empate, dlog: Math.log((b.gasto + 500) / (a.gasto + 500)),
       // la plata en "ventas equivalentes" para poder juntar productos de precios distintos
       dplata: (b.plata - a.plata) / a.escala, gastoAntes: Math.round(a.gasto), gastoDespues: Math.round(b.gasto), plataAntes: Math.round(a.plata), plataDespues: Math.round(b.plata) })
@@ -682,44 +697,6 @@ export function aprenderUmbral(transiciones, { ajustar, previo = UMBRAL_INICIAL 
   const aprendido = Math.min(3, Math.max(0.8, 1 - a / b))
   const peso = n / (n + PESO_PREVIO)
   return { ...base, a: r2(a), b: r2(b), aprendido: r2(aprendido), peso: r2(peso), umbral: r2(peso * aprendido + (1 - peso) * previo), estado: 'aprendido' }
-}
-
-// Pura. ¿Sirvieron las recomendaciones? Siete días después de cada una: si el
-// gasto se movió en la dirección recomendada (la siguió) y si la plata total
-// del producto mejoró. `recs`: { itemId, dia, accion, metricas.gastoDiario };
-// `diasPorItem`: itemId → filas diarias.
-export function evaluarRecomendaciones(recs, diasPorItem, ecoPorItem, { hoy }) {
-  const evaluadas = []
-  let conEvento = 0
-  for (const r of recs) {
-    const dias = diasPorItem.get(r.itemId) ?? []
-    const eco = ecoPorItem.get(r.itemId)
-    const i = dias.findIndex((d) => d.dia > r.dia)
-    if (i < 0 || !eco) continue
-    const despuesTodos = dias.slice(i, i + 7)
-    if (despuesTodos.length < 7 || despuesTodos.at(-1).dia >= hoy) continue
-    // LOS DÍAS DE EVENTO COMERCIAL SALEN, LA VENTANA NO (15-oct-2026). La primera
-    // versión botaba toda ventana que tocara el CyberDay y dejó 64
-    // recomendaciones sin evaluar: dos semanas a ciegas. Ahora se comparan los
-    // días normales que quedan, por día, si son al menos 4 de cada lado.
-    const antes = dias.slice(Math.max(0, i - 7), i).filter((d) => !d.evento)
-    const despues = despuesTodos.filter((d) => !d.evento)
-    if (antes.length < 4 || despues.length < 4) { conEvento++; continue }
-    const plataDe = (w) => (w.reduce((a, d) => a + (d.unidades ?? 0), 0) * eco.deja - w.reduce((a, d) => a + (d.gasto ?? 0), 0)) / w.length * 7
-    const gAntes = antes.reduce((a, d) => a + d.gasto, 0) / Math.max(1, antes.length), gDespues = despues.reduce((a, d) => a + d.gasto, 0) / despues.length
-    const cambio = gAntes > 0 ? gDespues / gAntes : gDespues > 0 ? 2 : 1
-    const siguio = { subir: cambio >= 1.15, bajar: cambio <= 0.85, apagar: gDespues < 100, mantener: cambio > 0.85 && cambio < 1.15, esperar: cambio > 0.85 && cambio < 1.15 }[r.accion]
-    if (siguio == null) continue
-    evaluadas.push({ itemId: r.itemId, dia: r.dia, accion: r.accion, siguio, plataAntes: Math.round(plataDe(antes)), plataDespues: Math.round(plataDe(despues)), mejoro: plataDe(despues) > plataDe(antes) })
-  }
-  const seguidas = evaluadas.filter((e) => e.siguio)
-  return { evaluadas: evaluadas.length, seguidas: seguidas.length, aciertos: seguidas.filter((e) => e.mejoro).length,
-    tasaAcierto: seguidas.length ? Math.round((seguidas.filter((e) => e.mejoro).length / seguidas.length) * 100) : null,
-    // lo mismo para las que NO se siguieron: la comparación que dice si seguirlas sirve
-    tasaSinSeguir: evaluadas.length - seguidas.length ? Math.round((evaluadas.filter((e) => !e.siguio && e.mejoro).length / (evaluadas.length - seguidas.length)) * 100) : null,
-    // las que no se evaluaron porque su ventana tocó un evento comercial
-    sinEvaluarPorEvento: conEvento,
-    detalle: evaluadas.slice(-20) }
 }
 
 // Pura. "Revisar anuncio" no mueve el budget, así que no se evalúa por plata
@@ -890,7 +867,7 @@ export function observacionesEstructura(filas, ecoDe, nichoDe = new Map(), famil
       const eco = ecoDe.get(id)
       g.gasto += a.gasto
       g.contribucion += eco ? dejaronDe(a.ventaAds, a.unidadesAds, eco) : 0
-      g.completa &&= Boolean(eco && !eco.esTecho && !eco.incompleta)
+      g.completa &&= economiaCompleta(eco)
       familias.set(clave, g)
     }
     const nichos = new Set(ids.map((id) => nichoDe.get(id) ?? `sin-${id}`))
@@ -956,6 +933,7 @@ const lunesDe = (dia) => { const t = new Date(`${dia}T12:00:00Z`); return new Da
 
 // Pura. dias: filas diarias del producto; recs: { dia, accion, budgetDiario }.
 export function bitacoraProducto(dias, eco, recs = [], { desde = null, max = 12 } = {}) {
+  const completa = economiaCompleta(eco)
   const porSemana = new Map()
   for (const d of dias) {
     if (desde && d.dia < desde) continue
@@ -971,7 +949,7 @@ export function bitacoraProducto(dias, eco, recs = [], { desde = null, max = 12 
   const semanas = [...porSemana.values()].sort((a, b) => a.semana.localeCompare(b.semana)).map((s) => {
     const r = recsPorSemana.get(s.semana)
     return { semana: s.semana, dias: s.dias, gasto: Math.round(s.gasto), gastoDiario: Math.round(s.gasto / Math.max(1, s.dias)), ventasAds: s.ventasAds, ventas: s.unidades,
-      roas: s.gasto > 0 ? r2(s.ventaAds / s.gasto) : null, plata: eco ? Math.round(dejaronDe(s.ventaAds, s.ventasAds, eco) - s.gasto) : null,
+      roas: s.gasto > 0 ? r2(s.ventaAds / s.gasto) : null, plata: completa ? Math.round(dejaronDe(s.ventaAds, s.ventasAds, eco) - s.gasto) : null,
       impresiones: s.prints, clicks: s.clicks, ctr: ctrDe(s.clicks, s.prints), evento: s.evento,
       recomendo: r ? { accion: r.accion, budgetDiario: r.budgetDiario ?? null } : null }
   }).slice(-max)
@@ -998,5 +976,8 @@ export function bitacoraProducto(dias, eco, recs = [], { desde = null, max = 12 
     else if (ultimasNegativas && acumulado < 0) { veredicto = 'cortar'; texto = `Pierde plata ${ult.length} semanas seguidas y en total va ${acumulado < 0 ? 'en rojo' : 'justo'}: cortar la publicidad.` }
     else { veredicto = 'vigilar'; texto = 'Semanas mezcladas: mantener el budget y mirar la próxima semana.' }
   }
-  return { semanas, acumulado: Math.round(acumulado), semanasConGasto: conGasto.length, tendencia, veredicto, texto }
+  if (!completa) return { semanas, acumulado: null, semanasConGasto: conGasto.length, tendencia: null,
+    veredicto: 'sin-economia', texto: 'Faltan costos completos para evaluar la contribución y recomendar una subida. El ROAS por sí solo no confirma ganancia.' }
+  return { semanas, acumulado: Math.round(acumulado), semanasConGasto: conGasto.length, tendencia, veredicto, texto,
+    alcance: 'contribucion-estimada-con-costos-vigentes' }
 }

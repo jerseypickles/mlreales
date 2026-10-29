@@ -36,8 +36,9 @@ export function protegerPlanPublicidad(plan, propio, anuncio, campana, opciones 
       texto: `${disponibilidad.motivo}. Revisa disponibilidad antes de destinar presupuesto; se conserva su historial.` }
   }
   const enMarcha = anuncio?.estado === 'active' && campana?.estado === 'active'
-  if (!plan.economia || plan.economia.esTecho || plan.economia.incompleta) {
+  if (!plan.economia || plan.economia.esTecho || plan.economia.incompleta || plan.economia.envioSupuesto) {
     return { ...salida, pendiente: false, accion: 'completar-economia', budgetDiario: enMarcha ? campana.presupuestoDiario ?? null : null,
+      metricas: plan.metricas ? { ...plan.metricas, resultado7: null, resultado30: null, budgetOptimoAprendido: null } : undefined,
       texto: 'Completa costo, comisión y envío para calcular cuánto puede pagar por una venta. No se propone iniciar ni aumentar presupuesto con esos datos pendientes.' }
   }
   // La ventana inicial necesita existencias. La cobertura es una estimación con ventas recientes.

@@ -233,16 +233,18 @@ function QueHacer({ plan, fotos, max }) {
 function Resumen({ datos, plan, serieTotal, fotos, onIr }) {
   const economia = datos.economia ?? {}
   const tot = datos.totales ?? { gasto: 0, venta: 0, unidades: 0 }
-  const neto = Object.values(economia).reduce((a, f) => a + (f.contribucionGenerada ?? 0), 0) - tot.gasto
+  const conActividad = Object.values(economia).filter(f => f.gasto > 0 || f.unidades > 0)
+  const costosCompletos = conActividad.length > 0 && conActividad.every(f => !f.esTecho && Number.isFinite(f.contribucionGenerada))
+  const neto = costosCompletos ? conActividad.reduce((a, f) => a + f.contribucionGenerada, 0) - tot.gasto : null
   const roas = tot.gasto ? tot.venta / tot.gasto : null
   return (
     <>
       <section className="pub-resultado">
         <div className="pub-resultado-numeros">
-          <div className={`pub-grande ${neto >= 0 ? 'bien' : 'mal'}`}>
-            <span>la publicidad dejó</span>
+          <div className={`pub-grande ${neto == null ? '' : neto >= 0 ? 'bien' : 'mal'}`}>
+            <span>contribución estimada</span>
             <strong>{conSigno(neto)}</strong>
-            <small>{plan?.sinCosto ? 'antes de pagar el producto (falta cargar costos)' : 'después de pagar el producto'}</small>
+            <small>{costosCompletos ? 'después del costo del producto y publicidad' : 'pendiente: faltan costos completos'}</small>
           </div>
           <div className="pub-chico"><span>gastaste</span><strong>{fmtPrecio(Math.round(tot.gasto))}</strong></div>
           <div className="pub-chico"><span>ventas por anuncio</span><strong>{miles(tot.unidades)}</strong></div>
@@ -473,7 +475,7 @@ function LearningMachine({ plan, aprendido, fotos }) {
           <ul className="pub-pruebas">
             {enPrueba.map((p) => {
               const dia = p.metricas?.diasCorriendo ?? 0
-              const toca = p.fase === 'arranque' ? `Crear campaña: ${fmtPrecio(p.budgetDiario)}/día` : dia < 7 ? `Semana 1 con ${fmtPrecio(p.metricas?.gastoDiario ?? 0)}/día` : dia < 14 ? 'Semana 2: el budget al doble' : 'Semana 3: ajustar con lo medido'
+              const toca = p.fase === 'arranque' ? `Crear campaña: ${fmtPrecio(p.budgetDiario)}/día` : dia < 7 ? `Semana 1 con ${fmtPrecio(p.metricas?.gastoDiario ?? 0)}/día` : dia < 14 ? 'Semana 2: revisar antes de ajustar presupuesto' : 'Semana 3: ajustar con lo medido'
               return (
                 <li key={p.itemId}>
                   {fotos.get(p.itemId) ? <img src={fotos.get(p.itemId)} alt="" width="36" height="36" /> : <span className="pub-foto-vacia" />}
@@ -504,7 +506,7 @@ function LearningMachine({ plan, aprendido, fotos }) {
                       const evd = evalDe.get(`${id}|${d}`)
                       const c = f ? (ACCION[f.accion]?.c ?? 'neutro') : 'vacio'
                       return (
-                        <i key={d} className={`pub-punto ${c}`} title={f ? `${d}: ${ACCION[f.accion]?.t ?? f.accion}${f.budgetDiario ? ` · ${fmtPrecio(f.budgetDiario)}/día` : ''}${evd ? ` · ${evd.siguio ? 'la seguiste' : 'no la seguiste'}, la plata ${evd.mejoro ? 'mejoró' : 'no mejoró'}` : ''}\n${f.texto ?? ''}` : d}>
+                        <i key={d} className={`pub-punto ${c}`} title={f ? `${d}: ${ACCION[f.accion]?.t ?? f.accion}${f.budgetDiario ? ` · ${fmtPrecio(f.budgetDiario)}/día` : ''}${evd ? ` · configuración compatible observada; contribución ${evd.mejoro ? 'mayor' : 'sin mejora'}` : ''}\n${f.texto ?? ''}` : d}>
                           {evd ? (evd.mejoro ? <CheckCircle2 size={10} /> : <XCircle size={10} />) : null}
                         </i>
                       )
@@ -513,11 +515,13 @@ function LearningMachine({ plan, aprendido, fotos }) {
                 </div>
               )
             })}
-            <p className="pub-ley"><CircleDot size={12} /> cada punto es un día (color = acción recomendada); ✓/✗ aparece 7 días después: si la plata mejoró.</p>
+            <p className="pub-ley"><CircleDot size={12} /> cada punto es un día (color = acción recomendada); ✓/✗ requiere un ajuste observado, siete días completos posteriores y costos conocidos.</p>
           </div>
         ) : <p className="pub-vacio">Todavía no hay días guardados.</p>}
       </section>
 
+      <p className="pub-ley">Se observa el presupuesto configurado, separado del gasto efectivo. Esto no confirma quién hizo el cambio ni que haya causado el resultado. Sin ajuste observado no se cuenta una recomendación como aplicada.</p>
+      {!!ev?.pendientes?.length && <p className="pub-ley">{ev.pendientes.length} ajustes esperando completar su semana de evaluación.</p>}
       <Bitacoras plan={plan} fotos={fotos} />
 
       <FormasCampana formas={plan?.formas} />
@@ -532,8 +536,8 @@ function LearningMachine({ plan, aprendido, fotos }) {
 
       <div className="pub-aprende-tarjetas">
         <div>
-          <strong>Sus aciertos</strong>
-          <p>{ev?.evaluadas ? <>{ev.seguidas} recomendaciones seguidas: <b>{ev.tasaAcierto ?? '—'}%</b> dejaron más plata{ev.tasaSinSeguir != null ? ` (las no seguidas: ${ev.tasaSinSeguir}%)` : ''}.</> : 'Se evalúan 7 días después de cada recomendación: desde el 7-oct.'}</p>
+          <strong>Ajustes observados y evaluados</strong>
+          <p>{ev?.evaluadas ? <>{ev.evaluadas} ajustes coincidentes con una recomendación: <b>{ev.tasaAcierto ?? '—'}%</b> tuvieron mayor contribución estimada.</> : 'Todavía sin ajustes evaluables con configuración observada y costos completos.'}</p>
         </div>
         {r ? (
           <div>
@@ -543,8 +547,8 @@ function LearningMachine({ plan, aprendido, fotos }) {
         ) : null}
         {e?.estado ? (
           <div>
-            <strong>Efecto real de la publicidad</strong>
-            <p>{e.dias} días de ventas totales contra gasto. {e.estado === 'aprendido' ? <>Predice <b>{e.validacion?.mejoraPct}% mejor</b> con la publicidad que sin ella.</> : 'Aún sin efecto confiable.'} Trajo {e.ventasIncrementales} ventas; ML se atribuye {e.ventasAtribuidasMl}.</p>
+            <strong>Relación entre publicidad y ventas</strong>
+            <p>{e.dias} días de ventas totales contra gasto. {e.estado === 'aprendido' ? <>Predice <b>{e.validacion?.mejoraPct}% mejor</b> con la publicidad que sin ella.</> : 'Aún sin efecto confiable.'} Estima {e.ventasIncrementales} ventas asociadas al gasto; ML se atribuye {e.ventasAtribuidasMl}. Es una comparación observacional.</p>
           </div>
         ) : null}
         {t?.medido ? (
@@ -560,7 +564,7 @@ function LearningMachine({ plan, aprendido, fotos }) {
 
 // LA BITÁCORA DE LARGO PLAZO: cada producto semana a semana desde que está en
 // su campaña — plata, lo que se recomendó y el veredicto de la serie completa.
-const VEREDICTO_LARGO = { escalar: { t: 'escalar', c: 'bien' }, mantener: { t: 'mantener', c: 'bien' }, vigilar: { t: 'vigilar', c: 'medio' }, cortar: { t: 'cortar', c: 'mal' }, midiendo: { t: 'midiendo', c: 'neutro' }, pausado: { t: 'sin publicidad', c: 'neutro' } }
+const VEREDICTO_LARGO = { 'sin-economia': { t: 'costos pendientes', c: 'medio' }, escalar: { t: 'escalar', c: 'bien' }, mantener: { t: 'mantener', c: 'bien' }, vigilar: { t: 'vigilar', c: 'medio' }, cortar: { t: 'cortar', c: 'mal' }, midiendo: { t: 'midiendo', c: 'neutro' }, pausado: { t: 'sin publicidad', c: 'neutro' } }
 function Bitacoras({ plan, fotos }) {
   const prods = (plan?.productos ?? []).filter((p) => p.bitacora?.semanas?.some((s) => s.gasto > 0))
   if (!prods.length) return null
@@ -571,7 +575,7 @@ function Bitacoras({ plan, fotos }) {
         {prods.map((p) => {
           const b = p.bitacora
           const v = VEREDICTO_LARGO[b.veredicto] ?? VEREDICTO_LARGO.midiendo
-          const max = Math.max(1, ...b.semanas.map((s) => Math.abs(s.plata ?? 0)))
+          const max = Math.max(1, ...b.semanas.map((s) => Math.abs(s.plata ?? s.gasto)))
           return (
             <div key={p.itemId} className="pub-bitacora">
               <div className="pub-bitacora-cab">
@@ -582,15 +586,15 @@ function Bitacoras({ plan, fotos }) {
               <p className="pub-texto">{b.texto}</p>
               <div className="pub-bitacora-semanas">
                 {b.semanas.map((s) => (
-                  <div key={s.semana} title={`Semana del ${s.semana}: gastó ${fmtPrecio(s.gasto)} (${fmtPrecio(s.gastoDiario)}/día), ${s.ventasAds} ventas por anuncio de ${s.ventas} totales, ROAS ${x(s.roas)}, CTR ${pctClic(s.ctr)}, dejó ${conSigno(s.plata)}${s.recomendo ? ` · se recomendó: ${ACCION[s.recomendo.accion]?.t ?? s.recomendo.accion}` : ''}`}>
-                    <span className="pub-bit-barra"><i className={(s.plata ?? 0) >= 0 ? 'bien' : 'mal'} style={{ height: `${Math.max(3, (Math.abs(s.plata ?? 0) / max) * 46)}px` }} /></span>
+                  <div key={s.semana} title={`Semana del ${s.semana}: gastó ${fmtPrecio(s.gasto)} (${fmtPrecio(s.gastoDiario)}/día), ${s.ventasAds} ventas por anuncio de ${s.ventas} totales, ROAS ${x(s.roas)}, CTR ${pctClic(s.ctr)}, ${s.plata == null ? 'contribución pendiente por costos' : `contribución estimada ${conSigno(s.plata)}`}${s.recomendo ? ` · se recomendó: ${ACCION[s.recomendo.accion]?.t ?? s.recomendo.accion}` : ''}`}>
+                    <span className="pub-bit-barra"><i className={s.plata == null ? '' : s.plata >= 0 ? 'bien' : 'mal'} style={{ height: `${Math.max(3, (Math.abs(s.plata ?? s.gasto) / max) * 46)}px` }} /></span>
                     <small>{s.semana.slice(8, 10)}/{s.semana.slice(5, 7)}</small>
                     {s.recomendo ? <em className={`pub-bit-rec ${ACCION[s.recomendo.accion]?.c ?? 'neutro'}`}>{ACCION[s.recomendo.accion]?.t ?? s.recomendo.accion}</em> : <em className="pub-bit-rec vacio">—</em>}
                   </div>
                 ))}
               </div>
               <div className="pub-bitacora-pie">
-                <span>acumulado <b className={b.acumulado >= 0 ? 'bien' : 'mal'}>{conSigno(b.acumulado)}</b></span>
+                <span>{b.acumulado == null ? 'Gráfico de gasto; falta completar costos' : <>contribución estimada <b className={b.acumulado >= 0 ? 'bien' : 'mal'}>{conSigno(b.acumulado)}</b></>}</span>
                 <span>{b.semanasConGasto} {b.semanasConGasto === 1 ? 'semana' : 'semanas'} con gasto</span>
                 {b.tendencia ? <span>tendencia: <b className={b.tendencia === 'mejora' ? 'bien' : b.tendencia === 'empeora' ? 'mal' : ''}>{b.tendencia}</b></span> : null}
               </div>

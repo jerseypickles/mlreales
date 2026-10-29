@@ -59,7 +59,7 @@ test('variables nuevas: temporada del mes, cambio de precio y ranking, sin confu
   ]
   const estacion = new Map([['k', [1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1]]]) // septiembre ×2
   const ranking = new Map([['CAT-A|2026-09-10', 4], ['CAT-A|2026-09-19', 3]])
-  const filas = filasCompetidores(snaps, [{ sku: 'A', catalogId: 'CAT-A' }, { sku: 'B' }], { estacion, ranking, primerDiaRanking: '2026-09-10' })
+  const filas = filasCompetidores(snaps, [{ sku: 'A', catalogId: 'CAT-A' }, { sku: 'B' }], { estacion, ranking, coberturaRanking: new Set(['k|2026-09-10', 'k|2026-09-19']) })
   const a1 = filas.find((x) => x.grupo === 'A' && x.dias && x.xs[V.indexOf('cambioPrecioLog')] === 0)
   const a2 = filas.find((x) => x.grupo === 'A' && x.xs[V.indexOf('cambioPrecioLog')] !== 0)
   assert.ok(Math.abs(a1.xs[V.indexOf('estacionLog')] - Math.log(2)) < 1e-9, 'septiembre es ×2 en su año')
@@ -71,4 +71,13 @@ test('variables nuevas: temporada del mes, cambio de precio y ranking, sin confu
   assert.equal(a2.enTopFin, true)
   const b = filas.find((x) => x.grupo === 'B')
   assert.equal(b.enTopFin, false, 'con ranking guardado ese día y fuera del top')
+})
+
+test('un ranking detenido no convierte ausencias futuras o de otro nicho en fuera del top', () => {
+  const snaps = [1, 8, 15].map(d => ({ sku: 'A', keyword: 'k', fecha: new Date(`2025-01-${String(d).padStart(2, '0')}T16:00:00Z`), precio: 1000, posicion: 1, numReviewsApi: d }))
+  const contexto = { coberturaRanking: new Set(['k|2025-01-01', 'otro|2025-01-08']) }
+  const filas = filasCompetidores(snaps, [{ sku: 'A' }], contexto)
+  assert.equal(filas[0].xs[VARIABLES_COMPETIDORES.indexOf('sinRanking')], 0)
+  assert.equal(filas[1].xs[VARIABLES_COMPETIDORES.indexOf('sinRanking')], 1)
+  assert.ok(filas.every(f => f.enTopFin === undefined))
 })

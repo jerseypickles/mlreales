@@ -81,7 +81,7 @@ test('campaña activa sin elegibles se distingue de campaña pausada y de la par
 
 test('aprendizaje de estructura cuenta familias, sin multiplicar las observaciones por color', () => {
   const filas = ['a', 'b', 'c'].map(itemId => ({ itemId, dia: '2026-10-12', campanaId: 1, costo: 1000, unidadesAds: 1, ventaAds: 10000 }))
-  const eco = new Map(filas.map(f => [f.itemId, { precio: 10000, comisionPct: 15, envio: 500, costo: 2000 }]))
+  const eco = new Map(filas.map(f => [f.itemId, { precio: 10000, comisionPct: 15, envio: 500, costo: 2000, cargoFijo: 0 }]))
   const familia = new Map(filas.map(f => [f.itemId, 'familia-a']))
   const obs = observacionesEstructura(filas, eco, new Map(), familia)
   assert.equal(obs.length, 1); assert.equal(obs[0].forma, 'sola'); assert.equal(obs[0].productos, 1)

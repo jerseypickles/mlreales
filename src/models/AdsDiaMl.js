@@ -24,6 +24,7 @@ const schema = new mongoose.Schema({
   unidadesOrganicas: { type: Number, default: 0 },
   ventaAds: { type: Number, default: 0 },
   anuncios: { type: Number, default: null }, // solo en la fila '*'
+  completa: { type: Boolean, default: false }, // lectura sin páginas pendientes
   actualizadoEl: { type: Date, required: true },
 }, { versionKey: false })
 schema.index({ itemId: 1, dia: 1 }, { unique: true })

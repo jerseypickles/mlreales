@@ -1,5 +1,4 @@
-import { comisionMlExacta } from './comisionesMl.js'
-import { costoEnvioFull, dimensionesDeItem, DIMENSIONES_POR_DEFECTO } from './envioFull.js'
+import { economiaUnidad } from './economiaUnidad.js'
 
 // ¿A PARTIR DE QUÉ ROAS CADA ANUNCIO PIERDE PLATA?
 //
@@ -79,31 +78,13 @@ export async function economiaPorAnuncio(porItem, propios, { envioFacturado = ne
     const precio = precioEfectivo ?? precioLista
 
     let eco = null
-    if (Number.isFinite(precio) && precio > 0) {
-      const [comision, envio] = await Promise.all([
-        // pct + cargo fijo de la categoría real (listing_prices de la API oficial)
-        comisionMlExacta({ precioClp: precio, categoriaId: propio?.categoriaMl ?? null, tipoPublicacion: 'gold_pro' })
-          .then((c) =>
-            Number.isFinite(c?.pct)
-              ? Math.round((c.pct / 100) * precio) + (c.cargoFijoClp ?? 0)
-              : Math.round(precio * 0.13),
-          )
-          .catch(() => Math.round(precio * 0.13)),
-        // lo facturado manda; la tarifa Full escalonada es el respaldo
-        Number.isFinite(envioFacturado.get(itemId)) ? Promise.resolve(envioFacturado.get(itemId)) : costoEnvioFull({
-          precioClp: precio,
-          dimensiones: dimensionesDeItem(propio?.oficial) ?? DIMENSIONES_POR_DEFECTO,
-        })
-          .then((e) => (Number.isFinite(e?.clp) ? e.clp : 799))
-          .catch(() => 799),
-      ])
-      const costoUnitario = Number.isFinite(propio?.costoUnitarioClp) ? propio.costoUnitarioClp : 0
-      eco = roasEquilibrio({ precio, comision, envio, costoUnitario })
-      if (eco) {
-        eco.comision = comision
-        eco.envio = envio
-        eco.envioBase = Number.isFinite(envioFacturado.get(itemId)) ? 'facturado' : 'tarifa'
-        eco.costoUnitario = costoUnitario || null
+    if (propio && Number.isFinite(precio) && precio > 0) {
+      const facturado = envioFacturado.get(itemId)
+      const eu = await economiaUnidad(propio, Number.isFinite(facturado) ? { envioClp: facturado, unidades: 1 } : null, { precio }).catch(() => null)
+      if (eu && Number.isFinite(eu.comisionClp) && Number.isFinite(eu.envioClp)) {
+        eco = { ...roasEquilibrio({ precio, comision: eu.comisionClp, envio: eu.envioClp, costoUnitario: eu.costoClp }),
+          comision: eu.comisionClp, envio: eu.envioClp, envioBase: eu.envioBase, costoUnitario: eu.costoClp,
+          esTecho: eu.costoClp == null || eu.envioSupuesto }
       }
     }
 
@@ -132,10 +113,10 @@ export async function economiaPorAnuncio(porItem, propios, { envioFacturado = ne
       ...(eco ?? {}),
       // la contribución que ESTE anuncio generó, contra lo que costó: es el
       // único número de ganancia calculable sin conocer el costo del producto
-      contribucionGenerada: eco?.contribucion != null ? eco.contribucion * unidades : null,
+      contribucionGenerada: eco?.contribucion != null && !eco.esTecho ? eco.contribucion * unidades : null,
       resultado:
-        eco?.contribucion != null ? Math.round(eco.contribucion * unidades - gasto) : null,
-      veredicto: veredictoAnuncio({ roasReal, roasEquilibrio: eco?.roas ?? null, unidades }),
+        eco?.contribucion != null && !eco.esTecho ? Math.round(eco.contribucion * unidades - gasto) : null,
+      veredicto: eco?.esTecho ? { estado: 'sin-economia', texto: 'Faltan costos completos para evaluar ganancia' } : veredictoAnuncio({ roasReal, roasEquilibrio: eco?.roas ?? null, unidades }),
       // LO QUE PUEDE COSTAR EL PRODUCTO PARA QUE EL ANUNCIO PAGUE: lo que deja
       // cada venta antes del costo, menos lo que costó conseguirla por anuncio.
       // Se calcula sin conocer el costo, y el importador lo compara con el suyo.

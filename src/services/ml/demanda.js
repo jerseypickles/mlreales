@@ -2,6 +2,7 @@ import { ejemplosDemanda, variablesDemanda, indiceMes, periodoMes, normalizarMes
 import { ajustarRidge, predecirRidge, errorPorGrupo, cuantil } from './regresion.js'
 
 export const VERSION_DEMANDA = 'demanda-google-v1'
+export const VERSION_GUIA_DEMANDA = 'guia-validada-v1'
 const PARAMETROS = [0.1, 1, 10].flatMap((lambda) => [12, Infinity].map((semivida) => ({ lambda, semivida })))
 const magnitud = (logValor) => Math.max(0, Math.expm1(Math.min(Math.log1p(Number.MAX_SAFE_INTEGER), logValor)))
 
@@ -121,6 +122,31 @@ export function entrenarDemanda(series) {
     ajuste: ajustarRidge(filas, { ...elegido.p, hasta: ultimoMes }) }
 }
 
+// La validación del modelo emitido decide la guía. Se conserva el candidato
+// experimental para medirlo después, sin reescribir su historia ni sus errores.
+export function seleccionarGuiaDemanda(datos, modelo) {
+  const e = modelo?.evaluacion
+  const referencias = [['estacional', e?.referenciaEstacional, datos.referencia], ['persistencia', e?.referenciaPersistencia, datos.persistencia]]
+    .filter(([, error, valor]) => Number.isFinite(error) && error >= 0 && Number.isFinite(valor) && valor >= 0)
+    .sort((a, b) => a[1] - b[1])
+  const mejor = referencias[0]
+  const estimadoModelo = datos.estimadoModelo ?? datos.estimado
+  const erroresRef = [e?.referenciaEstacional, e?.referenciaPersistencia]
+  const gana = Number.isFinite(estimadoModelo) && erroresRef.every(x => Number.isFinite(x) && x >= 0) &&
+    Number.isFinite(e?.maeLog) && e.maeLog >= 0 && e.maeLog < Math.min(...erroresRef) * 0.95
+  const metodo = gana ? 'modelo' : mejor?.[0] ?? 'estacional'
+  return { ...datos, estimadoModelo, metodo, politica: VERSION_GUIA_DEMANDA,
+    estimado: gana ? estimadoModelo : mejor?.[2] ?? datos.referencia ?? null,
+    inferiorModelo: datos.inferiorModelo ?? datos.inferior ?? null,
+    superiorModelo: datos.superiorModelo ?? datos.superior ?? null,
+    inferior: gana ? datos.inferiorModelo ?? datos.inferior ?? null : null,
+    superior: gana ? datos.superiorModelo ?? datos.superior ?? null : null,
+    tipoRango: gana ? 'empirico-sin-garantia-de-cobertura' : 'sin-rango-calibrado-para-referencia',
+    rankingValidado: e?.ranking?.ordenaMejor === true,
+    motivoGuia: gana ? 'Modelo supera las referencias en validación histórica; pendiente confirmar con meses nuevos.'
+      : mejor ? 'Se usa la referencia con menor error histórico; el modelo sigue en observación.' : 'Sin validación suficiente: referencia estacional, sin modelo promovido.' }
+}
+
 export function pronosticarDemanda(modelo, serie, { origen } = {}) {
   const meses = normalizarMeses(serie.meses)
   const corte = origen ?? indiceMes(meses.at(-1)?.periodo)
@@ -130,10 +156,10 @@ export function pronosticarDemanda(modelo, serie, { origen } = {}) {
     if (!v) return []
     const logEstimado = Math.log1p(v.referencia) + predecirRidge(modelo.ajuste, v.xs)
     const rango = modelo.rangos.find((r) => r.h === h)?.errorLog
-    return [{ periodo: periodoMes(v.objetivo), horizonte: h, origen: periodoMes(corte),
-      estimado: Math.round(magnitud(logEstimado)), referencia: v.referencia,
+    return [seleccionarGuiaDemanda({ periodo: periodoMes(v.objetivo), horizonte: h, origen: periodoMes(corte),
+      estimado: Math.round(magnitud(logEstimado)), referencia: v.referencia, persistencia: v.ultima,
       inferior: Number.isFinite(rango) ? Math.round(magnitud(logEstimado - rango)) : null,
       superior: Number.isFinite(rango) ? Math.round(magnitud(logEstimado + rango)) : null,
-      tipoRango: 'empirico-sin-garantia-de-cobertura', variables: v.xs }]
+      tipoRango: 'empirico-sin-garantia-de-cobertura', variables: v.xs }, modelo)]
   })
 }

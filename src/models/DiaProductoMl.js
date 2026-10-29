@@ -16,6 +16,8 @@ const schema = new mongoose.Schema({
   nichoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Nicho', default: null },
   visitas: { type: Number, required: true },
   unidades: { type: Number, required: true }, // órdenes pagadas de ese día
+  ingresosChileClp: { type: Number, default: null },
+  unidadesChile: { type: Number, default: null }, // suma de artículos pagados; excluye envío del comprador
   ordenes: { type: Number, required: true },
   precio: { type: Number, default: null }, // promedio ponderado por tiempo del precio efectivo
   precioMin: { type: Number, default: null },

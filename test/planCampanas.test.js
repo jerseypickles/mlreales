@@ -1,3 +1,4 @@
+import { casoAjusteAds } from './helpers/adsFixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { economiaVenta, planDeArranque, revisarCampana, marcadorSemanal } from '../src/services/ml/planCampanas.js'
@@ -61,7 +62,7 @@ test('marcadorSemanal: plata que dejaron las ventas por anuncio menos el gasto, 
 })
 
 test('revisarCampana: deja plata en promedio pero gasta muy sobre el óptimo → bajar hacia el óptimo', () => {
-  const eco = economiaVenta({ precio: 4000, envio: 800 })
+  const eco = economiaVenta({ precio: 4000, envio: 800, costo: 0 })
   const dias = Array.from({ length: 10 }, (_, i) => dia(i, { gasto: 3000, unidadesAds: 1.5, ventaAds: 6000, unidades: 1.2 }))
   const r = revisarCampana(dias, eco, P, { beta: 0.78, diasCorriendo: 60 })
   assert.ok(r.metricas.resultado7 > 0)
@@ -108,8 +109,8 @@ test('aprenderUmbral: encuentra el ROAS sobre el cual subir deja plata, y lo mez
 })
 
 test('transicionesSemanales: la semana sin stock (sin ventas ni gasto) no enseña', () => {
-  const eco = { precio: 4000, comisionPct: 17, envio: 800, costo: null }
-  const d = (i, gasto, unidades, extra) => ({ dia: `2026-08-${String(i + 1).padStart(2, '0')}`, gasto, unidadesAds: unidades / 2, ventaAds: unidades / 2 * 4000, unidades, precio: 4000, ...extra })
+  const eco = { precio: 4000, comisionPct: 17, envio: 800, costo: 0, cargoFijo: 0 }
+  const d = (i, gasto, unidades, extra) => ({ dia: `2026-08-${String(i + 1).padStart(2, '0')}`, gasto, unidadesAds: unidades / 2, ventaAds: unidades / 2 * 4000, unidades, ingresosClp: unidades * 4000, adsMedido: true, stockFraccion: 1, precio: 4000, ...extra })
   const dias = [
     ...Array.from({ length: 7 }, (_, i) => d(i, 2000, 2)),
     ...Array.from({ length: 7 }, (_, i) => d(i + 7, 4000, 3)),
@@ -120,14 +121,13 @@ test('transicionesSemanales: la semana sin stock (sin ventas ni gasto) no enseñ
   assert.ok(t[0].dlog > 0)
 })
 
-test('evaluarRecomendaciones: cuenta si se siguió y si la plata mejoró', () => {
+test('evaluarRecomendaciones: el gasto variable no demuestra que se aplicó la recomendación', () => {
   const eco = { deja: 2000 }
   const dias = Array.from({ length: 20 }, (_, i) => ({ dia: `2026-10-${String(i + 1).padStart(2, '0')}`, gasto: i < 7 ? 1000 : 2000, unidades: i < 7 ? 1 : 2 }))
   const e = evaluarRecomendaciones([{ itemId: 'A', dia: '2026-10-07', accion: 'subir' }], new Map([['A', dias]]), new Map([['A', eco]]), { hoy: '2026-10-30' })
-  assert.equal(e.evaluadas, 1)
-  assert.equal(e.seguidas, 1)
-  assert.equal(e.aciertos, 1)
-  assert.equal(e.tasaAcierto, 100)
+  assert.equal(e.evaluadas, 0)
+  assert.equal(e.seguidas, 0)
+  assert.equal(e.tasaAcierto, null)
 })
 
 import { estructuraCampanas } from '../src/services/ml/planCampanas.js'
@@ -192,7 +192,7 @@ test('revisarCampana: con poco gasto y 30 días también en rojo, ahí sí apaga
 import { observacionesEstructura, aprenderEstructura } from '../src/services/ml/planCampanas.js'
 
 test('observacionesEstructura: la forma de la campaña de cada producto por semana', () => {
-  const eco = { precio: 4000, comisionPct: 17, envio: 800 }
+  const eco = { precio: 4000, comisionPct: 17, envio: 800, costo: 0, cargoFijo: 0 }
   const ecoDe = new Map([['A', eco], ['B', eco], ['C', eco]])
   const filas = [
     { itemId: 'A', dia: '2026-09-01', campanaId: 1, costo: 3000, unidadesAds: 2, ventaAds: 8000 },
@@ -273,7 +273,7 @@ test('bitacoraProducto: semana a semana, acumulado, tendencia y veredicto de lar
 })
 
 test('bitacoraProducto: sin gasto las últimas semanas es "pausado", no "escalar"', () => {
-  const eco = economiaVenta({ precio: 10000, envio: 800 })
+  const eco = economiaVenta({ precio: 10000, envio: 800, costo: 0 })
   const dia = (n) => new Date(Date.UTC(2026, 7, 3) + n * 86400e3).toISOString().slice(0, 10)
   const dias = Array.from({ length: 42 }, (_, i) => (i < 28 ? { dia: dia(i), gasto: 1000, unidadesAds: 1, ventaAds: 10000, unidades: 1 } : { dia: dia(i), gasto: 0, unidadesAds: 0, ventaAds: 0, unidades: 0 }))
   assert.equal(bitacoraProducto(dias, eco).veredicto, 'pausado')
@@ -364,24 +364,12 @@ test('clic de la cuenta: si sale un producto de clic alto, el bruto cae y el de 
   assert.deepEqual(s2.salieron, ['Brochas Set 9'])
 })
 
-test('evaluarRecomendaciones: los días de evento salen de la ventana, la ventana no (CyberDay del 5 al 7-oct)', () => {
-  const eco = { deja: 2000 }
-  // antes 1 venta y $1.000 al día; después 2 ventas y $2.000; el 9 y el 10 son
-  // CyberDay con 10 ventas que, si contaran, harían parecer un acierto enorme
-  const dias = Array.from({ length: 20 }, (_, i) => {
-    const dia = `2026-10-${String(i + 1).padStart(2, '0')}`
-    const evento = i === 8 || i === 9
-    return { dia, evento, gasto: i < 7 ? 1000 : 2000, unidades: evento ? 10 : i < 7 ? 1 : 2 }
-  })
-  const e = evaluarRecomendaciones([{ itemId: 'A', dia: '2026-10-07', accion: 'subir' }], new Map([['A', dias]]), new Map([['A', eco]]), { hoy: '2026-10-30' })
-  assert.equal(e.evaluadas, 1, 'se evalúa con los 5 días normales que quedan')
-  assert.equal(e.sinEvaluarPorEvento, 0)
-  assert.equal(e.detalle[0].plataDespues, Math.round((2 * 2000 - 2000) * 7), 'por día, sin los 10 del CyberDay')
-  // si el evento se come la ventana (quedan menos de 4 días normales), no se evalúa
-  const largo = dias.map((d, i) => ({ ...d, evento: i >= 7 && i <= 10 }))
-  const e2 = evaluarRecomendaciones([{ itemId: 'A', dia: '2026-10-07', accion: 'subir' }], new Map([['A', largo]]), new Map([['A', eco]]), { hoy: '2026-10-30' })
-  assert.equal(e2.evaluadas, 0)
-  assert.equal(e2.sinEvaluarPorEvento, 1)
+test('evaluarRecomendaciones: descarta toda la ventana con un evento, sin completar días con otra semana', () => {
+  const c = casoAjusteAds()
+  const dias = c.dias.map((d, i) => i === 12 ? { ...d, evento: true } : d)
+  const e = evaluarRecomendaciones([c.rec], new Map([['A', dias]]), new Map([['A', c.eco]]), { hoy: c.hoy, cambios: [c.cambio] })
+  assert.equal(e.evaluadas, 0)
+  assert.equal(e.sinEvaluarPorEvento, 1)
 })
 
 test('planDeArranque con costo por venta medido: la manguera va a prueba, no a orgánico; lo barato sigue orgánico', () => {

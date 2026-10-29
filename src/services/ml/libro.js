@@ -45,6 +45,7 @@ export function diasDelLibro(propio, visitas, ventas, { ahora = new Date(), desd
   const itemId = propio.itemIdMl ?? propio.sku
   const hoy = diaUtc(ahora)
   const unidades = new Map(), ordenes = new Map()
+  const ingresos = new Map(), unidadesChile = new Map(), ingresosIncompletos = new Set()
   let primeraVenta = null
   for (const v of ventas ?? []) {
     if (v.estado !== 'paid' || !Number.isFinite(+new Date(v.fecha))) continue
@@ -52,6 +53,13 @@ export function diasDelLibro(propio, visitas, ventas, { ahora = new Date(), desd
     if (!n) continue
     const dia = diaUtc(v.fecha)
     unidades.set(dia, (unidades.get(dia) ?? 0) + n)
+    // Product Ads usa día de Chile; conservar esa frontera para comparar contribución.
+    const diaAds = diaChile(v.fecha)
+    unidadesChile.set(diaAds, (unidadesChile.get(diaAds) ?? 0) + n)
+    for (const i of v.items ?? []) if (i.itemId === itemId && Number.isFinite(i.cantidad) && i.cantidad > 0) {
+      if (!Number.isFinite(i.precioUnitClp) || i.precioUnitClp < 0) ingresosIncompletos.add(diaAds)
+      else ingresos.set(diaAds, (ingresos.get(diaAds) ?? 0) + i.cantidad * i.precioUnitClp)
+    }
     ordenes.set(dia, (ordenes.get(dia) ?? 0) + 1)
     if (!primeraVenta || dia < primeraVenta) primeraVenta = dia
   }
@@ -86,6 +94,8 @@ export function diasDelLibro(propio, visitas, ventas, { ahora = new Date(), desd
       // el nicho se anota solo en los días que se escriben en su fecha
       nichoId: +ahora - t <= 2 * DIA ? propio.nichoId ?? null : null,
       visitas: visitas.get(dia) ?? 0, unidades: unidades.get(dia) ?? 0, ordenes: ordenes.get(dia) ?? 0,
+      unidadesChile: unidadesChile.get(dia) ?? 0,
+      ingresosChileClp: ingresosIncompletos.has(dia) ? null : ingresos.get(dia) ?? 0,
       precio: preciosOk ? Math.round(p.tramos.reduce((a, x) => a + x.valor * x.ms, 0) / DIA) : null,
       precioMin: preciosOk ? Math.min(...valores) : null, precioMax: preciosOk ? Math.max(...valores) : null,
       cambiosPrecio: p.cambios, precioInferido: p.inferido,

@@ -154,7 +154,7 @@ function Modelo({ modelo, Icono, titulo, pregunta, children }) {
       {filas && <>
         <p className={`apr-veredicto apr-veredicto-${gana ? 'bien' : 'aviso'}`}>
           {gana ? <TrendingUp size={16} aria-hidden="true" /> : <TrendingDown size={16} aria-hidden="true" />}
-          {mejora >= 0 ? `${decimal(mejora, 0)}% mejor` : `${decimal(Math.abs(mejora), 0)}% peor`} que {demanda ? 'repetir el año pasado' : 'la regla simple'}
+          {mejora >= 0 ? `${decimal(mejora, 0)}% mejor` : `${decimal(Math.abs(mejora), 0)}% peor`} que {demanda ? 'la mejor referencia' : 'la regla simple'}
         </p>
         <Comparacion filas={filas} />
         <p className="apr-nota">{gana ? 'Sigue en observación hasta confirmarlo con meses nuevos.' : 'Mientras no le gane a la regla simple, no se usa para decidir.'}</p>
@@ -252,7 +252,7 @@ function Pronosticos({ nichos, modeloGana }) {
   if (!nichos.length) return <p className="apr-vacio">Todavía no hay pronósticos para los nichos del tablero.</p>
   const visibles = todos || texto.trim() ? filas : filas.slice(0, 12)
   return <>
-    {!modeloGana && <p className="apr-aviso-linea"><AlertTriangle size={15} aria-hidden="true" />Este modelo todavía se equivoca más que repetir el año pasado. Para decidir una compra, hoy la mejor guía es la barra gris (lo que se buscó ese mes el año pasado); la azul es lo que el modelo espera.</p>}
+    {!modeloGana && <p className="apr-aviso-linea"><AlertTriangle size={15} aria-hidden="true" />Mientras el modelo no supere las referencias, la guía usa la que tuvo menor error histórico. Azul: guía seleccionada. Gris: año pasado. El candidato experimental sigue guardado para medirlo con meses nuevos.</p>}
     <div className="apr-controles">
       <label className="apr-buscar"><Search size={14} aria-hidden="true" /><span className="apr-solo-lector">Buscar nicho</span>
         <input type="search" placeholder="Buscar nicho…" value={texto} onChange={(ev) => setTexto(ev.target.value)} /></label>
@@ -271,7 +271,7 @@ function Pronosticos({ nichos, modeloGana }) {
               const m = n.meses.find((x) => x.periodo === p)
               if (!m) return <td key={p} className="apr-pron-celda apr-pron-sin">—</td>
               const delta = m.referencia > 0 ? (m.estimado / m.referencia - 1) * 100 : null
-              return <td key={p} className="apr-pron-celda" title={`Año pasado: ${fmtNum(m.referencia)} · Modelo: ${fmtNum(m.estimado)}${m.inferior != null ? ` (entre ${fmtNum(m.inferior)} y ${fmtNum(m.superior)})` : ''}${m.real != null ? ` · Real: ${fmtNum(m.real)}` : ''}`}>
+              return <td key={p} className="apr-pron-celda" title={`Año pasado: ${fmtNum(m.referencia)} · Guía (${m.metodo ?? 'estacional'}): ${fmtNum(m.estimado)} · Candidato experimental: ${fmtNum(m.estimadoModelo)}${m.inferior != null ? ` (entre ${fmtNum(m.inferior)} y ${fmtNum(m.superior)})` : ''}${m.real != null ? ` · Real: ${fmtNum(m.real)}` : ''}`}>
                 <div className="apr-par"><span className="apr-par-pasado" style={{ width: `${(m.referencia / tope) * 100}%` }} /><span className="apr-par-modelo" style={{ width: `${(m.estimado / tope) * 100}%` }} /></div>
                 <div className="apr-par-cifras"><span>{fmtNum(m.referencia)}</span><strong>{fmtNum(m.estimado)}</strong>
                   {delta !== null && <em className={`apr-delta ${delta >= 3 ? 'apr-delta-sube' : delta <= -3 ? 'apr-delta-baja' : ''}`}>{delta > 0 ? '+' : ''}{decimal(delta, 0)}%</em>}</div>
@@ -282,7 +282,7 @@ function Pronosticos({ nichos, modeloGana }) {
           </tr>
         })}</tbody>
       </table>
-      <p className="apr-leyenda"><span className="apr-leyenda-pasado" /> búsquedas del año pasado <span className="apr-leyenda-barra apr-leyenda-sep" /> lo que espera el modelo</p>
+      <p className="apr-leyenda"><span className="apr-leyenda-pasado" /> búsquedas del año pasado <span className="apr-leyenda-barra apr-leyenda-sep" /> guía seleccionada</p>
     </div>
     {!texto.trim() && filas.length > 12 && <button type="button" className="boton-secundario apr-mas" onClick={() => setTodos((v) => !v)}>{todos ? 'Ver menos' : `Ver los ${fmtNum(filas.length)} nichos`}</button>}
   </>
@@ -424,6 +424,15 @@ export function Aprendizaje() {
             </Modelo>
           </div>
         </Seccion>
+
+        {!!e.saludFuentes?.length && <Seccion titulo="Estado de las fuentes" bajada="La fecha corresponde al último dato guardado. Una fuente atrasada no se cuenta como aprendizaje nuevo.">
+          <div className="apr-modelos">{e.saludFuentes.map(f => <article key={f.id} className="apr-modelo">
+            <div className="apr-cabeza"><span className="apr-icono"><Activity size={18} aria-hidden="true" /></span><h3>{f.nombre}</h3></div>
+            <span className={`apr-chip apr-chip-${f.estado === 'al-dia' ? 'bien' : 'aviso'}`}>{f.estado === 'al-dia' ? 'Al día' : f.estado === 'atrasada' ? 'Sin datos recientes' : 'Sin datos'}</span>
+            <p>{f.diasSinDatos != null ? `${f.diasSinDatos} días desde el último dato` : 'Sin lectura disponible'}</p>
+            <p className="apr-nota">{f.uso}</p><p className="apr-pie">Última lectura: {fmtFecha(f.ultima)}</p>
+          </article>)}</div>
+        </Seccion>}
 
         <Seccion titulo="Tus productos, día por día" bajada="Todo lo que cada publicación vendió y recibió de visitas desde que existe, y si su semana actual sirve para aprender.">
           <Productos libro={com.libro} diagnostico={com.diagnostico} minimoVisitas={min.visitasSemana} />

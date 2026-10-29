@@ -3,6 +3,7 @@ import { Producto } from '../models/Producto.js'
 import { LecturaResenia } from '../models/LecturaResenia.js'
 import { conteosPorItem } from './reviewsApi.js'
 import { diaChile } from './inventarioFull.js'
+import { frescuraFuente } from './ml/fuentes.js'
 
 // RESEÑAS DE LA COMPETENCIA, TODOS LOS DÍAS Y GRATIS.
 //
@@ -131,5 +132,6 @@ export async function estadoResenias({ ahora = new Date() } = {}) {
       reseniasNuevasLimpias: limpias,
       mayoresSaltos: saltos.slice(0, 10).map((x) => ({ ...x, descartada: fuera.get(x.itemId) ?? null })) }
   }
-  return { dia, leidasHoy, bloqueoMl, porDia: porDia.map((d) => ({ dia: d._id, lecturas: d.lecturas })), comparacion }
+  return { dia, leidasHoy, bloqueoMl, frescura: frescuraFuente(porDia[0]?._id, { ahora, maxDias: 2 }),
+    porDia: porDia.map((d) => ({ dia: d._id, lecturas: d.lecturas })), comparacion }
 }
