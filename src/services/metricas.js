@@ -1183,6 +1183,88 @@ export function detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPr
 }
 
 // Arma el reporte del último scan de un nicho leyendo de Mongo.
+// EL JUEZ DEL RUIDO contra Mongo (la regla pura es juzgarSalto, en
+// estacionalidad.js). Anula la tasa de reseñas de un salto imposible y guarda
+// el crudo en `saltoSospechoso`; si otro scan anulado lo confirma, la acepta
+// como nivel nuevo (`reanclado`) y devuelve ese scan a la serie.
+//   fechaScan: el scan que se juzga
+//   fechaReferencia: el scan contra el que se midió su delta (donde empieza
+//     su ventana)
+export async function juzgarRuidoDemanda({ nicho, metricas, fechaScan, fechaReferencia = null }) {
+  const crudo = metricas.demanda?.resenasNuevasPorDia
+  if (crudo == null) return null
+  const [{ Reporte }, { CurvaEstacional }, { juzgarSalto }, { tasasComparables }] = await Promise.all([
+    import('../models/Reporte.js'),
+    import('../models/CurvaEstacional.js'),
+    import('./estacionalidad.js'),
+    import('./oportunidades.js'),
+  ])
+  const campos = 'fecha metricas.demanda.resenasNuevasPorDia metricas.demanda.fuenteResenas metricas.demanda.reviewsFicha.porDia metricas.demanda.saltoSospechoso'
+  // el ancla es el último scan ACEPTADO antes de este, sin contarse a sí
+  // mismo: el recálculo del mismo scan (post-nivel-2, exclusiones) vuelve a
+  // juzgar un reporte que ya está guardado
+  const anterior = await Reporte.findOne({
+    nichoId: nicho._id,
+    fecha: { $lt: fechaScan },
+    'metricas.demanda.resenasNuevasPorDia': { $ne: null },
+  })
+    .sort({ fecha: -1 })
+    .select(campos)
+    .lean()
+  if (!anterior) return null
+  // con la fuente cambiada (API → ficha desde el 29-sep) la caída es de
+  // canasta, no de demanda: se juzga ficha contra ficha
+  const [actual, ancla] = tasasComparables({ metricas }, anterior)
+  if (!Number.isFinite(actual) || !Number.isFinite(ancla)) return null
+  const curvaDoc = await CurvaEstacional.findOne({ keyword: nicho.keyword }).select('curva').lean()
+  const mes = (d) => new Date(d).getMonth() + 1
+  // quién puede confirmar el salto: un scan anulado después del ancla cuya
+  // ventana terminó antes de que empezara la de este. Con la cadencia de
+  // maduración dos scans seguidos comparten tramo, y un mismo artefacto (un
+  // catálogo que se consolida) inflaría a los dos
+  const confirmador = fechaReferencia
+    ? await Reporte.findOne({
+      nichoId: nicho._id,
+      fecha: { $gt: anterior.fecha, $lte: fechaReferencia },
+      'metricas.demanda.resenasNuevasPorDia': null,
+      'metricas.demanda.saltoSospechoso.valorCrudo': { $ne: null },
+    })
+      .sort({ fecha: -1 })
+      .select(campos)
+      .lean()
+    : null
+  const crudoConfirmador = confirmador?.metricas.demanda.saltoSospechoso.valorCrudo
+  const [actualC, confirmado] = confirmador
+    ? tasasComparables({ metricas }, { metricas: { demanda: { ...confirmador.metricas.demanda, resenasNuevasPorDia: crudoConfirmador } } })
+    : []
+  const j = juzgarSalto({
+    contraAncla: { anterior: ancla, actual, mesAnterior: mes(anterior.fecha) },
+    contraConfirmador: Number.isFinite(actualC) && Number.isFinite(confirmado)
+      ? { anterior: confirmado, actual: actualC, mesAnterior: mes(confirmador.fecha) }
+      : null,
+    curva: curvaDoc?.curva?.length === 12 ? curvaDoc.curva : null,
+    mesActual: mes(fechaScan),
+  })
+  if (j.anular) {
+    metricas.demanda.saltoSospechoso = { valorCrudo: crudo, contra: ancla, salto: j.ancla.salto, motivo: j.ancla.motivo }
+    metricas.demanda.resenasNuevasPorDia = null
+  } else if (j.reanclar) {
+    metricas.demanda.reanclado = { contra: ancla, anclaDel: anterior.fecha, confirmadoCon: confirmado, confirmadorDel: confirmador.fecha, salto: j.ancla.salto }
+    // el scan que lo confirmó vuelve a la serie con su crudo (para eso se guardó)
+    await Reporte.updateOne(
+      { _id: confirmador._id, 'metricas.demanda.resenasNuevasPorDia': null },
+      {
+        $set: {
+          'metricas.demanda.resenasNuevasPorDia': crudoConfirmador,
+          'metricas.demanda.saltoConfirmado': { ...confirmador.metricas.demanda.saltoSospechoso, confirmadoPor: fechaScan },
+        },
+        $unset: { 'metricas.demanda.saltoSospechoso': '' },
+      },
+    )
+  }
+  return j
+}
+
 export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   const ultimoSnap = await Snapshot.findOne({ keyword: nicho.keyword }).sort({ fecha: -1 }).lean()
   if (!ultimoSnap) return null
@@ -1303,46 +1385,10 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   // NO se borra el dato: se anula la tasa de reseñas para que salga de la
   // serie y del conteo de maduración —los consumidores ya filtran $ne:null— y
   // el valor crudo queda guardado en `saltoSospechoso`. Si algún día un salto
-  // era real (un viral, un lanzamiento), se puede ver y revisar.
+  // era real (un viral, un lanzamiento), se puede ver y revisar; y si se
+  // repite en otro scan, es el nivel nuevo (juzgarRuidoDemanda, 2-nov-2026).
   try {
-    const previo = metricas.demanda?.resenasNuevasPorDia
-    if (previo != null) {
-      const [{ Reporte }, { CurvaEstacional }, { saltoEsCreible }] = await Promise.all([
-        import('../models/Reporte.js'),
-        import('../models/CurvaEstacional.js'),
-        import('./estacionalidad.js'),
-      ])
-      const anterior = await Reporte.findOne({
-        nichoId: nicho._id,
-        'metricas.demanda.resenasNuevasPorDia': { $ne: null },
-      })
-        .sort({ fecha: -1 })
-        .select('fecha metricas.demanda.resenasNuevasPorDia metricas.demanda.fuenteResenas metricas.demanda.reviewsFicha.porDia')
-        .lean()
-      // con la fuente cambiada (API → ficha desde el 29-sep) la caída es de
-      // canasta, no de demanda: se juzga ficha contra ficha
-      const { tasasComparables } = await import('./oportunidades.js')
-      const [actualComparable, anteriorComparable] = anterior ? tasasComparables({ metricas }, anterior) : []
-      if (anterior && Number.isFinite(actualComparable) && Number.isFinite(anteriorComparable)) {
-        const curva = await CurvaEstacional.findOne({ keyword: nicho.keyword }).select('curva').lean()
-        const veredicto = saltoEsCreible({
-          anterior: anteriorComparable,
-          actual: actualComparable,
-          curva: curva?.curva?.length === 12 ? curva.curva : null,
-          mesActual: new Date(ultimoSnap.fecha).getMonth() + 1,
-          mesAnterior: new Date(anterior.fecha).getMonth() + 1,
-        })
-        if (veredicto?.creible === false) {
-          metricas.demanda.saltoSospechoso = {
-            valorCrudo: previo,
-            contra: anteriorComparable,
-            salto: veredicto.salto,
-            motivo: veredicto.motivo,
-          }
-          metricas.demanda.resenasNuevasPorDia = null
-        }
-      }
-    }
+    await juzgarRuidoDemanda({ nicho, metricas, fechaScan: ultimoSnap.fecha, fechaReferencia: snapPrevio?.fecha ?? null })
   } catch {
     // sin juez el reporte sale igual: mejor un dato sin arbitrar que ninguno
   }

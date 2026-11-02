@@ -547,12 +547,18 @@ export async function procesarCalcularMetricas(job) {
       ? await Reporte.countDocuments({ ...filtroDemanda, fecha: { $lte: ultimoAnalizado.fecha } })
       : 0
     const gradua = demandaAhora >= config.maduracionScans && demandaAlAnalizar < config.maduracionScans
+    // el juez re-ancló la demanda (metricas.js, juzgarRuidoDemanda): el nivel
+    // se movió 5x o más contra el que leyó el último análisis, que quedó viejo.
+    // Además, el scan que vuelve a la serie puede caer antes del último
+    // análisis y esconder la graduación de la cuenta de `gradua`
+    const reanclo = reporte.metricas.demanda?.reanclado != null
     const debeAnalizar =
       !ultimoAnalizado ||
       gradua ||
+      reanclo ||
       Math.abs((ultimoAnalizado.metricas?.scoreOportunidad ?? 0) - reporte.metricas.scoreOportunidad) >= 10
     if (debeAnalizar) {
-      motivoAnalisis = !ultimoAnalizado ? 'primer-analisis' : gradua ? 'graduacion' : 'score-movido'
+      motivoAnalisis = !ultimoAnalizado ? 'primer-analisis' : gradua ? 'graduacion' : reanclo ? 'reanclaje' : 'score-movido'
       if (gradua) console.log(`[metricas] "${nicho.keyword}" graduó la maduración (${demandaAhora} scans con demanda): veredicto fresco con la serie completa`)
       // jobId por reporte: dos recálculos seguidos del mismo scan (extensión
       // plan C, reintentos) no deben pagar el LLM dos veces (caso sabanillas

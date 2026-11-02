@@ -140,6 +140,29 @@ export function saltoEsCreible({ anterior, actual, curva, mesActual, mesAnterior
   }
 }
 
+// Pura. EL JUEZ CON RE-ANCLAJE (2-nov-2026). saltoEsCreible compara cada scan
+// contra la ÚLTIMA tasa aceptada, y si esa fue un valor raro todo lo que venía
+// después se anulaba aunque coincidiera entre sí: el nicho quedaba con la
+// demanda congelada y sin poder terminar de madurar. Medido el 2-nov: nueve
+// nichos activos con sus últimos scans anulados (uno con ocho seguidos que
+// daban todos lo mismo, contra un ancla de septiembre), y el radar sin cupo
+// por los que nunca terminaban de madurar.
+//
+// Un salto que se repite en otro scan —con una ventana que no se cruza con la
+// de este, para que un mismo artefacto no cuente dos veces— no es ruido de un
+// scan: es el nivel nuevo. Se acepta, y el scan que lo confirma vuelve a la
+// serie (`reanclar`).
+//   contraAncla: { anterior, actual, mesAnterior } contra el último aceptado
+//   contraConfirmador: lo mismo contra el crudo de un scan anulado después del
+//     ancla, o null si no hay
+export function juzgarSalto({ contraAncla, contraConfirmador = null, curva, mesActual }) {
+  const ancla = saltoEsCreible({ ...contraAncla, curva, mesActual })
+  if (ancla?.creible !== false) return { anular: false, reanclar: false, ancla }
+  const confirmador = contraConfirmador ? saltoEsCreible({ ...contraConfirmador, curva, mesActual }) : null
+  if (confirmador?.creible === true) return { anular: false, reanclar: true, ancla, confirmador }
+  return { anular: true, reanclar: false, ancla }
+}
+
 // ── Red ──────────────────────────────────────────────────────────────────────
 
 async function pedir(url, cookie) {

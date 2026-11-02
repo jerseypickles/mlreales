@@ -6,6 +6,7 @@ import {
   describirCurva,
   posicionEnElAno,
   saltoEsCreible,
+  juzgarSalto,
 } from '../src/services/estacionalidad.js'
 
 // curvas REALES medidas en Google Trends el 12-ago-2026 (Chile, 5 años)
@@ -108,4 +109,44 @@ test('saltoEsCreible: la curva plana desenmascara el artefacto de catálogo', ()
   assert.match(sinCurva.motivo, /sin curva/)
 
   assert.equal(saltoEsCreible({ anterior: 0, actual: 10 }), null)
+})
+
+test('juzgarSalto: el salto que otro scan confirma es el nivel nuevo', () => {
+  const PLANA = Array(12).fill(50)
+  // caso medido el 2-nov: ancla de septiembre en 0,5/día y después ocho scans
+  // seguidos de entre 6 y 19, todos anulados contra esa ancla
+  const confirmado = juzgarSalto({
+    contraAncla: { anterior: 0.5, actual: 8, mesAnterior: 9 },
+    contraConfirmador: { anterior: 6.7, actual: 8, mesAnterior: 10 },
+    curva: PLANA,
+    mesActual: 11,
+  })
+  assert.deepEqual([confirmado.anular, confirmado.reanclar], [false, true])
+
+  // sin nadie que lo confirme sigue siendo artefacto, como antes
+  const solo = juzgarSalto({ contraAncla: { anterior: 0.5, actual: 8, mesAnterior: 9 }, curva: PLANA, mesActual: 11 })
+  assert.deepEqual([solo.anular, solo.reanclar], [true, false])
+  assert.match(solo.ancla.motivo, /plana/)
+
+  // un pico de catálogo no confirma lo que viene después
+  const pico = juzgarSalto({
+    contraAncla: { anterior: 118, actual: 1500, mesAnterior: 10 },
+    contraConfirmador: { anterior: 35063, actual: 1500, mesAnterior: 10 },
+    curva: PLANA,
+    mesActual: 10,
+  })
+  assert.equal(pico.anular, true)
+
+  // un salto normal contra el ancla no necesita confirmación
+  const normal = juzgarSalto({
+    contraAncla: { anterior: 5, actual: 8, mesAnterior: 10 },
+    contraConfirmador: { anterior: 300, actual: 8, mesAnterior: 10 },
+    curva: PLANA,
+    mesActual: 10,
+  })
+  assert.deepEqual([normal.anular, normal.reanclar], [false, false])
+
+  // sin curva no se juzga ("no sé" no es "es falso"): no se anula
+  const sinCurva = juzgarSalto({ contraAncla: { anterior: 0.5, actual: 8, mesAnterior: 9 }, curva: null, mesActual: 11 })
+  assert.equal(sinCurva.anular, false)
 })
