@@ -13,11 +13,13 @@ async function tipoPublicacionDe(propio) {
   return valor
 }
 
+import { precioVigente } from './precioVigente.js'
+
 const LOGISTICAS_MERCADO_ENVIOS = new Set(['fulfillment', 'cross_docking', 'drop_off', 'xd_drop_off'])
 
 export async function economiaUnidad(propio, medido = null, { precio = null } = {}) {
   const ultima = (propio.mediciones ?? []).at(-1) ?? null
-  const precioClp = precio ?? propio.promoMl?.activa?.precio ?? ultima?.precioEfectivo ?? ultima?.precio ?? null
+  const precioClp = precioVigente({ precio, promo: propio.promoMl, medicion: ultima })
   if (!Number.isFinite(precioClp) || precioClp <= 0) return null
 
   const { comisionMlExacta } = await import('./comisionesMl.js')

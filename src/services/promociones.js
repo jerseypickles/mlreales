@@ -1,9 +1,26 @@
 import { meliGet, hayCuentaMeli } from './meli.js'
+import { positivo } from './precioVigente.js'
 
 // Promociones de ML sobre un item propio. El precio de LISTA no es el que ve
 // el comprador: una campaña activa (DEAL, PRICE_DISCOUNT…) manda sobre él —
 // caso 8-ago: las 3 brochas seguían vendiéndose a $1.890 pese a que la lista
 // decía $2.690, así que la subida de precio nunca llegó al cliente.
+// Pura. Una promoción de ML en corto. La promoción POR VOLUMEN ("10% llevando
+// 2") llega con `price: 0` porque el precio depende de cuántas lleve el
+// comprador: no tiene precio por unidad, queda en null y para una unidad sigue
+// mandando el de lista (3-nov-2026, ver precioVigente.js).
+export function resumirPromocion(p) {
+  return {
+    id: p.id ?? null,
+    tipo: p.type,
+    nombre: p.name || p.type,
+    precio: positivo(p.price),
+    precioOriginal: p.original_price ?? null,
+    empiezaEl: p.start_date ?? null,
+    terminaEl: p.finish_date ?? null,
+  }
+}
+
 export async function promocionesDeItem(itemId) {
   try {
     if (!(await hayCuentaMeli())) return null
@@ -12,15 +29,7 @@ export async function promocionesDeItem(itemId) {
     const activa = lista.find((p) => p.status === 'started') ?? null
     const candidatas = lista.filter((p) => p.status === 'candidate')
     const oferta = candidatas.find((p) => p.type === 'PRICE_DISCOUNT') ?? null
-    const resumir = (p) => ({
-      id: p.id ?? null,
-      tipo: p.type,
-      nombre: p.name || p.type,
-      precio: p.price ?? null,
-      precioOriginal: p.original_price ?? null,
-      empiezaEl: p.start_date ?? null,
-      terminaEl: p.finish_date ?? null,
-    })
+    const resumir = resumirPromocion
     return {
       activa: activa ? resumir(activa) : null,
       // PRECIOS YA COMPROMETIDOS A FUTURO. Se leía solo `started`, así que el

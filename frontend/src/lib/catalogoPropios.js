@@ -46,7 +46,7 @@ export function paginarEntradas(entradas, pagina = 1, tamano = 12) {
 
 // El mínimo de una familia solo usa instantes medidos en todos sus colores.
 export function seriePrecioEntrada(entrada) {
-  const series = miembros(entrada).map((p) => new Map((p.mediciones ?? []).map((d) => [d.fecha, d.precioEfectivo ?? d.precio]).filter(([fecha, precio]) => fecha && Number.isFinite(precio))))
+  const series = miembros(entrada).map((p) => new Map((p.mediciones ?? []).map((d) => [d.fecha, d.precioEfectivo > 0 ? d.precioEfectivo : d.precio]).filter(([fecha, precio]) => fecha && Number.isFinite(precio))))
   if (!series.length) return []
   return [...series[0].keys()].filter((fecha) => series.every((s) => s.has(fecha))).sort().slice(-14)
     .map((fecha) => ({ fecha, valor: Math.min(...series.map((s) => s.get(fecha))) }))

@@ -23,6 +23,9 @@ export function compararUrgencia(a, b) {
 }
 
 const finito = (n) => (Number.isFinite(n) ? n : null)
+// un precio que no es positivo no es precio: la promoción por volumen llega de ML
+// con precio 0 (3-nov-2026, ver src/services/precioVigente.js)
+const positivo = (n) => (Number.isFinite(n) && n > 0 ? n : null)
 
 function suma(valores) {
   const xs = valores.filter(Number.isFinite)
@@ -44,7 +47,7 @@ export const nombreVariante = (p) => p.familiaMl?.variante ?? p.titulo ?? p.sku
 // Los números de la tarjeta de UNA publicación
 export function metricasDe(p) {
   const ultima = (p.mediciones ?? []).at(-1) ?? null
-  const precio = p.promoMl?.activa?.precio ?? ultima?.precioEfectivo ?? ultima?.precio ?? null
+  const precio = positivo(p.promoMl?.activa?.precio) ?? positivo(ultima?.precioEfectivo) ?? positivo(ultima?.precio)
   return {
     precio: finito(precio),
     precioHasta: null,

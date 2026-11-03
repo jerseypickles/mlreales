@@ -6,6 +6,7 @@ import { publicacionVigente } from '../../../frontend/src/lib/catalogoPropios.js
 import { protegerPlanPublicidad, carteraCampanas } from './carteraCampanas.js'
 import { configuracionCampana, economiaCompleta, evaluarAjustesAds } from './evaluacionAds.js'
 export { evaluarAjustesAds as evaluarRecomendaciones } from './evaluacionAds.js'
+import { precioVigente } from '../precioVigente.js'
 
 // "COMIENZA CON ESTO Y VAMOS ANALIZANDO". El plan de campaña del learning machine.
 //
@@ -484,7 +485,7 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   for (const prop of propios) {
     const id = prop.itemIdMl ?? prop.sku
     const ult = [...(prop.mediciones ?? [])].sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha)).at(-1)
-    const precio = prop.promoMl?.activa?.precio ?? ult?.precioEfectivo ?? ult?.precio ?? null
+    const precio = precioVigente({ promo: prop.promoMl, medicion: ult })
     // el precio que SE COBRA (con promociones) de las ventas por anuncio de las
     // últimas 2 semanas; sin ventas, el de lista
     const recientes = ads.filter((a) => a.itemId === id && a.unidadesAds > 0 && a.dia >= new Date(+ahora - 14 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' }))

@@ -1,5 +1,6 @@
 import { Nicho } from '../models/Nicho.js'
 import { obtenerProductosUltimoScan } from './metricas.js'
+import { precioVigente } from './precioVigente.js'
 
 // LA GAMA DE CADA PRODUCTO PROPIO (21-oct-2026).
 //
@@ -26,7 +27,7 @@ const finito = (x) => Number.isFinite(x)
 
 export function precioDePropio(propio) {
   const u = (propio?.mediciones ?? []).at(-1)
-  return propio?.promoMl?.activa?.precio ?? u?.precioEfectivo ?? u?.precio ?? null
+  return precioVigente({ promo: propio?.promoMl, medicion: u })
 }
 
 // Pura. El rango de precio de la gama: el que fijó el importador, o de 0,7× a

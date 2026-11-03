@@ -6,6 +6,7 @@ import { indexarDetallesPorSku } from './normalizadorDetalle.js'
 import { registrarGasto } from './gastos.js'
 import { reviewsOficialesSeguro, itemOficialSeguro, visitasConVentanaSeguro, precioParaGanarSeguro, meliGet } from './meli.js'
 import { promocionesDeItem } from './promociones.js'
+import { positivo } from './precioVigente.js'
 import { sincronizarOrdenes } from './ventasMl.js'
 import { diaChile } from './inventarioFull.js'
 import { dimensionesDeItem } from './envioFull.js'
@@ -243,7 +244,8 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     // promoción vigente: el precio efectivo manda sobre el de lista
     const promo = oficial ? await promocionesDeItem(propio.itemIdMl ?? propio.sku) : null
     if (promo) propio.promoMl = { ...promo, fecha }
-    const precioEfectivo = promo?.activa?.precio ?? precio
+    // una promoción por volumen no tiene precio por unidad: ver precioVigente.js
+    const precioEfectivo = positivo(promo?.activa?.precio) ?? precio
     // un cambio del precio EFECTIVO (subida, o fin de campaña) es una
     // intervención medible: la lupa lee su efecto en visitas y ventas
     const efectivoPrevio = (propio.mediciones ?? []).at(-1)?.precioEfectivo

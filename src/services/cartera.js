@@ -8,6 +8,8 @@
 // EXPOSICIÓN (título, keywords, Full, ads). El trasplante entre hermanos es la
 // acción más barata que existe: ya sabes que funciona en tu propia cuenta.
 
+import { precioVigente } from './precioVigente.js'
+
 const pct = (n) => Math.round(n * 10) / 10
 
 export function compararCartera(productos, { demandaNichoDia = null } = {}) {
@@ -96,7 +98,7 @@ export function filasCartera(propios) {
     visitas7d: (p.mediciones ?? []).at(-1)?.visitas,
     ventas7d: p.ventas7d?.unidades ?? 0,
     conversion7d: p.conversion7d,
-    precioEfectivo: (p.mediciones ?? []).at(-1)?.precioEfectivo,
+    precioEfectivo: precioVigente({ medicion: (p.mediciones ?? []).at(-1) }),
     esFull: p.envioMl?.logistica === 'fulfillment',
   })
   const grupos = new Map()
