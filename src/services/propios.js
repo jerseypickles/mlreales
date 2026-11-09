@@ -435,6 +435,18 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     } catch (err) {
       console.warn('[ml] plan de campañas no calculado:', err.message)
     }
+    // y el lazo que faltaba: lo que se recomendó traer contra lo que se vende.
+    // Una fila por nicho, gama y día (ml/recomendadoVsVendido.js)
+    try {
+      const { CruceRecomendacion, recomendadoVsVendido } = await import('./ml/recomendadoVsVendido.js')
+      const hoy = new Date().toISOString().slice(0, 10)
+      if (!(await CruceRecomendacion.exists({ dia: hoy }))) {
+        const r = await recomendadoVsVendido({ guardar: true })
+        console.log(`[ml] recomendado vs vendido: ${r.resumen.grupos} grupos, ${r.resumen.medidos} medidos, ${r.resumen.madurando} madurando`)
+      }
+    } catch (err) {
+      console.warn('[ml] recomendado vs vendido no calculado:', err.message)
+    }
   }
 
   // documento tributario de cada venta: es lo que hace que la posición de IVA

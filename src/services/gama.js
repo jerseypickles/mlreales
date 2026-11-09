@@ -165,6 +165,11 @@ export function gamasDelNicho(productos, { lideres = 2 } = {}) {
       resenias,
       reseniasPct: pct(resenias, reseniasNicho),
       ventaHoyDia: Math.round(hoy * 10) / 10,
+      // cuántas publicaciones traen ese dato y cuánto se llevan las 3 primeras:
+      // sin eso, el promedio de la gama es el de sus líderes (9-nov-2026,
+      // ml/recomendadoVsVendido.js lo usa como referencia de un recién llegado)
+      conVentaHoy: xs.filter((p) => finito(p.resenasNuevasDia)).length,
+      ventaHoyTop3Dia: Math.round(suma(xs.map((p) => p.resenasNuevasDia).filter(finito).sort((x, y) => y - x).slice(0, 3)) * 10) / 10,
       ventaHoyPct: hayHoy ? pct(hoy, hoyNicho) : null,
       ratingPromedio: conRating.length ? Math.round((suma(conRating.map((p) => p.rating)) / conRating.length) * 100) / 100 : null,
       enTop20: xs.filter((p) => finito(p.posicion) && p.posicion <= 20).length,

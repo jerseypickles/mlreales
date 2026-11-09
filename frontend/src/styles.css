@@ -8374,3 +8374,43 @@ a.op-plan-sello:hover { text-decoration: underline; }
   .pub-mesa-cifras dd { font-size: 17px; }
   .pub-mesa-fecha { align-items: flex-start; }
 }
+
+/* Aprendizaje › Recomendado vs vendido (AprendizajeAcierto.jsx) */
+.acr-resumen { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.acr-dato { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border: 1px solid var(--borde); border-radius: var(--radio-g); background: var(--superficie); box-shadow: var(--sombra-1); }
+.acr-dato span { font-size: 12.5px; color: var(--tinta-2); }
+.acr-dato strong { font-size: 24px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--tinta); }
+.acr-dato strong small { font-size: 13px; font-weight: 500; color: var(--tinta-3); }
+.acr-dato > small { font-size: 12px; color: var(--tinta-3); }
+.acr-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
+.acr-tarjeta { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--borde); border-radius: var(--radio-g); background: var(--superficie); box-shadow: var(--sombra-1); min-width: 0; }
+.acr-cabeza { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.acr-cabeza img, .acr-foto { width: 64px; height: 64px; border-radius: 10px; flex: none; object-fit: cover; }
+.acr-titulo { min-width: 0; }
+.acr-titulo h4 { margin: 0; font-size: 14px; line-height: 1.3; color: var(--tinta); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-transform: none; letter-spacing: 0; }
+.acr-titulo small { display: block; margin-top: 3px; font-size: 12px; color: var(--tinta-3); }
+.acr-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.acr-barras { display: flex; flex-direction: column; gap: 7px; }
+.acr-barra-fila { display: grid; grid-template-columns: 66px minmax(0, 1fr) 82px; align-items: center; gap: 10px; font-size: 12.5px; color: var(--tinta-2); }
+.acr-barra-fila strong { text-align: right; font-variant-numeric: tabular-nums; color: var(--tinta); }
+.acr-barra-fila strong small { font-weight: 500; color: var(--tinta-3); }
+.acr-barra { height: 10px; border-radius: 999px; background: var(--superficie-2); overflow: hidden; }
+.acr-barra i { display: block; height: 100%; border-radius: 999px; }
+.acr-esperado { background: var(--borde-fuerte); }
+.acr-real { background: var(--acento); }
+.acr-lectura { margin: 0; font-size: 12.5px; font-weight: 600; }
+.acr-lectura-bien { color: var(--exito-tinta); }
+.acr-lectura-aviso { color: var(--avisa-tinta); }
+.acr-serie { width: 100%; height: 44px; display: block; }
+.acr-dia { fill: var(--acento); }
+.acr-dia-cero { fill: var(--borde-fuerte); }
+.acr-sin-serie { margin: 0; font-size: 12px; color: var(--tinta-3); }
+.acr-cifras { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; margin: 0; }
+.acr-cifras dt { font-size: 11.5px; color: var(--tinta-3); }
+.acr-cifras dd { margin: 2px 0 0; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--tinta); }
+.acr-cifras dd small { font-size: 11.5px; font-weight: 500; color: var(--tinta-3); }
+.acr-aviso { display: flex; gap: 6px; align-items: flex-start; margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--avisa-tenue); color: var(--avisa-tinta); font-size: 12px; line-height: 1.45; }
+.acr-aviso svg { flex: none; margin-top: 2px; }
+.acr-falta { margin: 0; font-size: 12px; color: var(--tinta-3); line-height: 1.45; }
+@media (max-width: 900px) { .acr-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .acr-grilla { grid-template-columns: minmax(0, 1fr); } .acr-cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

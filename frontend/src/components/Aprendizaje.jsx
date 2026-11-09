@@ -7,6 +7,7 @@ import { api } from '../api.js'
 import { Cargando, Miniatura } from './ui.jsx'
 import { fmtFecha, fmtNum, fmtPrecio } from '../lib/formato.js'
 import { StockCompetidores, MasVendidosMl } from './AprendizajeFuentes.jsx'
+import { RecomendadoVsVendido } from './AprendizajeAcierto.jsx'
 
 const decimal = (valor, digitos = 1) => Number.isFinite(valor)
   ? valor.toLocaleString('es-CL', { maximumFractionDigits: digitos }) : '—'
@@ -359,10 +360,11 @@ export function Aprendizaje() {
         </div>
       </div>
       <nav className="apr-submenu" aria-label="Secciones de aprendizaje">
-        {[['resumen', 'Resumen', Activity], ['stock', 'Stock de competidores', PackageX], ['ranking', 'Más vendidos de ML', TrendingUp]].map(([id, nombre, Icono]) => (
+        {[['resumen', 'Resumen', Activity], ['acierto', 'Recomendado vs vendido', CheckCircle2], ['stock', 'Stock de competidores', PackageX], ['ranking', 'Más vendidos de ML', TrendingUp]].map(([id, nombre, Icono]) => (
           <button key={id} type="button" className={vista === id ? 'activo' : ''} aria-pressed={vista === id} onClick={() => setVista(id)}><Icono size={15} aria-hidden="true" />{nombre}</button>
         ))}
       </nav>
+      {vista === 'acierto' && <RecomendadoVsVendido />}
       {vista === 'stock' && <StockCompetidores />}
       {vista === 'ranking' && <MasVendidosMl />}
       {vista === 'resumen' && error && <p className="error-bloque" role="alert">No se pudo actualizar: {error}{datos ? ' Se muestra la última consulta.' : ''}</p>}
