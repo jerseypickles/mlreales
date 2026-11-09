@@ -1,5 +1,6 @@
 import mongoose from 'mongoose'
 import { unidadesDelTitulo } from '../metricas.js'
+import { alternoDeReporte, compararPuntajes, cambiosEnLaMesa, MIN_DIAS_PUNTAJE } from './puntajeSombra.js'
 
 // ¿LO QUE EL SISTEMA RECOMENDÓ SE ESTÁ VENDIENDO?
 //
@@ -51,7 +52,7 @@ export function analisisDeDecision(reportes, decididoEl) {
   const antes = decididoEl ? con.filter((r) => +new Date(r.fecha) <= +decididoEl).at(-1) : null
   const r = antes ?? con[0]
   return { fecha: r.fecha, posterior: !antes, veredicto: r.analisis.veredicto, confianza: r.analisis.confianza ?? null,
-    score: r.scoreOportunidad ?? null, recomendacion: r.analisis.recomendacion ?? null }
+    score: r.scoreOportunidad ?? null, scoreAlterno: alternoDeReporte(r), recomendacion: r.analisis.recomendacion ?? null }
 }
 
 function indiceGama(resumen, precio) {
@@ -134,6 +135,13 @@ export function cruzarNicho({ nicho, propios, reportes, diasPorItem, dejaPorItem
     const decididoEl = fechaDecision(nicho, ps)
     const decision = analisisDeDecision(reportes, decididoEl)
     const rec = decision?.recomendacion ?? null
+    // Para comparar puntajes no hace falta la fecha de la decisión, sino un
+    // puntaje anterior a las ventas propias: el último reporte antes de publicar
+    // que traiga los dos (los de agosto no guardaban la venta medida del nicho).
+    const publicadoEl = Math.min(...ps.map((p) => +(fecha(p.creadoEl) ?? Infinity)))
+    const previo = [...reportes].filter((r) => +new Date(r.fecha) <= publicadoEl && finito(r.scoreOportunidad) && alternoDeReporte(r) != null)
+      .sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha)).at(-1)
+    const puntajes = previo ? { fecha: previo.fecha, actual: previo.scoreOportunidad, alterno: alternoDeReporte(previo) } : null
     const recPrecio = finito(rec?.precioVentaClp) ? rec.precioVentaClp : null
     const iRec = indiceGama(resumen, recPrecio)
     const unidadesRec = unidadesRecomendadas(rec)
@@ -172,7 +180,7 @@ export function cruzarNicho({ nicho, propios, reportes, diasPorItem, dejaPorItem
     grupos.push({
       clave: `${nicho._id}:${claveGama}`, nichoId: String(nicho._id), keyword: nicho.keyword, gama: claveGama, gamaNombre: gama?.nombre ?? null,
       productos: [...ps].sort((a, b) => b.utiles.reduce((s, d) => s + (d.unidades ?? 0), 0) - a.utiles.reduce((s, d) => s + (d.unidades ?? 0), 0)).map((p) => ({ itemId: p.itemId, titulo: p.titulo, imagen: p.imagen ?? null, estadoMl: p.estadoMl ?? null, precio: p.precio })),
-      decision: decision && { fecha: decision.fecha, decididoEl, posterior: decision.posterior, veredicto: decision.veredicto, confianza: decision.confianza, score: decision.score,
+      decision: decision && { fecha: decision.fecha, decididoEl, posterior: decision.posterior, veredicto: decision.veredicto, confianza: decision.confianza, score: decision.score, scoreAlterno: decision.scoreAlterno,
         titular: rec?.titular ?? null, segmento: rec?.segmento ?? null },
       comparacion: {
         precioRecomendado: recPrecio, precioReal: precio, gamaRecomendada: iRec == null ? null : GAMAS[iRec], mismaGama,
@@ -186,7 +194,7 @@ export function cruzarNicho({ nicho, propios, reportes, diasPorItem, dejaPorItem
       real: { diasConStock: diasConStock.size, unidades, unidadesTotales, ventaDia: realDia, visitas, conversionPct: visitas ? r2(unidades / visitas * 100) : null,
         conStockHoy, ultimoDia, dejaPorVenta: deja, dejo: deja != null ? deja * unidades : null,
         serie: [...diasConStock].sort().slice(-28).map((dia) => ({ dia, unidades: ps.reduce((s, p) => s + (p.utiles.find((d) => d.dia === dia)?.unidades ?? 0), 0) })) },
-      ratio, lectura: lecturaRatio(ratio), estado: medido ? 'medido' : 'madurando', progresoPct: Math.min(100, Math.round(diasConStock.size / MIN_DIAS_CON_STOCK * 100)),
+      puntajes, ratio, lectura: lecturaRatio(ratio), estado: medido ? 'medido' : 'madurando', progresoPct: Math.min(100, Math.round(diasConStock.size / MIN_DIAS_CON_STOCK * 100)),
       acierto, falta,
     })
   }
@@ -226,6 +234,8 @@ const schema = new mongoose.Schema({
   unidades: Number,
   ventaDia: Number,
   esperadoDia: Number,
+  score: Number,
+  scoreAlterno: Number,
   ratio: Number,
   acierto: { type: Boolean, default: null },
 }, { versionKey: false })
@@ -244,7 +254,7 @@ export async function recomendadoVsVendido({ ahora = new Date(), guardar = false
   const nichoIds = [...new Set(propios.map((p) => String(p.nichoId)))]
   const [nichos, reportes, dias] = await Promise.all([
     Nicho.find({ _id: { $in: nichoIds } }).select('keyword etapaCompraEl exwCotizadoEl exwCotizadoUsd').lean(),
-    Reporte.find({ nichoId: { $in: nichoIds } }).select('nichoId fecha scoreOportunidad analisis.veredicto analisis.confianza analisis.recomendacion metricas.gamas.cortes metricas.gamas.gamas.clave metricas.gamas.gamas.nombre metricas.gamas.gamas.publicaciones metricas.gamas.gamas.ventaHoyDia metricas.gamas.gamas.ventaHoyTop3Dia').lean(),
+    Reporte.find({ nichoId: { $in: nichoIds } }).select('nichoId fecha scoreOportunidad analisis.veredicto analisis.confianza analisis.recomendacion metricas.oportunidad metricas.demanda.resenasNuevasPorDia metricas.gamas.cortes metricas.gamas.gamas.clave metricas.gamas.gamas.nombre metricas.gamas.gamas.publicaciones metricas.gamas.gamas.ventaHoyDia metricas.gamas.gamas.ventaHoyTop3Dia').lean(),
     DiaProductoMl.find({ itemId: { $in: propios.map((p) => p.itemId) } }).select('itemId dia unidades visitas precio logistica cambioLogistica stockFraccion').lean(),
   ])
   const diasPorItem = new Map()
@@ -273,9 +283,24 @@ export async function recomendadoVsVendido({ ahora = new Date(), guardar = false
   if (guardar && grupos.length) {
     await CruceRecomendacion.bulkWrite(grupos.map((g) => ({ updateOne: { filter: { clave: g.clave, dia }, upsert: true,
       update: { $set: { keyword: g.keyword, veredicto: g.decision?.veredicto ?? null, estado: g.estado, diasConStock: g.real.diasConStock, unidades: g.real.unidades,
-        ventaDia: g.real.ventaDia, esperadoDia: g.esperado.ventaDia, ratio: g.ratio, acierto: g.acierto } } } })))
+        ventaDia: g.real.ventaDia, esperadoDia: g.esperado.ventaDia, score: g.puntajes?.actual ?? null, scoreAlterno: g.puntajes?.alterno ?? null, ratio: g.ratio, acierto: g.acierto } } } })))
   }
   const historia = await CruceRecomendacion.find({ clave: { $in: grupos.map((g) => g.clave) } }).select('-_id clave dia ratio diasConStock').sort({ dia: 1 }).lean()
   for (const g of grupos) g.historia = historia.filter((h) => h.clave === g.clave).slice(-60).map(({ clave, ...h }) => h)
-  return { modo: 'sombra', usaParaDecidir: false, calculadoEl: ahora, resumen: resumenCruce(grupos), grupos }
+  // EL PUNTAJE ALTERNO (ml/puntajeSombra.js): cuál de los dos ordena mejor lo
+  // que de verdad se vendió, y qué cambiaría en la mesa si se usara.
+  const casos = grupos.filter((g) => g.real.diasConStock >= MIN_DIAS_PUNTAJE && g.puntajes)
+    .map((g) => ({ actual: g.puntajes.actual, alterno: g.puntajes.alterno, ventaDia: g.real.ventaDia }))
+  let mesa = null
+  try {
+    const activos = await Nicho.find({ estado: 'activo' }).select('keyword').lean()
+    const ultimos = await Reporte.aggregate([
+      { $match: { nichoId: { $in: activos.map((n) => n._id) }, scoreOportunidad: { $ne: null } } },
+      { $sort: { fecha: -1 } },
+      { $group: { _id: '$nichoId', keyword: { $first: '$keyword' }, score: { $first: '$scoreOportunidad' }, imagen: { $first: { $arrayElemAt: ['$topProductos.imagen', 0] } }, oportunidad: { $first: '$metricas.oportunidad' }, resenias: { $first: '$metricas.demanda.resenasNuevasPorDia' } } },
+    ])
+    mesa = cambiosEnLaMesa(ultimos.map((u) => ({ keyword: u.keyword, imagen: u.imagen ?? null, actual: u.score, reseniasDia: u.resenias ?? null,
+      alterno: alternoDeReporte({ metricas: { oportunidad: u.oportunidad, demanda: { resenasNuevasPorDia: u.resenias } } }) })))
+  } catch (err) { console.warn('[ml] puntaje alterno sin mesa:', err.message) }
+  return { modo: 'sombra', usaParaDecidir: false, calculadoEl: ahora, resumen: resumenCruce(grupos), puntaje: { contraVentas: compararPuntajes(casos), mesa }, grupos }
 }

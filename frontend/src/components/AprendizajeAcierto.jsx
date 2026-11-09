@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, CircleDashed, PackageX, ShoppingBag, Target, XCircle } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, CircleDashed, PackageX, ShoppingBag, Target, XCircle } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura } from './ui.jsx'
 import { fmtNum, fmtPrecio } from '../lib/formato.js'
@@ -97,6 +97,57 @@ function Tarjeta({ g }) {
   )
 }
 
+// EL PUNTAJE ALTERNO, EN SOMBRA: el mismo puntaje de la mesa, pero con la
+// demanda tomada sobre todo de la venta medida en Mercado Libre. No cambia nada
+// de lo que se ve en Oportunidades: acá se compara contra las ventas reales.
+const ESTADO_PUNTAJE = {
+  'pocos-casos': 'Todavía pocos productos medidos: no hay ganador',
+  'gana-alterno': 'El alterno ordena mejor lo que vendiste',
+  'gana-actual': 'El puntaje actual ordena mejor lo que vendiste',
+  empate: 'Los dos ordenan parecido',
+}
+
+function Movimiento({ m, sube }) {
+  const Icono = sube ? ArrowUp : ArrowDown
+  return (
+    <li className="acr-mov">
+      {m.imagen ? <Miniatura src={m.imagen} lado={44} /> : <span className="apr-foto-vacia acr-mov-foto" aria-hidden="true"><ShoppingBag size={16} /></span>}
+      <div className="acr-mov-cuerpo">
+        <strong>{m.keyword}</strong>
+        <div className="acr-mov-barras" role="img" aria-label={`Puntaje actual ${m.actual}, alterno ${m.alterno}`}>
+          <i className="acr-esperado" style={{ width: `${m.actual}%` }} /><i className="acr-real" style={{ width: `${m.alterno}%` }} />
+        </div>
+        <small>{m.actual} → {m.alterno} puntos · {decimal(m.reseniasDia)} reseñas nuevas al día</small>
+      </div>
+      <span className={`apr-chip apr-chip-${sube ? 'bien' : 'aviso'}`}><Icono size={13} aria-hidden="true" />lugar {m.lugarActual} → {m.lugarAlterno}</span>
+    </li>
+  )
+}
+
+function PuntajeAlterno({ p }) {
+  if (!p?.mesa) return null
+  const v = p.contraVentas, m = p.mesa
+  return (
+    <section className="apr-seccion acr">
+      <div className="apr-seccion-cabeza">
+        <h3>Puntaje alterno, en prueba</h3>
+        <p>El mismo puntaje de Oportunidades con un solo cambio: la demanda sale sobre todo de la venta medida en Mercado Libre y no de las búsquedas de Google. No toca la mesa; se compara contra lo que vendes para decidir después con datos.</p>
+      </div>
+      <div className="acr-resumen">
+        <div className="acr-dato"><span>Contra tus ventas</span><strong>{v.casos}<small> de {v.minimoCasos} productos</small></strong><small>{ESTADO_PUNTAJE[v.estado]}</small></div>
+        <div className="acr-dato"><span>Orden del puntaje actual</span><strong>{decimal(v.ordenActual, 2)}</strong><small>1 = ordena perfecto lo que vendiste</small></div>
+        <div className="acr-dato"><span>Orden del alterno</span><strong>{decimal(v.ordenAlterno, 2)}</strong><small>misma medida, mismos productos</small></div>
+        <div className="acr-dato"><span>Separa más los nichos</span><strong>{m.rangoAlterno[0]}–{m.rangoAlterno[1]}</strong><small>el actual va de {m.rangoActual[0]} a {m.rangoActual[1]} · {m.nichos} nichos</small></div>
+      </div>
+      <div className="acr-movs">
+        <div><h4>Subirían en la mesa</h4><ul>{m.suben.map((x) => <Movimiento key={x.keyword} m={x} sube />)}</ul></div>
+        <div><h4>Bajarían en la mesa</h4><ul>{m.bajan.map((x) => <Movimiento key={x.keyword} m={x} />)}</ul></div>
+      </div>
+      <p className="apr-leyenda"><span className="acr-leyenda acr-esperado" /> puntaje actual <span className="acr-leyenda acr-real" /> alterno · {m.sinVentaMedida} nichos quedan fuera porque aún no tienen venta medida.</p>
+    </section>
+  )
+}
+
 export function RecomendadoVsVendido() {
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
@@ -118,6 +169,7 @@ export function RecomendadoVsVendido() {
         <div className="acr-dato"><span>Muestra</span><strong>{r.medidos}<small> de {r.minimoCasos}</small></strong><small>{r.estado === 'con-muestra' ? 'suficiente para leerla' : 'todavía pocos casos: es una pista'}</small></div>
       </div>
       <div className="acr-grilla">{datos.grupos.map((g) => <Tarjeta key={g.clave} g={g} />)}</div>
+      <PuntajeAlterno p={datos.puntaje} />
       <p className="apr-leyenda">La referencia sale de las reseñas nuevas por día de la gama, sin sus 3 líderes cuando el dato existe, por las ventas por reseña medidas en tu cuenta. Es gruesa a propósito: lo que se aprende es cuánto se aleja de ella un producto que recién entra.</p>
     </section>
   )
