@@ -1100,12 +1100,28 @@ const GRUPOS_OP = [
   { id: 'sin-medir', titulo: 'Midiendo', sub: 'Recién descubiertos, sin curva de búsqueda o sin búsqueda en ML: todavía sin veredicto.' },
 ]
 
+// POR VER / EN COTIZACIÓN (9-nov-2026). El importador: «siento que muchos ya
+// están en cotización y falta ir viendo otros productos». Con un tercio de la
+// mesa marcado, lo ya decidido tapaba lo que falta mirar. Ahora la mesa abre en
+// lo que queda por ver y lo cotizado tiene su propia vista; el filtro suelto
+// "En cotización" se fue porque esto lo reemplaza.
+const YA_DECIDIDO = ['cotizando', 'pedido', 'vendiendo', 'en-espera', 'descartado']
+const ETAPAS_MESA = [
+  { id: 'por-ver', titulo: 'Por ver', ayuda: 'Lo que todavía no cotizas ni descartas', fn: (o) => !YA_DECIDIDO.includes(o.etapaCompra) },
+  { id: 'cotizando', titulo: 'En cotización', ayuda: 'Lo que ya marcaste como cotizando o pedido', fn: (o) => ['cotizando', 'pedido'].includes(o.etapaCompra) },
+  { id: 'todas', titulo: 'Todo', ayuda: 'La mesa completa', fn: () => true },
+]
+const CLAVE_ETAPA_MESA = 'oportunidades-etapa'
+function etapaGuardada() {
+  try { const v = localStorage.getItem(CLAVE_ETAPA_MESA); return ETAPAS_MESA.some((e) => e.id === v) ? v : 'por-ver' } catch { return 'por-ver' }
+}
+
 const FILTROS = [
+  ['nuevos', 'Nuevos esta semana', (o) => esNuevo(o.creadoEl)],
   ['vara', `Sobre ${fmtNum(VARA_BUSQUEDAS)} búsquedas`, (o) => (o.curvaAnual?.busquedasMes ?? 0) >= VARA_BUSQUEDAS],
   ['pasa-ml', 'Pasa la vara por ML', (o) => o.demandaMlVsGoogle?.firme && o.demandaMlVsGoogle.lectura === 'pasa-por-ml'],
   ['buscados', 'Búsqueda alta', (o) => o.nivelBusqueda?.nivel === 'alto'],
   ['confirmados', 'Confirmados', (o) => o.confirmacion === 'confirmado'],
-  ['cotizando', 'En cotización', (o) => ['cotizando', 'pedido'].includes(o.etapaCompra)],
   ['cotizados', 'Con costo', (o) => Boolean(o.cotizacion)],
   ['arreglar', 'Keyword por arreglar', (o) => o.nivelBusqueda?.nivel === 'renombrar'],
 ]
@@ -1634,6 +1650,8 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const [aviso, setAviso] = useState(null)
   const [activos, setActivos] = useState([])
   const [grupo, setGrupo] = useState('ahora')
+  const [etapaMesa, setEtapaMesaEstado] = useState(etapaGuardada)
+  const setEtapaMesa = (id) => { setEtapaMesaEstado(id); try { localStorage.setItem(CLAVE_ETAPA_MESA, id) } catch { /* sin almacenamiento la vista igual cambia */ } }
   // LISTA + PANEL: la tarjeta elegida se ve entera a la derecha, sin acordeón
   // que empuje la lista. En pantalla chica el panel se abre encima.
   // null = panel cerrado y la lista a todo el ancho
@@ -1733,9 +1751,14 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const todas = [...datos.oportunidades].sort(compararOportunidades)
   const filtrosActivos = FILTROS.filter(([id]) => activos.includes(id))
   const q = busca.trim().toLowerCase()
-  const visibles = todas
+  const filtradas = todas
     .filter((o) => filtrosActivos.every(([, , fn]) => fn(o)))
     .filter((o) => !q || o.keyword.toLowerCase().includes(q) || (o.titular ?? '').toLowerCase().includes(q))
+  const etapaActual = ETAPAS_MESA.find((e) => e.id === etapaMesa) ?? ETAPAS_MESA[0]
+  // al buscar por nombre se busca en toda la mesa: lo que se escribe a mano no
+  // debe esconderse por estar ya cotizado
+  const visibles = q ? filtradas : filtradas.filter(etapaActual.fn)
+  const cuentaEtapa = (e) => filtradas.filter((o) => !o.familiaLider).filter(e.fn).length
   const cuenta = (fn) => todas.filter(fn).length
   const tendenciaDe = (o) => (pron.ordena ? pron.porNicho.get(String(o.nichoId))?.tendencia : null)
 
@@ -1761,7 +1784,8 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   // la temporada con la ventana abierta no puede depender de bajar con la rueda:
   // "se me ha ido traer lo que se viene ahora, verano" (17-sep)
   const ventanaAbierta = orden.filter((o) => ['ahora', 'ultimo-mes'].includes(o.ventana?.estado))
-  const enCotizacion = orden.filter((o) => ['cotizando', 'pedido'].includes(o.etapaCompra)).length
+  // contado sobre toda la pestaña, no sobre la vista: en "Por ver" siempre daría cero
+  const enCotizacion = filtradas.filter((o) => !o.familiaLider && momentoDeCompra(o).grupo === grupoActual.id && ['ahora', 'ultimo-mes'].includes(o.ventana?.estado) && ['cotizando', 'pedido'].includes(o.etapaCompra)).length
 
   return (
     <main>
@@ -1776,6 +1800,15 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
       {aviso ? <p className="error-bloque">{aviso}</p> : null}
 
       <div className="opx-barra">
+        <div className="opx-etapas" role="tablist" aria-label="Etapa de la compra">
+          {ETAPAS_MESA.map((e) => (
+            <button key={e.id} type="button" role="tab" aria-selected={etapaActual.id === e.id && !q} title={e.ayuda} className={`opx-etapa${etapaActual.id === e.id && !q ? ' activa' : ''}`}
+              onClick={() => { setEtapaMesa(e.id); setSeleccion(null) }}>
+              {e.titulo}<span className="opx-tab-n">{cuentaEtapa(e)}</span>
+            </button>
+          ))}
+          {q ? <span className="opx-etapa-nota">buscando en toda la mesa</span> : null}
+        </div>
         <div className="opx-tabs" role="tablist" aria-label="Momento de compra">
           {GRUPOS_OP.map((g) => (
             <button key={g.id} type="button" role="tab" aria-selected={grupo === g.id} className={`opx-tab${grupo === g.id ? ' activa' : ''}`}
