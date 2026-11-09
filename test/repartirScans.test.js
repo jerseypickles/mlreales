@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { repartirScans, metaDeReposicion } from '../src/jobs/workers.js'
+import { repartirScans, metaDeReposicion, esPrimeraMedicion } from '../src/jobs/workers.js'
 
 // Caso real del 10-ago-2026: 78 nichos maduraron juntos entre el 6 y el 8 de
 // agosto, así que su semana venció junta — 46 de 50 scans caían en 3 días,
@@ -78,4 +78,14 @@ test('repartirScans: un recién creado sin puntaje pasa con prioridad aunque no 
   const { aEncolar } = repartirScans({ vencidos, yaHoy: 0, techo: 4 })
   assert.equal(aEncolar[0].nicho, 'recien-creado')
   assert.equal(aEncolar.length, 4)
+})
+
+test('primera medición: prioridad solo al recién creado que aún busca su primer puntaje', () => {
+  const ahora = Date.parse('2026-11-10T12:00:00Z')
+  const hace = (dias) => new Date(ahora - dias * 86400e3)
+  assert.equal(esPrimeraMedicion({ nuncaPuntuo: true, creadoEl: hace(2), reportes: 1, ahora }), true)
+  assert.equal(esPrimeraMedicion({ nuncaPuntuo: false, creadoEl: hace(2), reportes: 1, ahora }), false, 'ya tiene puntaje')
+  assert.equal(esPrimeraMedicion({ nuncaPuntuo: true, creadoEl: hace(30), reportes: 1, ahora }), false, 'antiguo sin puntaje: está fallando')
+  assert.equal(esPrimeraMedicion({ nuncaPuntuo: true, creadoEl: hace(5), reportes: 6, ahora }), false, 'ya tuvo sus intentos')
+  assert.equal(esPrimeraMedicion({ nuncaPuntuo: true, creadoEl: null, reportes: 0, ahora }), false)
 })

@@ -83,6 +83,13 @@ export function metaDeReposicion({ pedidas, conDetalle, minimo, tope }) {
   return Math.max(minimo, conDetalle + reponer)
 }
 
+// Pura. ¿Es un nicho recién creado que todavía está consiguiendo su primer
+// puntaje? Hasta 14 días desde que se creó y con no más de 3 reportes.
+export function esPrimeraMedicion({ nuncaPuntuo, creadoEl, reportes = 0, ahora = Date.now() }) {
+  const creado = +new Date(creadoEl ?? NaN)
+  return Boolean(nuncaPuntuo) && Number.isFinite(creado) && ahora - creado <= 14 * 86_400e3 && reportes <= 3
+}
+
 export async function procesarScanNicho(job) {
   const nicho = await Nicho.findById(job.data.nichoId)
   if (!nicho) throw new Error(`Nicho ${job.data.nichoId} no existe`)
@@ -924,9 +931,10 @@ export async function procesarProgramadorScans() {
   const scores = await Reporte.aggregate([
     { $match: { nichoId: { $in: nichos.map((n) => n._id) } } },
     { $sort: { fecha: -1 } },
-    { $group: { _id: '$nichoId', score: { $first: '$scoreOportunidad' } } },
+    { $group: { _id: '$nichoId', score: { $first: '$scoreOportunidad' }, reportes: { $sum: 1 } } },
   ])
   const ultimoScore = new Map(scores.map((r) => [String(r._id), r.score ?? null]))
+  const reportesDe = new Map(scores.map((r) => [String(r._id), r.reportes]))
 
   // MADURACIÓN DE CARTERA: un "entrar" con 1-2 scans es una foto, no evidencia
   // para girar plata. Mientras el nicho tenga veredicto de entrada y menos de
@@ -998,9 +1006,10 @@ export async function procesarProgramadorScans() {
     if (ahora - ultimo < umbral) continue
     if (nuncaPuntuo) sinScore++
     // Pasan primero los que maduran y los recién creados que aún no tienen
-    // puntaje: su segundo scan es el que les da el primero. Un nicho antiguo
-    // que nunca puntuó no entra acá: ese está fallando, no empezando.
-    const prioridad = madurando || (nuncaPuntuo && esReciente(nicho) && ahora - +new Date(nicho.creadoEl ?? 0) <= 14 * 86_400e3)
+    // puntaje: su segundo scan es el que les da el primero. Con tope de
+    // intentos y de días: el que sigue sin puntaje después de eso no está
+    // empezando, está fallando, y no puede comerse un cupo diario con prioridad.
+    const prioridad = madurando || esPrimeraMedicion({ nuncaPuntuo, creadoEl: nicho.creadoEl, reportes: reportesDe.get(id) ?? 0, ahora })
     vencidos.push({ nicho, madurando, prioridad, atraso: ahora - ultimo - umbral })
   }
   // ventana MÓVIL de 24 h, no día calendario: reparte de forma continua y no
