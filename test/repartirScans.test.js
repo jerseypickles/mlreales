@@ -48,3 +48,17 @@ test('no muta la lista que recibe', () => {
   repartirScans({ vencidos, yaHoy: 0, techo: 1 })
   assert.deepEqual(vencidos, copia, 'ordenar in-place rompería al llamador')
 })
+
+test('repartirScans: los que maduran pasan primero, hasta la mitad del cupo', () => {
+  const vencidos = [
+    ...Array.from({ length: 10 }, (_, i) => ({ nicho: `semanal-${i}`, madurando: false, atraso: 100 - i })),
+    ...Array.from({ length: 6 }, (_, i) => ({ nicho: `nuevo-${i}`, madurando: true, atraso: 10 - i })),
+  ]
+  const { aEncolar, diferidos } = repartirScans({ vencidos, yaHoy: 0, techo: 8 })
+  assert.equal(aEncolar.filter((v) => v.madurando).length, 4, 'la mitad del cupo es de los que maduran')
+  assert.deepEqual(aEncolar.slice(0, 4).map((v) => v.nicho), ['nuevo-0', 'nuevo-1', 'nuevo-2', 'nuevo-3'])
+  assert.equal(aEncolar[4].nicho, 'semanal-0', 'el resto sigue por atraso')
+  assert.equal(diferidos, 8)
+  const sinNuevos = repartirScans({ vencidos: vencidos.filter((v) => !v.madurando), yaHoy: 0, techo: 8 })
+  assert.equal(sinNuevos.aEncolar.length, 8, 'si nadie madura, el cupo entero es de los semanales')
+})

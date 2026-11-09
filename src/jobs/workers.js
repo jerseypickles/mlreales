@@ -46,10 +46,20 @@ import {
 // que menos lo necesita. Diferir no atrasa nada real: un nicho semanal medido
 // el día 8 en vez del 7 no cambia ninguna decisión de compra — el tope de
 // Apify sí.
-export function repartirScans({ vencidos, yaHoy, techo }) {
+//
+// LOS QUE MADURAN TIENEN CUPO RESERVADO (9-nov-2026). Ordenar solo por atraso
+// los dejaba al final: su atraso se cuenta desde las 68 h y el de un semanal
+// desde los 6,5 días, así que con la cola de semanales llena un nicho recién
+// descubierto esperaba junto a ellos. Medido ese día: los nichos creados 5 y 6
+// días antes llevaban un solo scan y ninguna demanda medida, o sea unas tres
+// semanas para tener veredicto. Ahora hasta la mitad del cupo es de ellos; el
+// techo no cambia, así que no se gasta más: solo cambia quién pasa primero.
+export function repartirScans({ vencidos, yaHoy, techo, reservaMadurando = 0.5 }) {
   const ordenados = [...vencidos].sort((a, b) => b.atraso - a.atraso)
   const cupo = Math.max(0, techo - yaHoy)
-  const aEncolar = ordenados.slice(0, cupo)
+  const primero = ordenados.filter((v) => v.madurando).slice(0, Math.ceil(cupo * reservaMadurando))
+  const resto = ordenados.filter((v) => !primero.includes(v))
+  const aEncolar = [...primero, ...resto].slice(0, cupo)
   return { aEncolar, diferidos: ordenados.length - aEncolar.length }
 }
 

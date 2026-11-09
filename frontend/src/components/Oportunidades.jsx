@@ -368,8 +368,9 @@ function avisosDe(o, tendencia) {
   }
   if (o.mejoras?.length) a.push({ id: 'mejora', Icono: Lightbulb, tono: 'aviso', corto: o.mejoras.length === 1 ? 'Mejora por revisar' : `${o.mejoras.length} mejoras por revisar`, ayuda: `${o.mejoras.map((m) => m.motivo).join(' · ')}. Se revisa en la pestaña Mejoras del panel.` })
   // criterio del importador: la certificación se informa, no veta (sabe
-  // tramitarla), así que va al panel y no ensucia la tarjeta
-  for (const t of o.tramites ?? []) a.push({ id: `tramite-${t}`, Icono: ShieldAlert, tono: 'info', soloPanel: true, corto: `Requiere ${t}`, ayuda: 'Trámite de importación: se informa como costo y plazo, la decisión es tuya.' })
+  // tramitarla). Desde el 9-nov va a la vista en la tarjeta: «se pueden, pero
+  // siempre que se indique con algún tag»
+  for (const t of o.tramites ?? []) a.push({ id: `tramite-${t}`, Icono: ShieldAlert, tono: 'info', corto: `Requiere ${t}`, ayuda: 'Trámite de importación: se informa como costo y plazo, la decisión es tuya.' })
   // "ACÁ YA VENDO YO": evaluar a ciegas no es lo mismo que un nicho del que ya
   // tienes conversión y precio propio; ahí la decisión es reponer o ampliar
   if (o.mios?.publicaciones) {

@@ -44,6 +44,7 @@ export function detectarTramites(textos) {
   if (mencionAfirmada(t, /\bsec\b|certificaci[oó]n el[eé]ctrica/)) tramites.push('SEC')
   if (mencionAfirmada(t, /\bisp\b|registro sanitario/)) tramites.push('ISP')
   if (mencionAfirmada(t, /\bseremi\b|autorizaci[oó]n sanitaria/)) tramites.push('SEREMI')
+  if (mencionAfirmada(t, /\bsubtel\b/)) tramites.push('SUBTEL')
   return tramites
 }
 

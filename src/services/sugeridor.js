@@ -20,6 +20,17 @@ export function palabrasSaturadas(keywords, { umbral = 3 } = {}) {
   return new Set([...conteo].filter(([, c]) => c >= umbral).map(([p]) => p))
 }
 
+// LICENCIAS: lo único que se veta antes de medir. El importador (9-nov-2026):
+// un suplemento o un eléctrico se pueden traer «siempre que se indique» el
+// trámite —ese dato dice que el producto se mueve—, pero un peluche de una
+// franquicia «nada que ver»: no hay trámite que lo arregle, ML lo baja por
+// propiedad intelectual. Va en código además del prompt porque las búsquedas
+// que suben traen estos nombres todas las semanas.
+const FRANQUICIAS = /\b(stitch|disney|marvel|pixar|pok[eé]mon|pikachu|barbie|hot ?wheels|lego|frozen|spider ?man|hombre ara[ñn]a|mickey|minnie|hello kitty|kuromi|sanrio|bluey|paw patrol|peppa|minecraft|roblox|fortnite|harry potter|star wars|nintendo|mario bros|sonic|avengers|batman|superman|labubu|funko|nerf|play ?doh|bratz|dragon ball|naruto|one piece|demon slayer|k-?pop demon)\b/i
+export function esDeLicencia(keyword) {
+  return FRANQUICIAS.test(String(keyword ?? '').normalize('NFC'))
+}
+
 export const FUENTES_RADAR = ['ranking-ml', 'busqueda-que-sube', 'producto-que-despega', 'tienda-ganadora', 'autocompletado', 'temporada', 'categoria-hermana', 'pasillo-probado', 'intuicion']
 
 const SCHEMA_SUGERENCIAS = {
@@ -103,6 +114,8 @@ LA BASE ES TODO EL AÑO, Y LA TEMPORADA SE TRABAJA CON CALENDARIO (regla dura):
 - En el campo ventanaImportacion escribe la fecha límite de pago que dice el calendario para esa temporada, tal cual; no inventes otra.
 
 FILTROS DE NEGOCIO (aplícalos antes de proponer):
+- LICENCIAS: nunca propongas un producto cuyo gancho es un personaje, franquicia, película, equipo o marca ajena (peluche de un personaje, mochila de una serie, camiseta de un club). No es un trámite: sin licencia Mercado Libre baja la publicación. La versión genérica del mismo producto sí sirve ("peluche gigante", no el del personaje).
+- LO REGULADO SÍ SE PROPONE, PERO ETIQUETADO. Suplementos, cosmética, eléctricos, inalámbricos o juguetes para niños son nichos válidos —que pidan trámite suele indicar que se mueven y que hay menos importadores—. Cuando propongas uno, el campo riesgo DEBE empezar con la sigla del trámite: SEC (eléctrico), ISP (cosmética, dispositivo médico), SEREMI (suplementos y alimentos), SUBTEL (Bluetooth, wifi, radio). Si se vende por tallas, dilo también con la palabra "tallas".
 - CABE EN FULL O NO SIRVE. Límites oficiales de ML Chile, medidos sobre el EMPAQUE final: menos de 20 kg, ningún lado sobre 120 cm y la suma de los tres bajo 260 cm. Lo que excede queda fuera de Full, y sin Full se pierde el posicionamiento que sostiene toda la operación. Además el envío se cobra por peso VOLUMÉTRICO (4.000 cm³/kg, se factura el mayor entre real y volumétrico), así que un bulto liviano pero grande paga como si pesara mucho y se come el margen sin avisar.
   En MOBILIARIO la restricción que manda NO es si cabe —el mueble empacado plano cabe holgado: una mesa auxiliar de 60x60x10 suma 130 de 260 permitidos, un escritorio plegable de 110x60x12 suma 182— sino CUÁNTO CUESTA su volumen. Medido: esa mesa a $39.990 paga $6.200 de envío (16% del precio) y un zapatero de $19.990 paga $5.800 (29%). Al revés de los productos chicos, donde el envío es fijo en ~$799 y subir el precio mejora el margen, acá el flete ESCALA con el bulto.
   Por eso en mueble el criterio es el GROSOR del empaque y el precio que lo sostiene: propón lo que viaje plano (repisas, mesas auxiliares, escritorios y sillas plegables, zapateros, organizadores, muebles para armar) con ticket sobre $25.000. Descarta lo que llegue armado y voluminoso —sofás, camas, closets— no porque no quepa sino porque su volumétrico se come el margen. Si dudas del bulto, propón igual y dilo en el porqué: el importador cotiza el cubicaje real con el proveedor.
@@ -280,6 +293,12 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   // no se alcanza cuesta más caro que eso: semanas de scans y, si alguien le
   // cree, un contenedor que llega con la fiesta terminada.
   if (Array.isArray(datos?.sugerencias)) {
+    const conLicencia = datos.sugerencias.filter((s) => esDeLicencia(s.keyword)).map((s) => s.keyword)
+    if (conLicencia.length) {
+      datos.sugerencias = datos.sugerencias.filter((s) => !esDeLicencia(s.keyword))
+      datos.descartadasPorLicencia = conLicencia
+      console.log(`[sugeridor] fuera por licencia de marca: ${conLicencia.join(', ')}`)
+    }
     const fuera = []
     datos.sugerencias = datos.sugerencias.filter((s) => {
       const t = temporadaInalcanzableDe(s.keyword, hoy)
