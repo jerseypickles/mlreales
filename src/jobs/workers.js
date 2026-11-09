@@ -63,6 +63,18 @@ export function repartirScans({ vencidos, yaHoy, techo, reservaMadurando = 0.5 }
   return { aEncolar, diferidos: ordenados.length - aEncolar.length }
 }
 
+// REPONER LAS FICHAS QUE VOLVIERON VACÍAS (9-nov-2026). La extensión bajo el
+// top solo corría cuando no se juntaba el mínimo para puntuar, así que un scan
+// que pedía 20 fichas y recibía 14 con dato se quedaba en 14. Medido ese día
+// sobre 205 scans: 21% sin demanda medida y una mediana de 8 publicaciones
+// comparables, o sea una señal que se mueve con una sola publicación. Ahora lo
+// que volvió sin dato se repone con las posiciones siguientes del mismo scan,
+// con un tope por scan para acotar el gasto.
+export function metaDeReposicion({ pedidas, conDetalle, vacias, minimo, tope }) {
+  const reponer = Math.max(0, Math.min(vacias, tope, pedidas - conDetalle))
+  return Math.max(minimo, conDetalle + reponer)
+}
+
 export async function procesarScanNicho(job) {
   const nicho = await Nicho.findById(job.data.nichoId)
   if (!nicho) throw new Error(`Nicho ${job.data.nichoId} no existe`)
@@ -348,17 +360,21 @@ export async function procesarScanDetalle(job) {
   // reintentar las mismas URLs jamás va a juntar el mínimo. Se mide más abajo
   // del MISMO scan (posiciones siguientes, páginas normales) hasta poder
   // puntuar — el score se calcula sobre el top-50 igual.
-  if (totalConDetalle < minimoParaPuntuar && sinReviews > 0) {
+  const vacias = sinReviews + sinMatch + fallidos
+  const metaConDetalle = metaDeReposicion({ pedidas: objetivos.length, conDetalle: totalConDetalle, vacias, minimo: minimoParaPuntuar, tope: config.detalleReposicionMax })
+  if (totalConDetalle < metaConDetalle && vacias > 0) {
     const skusVistos = new Set([...objetivos.map((o) => o.sku), ...yaMedidos])
     const snaps = await Snapshot.find({ keyword: nicho.keyword, fecha })
       .sort({ posicion: 1 })
       .select('sku')
       .lean()
     const candidatos = snaps.map((s) => s.sku).filter((sku) => !skusVistos.has(sku))
-    for (let tanda = 0; tanda < 2 && totalConDetalle < minimoParaPuntuar && candidatos.length; tanda++) {
-      // pedir el doble de lo que falta: parte de la extensión también puede
-      // ser catálogo sin reseñas
-      const skusTanda = candidatos.splice(0, Math.min(config.detalleBatch, Math.max((minimoParaPuntuar - totalConDetalle) * 2, 6)))
+    for (let tanda = 0; tanda < 2 && totalConDetalle < metaConDetalle && candidatos.length; tanda++) {
+      // bajo el mínimo se pide el doble de lo que falta: parte de la extensión
+      // también puede ser catálogo sin reseñas. Sobre el mínimo solo se repone
+      // lo que falta, una por una: ahí lo que se cuida es el gasto
+      const skusTanda = candidatos.splice(0, Math.min(config.detalleBatch,
+        totalConDetalle < minimoParaPuntuar ? Math.max((minimoParaPuntuar - totalConDetalle) * 2, 6) : metaConDetalle - totalConDetalle))
       const productos = await Producto.find({ sku: { $in: skusTanda } })
         .select('sku url')
         .lean()
@@ -378,7 +394,7 @@ export async function procesarScanDetalle(job) {
         aplicados += res.reviewsAplicadas
         totalConDetalle += res.reviewsAplicadas
         console.log(
-          `[scan-detalle] extensión bajo el top por catálogo sin reseñas: ${res.reviewsAplicadas}/${extra.length} medidos (total ${totalConDetalle}/${minimoParaPuntuar} para puntuar)`,
+          `[scan-detalle] reposición bajo el top de fichas sin dato: ${res.reviewsAplicadas}/${extra.length} medidos (total ${totalConDetalle}, meta ${metaConDetalle}, mínimo para puntuar ${minimoParaPuntuar})`,
         )
       } catch (err) {
         console.error(`[scan-detalle] extensión falló: ${err.message}`)

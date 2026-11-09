@@ -189,8 +189,8 @@ test('el piso mejora al leer más seguido, no empeora', () => {
 
 test('cadencia: al medible se le lee seguido, al que no dice nada no se le gasta', () => {
   const medible = { medible: true }
-  assert.deepEqual([horasHastaLaProxima({ stock: 51, topado: true }), horasHastaLaProxima({ stock: 51, topado: true }, medible)], [336, 48])
-  assert.deepEqual([horasHastaLaProxima({ stock: 26, topado: true }), horasHastaLaProxima({ stock: 26, topado: true }, medible)], [48, 12])
+  assert.deepEqual([horasHastaLaProxima({ stock: 51, topado: true }), horasHastaLaProxima({ stock: 51, topado: true }, medible)], [336, 120])
+  assert.deepEqual([horasHastaLaProxima({ stock: 26, topado: true }), horasHastaLaProxima({ stock: 26, topado: true }, medible)], [48, 24])
   assert.deepEqual([horasHastaLaProxima({ stock: 6, topado: true }), horasHastaLaProxima({ stock: 6, topado: true }, medible)], [48, 8])
   assert.deepEqual([horasHastaLaProxima({ stock: 3 }), horasHastaLaProxima({ stock: 3 }, medible)], [24, 8])
   // Full con su publicación propia resuelta, o Full que nunca fue catálogo

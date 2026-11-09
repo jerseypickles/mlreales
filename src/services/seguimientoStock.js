@@ -15,7 +15,13 @@ import { config } from '../config/env.js'
 const HORA = 3600e3
 const DIA = 86400e3
 // el tope es del importador: "¿podría ajustarse a $30 al mes?"
-export const TOPE_USD_MES = Number(process.env.SEGUIMIENTO_USD_MES) || 30
+// De 30 a 15 el 9-nov-2026. Medido sobre una semana de lecturas: siete de cada
+// diez volvían topadas en un balde ("+5" a "+50"), donde no se cuenta ninguna
+// venta, y solo dos de cada diez traían el número exacto. Esa mitad del gasto
+// pasa a scans de nichos (ver scansMaxDia en config/env.js), que es donde hoy
+// falta medición. La cadencia de abajo se alarga en los mismos baldes para que
+// el tope menor no le quite lecturas al número exacto.
+export const TOPE_USD_MES = Number(process.env.SEGUIMIENTO_USD_MES) || 15
 // TRES SENSORES POR NICHO, NO SEIS PUBLICACIONES. El importador, 19-sep: "no es
 // necesario leer todos los productos, lo que quiero saber es si el nicho mueve".
 // Con seis por nicho eran 336 seguidos para ~165 lecturas diarias (US$30 al mes):
@@ -46,8 +52,8 @@ const MAX_POR_PASADA = 40
 // la mitad de seguido y esa plata pasa a los medibles. El tope no cambia.
 export function horasHastaLaProxima(ultima, { medible = false } = {}) {
   if (!ultima || !Number.isFinite(ultima.stock)) return 24
-  if (ultima.topado && ultima.stock >= 51) return medible ? 48 : 336 // "+50"
-  if (ultima.topado && ultima.stock >= 11) return medible ? 12 : 48 // "+10" y "+25"
+  if (ultima.topado && ultima.stock >= 51) return medible ? 120 : 336 // "+50": lejos de mostrar una venta
+  if (ultima.topado && ultima.stock >= 11) return medible ? 24 : 48 // "+10" y "+25"
   if (ultima.stock === 0) return medible ? 12 : 48 // agotado: esperar la reposición
   if (ultima.topado) return medible ? 8 : 48 // "+5": todavía es un rango
   return medible ? 8 : 24 // número exacto: cada lectura es una venta contada

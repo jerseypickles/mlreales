@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { repartirScans } from '../src/jobs/workers.js'
+import { repartirScans, metaDeReposicion } from '../src/jobs/workers.js'
 
 // Caso real del 10-ago-2026: 78 nichos maduraron juntos entre el 6 y el 8 de
 // agosto, así que su semana venció junta — 46 de 50 scans caían en 3 días,
@@ -61,4 +61,11 @@ test('repartirScans: los que maduran pasan primero, hasta la mitad del cupo', ()
   assert.equal(diferidos, 8)
   const sinNuevos = repartirScans({ vencidos: vencidos.filter((v) => !v.madurando), yaHoy: 0, techo: 8 })
   assert.equal(sinNuevos.aEncolar.length, 8, 'si nadie madura, el cupo entero es de los semanales')
+})
+
+test('reposición de fichas: repone lo que volvió vacío, con tope, y nunca baja del mínimo para puntuar', () => {
+  assert.equal(metaDeReposicion({ pedidas: 20, conDetalle: 14, vacias: 6, minimo: 5, tope: 6 }), 20)
+  assert.equal(metaDeReposicion({ pedidas: 20, conDetalle: 8, vacias: 12, minimo: 5, tope: 6 }), 14, 'el tope acota el gasto')
+  assert.equal(metaDeReposicion({ pedidas: 20, conDetalle: 20, vacias: 0, minimo: 5, tope: 6 }), 20, 'si todo llegó no se pide nada')
+  assert.equal(metaDeReposicion({ pedidas: 10, conDetalle: 2, vacias: 8, minimo: 5, tope: 0 }), 5, 'apagada, queda el mínimo de siempre')
 })

@@ -124,6 +124,9 @@ export const config = {
   // detalle recortado para el mantenimiento semanal de graduados (~33% menos actor)
   detalleTopNMantenimiento: Number(process.env.DETALLE_TOP_N_MANTENIMIENTO) || 20,
   detalleBatch: Number(process.env.DETALLE_BATCH) || 15,
+  // fichas que se reponen por scan cuando las pedidas vuelven sin dato
+  // (workers.js › metaDeReposicion). 0 lo apaga.
+  detalleReposicionMax: process.env.DETALLE_REPOSICION_MAX != null && process.env.DETALLE_REPOSICION_MAX !== '' ? Number(process.env.DETALLE_REPOSICION_MAX) : 3,
   // embudo del radar: screening barato (top-10) y score mínimo para ganarse el detalle completo
   detalleScreeningN: Number(process.env.DETALLE_SCREENING_N) || 10,
   screeningScoreMin: Number(process.env.SCREENING_SCORE_MIN) || 45,
@@ -143,7 +146,12 @@ export const config = {
   // semanales cada 6,5 = 9,1). Con 16 queda apenas por debajo, y es a
   // propósito: la cola se drena sola porque cada nicho que llega a sus 5 scans
   // pasa de 3 días a 6,5, así que la carga de maduración baja con el tiempo.
-  scansMaxDia: Number(process.env.SCANS_MAX_DIA) || 16,
+  //
+  // De 16 a 18 el 9-nov-2026, sin subir el gasto total: lo paga la mitad del
+  // presupuesto del seguimiento de stock (services/seguimientoStock.js), que se
+  // iba en lecturas topadas. Con 152 nichos activos la vuelta completa baja de
+  // ~9,5 a ~8,5 días. El valor vigente es el de la variable en Render.
+  scansMaxDia: Number(process.env.SCANS_MAX_DIA) || 18,
   // CADA CUÁNTO SE MIDE UN NICHO QUE MADURA.
   //
   // Era diario (umbral de 20 h) y no servía: la señal de demanda es el DELTA de
