@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { demandaMedida, puntajeAlterno, compararPuntajes, cambiosEnLaMesa, MIN_CASOS_PUNTAJE } from '../src/services/ml/puntajeSombra.js'
+import { demandaMedida, puntajeAlterno, compararPuntajes, cambiosEnLaMesa, ordenConEmpates, MIN_CASOS_PUNTAJE } from '../src/services/ml/puntajeSombra.js'
 
 const base = { demanda: 80, constancia: 70, entrada: 60, economia: 90, competencia: 50 }
 
@@ -34,4 +34,15 @@ test('puntaje alterno: dice quién sube y quién baja en la mesa', () => {
   assert.equal(r.sinVentaMedida, 1)
   assert.equal(r.suben[0].keyword, 'barato que vende')
   assert.equal(r.bajan[0].keyword, 'caro sin venta')
+})
+
+test('puntaje alterno: los empates no dependen del orden de llegada', () => {
+  // tres productos sin ventas y tres con: un puntaje que separa bien los dos grupos ordena bien, llegue como llegue
+  const a = [50, 51, 52, 80, 81, 82], v = [0, 0, 0, 1, 2, 3]
+  const alReves = [52, 51, 50, 80, 81, 82]
+  assert.ok(ordenConEmpates(a, v) > 0.85)
+  assert.equal(ordenConEmpates(a, v), ordenConEmpates(alReves, v), 'los tres empatados en cero valen lo mismo en cualquier orden')
+  assert.equal(ordenConEmpates([1, 1, 1], [1, 2, 3]), null, 'sin variación no hay orden que medir')
+  const m = cambiosEnLaMesa([{ keyword: 'a', actual: 70, alterno: 70 }, { keyword: 'b', actual: 70, alterno: 70 }, { keyword: 'c', actual: 60, alterno: 60 }])
+  assert.equal(m.suben.length + m.bajan.length, 0, 'dos nichos empatados no se mueven de lugar')
 })

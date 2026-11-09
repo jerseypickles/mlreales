@@ -48,6 +48,14 @@ export function detectarTramites(textos) {
   return tramites
 }
 
+// ¿Se vende por tallas? No es un trámite, pero el importador pidió que quede a
+// la vista igual (9-nov-2026): las tallas inmovilizan stock por medida. Sale de
+// los mismos textos de riesgo; "talla única" no cuenta.
+export function detectarTallas(textos) {
+  const t = (textos ?? []).filter(Boolean).join('. ')
+  return mencionAfirmada(t, /\btallas?\b(?!\s+[uú]nica)|\btallaje\b/)
+}
+
 // Precio objetivo para anclar al proveedor en la hoja de cotización: un % del
 // EXW máximo (default 80%). El máximo real es el tope de negociación y NUNCA
 // se le muestra; el target ancla bajo y deja espacio para negociar.

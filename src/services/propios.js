@@ -438,9 +438,9 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     // y el lazo que faltaba: lo que se recomendó traer contra lo que se vende.
     // Una fila por nicho, gama y día (ml/recomendadoVsVendido.js)
     try {
-      const { CruceRecomendacion, recomendadoVsVendido } = await import('./ml/recomendadoVsVendido.js')
+      const { CruceRecomendacion, recomendadoVsVendido, VERSION_CRUCE } = await import('./ml/recomendadoVsVendido.js')
       const hoy = new Date().toISOString().slice(0, 10)
-      if (!(await CruceRecomendacion.exists({ dia: hoy }))) {
+      if (!(await CruceRecomendacion.exists({ dia: hoy, version: VERSION_CRUCE }))) {
         const r = await recomendadoVsVendido({ guardar: true })
         console.log(`[ml] recomendado vs vendido: ${r.resumen.grupos} grupos, ${r.resumen.medidos} medidos, ${r.resumen.madurando} madurando`)
       }

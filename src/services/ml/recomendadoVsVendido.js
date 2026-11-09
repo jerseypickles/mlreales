@@ -15,27 +15,40 @@ import { alternoDeReporte, compararPuntajes, cambiosEnLaMesa, MIN_DIAS_PUNTAJE }
 //     nicho, y si el pack trae otra cantidad que la recomendada se dice, porque
 //     ahí precio y costo no son comparables (medido el 9-nov: se recomendó un
 //     pack y se publicó otro tamaño; un set chico y se trajo uno grande).
-//  3. Le pone una venta esperada: lo que vende al día una publicación promedio
-//     de esa gama (reseñas nuevas por día de la gama × ventas por reseña ÷
-//     publicaciones). Es una referencia gruesa a propósito: lo que se aprende es
-//     el FACTOR entre lo real y esa referencia para un vendedor que recién entra.
-//  4. Mide lo real solo en días con stock y con la logística actual: la semana
+//  3. Mide lo real solo en días con stock y con la logística actual: la semana
 //     del paso a Full y los quiebres no son "poca demanda".
-//  5. Pone nota recién con muestra (días con stock); antes dice "madurando".
+//  4. La nota del veredicto sale de HECHOS, no de una estimación: con muestra
+//     (días con stock), ¿se vende y deja plata? Un "entrar" coincide si sí; un
+//     "no entrar", si no.
+//  5. Aparte, y solo para aprender, compara la venta real con la de una
+//     publicación promedio del nicho. No es una meta: es la vara con que se
+//     mide cuánto vende un vendedor que recién entra.
+//
+// LA REFERENCIA ES DEL NICHO, NO DE LA GAMA. La primera versión usaba la gama
+// de precio y no aguantó la revisión del mismo día: cada gama tiene entre 3 y
+// 19 publicaciones con venta medida, así que su promedio es el de dos o tres
+// líderes. Sobre los once grupos de ese día, real ÷ referencia iba de 0,06 a 20
+// con la gama y de 0,1 a 2,7 con el nicho entero; quitar a los tres líderes
+// dejaba la referencia en cero en la mayoría de las gamas.
 
 export const MIN_DIAS_CON_STOCK = 14
 export const MIN_CASOS = 5
 export const VENTAS_POR_RESENIA_BASE = 10 // cota de la calibración en auditoría; se reemplaza por la medida si existe
+export const VENTA_MINIMA_DIA = 1 / 7 // una unidad por semana con stock: bajo eso no se puede decir que "se vende"
+// Las filas guardadas con otra forma de calcular no se mezclan en la historia.
+export const VERSION_CRUCE = 2
 const SI = ['entrar', 'entrar_con_condiciones']
 const GAMAS = ['economica', 'media', 'alta']
 
 const finito = (x) => Number.isFinite(x)
 const r2 = (x) => (finito(x) ? Math.round(x * 100) / 100 : null)
+const r3 = (x) => (finito(x) ? Math.round(x * 1000) / 1000 : null)
 const fecha = (x) => { const d = new Date(x ?? NaN); return finito(+d) ? d : null }
 const mediana = (xs) => {
   const o = xs.filter(finito).sort((a, b) => a - b)
   return o.length ? (o.length % 2 ? o[(o.length - 1) / 2] : (o[o.length / 2 - 1] + o[o.length / 2]) / 2) : null
 }
+const vendidasEn = (p) => p.utiles.reduce((s, d) => s + (d.unidades ?? 0), 0)
 
 // Pura. Cuándo se decidió traerlo: lo más temprano entre la etapa de compra,
 // la cotización y la primera publicación.
@@ -52,7 +65,7 @@ export function analisisDeDecision(reportes, decididoEl) {
   const antes = decididoEl ? con.filter((r) => +new Date(r.fecha) <= +decididoEl).at(-1) : null
   const r = antes ?? con[0]
   return { fecha: r.fecha, posterior: !antes, veredicto: r.analisis.veredicto, confianza: r.analisis.confianza ?? null,
-    score: r.scoreOportunidad ?? null, scoreAlterno: alternoDeReporte(r), recomendacion: r.analisis.recomendacion ?? null }
+    score: r.scoreOportunidad ?? null, recomendacion: r.analisis.recomendacion ?? null }
 }
 
 function indiceGama(resumen, precio) {
@@ -60,16 +73,16 @@ function indiceGama(resumen, precio) {
   return precio <= resumen.cortes.economicaHasta ? 0 : precio <= resumen.cortes.mediaHasta ? 1 : 2
 }
 
-// Pura. Venta esperada por día de UNA publicación típica de la gama: sin las
-// 3 que más venden cuando el reporte lo trae (medido el 9-nov: en un nicho
-// concentrado el promedio simple pedía a un recién llegado la venta de los
-// líderes). Los reportes anteriores solo permiten el promedio.
-export function esperadoDeGama(gama, ventasPorResenia = VENTAS_POR_RESENIA_BASE) {
-  if (!gama || !finito(gama.ventaHoyDia) || !(gama.publicaciones > 0)) return null
-  if (finito(gama.ventaHoyTop3Dia) && gama.publicaciones > 3) {
-    return { ventaDia: r2(Math.max(0, gama.ventaHoyDia - gama.ventaHoyTop3Dia) * ventasPorResenia / (gama.publicaciones - 3)), referencia: 'sin-lideres' }
-  }
-  return { ventaDia: r2(gama.ventaHoyDia * ventasPorResenia / gama.publicaciones), referencia: 'promedio' }
+// Pura. Lo que vende al día UNA publicación promedio del nicho: las reseñas
+// nuevas por día de todas sus gamas, por las ventas por reseña, entre todas sus
+// publicaciones. null si el nicho no tiene venta medida.
+export function referenciaDelNicho(resumen, ventasPorResenia = VENTAS_POR_RESENIA_BASE) {
+  const gamas = resumen?.gamas ?? []
+  const publicaciones = gamas.reduce((s, g) => s + (g.publicaciones > 0 ? g.publicaciones : 0), 0)
+  const medidas = gamas.filter((g) => finito(g.ventaHoyDia))
+  if (!(publicaciones > 0) || !medidas.length) return null
+  const resenias = medidas.reduce((s, g) => s + g.ventaHoyDia, 0)
+  return { ventaDia: r3(resenias * ventasPorResenia / publicaciones), reseniasDiaNicho: r2(resenias), publicacionesNicho: publicaciones }
 }
 
 // Pura. Unidades del pack propio: lo que declara el título o el número con que
@@ -107,7 +120,7 @@ export function diasUtiles(dias) {
 
 function lecturaRatio(ratio) {
   if (!finito(ratio)) return null
-  return ratio >= 1 ? 'sobre-lo-esperado' : ratio >= 0.5 ? 'en-linea' : 'bajo-lo-esperado'
+  return ratio >= 1 ? 'sobre-el-promedio' : ratio >= 0.5 ? 'cerca-del-promedio' : 'bajo-el-promedio'
 }
 
 // Pura. nicho: {_id, keyword, etapaCompraEl, exwCotizadoEl, exwCotizadoUsd};
@@ -116,6 +129,7 @@ function lecturaRatio(ratio) {
 // dejaPorItem: Map(itemId → lo que deja una venta antes de publicidad).
 export function cruzarNicho({ nicho, propios, reportes, diasPorItem, dejaPorItem = new Map(), ventasPorResenia = VENTAS_POR_RESENIA_BASE }) {
   const resumen = [...reportes].filter((r) => r.metricas?.gamas?.gamas?.length).sort((a, b) => +new Date(a.fecha) - +new Date(b.fecha)).at(-1)?.metricas.gamas ?? null
+  const referencia = referenciaDelNicho(resumen, ventasPorResenia)
 
   const porGama = new Map()
   for (const p of propios) {
@@ -130,6 +144,7 @@ export function cruzarNicho({ nicho, propios, reportes, diasPorItem, dejaPorItem
   const grupos = []
   for (const [claveGama, ps] of porGama) {
     const gama = resumen?.gamas?.[GAMAS.indexOf(claveGama)] ?? null
+    const porVenta = [...ps].sort((a, b) => vendidasEn(b) - vendidasEn(a))
     // la decisión es de cada grupo: en un mismo nicho conviven productos
     // antiguos y los que se trajeron después con otro análisis a la vista
     const decididoEl = fechaDecision(nicho, ps)
@@ -146,41 +161,42 @@ export function cruzarNicho({ nicho, propios, reportes, diasPorItem, dejaPorItem
     const iRec = indiceGama(resumen, recPrecio)
     const unidadesRec = unidadesRecomendadas(rec)
     const diasConStock = new Set(ps.flatMap((p) => p.utiles.map((d) => d.dia)))
-    const unidades = ps.reduce((s, p) => s + p.utiles.reduce((a, d) => a + (d.unidades ?? 0), 0), 0)
+    const unidades = ps.reduce((s, p) => s + vendidasEn(p), 0)
     const unidadesTotales = ps.reduce((s, p) => s + p.dias.reduce((a, d) => a + (d.unidades ?? 0), 0), 0)
     const visitas = ps.reduce((s, p) => s + p.utiles.reduce((a, d) => a + (d.visitas ?? 0), 0), 0)
     const ultimoDia = ps.flatMap((p) => p.dias.map((d) => d.dia)).sort().at(-1) ?? null
     const conStockHoy = ps.some((p) => p.utiles.some((d) => d.dia === ultimoDia))
     const realDia = diasConStock.size ? r2(unidades / diasConStock.size) : null
-    const esperado = esperadoDeGama(gama, ventasPorResenia)
-    const esperadoDia = esperado?.ventaDia ?? null
-    const ratio = finito(realDia) && esperadoDia > 0 ? r2(realDia / esperadoDia) : null
+    const ratio = finito(realDia) && referencia?.ventaDia > 0 ? r2(realDia / referencia.ventaDia) : null
     const precio = mediana(ps.map((p) => p.precio))
     const dejas = ps.map((p) => dejaPorItem.get(p.itemId)).filter(finito)
     const deja = dejas.length ? Math.round(mediana(dejas)) : null
     const sinCosto = ps.some((p) => !(p.costoUnitarioClp > 0))
     // varios tamaños en el grupo: manda el de la publicación que más vendió
-    const unidadesPropias = [...ps].sort((a, b) => b.utiles.reduce((s, d) => s + (d.unidades ?? 0), 0) - a.utiles.reduce((s, d) => s + (d.unidades ?? 0), 0)).map((p) => unidadesDePropio(p.titulo)).find(Boolean) ?? null
+    const unidadesPropias = porVenta.map((p) => unidadesDePropio(p.titulo)).find(Boolean) ?? null
     const mismaGama = iRec == null || claveGama === 'sin-gama' ? null : GAMAS[iRec] === claveGama
     const mismasUnidades = unidadesRec && unidadesPropias ? unidadesPropias >= unidadesRec.desde && unidadesPropias <= unidadesRec.hasta : null
 
     const falta = []
     if (!decision) falta.push('nicho sin análisis')
     else if (decision.posterior) falta.push('el primer análisis es posterior a la decisión')
-    if (!gama) falta.push('nicho sin gamas de precio medidas')
-    else if (esperadoDia == null) falta.push('gama sin venta medida')
+    if (!referencia) falta.push('nicho sin venta medida para comparar')
     if (sinCosto) falta.push('sin costo cargado')
     if (diasConStock.size < MIN_DIAS_CON_STOCK) falta.push(`${diasConStock.size} de ${MIN_DIAS_CON_STOCK} días con stock`)
     if (!conStockHoy) falta.push('sin stock hoy')
 
-    const medido = diasConStock.size >= MIN_DIAS_CON_STOCK && ratio != null && !!decision
-    const vende = medido ? ratio >= 0.5 && (deja == null || deja > 0) : null
+    // LA NOTA SALE DE HECHOS. Con muestra: ¿se vende (al menos una por semana
+    // con stock) y deja plata? No depende de la referencia, que es gruesa: la
+    // primera versión marcaba "falló" a un producto que vendía y dejaba plata
+    // en un nicho donde dos líderes inflaban el promedio.
+    const medido = diasConStock.size >= MIN_DIAS_CON_STOCK && !!decision
+    const vende = medido ? realDia >= VENTA_MINIMA_DIA && (deja == null || deja > 0) : null
     const acierto = !medido || decision.posterior ? null : SI.includes(decision.veredicto) ? vende : decision.veredicto === 'no_entrar' ? !vende : null
 
     grupos.push({
       clave: `${nicho._id}:${claveGama}`, nichoId: String(nicho._id), keyword: nicho.keyword, gama: claveGama, gamaNombre: gama?.nombre ?? null,
-      productos: [...ps].sort((a, b) => b.utiles.reduce((s, d) => s + (d.unidades ?? 0), 0) - a.utiles.reduce((s, d) => s + (d.unidades ?? 0), 0)).map((p) => ({ itemId: p.itemId, titulo: p.titulo, imagen: p.imagen ?? null, estadoMl: p.estadoMl ?? null, precio: p.precio })),
-      decision: decision && { fecha: decision.fecha, decididoEl, posterior: decision.posterior, veredicto: decision.veredicto, confianza: decision.confianza, score: decision.score, scoreAlterno: decision.scoreAlterno,
+      productos: porVenta.map((p) => ({ itemId: p.itemId, titulo: p.titulo, imagen: p.imagen ?? null, estadoMl: p.estadoMl ?? null, precio: p.precio })),
+      decision: decision && { fecha: decision.fecha, decididoEl, posterior: decision.posterior, veredicto: decision.veredicto, confianza: decision.confianza, score: decision.score,
         titular: rec?.titular ?? null, segmento: rec?.segmento ?? null },
       comparacion: {
         precioRecomendado: recPrecio, precioReal: precio, gamaRecomendada: iRec == null ? null : GAMAS[iRec], mismaGama,
@@ -190,9 +206,15 @@ export function cruzarNicho({ nicho, propios, reportes, diasPorItem, dejaPorItem
         exwMaximoUsd: rec?.exwMaximoUsd ?? null, exwCotizadoUsd: nicho.exwCotizadoUsd ?? null,
         comparable: mismaGama !== false && mismasUnidades !== false,
       },
-      esperado: { ventaDia: esperadoDia, referencia: esperado?.referencia ?? null, ventasPorResenia, reseniasDiaGama: gama?.ventaHoyDia ?? null, publicacionesGama: gama?.publicaciones ?? null },
-      real: { diasConStock: diasConStock.size, unidades, unidadesTotales, ventaDia: realDia, visitas, conversionPct: visitas ? r2(unidades / visitas * 100) : null,
-        conStockHoy, ultimoDia, dejaPorVenta: deja, dejo: deja != null ? deja * unidades : null,
+      // la vara para aprender: una publicación promedio del nicho (no es una meta)
+      referencia: { ventaDia: referencia?.ventaDia ?? null, de: 'promedio-nicho', ventasPorResenia,
+        reseniasDiaNicho: referencia?.reseniasDiaNicho ?? null, publicacionesNicho: referencia?.publicacionesNicho ?? null },
+      // mismo dato con el nombre anterior: un dashboard abierto desde antes del
+      // cambio lo lee así y sin esto se cae hasta recargar. Quitar más adelante.
+      esperado: { ventaDia: referencia?.ventaDia ?? null },
+      real: { diasConStock: diasConStock.size, unidades, unidadesTotales, ventaDia: realDia, ventaSemana: finito(realDia) ? r2(realDia * 7) : null,
+        visitas, conversionPct: visitas ? r2(unidades / visitas * 100) : null,
+        conStockHoy, ultimoDia, dejaPorVenta: deja, dejo: deja != null ? deja * unidades : null, vende,
         serie: [...diasConStock].sort().slice(-28).map((dia) => ({ dia, unidades: ps.reduce((s, p) => s + (p.utiles.find((d) => d.dia === dia)?.unidades ?? 0), 0) })) },
       puntajes, ratio, lectura: lecturaRatio(ratio), estado: medido ? 'medido' : 'madurando', progresoPct: Math.min(100, Math.round(diasConStock.size / MIN_DIAS_CON_STOCK * 100)),
       acierto, falta,
@@ -201,39 +223,42 @@ export function cruzarNicho({ nicho, propios, reportes, diasPorItem, dejaPorItem
   return grupos
 }
 
-// Pura. Lo que aprende la máquina del conjunto: cuántos veredictos acertó y
-// cuánto vende de verdad un producto recién entrado contra la referencia.
+// Pura. Lo que aprende la máquina del conjunto: en cuántos veredictos lo que
+// pasó coincide con lo que dijo, y cuánto vende de verdad un producto recién
+// entrado contra una publicación promedio de su nicho.
 export function resumenCruce(grupos) {
   const medidos = grupos.filter((g) => g.estado === 'medido')
   const conNota = medidos.filter((g) => g.acierto != null)
   const aciertos = conNota.filter((g) => g.acierto).length
-  const factor = mediana(medidos.map((g) => g.ratio))
+  const conRatio = medidos.filter((g) => finito(g.ratio))
   const porVeredicto = {}
   for (const g of grupos) {
     const v = g.decision?.veredicto ?? 'sin-analisis'
     const x = porVeredicto[v] ??= { grupos: 0, medidos: 0, unidades: 0, ratios: [] }
     x.grupos++; x.unidades += g.real.unidades
-    if (g.estado === 'medido') { x.medidos++; x.ratios.push(g.ratio) }
+    if (g.estado === 'medido') { x.medidos++; if (finito(g.ratio)) x.ratios.push(g.ratio) }
   }
   for (const x of Object.values(porVeredicto)) { x.ratioMediano = r2(mediana(x.ratios)); delete x.ratios }
   return {
     grupos: grupos.length, medidos: medidos.length, madurando: grupos.length - medidos.length,
     conNota: conNota.length, aciertos, tasaAcierto: conNota.length ? Math.round(aciertos / conNota.length * 100) : null,
-    factorEntrante: r2(factor), estado: medidos.length >= MIN_CASOS ? 'con-muestra' : medidos.length ? 'pocos-casos' : 'sin-casos',
-    minimoCasos: MIN_CASOS, minimoDias: MIN_DIAS_CON_STOCK, porVeredicto,
+    factorEntrante: r2(mediana(conRatio.map((g) => g.ratio))), casosFactor: conRatio.length,
+    estado: medidos.length >= MIN_CASOS ? 'con-muestra' : medidos.length ? 'pocos-casos' : 'sin-casos',
+    minimoCasos: MIN_CASOS, minimoDias: MIN_DIAS_CON_STOCK, ventaMinimaSemana: Math.round(VENTA_MINIMA_DIA * 7), porVeredicto,
   }
 }
 
 const schema = new mongoose.Schema({
   dia: { type: String, required: true }, // AAAA-MM-DD
   clave: { type: String, required: true }, // nichoId:gama
+  version: { type: Number, default: null },
   keyword: String,
   veredicto: String,
   estado: String,
   diasConStock: Number,
   unidades: Number,
   ventaDia: Number,
-  esperadoDia: Number,
+  referenciaDia: Number,
   score: Number,
   scoreAlterno: Number,
   ratio: Number,
@@ -242,9 +267,34 @@ const schema = new mongoose.Schema({
 schema.index({ clave: 1, dia: 1 }, { unique: true })
 export const CruceRecomendacion = mongoose.models.CruceRecomendacion ?? mongoose.model('CruceRecomendacion', schema)
 
+// LA RESPUESTA SE GUARDA UN RATO. Medido el 9-nov-2026 en producción: la primera
+// consulta tardó 35 s y la siguiente 6 s (el plan de campañas consulta a Mercado
+// Libre y la calibración recorre miles de filas). Y casi nada de esto cambia
+// dentro del día: el libro trae días completos, así que la venta real se mueve
+// una vez al día. `fresca` la recalcula; guardar (el ciclo diario) también.
+const TTL_MS = 3 * 3600e3
+let guardada = { en: 0, datos: null }
+let enCurso = null
+
 // `conEconomia: false` deja fuera el plan de campañas, que consulta a ML: es
 // para correr la pieza desde un script sin tocar el token del servidor.
-export async function recomendadoVsVendido({ ahora = new Date(), guardar = false, conEconomia = true } = {}) {
+export async function recomendadoVsVendido(opciones = {}) {
+  const { guardar = false, conEconomia = true, fresca = false } = opciones
+  const reutilizable = !guardar && conEconomia
+  if (reutilizable && !fresca && guardada.datos && Date.now() - guardada.en < TTL_MS) return guardada.datos
+  if (reutilizable && enCurso) return enCurso
+  const tarea = calcular(opciones).then((datos) => {
+    if (conEconomia) guardada = { en: Date.now(), datos }
+    return datos
+  })
+  if (reutilizable) {
+    enCurso = tarea
+    tarea.then(() => { enCurso = null }, () => { enCurso = null })
+  }
+  return tarea
+}
+
+async function calcular({ ahora = new Date(), guardar = false, conEconomia = true } = {}) {
   const [{ ProductoPropio }, { Nicho }, { Reporte }, { DiaProductoMl }] = await Promise.all([
     import('../../models/ProductoPropio.js'), import('../../models/Nicho.js'), import('../../models/Reporte.js'), import('../../models/DiaProductoMl.js'),
   ])
@@ -252,27 +302,51 @@ export async function recomendadoVsVendido({ ahora = new Date(), guardar = false
     .select('sku itemIdMl titulo imagen creadoEl estadoMl costoUnitarioClp nichoId precio').lean())
     .map((p) => ({ ...p, itemId: p.itemIdMl ?? p.sku }))
   const nichoIds = [...new Set(propios.map((p) => String(p.nichoId)))]
-  const [nichos, reportes, dias] = await Promise.all([
+
+  // Lo que deja una venta sale del plan de campañas (comisión y envío medidos);
+  // las ventas por reseña, de la calibración; y la mesa, del último reporte de
+  // cada nicho activo. Son las tres partes lentas: van a la vez, y si alguna
+  // falla la pieza sigue sin ella.
+  const economia = async () => {
+    const deja = new Map()
+    if (!conEconomia) return deja
+    try {
+      const { planesDeCampana } = await import('./planCampanas.js')
+      for (const p of (await planesDeCampana({ ahora })).productos ?? []) if (finito(p.economia?.deja) && p.economia.costo != null) deja.set(p.itemId, p.economia.deja)
+    } catch (err) { console.warn('[ml] recomendado vs vendido sin economía:', err.message) }
+    return deja
+  }
+  const calibracion = async () => {
+    try {
+      const { calibracionResenias } = await import('./calibracionResenias.js')
+      const medido = (await calibracionResenias({ ahora })).propiosAgrupado?.ventasPorResenia
+      if (medido > 0) return medido
+    } catch (err) { console.warn('[ml] recomendado vs vendido sin calibración:', err.message) }
+    return VENTAS_POR_RESENIA_BASE
+  }
+  // EL PUNTAJE ALTERNO (ml/puntajeSombra.js) sobre toda la mesa: qué cambiaría
+  // si se usara. Se proyecta antes de ordenar: los reportes son documentos grandes.
+  const mesaAlterna = async () => {
+    try {
+      const activos = await Nicho.find({ estado: 'activo' }).select('_id').lean()
+      const ultimos = await Reporte.aggregate([
+        { $match: { nichoId: { $in: activos.map((n) => n._id) }, scoreOportunidad: { $ne: null } } },
+        { $project: { nichoId: 1, fecha: 1, keyword: 1, scoreOportunidad: 1, oportunidad: '$metricas.oportunidad', resenias: '$metricas.demanda.resenasNuevasPorDia', imagen: { $arrayElemAt: ['$topProductos.imagen', 0] } } },
+        { $sort: { fecha: -1 } },
+        { $group: { _id: '$nichoId', keyword: { $first: '$keyword' }, score: { $first: '$scoreOportunidad' }, imagen: { $first: '$imagen' }, oportunidad: { $first: '$oportunidad' }, resenias: { $first: '$resenias' } } },
+      ])
+      return cambiosEnLaMesa(ultimos.map((u) => ({ keyword: u.keyword, imagen: u.imagen ?? null, actual: u.score, reseniasDia: u.resenias ?? null,
+        alterno: alternoDeReporte({ metricas: { oportunidad: u.oportunidad, demanda: { resenasNuevasPorDia: u.resenias } } }) })))
+    } catch (err) { console.warn('[ml] puntaje alterno sin mesa:', err.message); return null }
+  }
+  const [nichos, reportes, dias, dejaPorItem, ventasPorResenia, mesa] = await Promise.all([
     Nicho.find({ _id: { $in: nichoIds } }).select('keyword etapaCompraEl exwCotizadoEl exwCotizadoUsd').lean(),
-    Reporte.find({ nichoId: { $in: nichoIds } }).select('nichoId fecha scoreOportunidad analisis.veredicto analisis.confianza analisis.recomendacion metricas.oportunidad metricas.demanda.resenasNuevasPorDia metricas.gamas.cortes metricas.gamas.gamas.clave metricas.gamas.gamas.nombre metricas.gamas.gamas.publicaciones metricas.gamas.gamas.ventaHoyDia metricas.gamas.gamas.ventaHoyTop3Dia').lean(),
+    Reporte.find({ nichoId: { $in: nichoIds } }).select('nichoId fecha scoreOportunidad analisis.veredicto analisis.confianza analisis.recomendacion metricas.oportunidad metricas.demanda.resenasNuevasPorDia metricas.gamas.cortes metricas.gamas.gamas.clave metricas.gamas.gamas.nombre metricas.gamas.gamas.publicaciones metricas.gamas.gamas.ventaHoyDia').lean(),
     DiaProductoMl.find({ itemId: { $in: propios.map((p) => p.itemId) } }).select('itemId dia unidades visitas precio logistica cambioLogistica stockFraccion').lean(),
+    economia(), calibracion(), mesaAlterna(),
   ])
   const diasPorItem = new Map()
   for (const d of dias) diasPorItem.set(d.itemId, [...(diasPorItem.get(d.itemId) ?? []), d])
-
-  // Lo que deja una venta sale del plan de campañas (comisión y envío medidos);
-  // y las ventas por reseña, de la calibración. Si alguno falla, la pieza sigue.
-  const dejaPorItem = new Map()
-  if (conEconomia) try {
-    const { planesDeCampana } = await import('./planCampanas.js')
-    for (const p of (await planesDeCampana({ ahora })).productos ?? []) if (finito(p.economia?.deja) && p.economia.costo != null) dejaPorItem.set(p.itemId, p.economia.deja)
-  } catch (err) { console.warn('[ml] recomendado vs vendido sin economía:', err.message) }
-  let ventasPorResenia = VENTAS_POR_RESENIA_BASE
-  try {
-    const { calibracionResenias } = await import('./calibracionResenias.js')
-    const medido = (await calibracionResenias({ ahora })).propiosAgrupado?.ventasPorResenia
-    if (medido > 0) ventasPorResenia = medido
-  } catch (err) { console.warn('[ml] recomendado vs vendido sin calibración:', err.message) }
 
   const grupos = nichos.flatMap((nicho) => cruzarNicho({
     nicho, propios: propios.filter((p) => String(p.nichoId) === String(nicho._id)),
@@ -282,25 +356,13 @@ export async function recomendadoVsVendido({ ahora = new Date(), guardar = false
   const dia = ahora.toISOString().slice(0, 10)
   if (guardar && grupos.length) {
     await CruceRecomendacion.bulkWrite(grupos.map((g) => ({ updateOne: { filter: { clave: g.clave, dia }, upsert: true,
-      update: { $set: { keyword: g.keyword, veredicto: g.decision?.veredicto ?? null, estado: g.estado, diasConStock: g.real.diasConStock, unidades: g.real.unidades,
-        ventaDia: g.real.ventaDia, esperadoDia: g.esperado.ventaDia, score: g.puntajes?.actual ?? null, scoreAlterno: g.puntajes?.alterno ?? null, ratio: g.ratio, acierto: g.acierto } } } })))
+      update: { $set: { version: VERSION_CRUCE, keyword: g.keyword, veredicto: g.decision?.veredicto ?? null, estado: g.estado, diasConStock: g.real.diasConStock, unidades: g.real.unidades,
+        ventaDia: g.real.ventaDia, referenciaDia: g.referencia.ventaDia, score: g.puntajes?.actual ?? null, scoreAlterno: g.puntajes?.alterno ?? null, ratio: g.ratio, acierto: g.acierto } } } })))
   }
-  const historia = await CruceRecomendacion.find({ clave: { $in: grupos.map((g) => g.clave) } }).select('-_id clave dia ratio diasConStock').sort({ dia: 1 }).lean()
+  const historia = await CruceRecomendacion.find({ clave: { $in: grupos.map((g) => g.clave) }, version: VERSION_CRUCE }).select('-_id clave dia ventaDia ratio diasConStock').sort({ dia: 1 }).lean()
   for (const g of grupos) g.historia = historia.filter((h) => h.clave === g.clave).slice(-60).map(({ clave, ...h }) => h)
-  // EL PUNTAJE ALTERNO (ml/puntajeSombra.js): cuál de los dos ordena mejor lo
-  // que de verdad se vendió, y qué cambiaría en la mesa si se usara.
+  // cuál de los dos puntajes ordena mejor lo que de verdad se vendió
   const casos = grupos.filter((g) => g.real.diasConStock >= MIN_DIAS_PUNTAJE && g.puntajes)
     .map((g) => ({ actual: g.puntajes.actual, alterno: g.puntajes.alterno, ventaDia: g.real.ventaDia }))
-  let mesa = null
-  try {
-    const activos = await Nicho.find({ estado: 'activo' }).select('keyword').lean()
-    const ultimos = await Reporte.aggregate([
-      { $match: { nichoId: { $in: activos.map((n) => n._id) }, scoreOportunidad: { $ne: null } } },
-      { $sort: { fecha: -1 } },
-      { $group: { _id: '$nichoId', keyword: { $first: '$keyword' }, score: { $first: '$scoreOportunidad' }, imagen: { $first: { $arrayElemAt: ['$topProductos.imagen', 0] } }, oportunidad: { $first: '$metricas.oportunidad' }, resenias: { $first: '$metricas.demanda.resenasNuevasPorDia' } } },
-    ])
-    mesa = cambiosEnLaMesa(ultimos.map((u) => ({ keyword: u.keyword, imagen: u.imagen ?? null, actual: u.score, reseniasDia: u.resenias ?? null,
-      alterno: alternoDeReporte({ metricas: { oportunidad: u.oportunidad, demanda: { resenasNuevasPorDia: u.resenias } } }) })))
-  } catch (err) { console.warn('[ml] puntaje alterno sin mesa:', err.message) }
   return { modo: 'sombra', usaParaDecidir: false, calculadoEl: ahora, resumen: resumenCruce(grupos), puntaje: { contraVentas: compararPuntajes(casos), mesa }, grupos }
 }

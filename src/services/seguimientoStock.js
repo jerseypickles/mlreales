@@ -15,13 +15,19 @@ import { config } from '../config/env.js'
 const HORA = 3600e3
 const DIA = 86400e3
 // el tope es del importador: "¿podría ajustarse a $30 al mes?"
-// De 30 a 15 el 9-nov-2026. Medido sobre una semana de lecturas: siete de cada
+// De 30 a 20 el 9-nov-2026. Medido sobre una semana de lecturas: siete de cada
 // diez volvían topadas en un balde ("+5" a "+50"), donde no se cuenta ninguna
-// venta, y solo dos de cada diez traían el número exacto. Esa mitad del gasto
+// venta, y solo dos de cada diez traían el número exacto. Un tercio del gasto
 // pasa a scans de nichos (ver scansMaxDia en config/env.js), que es donde hoy
-// falta medición. La cadencia de abajo se alarga en los mismos baldes para que
-// el tope menor no le quite lecturas al número exacto.
-export const TOPE_USD_MES = Number(process.env.SEGUIMIENTO_USD_MES) || 15
+// falta medición. La cadencia de abajo se alarga en los baldes altos y el
+// reparto de cada pasada pone primero a quien deja ver el número, para que el
+// tope menor no le quite lecturas a lo que sí cuenta ventas.
+//
+// No bajó a 15, que fue el primer número: el freno reparte lo que queda del mes
+// y, con nueve días ya gastados al ritmo anterior, dejaba ~50 lecturas al día
+// contra las ~160 de antes; lo propio y lo medible con número a la vista ya
+// ocupan ~45.
+export const TOPE_USD_MES = Number(process.env.SEGUIMIENTO_USD_MES) || 20
 // TRES SENSORES POR NICHO, NO SEIS PUBLICACIONES. El importador, 19-sep: "no es
 // necesario leer todos los productos, lo que quiero saber es si el nicho mueve".
 // Con seis por nicho eran 336 seguidos para ~165 lecturas diarias (US$30 al mes):
@@ -344,7 +350,9 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
   const dejaVer = (p) => p.ultima && Number.isFinite(p.ultima.stock) && !(p.ultima.topado && p.ultima.stock >= 51)
   // dentro de cada grupo, primero quien puede dar señal: Full con publicación
   // propia antes que un catálogo que quizá no se pueda atribuir
-  const utilidad = (p) => (esMedible(p) ? 0 : 2) + (seguidoFlojo(p) ? 1 : 0)
+  // y entre los medibles, primero el que está cerca de mostrar una venta (número
+  // exacto, "+5" o agotado) y después el que sigue topado en un balde alto
+  const utilidad = (p) => (esMedible(p) ? 0 : 4) + (p.ultima?.topado && p.ultima.stock >= 11 ? 2 : 0) + (seguidoFlojo(p) ? 1 : 0)
   // LOS NO MEDIBLES CON TOPE (6-oct-2026): ya conocidos y sin Full atribuible,
   // como mucho un cuarto de cada pasada. La primera lectura de un recién llegado
   // sí entra —es la que dice si es Full—, y lo que el tope no usa pasa al resto.

@@ -116,7 +116,19 @@ export const config = {
   maduracionScans: Number(process.env.MADURACION_SCANS) || 3,
   // cupo de nichos madurando a diario a la vez (los de mayor score primero):
   // el resto entra a medida que los confirmados liberan lugar
-  maduracionMax: Number(process.env.MADURACION_MAX) || 8,
+  //
+  // De 8 a 25 el 9-nov-2026. El 8 se fijó cuando la maduración era DIARIA: ocho
+  // nichos eran ocho scans al día. Desde que se mide cada 68 h (ver
+  // maduracionHoras) esos mismos ocho nichos son menos de tres scans al día, y
+  // el resto de los candidatos quedaba a ritmo semanal. Medido ese día: 19
+  // candidatos, 11 esperando; los nichos creados seis días antes llevaban un
+  // solo scan, y el radar estaba detenido con 25 de 25 madurando. A 68 h, 25
+  // nichos son ~9 scans al día: el mismo gasto para el que se pensó el cupo, y
+  // el mismo número que el tope del radar (radarMaxActivos).
+  maduracionMax: Number(process.env.MADURACION_MAX) || 25,
+  // un nicho que no logra medir demanda no madura para siempre a ritmo rápido:
+  // pasado este plazo desde que se creó vuelve al ritmo semanal
+  maduracionDiasMax: Number(process.env.MADURACION_DIAS_MAX) || 45,
   // ciclo frecuente de Mis productos: solo API oficial ($0) — una venta se ve
   // en minutos, no al día siguiente. La pasada completa (con actor) sigue diaria.
   propiosFrecuenciaMin: Number(process.env.PROPIOS_FRECUENCIA_MIN) || 45,
@@ -124,7 +136,10 @@ export const config = {
   // detalle recortado para el mantenimiento semanal de graduados (~33% menos actor)
   detalleTopNMantenimiento: Number(process.env.DETALLE_TOP_N_MANTENIMIENTO) || 20,
   detalleBatch: Number(process.env.DETALLE_BATCH) || 15,
-  // fichas que se reponen por scan cuando las pedidas vuelven sin dato
+  // segundos de espera antes de volver a pedir, una sola vez, las fichas que
+  // el proveedor no pudo traer (workers.js › procesarScanDetalle). 0 lo apaga.
+  detalleSegundaVueltaSeg: process.env.DETALLE_SEGUNDA_VUELTA_SEG != null && process.env.DETALLE_SEGUNDA_VUELTA_SEG !== '' ? Number(process.env.DETALLE_SEGUNDA_VUELTA_SEG) : 60,
+  // fichas NUEVAS que se piden por scan cuando, aun así, faltan de las pedidas
   // (workers.js › metaDeReposicion). 0 lo apaga.
   detalleReposicionMax: process.env.DETALLE_REPOSICION_MAX != null && process.env.DETALLE_REPOSICION_MAX !== '' ? Number(process.env.DETALLE_REPOSICION_MAX) : 3,
   // embudo del radar: screening barato (top-10) y score mínimo para ganarse el detalle completo

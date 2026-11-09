@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarClock, Check, CircleDollarSign, FileText, ImageOff, Lightbulb, MousePointerClick, PencilLine, Search, ShieldAlert, ShoppingBag, Sparkles, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarClock, Check, CircleDollarSign, FileText, ImageOff, Lightbulb, MousePointerClick, PencilLine, Ruler, Search, ShieldAlert, ShoppingBag, Sparkles, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
 import { Criterios } from './Criterios.jsx'
@@ -368,9 +368,11 @@ function avisosDe(o, tendencia) {
   }
   if (o.mejoras?.length) a.push({ id: 'mejora', Icono: Lightbulb, tono: 'aviso', corto: o.mejoras.length === 1 ? 'Mejora por revisar' : `${o.mejoras.length} mejoras por revisar`, ayuda: `${o.mejoras.map((m) => m.motivo).join(' · ')}. Se revisa en la pestaña Mejoras del panel.` })
   // criterio del importador: la certificación se informa, no veta (sabe
-  // tramitarla). Desde el 9-nov va a la vista en la tarjeta: «se pueden, pero
-  // siempre que se indique con algún tag»
-  for (const t of o.tramites ?? []) a.push({ id: `tramite-${t}`, Icono: ShieldAlert, tono: 'info', corto: `Requiere ${t}`, ayuda: 'Trámite de importación: se informa como costo y plazo, la decisión es tuya.' })
+  // tramitarla). El detalle va al panel; en la tarjeta se ve como etiqueta con
+  // su sigla (EtiquetasTramite): «se pueden, pero siempre que se indique con
+  // algún tag» (9-nov-2026). Un icono solo, entre los demás, no se leía.
+  if (o.porTallas) a.push({ id: 'tallas', Icono: Ruler, tono: 'info', soloPanel: true, corto: 'Se vende por tallas', ayuda: 'Las tallas inmovilizan stock por medida y suben las devoluciones: conviene traer un rango acotado.' })
+  for (const t of o.tramites ?? []) a.push({ id: `tramite-${t}`, Icono: ShieldAlert, tono: 'info', soloPanel: true, corto: `Requiere ${t}`, ayuda: 'Trámite de importación: se informa como costo y plazo, la decisión es tuya.' })
   // "ACÁ YA VENDO YO": evaluar a ciegas no es lo mismo que un nicho del que ya
   // tienes conversión y precio propio; ahí la decisión es reponer o ampliar
   if (o.mios?.publicaciones) {
@@ -512,6 +514,23 @@ function MiniCurva({ c }) {
 // cuánto vende cada una, y se marca la del precio objetivo.
 const rangoGamaTexto = (g) => (g.hasta ? `${fmtPrecio(g.desde)}–${fmtPrecio(g.hasta)}` : `desde ${fmtPrecio(g.desde)}`)
 
+const NOMBRE_TRAMITE = { SEC: 'certificación eléctrica SEC', ISP: 'registro ISP', SEREMI: 'autorización de la SEREMI de Salud', SUBTEL: 'homologación SUBTEL' }
+
+// La sigla del trámite, a la vista en la tarjeta. No veta: avisa.
+function EtiquetasTramite({ o }) {
+  if (!o.tramites?.length && !o.porTallas) return null
+  return (
+    <>
+      {(o.tramites ?? []).map((t) => (
+        <span key={t} className="opt-tramite-chip" title={`Requiere ${NOMBRE_TRAMITE[t] ?? t}. Se informa como costo y plazo; la decisión es tuya.`}>
+          <ShieldAlert size={11} aria-hidden="true" />{t}
+        </span>
+      ))}
+      {o.porTallas ? <span className="opt-tramite-chip opt-tallas-chip" title="Se vende por tallas: inmoviliza stock por medida."><Ruler size={11} aria-hidden="true" />tallas</span> : null}
+    </>
+  )
+}
+
 function ChipGama({ g }) {
   if (!g) return null
   const venta = g.ventaHoyPct ?? g.reseniasPct
@@ -622,7 +641,7 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onEtapa, tendencia }) {
           <span>{o.midiendo ? `faltan ${o.faltanScans} ${o.faltanScans === 1 ? 'scan' : 'scans'} para el veredicto` : m.motivo}</span>
         </span>
         <AvisosIconos lista={avisos} />
-        <ChipGama g={o.gamaObjetivo} />
+        <span className="opt-chips"><ChipGama g={o.gamaObjetivo} /><EtiquetasTramite o={o} /></span>
       </span>
       <span className="opt-score">
         {o.midiendo ? (
@@ -1651,7 +1670,11 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const [activos, setActivos] = useState([])
   const [grupo, setGrupo] = useState('ahora')
   const [etapaMesa, setEtapaMesaEstado] = useState(etapaGuardada)
-  const setEtapaMesa = (id) => { setEtapaMesaEstado(id); try { localStorage.setItem(CLAVE_ETAPA_MESA, id) } catch { /* sin almacenamiento la vista igual cambia */ } }
+  // Lo que se marca desde la vista actual se queda a la vista hasta cambiar de
+  // vista: en "Por ver", marcar cotizando hacía desaparecer la tarjeta en el
+  // acto, sin dejar ver qué se había tocado ni deshacerlo con otro clic.
+  const [fijadas, setFijadas] = useState(() => new Set())
+  const setEtapaMesa = (id) => { setEtapaMesaEstado(id); setFijadas(new Set()); try { localStorage.setItem(CLAVE_ETAPA_MESA, id) } catch { /* sin almacenamiento la vista igual cambia */ } }
   // LISTA + PANEL: la tarjeta elegida se ve entera a la derecha, sin acordeón
   // que empuje la lista. En pantalla chica el panel se abre encima.
   // null = panel cerrado y la lista a todo el ancho
@@ -1716,6 +1739,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const cambiarEtapa = useCallback(async (o, etapa) => {
     cambios.current++
     setAviso(null)
+    setFijadas((f) => new Set(f).add(o.nichoId))
     setDatosEstado((d) => {
       if (!d) return d
       const nuevo = { ...d, oportunidades: d.oportunidades.map((x) => (x.nichoId === o.nichoId ? { ...x, etapaCompra: etapa } : x)) }
@@ -1757,7 +1781,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
   const etapaActual = ETAPAS_MESA.find((e) => e.id === etapaMesa) ?? ETAPAS_MESA[0]
   // al buscar por nombre se busca en toda la mesa: lo que se escribe a mano no
   // debe esconderse por estar ya cotizado
-  const visibles = q ? filtradas : filtradas.filter(etapaActual.fn)
+  const visibles = q ? filtradas : filtradas.filter((o) => etapaActual.fn(o) || fijadas.has(o.nichoId))
   const cuentaEtapa = (e) => filtradas.filter((o) => !o.familiaLider).filter(e.fn).length
   const cuenta = (fn) => todas.filter(fn).length
   const tendenciaDe = (o) => (pron.ordena ? pron.porNicho.get(String(o.nichoId))?.tendencia : null)
@@ -1783,9 +1807,10 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
 
   // la temporada con la ventana abierta no puede depender de bajar con la rueda:
   // "se me ha ido traer lo que se viene ahora, verano" (17-sep)
-  const ventanaAbierta = orden.filter((o) => ['ahora', 'ultimo-mes'].includes(o.ventana?.estado))
-  // contado sobre toda la pestaña, no sobre la vista: en "Por ver" siempre daría cero
-  const enCotizacion = filtradas.filter((o) => !o.familiaLider && momentoDeCompra(o).grupo === grupoActual.id && ['ahora', 'ultimo-mes'].includes(o.ventana?.estado) && ['cotizando', 'pedido'].includes(o.etapaCompra)).length
+  // Las dos cifras salen de toda la pestaña y no de la vista: en "Por ver" lo
+  // cotizado no está a la vista, y decir "ninguno en cotización" sería falso.
+  const ventanaAbierta = filtradas.filter((o) => !o.familiaLider && momentoDeCompra(o).grupo === grupoActual.id && ['ahora', 'ultimo-mes'].includes(o.ventana?.estado))
+  const enCotizacion = ventanaAbierta.filter((o) => ['cotizando', 'pedido'].includes(o.etapaCompra)).length
 
   return (
     <main>
@@ -1840,7 +1865,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
       <p className="opx-sub">
         {grupoActual.sub}
         {grupoActual.id === 'ahora' && ventanaAbierta.length ? (
-          <> <strong className={enCotizacion ? '' : 'opx-alerta'}><CalendarClock size={13} aria-hidden="true" /> {ventanaAbierta.length} con la ventana de temporada abierta · {enCotizacion ? `${enCotizacion} en cotización` : 'ninguno en cotización todavía'}</strong></>
+          <> <strong className={enCotizacion ? '' : 'opx-alerta'}><CalendarClock size={13} aria-hidden="true" /> {ventanaAbierta.length} con la ventana de temporada abierta · {enCotizacion ? `${enCotizacion} de ellos en cotización` : 'ninguno en cotización todavía'}</strong></>
         ) : null}
       </p>
 

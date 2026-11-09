@@ -1,5 +1,4 @@
 import { scoring } from '../../config/scoring.js'
-import { spearman } from './demandaPropia.js'
 
 // PUNTAJE ALTERNO, EN SOMBRA. Medido el 9-nov-2026 sobre la mesa: el puntaje
 // vigente casi no sigue la venta medida en Mercado Libre (orden casi nulo contra
@@ -20,6 +19,31 @@ export const MIN_CASOS_PUNTAJE = 8 // productos propios medidos para leer cuál 
 export const MIN_DIAS_PUNTAJE = 7
 
 const finito = (x) => Number.isFinite(x)
+
+// Pura. Orden de Spearman con RANGOS PROMEDIO en los empates. Acá los empates
+// son la regla y no la excepción: los puntajes son enteros y varios productos
+// llevan cero ventas. Con rangos sin promediar (como el spearman de
+// demandaPropia.js) el resultado depende del orden en que llegan los datos.
+export function ordenConEmpates(a, b) {
+  const n = a.length
+  if (n < 3 || b.length !== n) return null
+  const rangos = (xs) => {
+    const idx = xs.map((v, i) => [v, i]).sort((x, y) => x[0] - y[0])
+    const r = new Array(n)
+    for (let i = 0; i < n;) {
+      let j = i
+      while (j + 1 < n && idx[j + 1][0] === idx[i][0]) j++
+      for (let k = i; k <= j; k++) r[idx[k][1]] = (i + j) / 2
+      i = j + 1
+    }
+    return r
+  }
+  const ra = rangos(a), rb = rangos(b)
+  const ma = ra.reduce((s, x) => s + x, 0) / n, mb = rb.reduce((s, x) => s + x, 0) / n
+  let c = 0, va = 0, vb = 0
+  for (let i = 0; i < n; i++) { c += (ra[i] - ma) * (rb[i] - mb); va += (ra[i] - ma) ** 2; vb += (rb[i] - mb) ** 2 }
+  return va && vb ? Math.round((c / Math.sqrt(va * vb)) * 100) / 100 : null
+}
 
 // Pura. 0-100 desde las reseñas nuevas por día del nicho.
 export function demandaMedida(reseniasDia) {
@@ -50,8 +74,8 @@ export function alternoDeReporte(reporte) {
 // stock suficientes. Cuál de los dos ordena mejor la venta real.
 export function compararPuntajes(casos) {
   const utiles = casos.filter((c) => finito(c.actual) && finito(c.alterno) && finito(c.ventaDia))
-  const actual = spearman(utiles.map((c) => c.actual), utiles.map((c) => c.ventaDia))
-  const alterno = spearman(utiles.map((c) => c.alterno), utiles.map((c) => c.ventaDia))
+  const actual = ordenConEmpates(utiles.map((c) => c.actual), utiles.map((c) => c.ventaDia))
+  const alterno = ordenConEmpates(utiles.map((c) => c.alterno), utiles.map((c) => c.ventaDia))
   const conMuestra = utiles.length >= MIN_CASOS_PUNTAJE
   return {
     casos: utiles.length, minimoCasos: MIN_CASOS_PUNTAJE, ordenActual: actual, ordenAlterno: alterno,
@@ -63,13 +87,15 @@ export function compararPuntajes(casos) {
 // parecen los dos órdenes y quién sube o baja más de lugar.
 export function cambiosEnLaMesa(filas, { cuantos = 6 } = {}) {
   const utiles = filas.filter((f) => finito(f.actual) && finito(f.alterno))
-  const lugar = (campo) => new Map([...utiles].sort((a, b) => b[campo] - a[campo]).map((f, i) => [f.keyword, i + 1]))
+  // en un empate todos comparten el mejor lugar del grupo: sin eso, dos nichos
+  // con el mismo puntaje "suben" o "bajan" según el orden en que llegaron
+  const lugar = (campo) => { const m = new Map(); let previo = null, puesto = 0; [...utiles].sort((a, b) => b[campo] - a[campo]).forEach((f, i) => { if (f[campo] !== previo) { puesto = i + 1; previo = f[campo] } m.set(f.keyword, puesto) }); return m }
   const la = lugar('actual'), lb = lugar('alterno')
   const mov = utiles.map((f) => ({ ...f, lugarActual: la.get(f.keyword), lugarAlterno: lb.get(f.keyword), salto: la.get(f.keyword) - lb.get(f.keyword) }))
   const deciles = (campo) => { const o = utiles.map((f) => f[campo]).sort((a, b) => a - b); return o.length ? [o[Math.floor((o.length - 1) * 0.1)], o[Math.floor((o.length - 1) * 0.9)]] : [null, null] }
   return {
     nichos: utiles.length, sinVentaMedida: filas.length - utiles.length,
-    parecido: spearman(utiles.map((f) => f.actual), utiles.map((f) => f.alterno)),
+    parecido: ordenConEmpates(utiles.map((f) => f.actual), utiles.map((f) => f.alterno)),
     rangoActual: deciles('actual'), rangoAlterno: deciles('alterno'),
     suben: [...mov].sort((a, b) => b.salto - a.salto).slice(0, cuantos).filter((m) => m.salto > 0),
     bajan: [...mov].sort((a, b) => a.salto - b.salto).slice(0, cuantos).filter((m) => m.salto < 0),

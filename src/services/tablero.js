@@ -4,6 +4,7 @@ import { LIMITES_FULL } from './envioFull.js'
 import { Nicho } from '../models/Nicho.js'
 import {
   detectarTramites,
+  detectarTallas,
   tendenciaVentas,
   inversionEstimadaUsd,
   unidadesPrimeraCompra,
@@ -616,6 +617,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       tramites: Array.isArray(analisis.tramites)
         ? analisis.tramites
         : detectarTramites([...(analisis.riesgos ?? []), n.radarInfo?.riesgo]),
+      porTallas: detectarTallas([...(analisis.riesgos ?? []), n.radarInfo?.riesgo]),
       // CUÁNDO se compra, calculado (pico menos lead time). Es lo que ordena la
       // mesa junto con el nivel de búsqueda: un nicho de score alto con la
       // ventana cerrada no se puede comprar y no puede ir arriba.

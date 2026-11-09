@@ -8398,9 +8398,10 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .acr-barra i { display: block; height: 100%; border-radius: 999px; }
 .acr-esperado { background: var(--borde-fuerte); }
 .acr-real { background: var(--acento); }
-.acr-lectura { margin: 0; font-size: 12.5px; font-weight: 600; }
-.acr-lectura-bien { color: var(--exito-tinta); }
-.acr-lectura-aviso { color: var(--avisa-tinta); }
+.acr-lectura { margin: 6px 0 0; font-size: 12px; color: var(--tinta-3); }
+.acr-vara { padding-top: 10px; border-top: 1px dashed var(--borde); }
+.acr-cabecera { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.acr-cabecera > div:first-child { flex: 1 1 420px; min-width: 0; }
 .acr-serie { width: 100%; height: 44px; display: block; }
 .acr-dia { fill: var(--acento); }
 .acr-dia-cero { fill: var(--borde-fuerte); }
@@ -8438,3 +8439,9 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .acr-mov-barras i { display: block; height: 5px; border-radius: 999px; }
 .acr-leyenda { display: inline-block; width: 14px; height: 6px; border-radius: 999px; margin: 0 4px 1px 8px; vertical-align: middle; }
 @media (max-width: 800px) { .acr-movs { grid-template-columns: minmax(0, 1fr); } }
+
+/* Oportunidades: sigla del trámite y marca de tallas, a la vista en la tarjeta */
+.opt-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.opt-chips .opt-gama-chip { margin-top: 0; }
+.opt-tramite-chip { display: inline-flex; align-items: center; gap: 3px; width: fit-content; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; border: 1px solid transparent; background: var(--avisa-tenue); color: var(--avisa-tinta); white-space: nowrap; letter-spacing: 0.01em; }
+.opt-tallas-chip { background: var(--superficie-2); color: var(--tinta-2); border-color: var(--borde); font-weight: 500; }

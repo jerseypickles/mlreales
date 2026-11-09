@@ -48,6 +48,9 @@ const ZYTE = 'https://api.zyte.com/v1/extract'
 const CONCURRENCIA = 4
 // bajo esto la extracción no reconoció la página como ficha de producto
 const PROBABILIDAD_MINIMA = 0.5
+// La página llegó (HTTP 200, se cobra) pero la extracción no reconoció una ficha.
+// Cualquier otro motivo es una petición que Zyte no sirvió, y esas no se cobran.
+export const MOTIVO_NO_ES_FICHA = 'la extraccion no reconocio una ficha de producto'
 const REINTENTOS = 2
 const TIMEOUT_MS = 200_000
 
@@ -342,7 +345,7 @@ async function conReintento(url, opciones, precioListado) {
   return {
     ok: false,
     url,
-    motivo: ultima ? 'la extraccion no reconocio una ficha de producto' : 'sin respuesta',
+    motivo: ultima ? MOTIVO_NO_ES_FICHA : 'sin respuesta',
   }
 }
 

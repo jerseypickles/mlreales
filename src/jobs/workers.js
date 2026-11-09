@@ -4,7 +4,7 @@ import { Nicho } from '../models/Nicho.js'
 import { Reporte } from '../models/Reporte.js'
 import { Snapshot } from '../models/Snapshot.js'
 import { Producto } from '../models/Producto.js'
-import { buscarListado, buscarDetalle } from '../services/scraper.js'
+import { buscarListado, buscarDetalle, costoServido } from '../services/scraper.js'
 import { normalizarScan } from '../services/normalizador.js'
 import { indexarDetallesPorSku } from '../services/normalizadorDetalle.js'
 import { guardarScan, aplicarDetalleScan } from '../services/persistencia.js'
@@ -54,24 +54,32 @@ import {
 // días antes llevaban un solo scan y ninguna demanda medida, o sea unas tres
 // semanas para tener veredicto. Ahora hasta la mitad del cupo es de ellos; el
 // techo no cambia, así que no se gasta más: solo cambia quién pasa primero.
+//
+// Quién pasa primero lo marca el programador en `prioridad` (los que maduran y
+// los recién creados que todavía no tienen puntaje); sin esa marca vale
+// `madurando`, que es como llegaban las listas antes.
 export function repartirScans({ vencidos, yaHoy, techo, reservaMadurando = 0.5 }) {
   const ordenados = [...vencidos].sort((a, b) => b.atraso - a.atraso)
   const cupo = Math.max(0, techo - yaHoy)
-  const primero = ordenados.filter((v) => v.madurando).slice(0, Math.ceil(cupo * reservaMadurando))
+  const primero = ordenados.filter((v) => v.prioridad ?? v.madurando).slice(0, Math.ceil(cupo * reservaMadurando))
   const resto = ordenados.filter((v) => !primero.includes(v))
   const aEncolar = [...primero, ...resto].slice(0, cupo)
   return { aEncolar, diferidos: ordenados.length - aEncolar.length }
 }
 
-// REPONER LAS FICHAS QUE VOLVIERON VACÍAS (9-nov-2026). La extensión bajo el
-// top solo corría cuando no se juntaba el mínimo para puntuar, así que un scan
-// que pedía 20 fichas y recibía 14 con dato se quedaba en 14. Medido ese día
-// sobre 205 scans: 21% sin demanda medida y una mediana de 8 publicaciones
-// comparables, o sea una señal que se mueve con una sola publicación. Ahora lo
-// que volvió sin dato se repone con las posiciones siguientes del mismo scan,
+// REPONER LO QUE FALTÓ (9-nov-2026). La extensión bajo el top solo corría
+// cuando no se juntaba el mínimo para puntuar, así que un scan que pedía 20
+// fichas y recibía 12 con dato se quedaba en 12. Medido ese día sobre 205
+// scans: 21% sin demanda medida y una mediana de 8 publicaciones comparables,
+// o sea una señal que se mueve con una sola publicación. Lo que falta después
+// de la segunda vuelta se repone con las posiciones siguientes del mismo scan,
 // con un tope por scan para acotar el gasto.
-export function metaDeReposicion({ pedidas, conDetalle, vacias, minimo, tope }) {
-  const reponer = Math.max(0, Math.min(vacias, tope, pedidas - conDetalle))
+//
+// Lo que falta se cuenta como pedidas menos medidas, no con los contadores de
+// fallo: la primera versión sumaba sinReviews + sinMatch + fallidos y casi no
+// actuaba, porque las fichas que el proveedor no trae no caen en ninguno.
+export function metaDeReposicion({ pedidas, conDetalle, minimo, tope }) {
+  const reponer = Math.max(0, Math.min(tope, pedidas - conDetalle))
   return Math.max(minimo, conDetalle + reponer)
 }
 
@@ -272,10 +280,10 @@ export async function procesarScanDetalle(job) {
   let fallidos = 0
   let sinReviews = 0
 
-  for (let i = 0; i < pendientes.length; i += config.detalleBatch) {
-    // pausa entre batches: menos agresivo con ML = menos páginas vacías por bloqueo
-    if (i > 0) await new Promise((resolver) => setTimeout(resolver, 20_000))
-    const batch = pendientes.slice(i, i + config.detalleBatch)
+  // Un lote de fichas: pedirlas, anotar lo que se cobra y aplicar lo que volvió.
+  // Las que el proveedor no pudo traer quedan en `caidas` para la segunda vuelta.
+  let caidas = []
+  async function medirLote(batch, etiqueta, { segunda = false } = {}) {
     let crudos, fuenteDetalle
     try {
       const r = await buscarDetalle(batch.map((o) => o.url), {
@@ -286,12 +294,16 @@ export async function procesarScanDetalle(job) {
       })
       crudos = r.items
       fuenteDetalle = r.fuente
-      await registrarGasto(nichoId, r.costoUsd, r.fuente)
+      await registrarGasto(nichoId, costoServido(r), r.fuente)
+      const porUrl = new Map(batch.map((o) => [o.url, o]))
+      for (const f of r.fallidos ?? []) if (porUrl.has(f.url)) caidas.push(porUrl.get(f.url))
     } catch (err) {
       // un batch caído no bota el scan completo; queda registrado en el resultado
-      console.error(`[scan-detalle] batch ${i / config.detalleBatch + 1} falló: ${err.message}`)
-      fallidos += batch.length
-      continue
+      console.error(`[scan-detalle] ${etiqueta} falló: ${err.message}`)
+      // en la segunda vuelta esas fichas ya estaban contadas como caídas
+      if (segunda) caidas.push(...batch)
+      else fallidos += batch.length
+      return
     }
     const { porSku, sinMatch: sm } = indexarDetallesPorSku(crudos, pendientes)
     sinMatch += sm
@@ -343,7 +355,48 @@ export async function procesarScanDetalle(job) {
         )
       }
     }
+  }
+
+  for (let i = 0; i < pendientes.length; i += config.detalleBatch) {
+    // pausa entre batches: menos agresivo con ML = menos páginas vacías por bloqueo
+    if (i > 0) await new Promise((resolver) => setTimeout(resolver, 20_000))
+    const batch = pendientes.slice(i, i + config.detalleBatch)
+    await medirLote(batch, `batch ${i / config.detalleBatch + 1}`)
     await job.updateProgress(Math.round(((i + batch.length) / pendientes.length) * 100))
+  }
+
+  // SEGUNDA VUELTA A LAS QUE EL PROVEEDOR NO TRAJO (9-nov-2026).
+  //
+  // Medido ese día en los jobs de producción: de 20 fichas pedidas se aplicaban
+  // entre 7 y 13, con sinMatch 0 y fallidos 0 —las demás no aparecían en ningún
+  // contador—. Una prueba de control mostró por qué: Zyte devuelve HTTP 520
+  // "Website Ban" (Mercado Libre bloqueó esa petición) y los tres intentos
+  // seguidos de detalleMl.js caen en el mismo bloqueo. Las mismas fichas,
+  // pedidas de nuevo un minuto después, volvieron completas (3 de 3 en una
+  // prueba, 2 de 2 en otra). Zyte no cobra las bloqueadas, así que esperar y
+  // volver a pedir no gasta de más: solo se paga lo que llega.
+  //
+  // Importa que sean LAS MISMAS fichas y no otras: la demanda del nicho es el
+  // delta de reseñas de una publicación entre dos scans, y una ficha que falta
+  // hoy rompe ese par aunque se mida otra en su lugar.
+  //
+  // Si no llegó ninguna, el proveedor está caído y no se insiste: el mínimo de
+  // más abajo hace fallar el job y BullMQ lo reintenta más tarde.
+  const caidasPrimera = caidas.length
+  let recuperadas = 0
+  if (caidasPrimera && caidasPrimera < pendientes.length && config.detalleSegundaVueltaSeg > 0) {
+    const pendientesVuelta = caidas
+    caidas = []
+    const antes = aplicados
+    await new Promise((resolver) => setTimeout(resolver, config.detalleSegundaVueltaSeg * 1000))
+    for (let i = 0; i < pendientesVuelta.length; i += config.detalleBatch) {
+      if (i > 0) await new Promise((resolver) => setTimeout(resolver, 20_000))
+      await medirLote(pendientesVuelta.slice(i, i + config.detalleBatch), 'segunda vuelta', { segunda: true })
+    }
+    recuperadas = pendientesVuelta.length - caidas.length
+    console.log(
+      `[scan-detalle] segunda vuelta: ${recuperadas}/${pendientesVuelta.length} fichas recuperadas tras ${config.detalleSegundaVueltaSeg} s (${aplicados - antes} con reseñas); ${caidas.length} siguen sin llegar`,
+    )
   }
 
   // medir casi nada equivale a no medir — y medir MENOS de lo que el score
@@ -360,9 +413,8 @@ export async function procesarScanDetalle(job) {
   // reintentar las mismas URLs jamás va a juntar el mínimo. Se mide más abajo
   // del MISMO scan (posiciones siguientes, páginas normales) hasta poder
   // puntuar — el score se calcula sobre el top-50 igual.
-  const vacias = sinReviews + sinMatch + fallidos
-  const metaConDetalle = metaDeReposicion({ pedidas: objetivos.length, conDetalle: totalConDetalle, vacias, minimo: minimoParaPuntuar, tope: config.detalleReposicionMax })
-  if (totalConDetalle < metaConDetalle && vacias > 0) {
+  const metaConDetalle = metaDeReposicion({ pedidas: objetivos.length, conDetalle: totalConDetalle, minimo: minimoParaPuntuar, tope: config.detalleReposicionMax })
+  if (totalConDetalle < metaConDetalle) {
     const skusVistos = new Set([...objetivos.map((o) => o.sku), ...yaMedidos])
     const snaps = await Snapshot.find({ keyword: nicho.keyword, fecha })
       .sort({ posicion: 1 })
@@ -382,7 +434,7 @@ export async function procesarScanDetalle(job) {
       if (!extra.length) break
       try {
         const r = await buscarDetalle(extra.map((o) => o.url), { domainCode: nicho.domainCode })
-        await registrarGasto(nichoId, r.costoUsd, r.fuente)
+        await registrarGasto(nichoId, costoServido(r), r.fuente)
         const { porSku } = indexarDetallesPorSku(r.items, extra)
         const res = await aplicarDetalleScan({ porSku, fecha })
         if (config.mlActivo && r.fuente === 'zyte') {
@@ -466,7 +518,9 @@ export async function procesarScanDetalle(job) {
   // puede matar un nicho con esta, nunca con la pasada rápida.
   await obtenerColas().calcularMetricas.add('reporte', { nichoId, conDetalle: true })
 
-  return { objetivos: objetivos.length, aplicados, yaMedidos: yaMedidos.size, sinMatch, sinReviews, fallidos }
+  return { objetivos: objetivos.length, aplicados, yaMedidos: yaMedidos.size, sinMatch, sinReviews, fallidos,
+    // las que el proveedor no trajo: en la primera pasada, cuántas volvieron en la segunda y cuántas quedaron
+    caidasProveedor: caidasPrimera, recuperadas, sinLlegar: caidas.length }
 }
 
 export async function procesarCalcularMetricas(job) {
@@ -891,12 +945,26 @@ export async function procesarProgramadorScans() {
   ])
   const demandaPorNicho = new Map(conDemanda.map((r) => [String(r._id), r.n]))
 
+  // TAMBIÉN MADURA EL "NO ENTRAR" SIN CONFIRMAR (9-nov-2026). Antes solo
+  // maduraban los veredictos de entrada, y un "no entrar" con uno o dos scans
+  // quedaba a ritmo semanal: tardaba más de un mes en confirmarse y mientras
+  // tanto ocupaba uno de los cupos del radar, que cuenta a todo nicho con menos
+  // de maduracionScans mediciones (medido ese día: 4 de los 25). Confirmarlo
+  // rápido lo libera —y si se confirma, la auto-pausa lo saca de la mesa—.
+  //
+  // Con plazo: un nicho que no logra medir demanda no se queda para siempre a
+  // ritmo rápido (maduracionDiasMax desde que se creó).
+  const esReciente = (n) => {
+    const creado = +new Date(n.creadoEl ?? NaN)
+    return !Number.isFinite(creado) || ahora - creado <= config.maduracionDiasMax * 86_400e3
+  }
   const candidatosMaduracion = nichos.filter((n) => {
     const id = String(n._id)
     return (
-      ['entrar', 'entrar_con_condiciones'].includes(veredictoPorNicho.get(id)) &&
+      ['entrar', 'entrar_con_condiciones', 'no_entrar'].includes(veredictoPorNicho.get(id)) &&
       (demandaPorNicho.get(id) ?? 0) < config.maduracionScans &&
-      !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando')
+      !['descartado', 'en-espera', 'vendiendo'].includes(n.etapaCompra ?? 'evaluando') &&
+      esReciente(n)
     )
   })
   // la CARTERA (cotizando/pedido: ya hay intención de compra) madura a diario
@@ -929,7 +997,11 @@ export async function procesarProgramadorScans() {
     const umbral = nuncaPuntuo ? umbrales.diario : madurando ? umbrales.madurando : umbrales.semanal
     if (ahora - ultimo < umbral) continue
     if (nuncaPuntuo) sinScore++
-    vencidos.push({ nicho, madurando, atraso: ahora - ultimo - umbral })
+    // Pasan primero los que maduran y los recién creados que aún no tienen
+    // puntaje: su segundo scan es el que les da el primero. Un nicho antiguo
+    // que nunca puntuó no entra acá: ese está fallando, no empezando.
+    const prioridad = madurando || (nuncaPuntuo && esReciente(nicho) && ahora - +new Date(nicho.creadoEl ?? 0) <= 14 * 86_400e3)
+    vencidos.push({ nicho, madurando, prioridad, atraso: ahora - ultimo - umbral })
   }
   // ventana MÓVIL de 24 h, no día calendario: reparte de forma continua y no
   // depende del huso (ni del cambio de hora de Chile)

@@ -63,9 +63,19 @@ test('repartirScans: los que maduran pasan primero, hasta la mitad del cupo', ()
   assert.equal(sinNuevos.aEncolar.length, 8, 'si nadie madura, el cupo entero es de los semanales')
 })
 
-test('reposición de fichas: repone lo que volvió vacío, con tope, y nunca baja del mínimo para puntuar', () => {
-  assert.equal(metaDeReposicion({ pedidas: 20, conDetalle: 14, vacias: 6, minimo: 5, tope: 6 }), 20)
-  assert.equal(metaDeReposicion({ pedidas: 20, conDetalle: 8, vacias: 12, minimo: 5, tope: 6 }), 14, 'el tope acota el gasto')
-  assert.equal(metaDeReposicion({ pedidas: 20, conDetalle: 20, vacias: 0, minimo: 5, tope: 6 }), 20, 'si todo llegó no se pide nada')
-  assert.equal(metaDeReposicion({ pedidas: 10, conDetalle: 2, vacias: 8, minimo: 5, tope: 0 }), 5, 'apagada, queda el mínimo de siempre')
+test('reposición de fichas: repone lo que falta de lo pedido, con tope, y nunca baja del mínimo para puntuar', () => {
+  assert.equal(metaDeReposicion({ pedidas: 20, conDetalle: 14, minimo: 5, tope: 6 }), 20)
+  assert.equal(metaDeReposicion({ pedidas: 20, conDetalle: 8, minimo: 5, tope: 3 }), 11, 'el tope acota el gasto')
+  assert.equal(metaDeReposicion({ pedidas: 20, conDetalle: 20, minimo: 5, tope: 3 }), 20, 'si todo llegó no se pide nada')
+  assert.equal(metaDeReposicion({ pedidas: 10, conDetalle: 2, minimo: 5, tope: 0 }), 5, 'apagada, queda el mínimo de siempre')
+})
+
+test('repartirScans: un recién creado sin puntaje pasa con prioridad aunque no esté madurando', () => {
+  const vencidos = [
+    ...Array.from({ length: 6 }, (_, i) => ({ nicho: `semanal-${i}`, madurando: false, prioridad: false, atraso: 100 - i })),
+    { nicho: 'recien-creado', madurando: false, prioridad: true, atraso: 1 },
+  ]
+  const { aEncolar } = repartirScans({ vencidos, yaHoy: 0, techo: 4 })
+  assert.equal(aEncolar[0].nicho, 'recien-creado')
+  assert.equal(aEncolar.length, 4)
 })

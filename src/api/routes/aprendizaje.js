@@ -265,10 +265,12 @@ router.get('/fuentes-radar', async (_req, res) => {
   const { fuentesDelRadar } = await import('../../services/ml/fuentesRadar.js')
   res.json(await fuentesDelRadar())
 })
-// lo que el sistema recomendó traer contra lo que se vende (en sombra)
-router.get('/recomendado-vs-vendido', async (_req, res) => {
+// lo que el sistema recomendó traer contra lo que se vende (en sombra). La
+// respuesta se reutiliza unas horas (tarda y casi no cambia dentro del día);
+// ?fresca=1 la recalcula
+router.get('/recomendado-vs-vendido', async (req, res) => {
   const { recomendadoVsVendido } = await import('../../services/ml/recomendadoVsVendido.js')
-  res.json(await recomendadoVsVendido())
+  res.json(await recomendadoVsVendido({ fresca: req.query.fresca === '1' }))
 })
 // Mide de nuevo los nichos activos cuya curva no tiene corrección, probando la
 // forma con preposición y plural (una llamada en lote a DataForSEO, sin buscar
