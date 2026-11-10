@@ -1325,7 +1325,7 @@ function ResumenNicho({ o, tendencia }) {
           {o.resenasNuevas != null && o.ventanaDias ? (
             <span title={`${o.resenasNuevas} reseñas nuevas en ${o.ventanaDias} días, contadas sobre ${o.canasta} productos ${o.fuenteResenas === 'api' ? 'de todo el listado (API oficial de ML)' : 'del top (ficha)'}${o.saltosFiltrados ? ` · ${o.saltosFiltrados} saltos de catálogo descartados` : ''}`}>
               +{fmtNum(o.resenasNuevas)} reseñas / {o.ventanaDias}d{' '}
-              {flecha ? <span className={`delta ${flecha[1]}`}>{flecha[0]}</span> : null}
+              {flecha ? <span className={`delta ${flecha[1]}`} title="Contra el scan anterior, por publicación medida: que ahora lleguen más o menos fichas no cuenta como subir o bajar.">{flecha[0]}</span> : null}
               {o.saltosFiltrados ? <span className="op-sucio" title="hubo saltos de catálogo filtrados">⚠</span> : null}
             </span>
           ) : null}
@@ -1334,7 +1334,7 @@ function ResumenNicho({ o, tendencia }) {
             salto era real, se tiene que poder ver */}
         {o.saltoSospechoso ? (
           <Hecho etiqueta="descartado">
-            <span className="op-sucio" title={`Se midieron ${Math.round(o.saltoSospechoso.valorCrudo)} ventas/día contra ${Math.round(o.saltoSospechoso.contra)} del scan anterior (×${o.saltoSospechoso.salto}). ${o.saltoSospechoso.motivo}`}>
+            <span className="op-sucio" title={`Se midieron ${Math.round(o.saltoSospechoso.valorCrudo)} ventas/día contra ${Math.round(o.saltoSospechoso.contra)} del scan anterior${o.saltoSospechoso.porComparable ? `; por publicación medida, ${o.saltoSospechoso.porComparable.actual} contra ${o.saltoSospechoso.porComparable.contra}` : ''} (×${o.saltoSospechoso.salto}). ${o.saltoSospechoso.motivo}`}>
               ⚠ salto ×{o.saltoSospechoso.salto} no creíble
             </span>
           </Hecho>

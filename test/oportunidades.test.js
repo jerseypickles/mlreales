@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   detectarTramites,
   tendenciaVentas,
+  tasasMismaCanasta,
   unidadesPrimeraCompra,
   inversionEstimadaUsd,
   cambiosPorEtapa,
@@ -55,6 +56,35 @@ test('tendenciaVentas: sube/baja/estable con umbral de ±15%', () => {
   assert.equal(tendenciaVentas(rep(10.5), rep(10)), 'estable')
   assert.equal(tendenciaVentas(rep(10), null), null)
   assert.equal(tendenciaVentas(rep(10), rep(0)), null)
+})
+
+test('tasasMismaCanasta: con los comparables a la vista compara por publicación; si falta alguno, la suma', () => {
+  const rep = (tasa, comparables, extra = {}) => ({ metricas: { demanda: { resenasNuevasPorDia: tasa, reviews: { itemsComparables: comparables }, ...extra } } })
+  // llegó el doble de fichas y la suma se duplicó: por publicación no cambió nada
+  const mas = tasasMismaCanasta(rep(40, 20), rep(20, 10))
+  assert.deepEqual([mas.actual, mas.ancla, mas.base], [2, 2, 'por-comparable'])
+  assert.deepEqual(mas.crudas, [40, 20], 'las sumas siguen a mano: son lo que se guarda y se muestra')
+  assert.deepEqual(mas.comparables, [20, 10])
+  // reportes viejos sin el conteo de comparables: queda la suma
+  const vieja = tasasMismaCanasta(rep(40, 20), { metricas: { demanda: { resenasNuevasPorDia: 20 } } })
+  assert.deepEqual([vieja.actual, vieja.ancla, vieja.base], [40, 20, 'suma'])
+  // con fuentes distintas se compara la ficha, y los comparables son los de la ficha
+  const api = rep(300, 150, { fuenteResenas: 'api', reviewsFicha: { porDia: 30, itemsComparables: 15 } })
+  const ficha = rep(12, 6, { fuenteResenas: 'ficha', reviewsFicha: { porDia: 12, itemsComparables: 6 } })
+  const cruzada = tasasMismaCanasta(ficha, api)
+  assert.deepEqual([cruzada.actual, cruzada.ancla, cruzada.base], [2, 2, 'por-comparable'])
+  // sin tasa en alguno no hay con qué comparar
+  assert.equal(tasasMismaCanasta(rep(null, 10), rep(20, 10)).base, 'suma')
+  assert.equal(tasasMismaCanasta(rep(40, 20), null).ancla, undefined)
+})
+
+test('tendenciaVentas: que lleguen más o menos fichas no es subir ni bajar', () => {
+  const rep = (tasa, comparables) => ({ metricas: { demanda: { resenasNuevasPorDia: tasa, reviews: { itemsComparables: comparables } } } })
+  assert.equal(tendenciaVentas(rep(40, 20), rep(20, 10)), 'estable', 'la suma se duplicó porque se midió el doble')
+  assert.equal(tendenciaVentas(rep(10, 5), rep(20, 10)), 'estable', 'y cae a la mitad cuando llega la mitad')
+  assert.equal(tendenciaVentas(rep(60, 20), rep(20, 10)), 'sube', 'por publicación pasó de 2 a 3')
+  assert.equal(tendenciaVentas(rep(20, 20), rep(20, 10)), 'baja', 'la misma suma con el doble de fichas es la mitad por publicación')
+  assert.equal(tendenciaVentas(rep(24, 10), rep(20, 10)), 'sube', 'con la misma canasta decide la suma, como siempre')
 })
 
 test('unidadesPrimeraCompra: rangos, números sueltos y texto sin números', () => {

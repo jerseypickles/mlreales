@@ -1193,13 +1193,14 @@ export function detectarSellersGemelos({ snapshots, productosPorSku, snapshotsPr
 export async function juzgarRuidoDemanda({ nicho, metricas, fechaScan, fechaReferencia = null }) {
   const crudo = metricas.demanda?.resenasNuevasPorDia
   if (crudo == null) return null
-  const [{ Reporte }, { CurvaEstacional }, { juzgarSalto }, { tasasComparables }] = await Promise.all([
+  const [{ Reporte }, { CurvaEstacional }, { juzgarSalto }, { tasasMismaCanasta }] = await Promise.all([
     import('../models/Reporte.js'),
     import('../models/CurvaEstacional.js'),
     import('./estacionalidad.js'),
     import('./oportunidades.js'),
   ])
-  const campos = 'fecha metricas.demanda.resenasNuevasPorDia metricas.demanda.fuenteResenas metricas.demanda.reviewsFicha.porDia metricas.demanda.saltoSospechoso'
+  // los comparables van para juzgar sobre la misma canasta (tasasMismaCanasta)
+  const campos = 'fecha metricas.demanda.resenasNuevasPorDia metricas.demanda.fuenteResenas metricas.demanda.reviewsFicha.porDia metricas.demanda.reviewsFicha.itemsComparables metricas.demanda.reviews.itemsComparables metricas.demanda.saltoSospechoso'
   // el ancla es el último scan ACEPTADO antes de este, sin contarse a sí
   // mismo: el recálculo del mismo scan (post-nivel-2, exclusiones) vuelve a
   // juzgar un reporte que ya está guardado
@@ -1213,8 +1214,12 @@ export async function juzgarRuidoDemanda({ nicho, metricas, fechaScan, fechaRefe
     .lean()
   if (!anterior) return null
   // con la fuente cambiada (API → ficha desde el 29-sep) la caída es de
-  // canasta, no de demanda: se juzga ficha contra ficha
-  const [actual, ancla] = tasasComparables({ metricas }, anterior)
+  // canasta, no de demanda: se juzga ficha contra ficha. Y con la misma fuente
+  // pero otra cantidad de fichas (10-nov), por publicación comparada: lo que se
+  // juzga es `actual` contra `ancla`; lo que se guarda son las sumas (`crudas`)
+  const contraAncla = tasasMismaCanasta({ metricas }, anterior)
+  const { actual, ancla } = contraAncla
+  const anclaCruda = contraAncla.crudas[1]
   if (!Number.isFinite(actual) || !Number.isFinite(ancla)) return null
   const curvaDoc = await CurvaEstacional.findOne({ keyword: nicho.keyword }).select('curva').lean()
   const mes = (d) => new Date(d).getMonth() + 1
@@ -1234,9 +1239,10 @@ export async function juzgarRuidoDemanda({ nicho, metricas, fechaScan, fechaRefe
       .lean()
     : null
   const crudoConfirmador = confirmador?.metricas.demanda.saltoSospechoso.valorCrudo
-  const [actualC, confirmado] = confirmador
-    ? tasasComparables({ metricas }, { metricas: { demanda: { ...confirmador.metricas.demanda, resenasNuevasPorDia: crudoConfirmador } } })
-    : []
+  const contraConfirmador = confirmador
+    ? tasasMismaCanasta({ metricas }, { metricas: { demanda: { ...confirmador.metricas.demanda, resenasNuevasPorDia: crudoConfirmador } } })
+    : null
+  const actualC = contraConfirmador?.actual, confirmado = contraConfirmador?.ancla
   const j = juzgarSalto({
     contraAncla: { anterior: ancla, actual, mesAnterior: mes(anterior.fecha) },
     contraConfirmador: Number.isFinite(actualC) && Number.isFinite(confirmado)
@@ -1245,11 +1251,16 @@ export async function juzgarRuidoDemanda({ nicho, metricas, fechaScan, fechaRefe
     curva: curvaDoc?.curva?.length === 12 ? curvaDoc.curva : null,
     mesActual: mes(fechaScan),
   })
+  // el salto se midió por publicación comparada: queda dicho, porque `valorCrudo`
+  // y `contra` son sumas y su cociente ya no es el salto
+  const porComparable = contraAncla.base === 'por-comparable'
+    ? { porComparable: { actual: redondear(actual, 2), contra: redondear(ancla, 2), comparables: contraAncla.comparables } }
+    : {}
   if (j.anular) {
-    metricas.demanda.saltoSospechoso = { valorCrudo: crudo, contra: ancla, salto: j.ancla.salto, motivo: j.ancla.motivo }
+    metricas.demanda.saltoSospechoso = { valorCrudo: crudo, contra: anclaCruda, salto: j.ancla.salto, motivo: j.ancla.motivo, ...porComparable }
     metricas.demanda.resenasNuevasPorDia = null
   } else if (j.reanclar) {
-    metricas.demanda.reanclado = { contra: ancla, anclaDel: anterior.fecha, confirmadoCon: confirmado, confirmadorDel: confirmador.fecha, salto: j.ancla.salto }
+    metricas.demanda.reanclado = { contra: anclaCruda, anclaDel: anterior.fecha, confirmadoCon: contraConfirmador.crudas[1], confirmadorDel: confirmador.fecha, salto: j.ancla.salto, ...porComparable }
     // el scan que lo confirmó vuelve a la serie con su crudo (para eso se guardó)
     await Reporte.updateOne(
       { _id: confirmador._id, 'metricas.demanda.resenasNuevasPorDia': null },

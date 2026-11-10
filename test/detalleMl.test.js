@@ -7,6 +7,10 @@ import {
   precioAnteriorReal,
   vendedorDesdeHtml,
   aItemDetalle,
+  detallesDeMl,
+  conCupo,
+  ZyteError,
+  MOTIVO_NO_ES_FICHA,
 } from '../src/services/detalleMl.js'
 
 // Respuestas REALES de Zyte medidas el 29-ago-2026 sobre el nicho depiladora
@@ -154,4 +158,61 @@ test('el stock es el que ve el comprador; el campo de telemetría puede ser el t
   assert.equal(stockDesdeHtml('<html>sin nada</html>'), null)
   const item = aItemDetalle({ product: { price: '2930', sku: 'MLCU1' }, browserHtml: chico })
   assert.deepEqual([item.stockQuantity, item.stockTopado, item.stockFuente, item.soldQuantityFicha], [4, false, 'texto', 5])
+})
+
+// LA PETICIÓN INYECTADA (sin red): qué se reintenta y cuántas van a la vez.
+const pedirCon = (plan) => {
+  const llamadas = new Map()
+  const pedir = async (url) => {
+    const n = (llamadas.get(url) ?? 0) + 1
+    llamadas.set(url, n)
+    const paso = plan[url]?.[Math.min(n, plan[url].length) - 1] ?? 'ficha'
+    if (paso === 'bloqueo') throw new ZyteError('Zyte HTTP 520: Website Ban', { status: 520, url })
+    return paso === 'cascaron' ? DEGRADADA : BUENA
+  }
+  return { pedir, llamadas }
+}
+
+test('cada ficha tiene hasta tres intentos seguidos, y queda contado en cuál salió', async () => {
+  const { pedir, llamadas } = pedirCon({
+    bloqueada: ['bloqueo'], // bloqueada las tres veces
+    rescatada: ['bloqueo', 'ficha'], // el reintento inmediato la trae
+    lenta: ['cascaron', 'bloqueo', 'ficha'],
+    terca: ['cascaron'],
+  })
+  const r = await detallesDeMl(['bloqueada', 'rescatada', 'lenta', 'terca', 'buena'], { apiKey: 'k', pedir })
+  assert.deepEqual([llamadas.get('bloqueada'), llamadas.get('rescatada'), llamadas.get('lenta'), llamadas.get('terca'), llamadas.get('buena')], [3, 2, 3, 3, 1])
+  assert.deepEqual([r.items.length, r.fallidos.length, r.pedidas], [3, 2, 5])
+  assert.deepEqual(r.intentos, { 1: 1, 2: 1, 3: 1 }, 'una al primero, una al segundo, una al tercero')
+  const motivo = Object.fromEntries(r.fallidos.map((f) => [f.url, f.motivo]))
+  assert.match(motivo.bloqueada, /520/, 'no llegó: Zyte no la cobra')
+  assert.equal(motivo.terca, MOTIVO_NO_ES_FICHA, 'esa sí llegó y se cobra')
+})
+
+test('el tope de 4 fichas a la vez es de todo el proceso: dos scans juntos no suman 8', async () => {
+  let enVuelo = 0, maximo = 0, total = 0
+  const pedir = async () => {
+    enVuelo++; total++
+    maximo = Math.max(maximo, enVuelo)
+    await new Promise((r) => setTimeout(r, 5))
+    enVuelo--
+    return BUENA
+  }
+  const urls = (p) => Array.from({ length: 10 }, (_, i) => `${p}${i}`)
+  const [a, b, c] = await Promise.all([
+    detallesDeMl(urls('a'), { apiKey: 'k', pedir }),
+    detallesDeMl(urls('b'), { apiKey: 'k', pedir }),
+    detallesDeMl(urls('c'), { apiKey: 'k', pedir }),
+  ])
+  assert.equal(maximo, 4, 'nunca más de 4 peticiones en vuelo')
+  assert.equal(total, 30)
+  assert.deepEqual([a.items.length, b.items.length, c.items.length], [10, 10, 10], 'y nadie se queda sin turno')
+})
+
+test('conCupo: una petición que falla devuelve su cupo', async () => {
+  const falla = () => conCupo(async () => { throw new Error('se cayó') })
+  await Promise.all(Array.from({ length: 12 }, () => assert.rejects(falla(), /se cayó/)))
+  // si los cupos se hubieran perdido, esto quedaría esperando para siempre
+  const ok = await Promise.all(Array.from({ length: 8 }, (_, i) => conCupo(async () => i)))
+  assert.deepEqual(ok, [0, 1, 2, 3, 4, 5, 6, 7])
 })

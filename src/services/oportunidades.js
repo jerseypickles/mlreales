@@ -84,9 +84,41 @@ export function tasasComparables(ultimo, anterior) {
   return [da?.reviewsFicha?.porDia, db?.reviewsFicha?.porDia]
 }
 
-// Dirección de la demanda entre los dos últimos reportes (±15% = ruido).
+// Pura. Las dos tasas de `tasasComparables` puestas SOBRE LA MISMA CANASTA.
+//
+// La tasa de un nicho es la SUMA de las reseñas nuevas de las publicaciones que
+// se pudieron comparar entre dos scans, así que sube y baja con cuántas fichas
+// llegaron sin que la demanda se mueva. Medido el 10-nov-2026 sobre los pares de
+// scans seguidos de toda la serie: la suma sigue al número de comparables (cuando
+// se duplican, hace más que duplicarse) y, dividida por los comparables, deja de
+// seguirlos. Se probaron además una canasta fija de las primeras posiciones y las
+// mismas publicaciones en los cuatro scans: ninguna se mueve menos que esta.
+//
+// Lo destapó el arreglo del 9-nov a las fichas bloqueadas: al llegar el doble de
+// fichas por scan, la tasa de los nichos empezó a subir sola y el juez del ruido
+// anuló como salto imposible una lectura que solo traía más canasta.
+//
+// Con los comparables de los dos reportes a la vista se compara la tasa por
+// publicación comparada; si falta alguno (reportes viejos), queda la suma.
+// `crudas` son las sumas, que es lo que se guarda y se muestra.
+export function tasasMismaCanasta(ultimo, anterior) {
+  const crudas = tasasComparables(ultimo, anterior)
+  const [a, b] = crudas
+  const da = ultimo?.metricas?.demanda, db = anterior?.metricas?.demanda
+  // los comparables de la misma señal que eligió tasasComparables
+  const deFicha = (da?.fuenteResenas ?? 'ficha') !== (db?.fuenteResenas ?? 'ficha')
+  const comparables = (d) => (deFicha ? d?.reviewsFicha?.itemsComparables : d?.reviews?.itemsComparables)
+  const ca = comparables(da), cb = comparables(db)
+  if (!Number.isFinite(a) || !Number.isFinite(b) || !(ca > 0) || !(cb > 0)) {
+    return { actual: a, ancla: b, base: 'suma', crudas }
+  }
+  return { actual: a / ca, ancla: b / cb, base: 'por-comparable', crudas, comparables: [ca, cb] }
+}
+
+// Dirección de la demanda entre los dos últimos reportes (±15% = ruido), sobre
+// la misma canasta: que hoy lleguen más o menos fichas no es subir ni bajar.
 export function tendenciaVentas(ultimo, anterior) {
-  const [a, b] = tasasComparables(ultimo, anterior)
+  const { actual: a, ancla: b } = tasasMismaCanasta(ultimo, anterior)
   if (!Number.isFinite(a) || !Number.isFinite(b) || b <= 0) return null
   const cambio = (a - b) / b
   if (cambio >= 0.15) return 'sube'

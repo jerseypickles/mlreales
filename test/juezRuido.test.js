@@ -96,6 +96,45 @@ test('juez del ruido: el recálculo del mismo scan no se juzga contra sí mismo 
   assert.equal(await Reporte.countDocuments({ nichoId: nicho._id, 'metricas.demanda.resenasNuevasPorDia': { $ne: null } }), 3)
 })
 
+test('juez del ruido: un salto que solo es más canasta no se anula; uno por publicación sí, y queda dicho cómo se midió', async () => {
+  // el ancla se midió con 2 publicaciones comparables (llegaron pocas fichas)
+  await Reporte.create(base('10-20', { resenasNuevasPorDia: 2, reviews: { itemsComparables: 2 } }))
+  const conCanasta = (tasa, comparables) => ({ demanda: { resenasNuevasPorDia: tasa, fuenteResenas: 'ficha', reviews: { itemsComparables: comparables } } })
+
+  // ahora llegan 12: la suma es 6 veces más, por publicación es lo mismo
+  const masFichas = conCanasta(12, 12)
+  const j1 = await juzgarRuidoDemanda({ nicho, metricas: masFichas, fechaScan: dia('10-27'), fechaReferencia: dia('10-20') })
+  assert.deepEqual([j1.anular, j1.reanclar], [false, false])
+  assert.equal(masFichas.demanda.resenasNuevasPorDia, 12, 'la lectura se queda')
+  assert.equal(masFichas.demanda.saltoSospechoso, undefined)
+
+  // la misma suma con las mismas 2 publicaciones: eso sí es un salto de 6 veces
+  const mismoPar = conCanasta(12, 2)
+  const j2 = await juzgarRuidoDemanda({ nicho, metricas: mismoPar, fechaScan: dia('10-27'), fechaReferencia: dia('10-20') })
+  assert.equal(j2.anular, true)
+  assert.equal(mismoPar.demanda.resenasNuevasPorDia, null)
+  assert.equal(mismoPar.demanda.saltoSospechoso.valorCrudo, 12, 'se guardan las sumas…')
+  assert.equal(mismoPar.demanda.saltoSospechoso.contra, 2)
+  assert.deepEqual(mismoPar.demanda.saltoSospechoso.porComparable, { actual: 6, contra: 1, comparables: [2, 2] }, '…y con qué se midió el salto')
+  assert.equal(mismoPar.demanda.saltoSospechoso.salto, 6)
+})
+
+test('juez del ruido: el scan que confirma un salto también se compara por publicación', async () => {
+  // ancla con 2 comparables; después dos lecturas con 10 que coinciden entre sí por publicación (y son 8 veces el ancla)
+  await Reporte.create([
+    base('09-09', { resenasNuevasPorDia: 1, reviews: { itemsComparables: 2 } }),
+    base('10-31', { resenasNuevasPorDia: null, reviews: { itemsComparables: 10 }, saltoSospechoso: { valorCrudo: 40, contra: 1, salto: 8, motivo: 'la curva del año está plana en ese mes' } }),
+  ])
+  const metricas = { demanda: { resenasNuevasPorDia: 88, fuenteResenas: 'ficha', reviews: { itemsComparables: 20 } } }
+  const j = await juzgarRuidoDemanda({ nicho, metricas, fechaScan: dia('11-04'), fechaReferencia: dia('10-31') })
+
+  assert.equal(j.reanclar, true, 'por publicación: 4,4 contra 4 del que confirma')
+  assert.equal(metricas.demanda.resenasNuevasPorDia, 88)
+  assert.equal(metricas.demanda.reanclado.contra, 1)
+  assert.equal(metricas.demanda.reanclado.confirmadoCon, 40)
+  assert.equal((await tasaDel('10-31')).resenasNuevasPorDia, 40, 'el que confirma vuelve con su suma')
+})
+
 test('juez del ruido: sin tasa o sin ancla no hace nada', async () => {
   assert.equal(await juzgarRuidoDemanda({ nicho, metricas: scan(null), fechaScan: dia('11-04') }), null)
   const primera = scan(40)

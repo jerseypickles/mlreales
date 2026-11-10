@@ -290,6 +290,8 @@ export async function procesarScanDetalle(job) {
   // Un lote de fichas: pedirlas, anotar lo que se cobra y aplicar lo que volvió.
   // Las que el proveedor no pudo traer quedan en `caidas` para la segunda vuelta.
   let caidas = []
+  let alReintento = 0
+  const inicioDetalle = Date.now()
   async function medirLote(batch, etiqueta, { segunda = false } = {}) {
     let crudos, fuenteDetalle
     try {
@@ -299,6 +301,8 @@ export async function procesarScanDetalle(job) {
         // la ficha (solo lo usa Zyte)
         preciosListado: new Map(batch.filter((o) => o.url && o.precio).map((o) => [o.url, o.precio])),
       })
+      // las que no salieron al primer intento sino al reintento inmediato
+      alReintento += (r.intentos?.[2] ?? 0) + (r.intentos?.[3] ?? 0)
       crudos = r.items
       fuenteDetalle = r.fuente
       await registrarGasto(nichoId, costoServido(r), r.fuente)
@@ -382,6 +386,9 @@ export async function procesarScanDetalle(job) {
   // pedidas de nuevo un minuto después, volvieron completas (3 de 3 en una
   // prueba, 2 de 2 en otra). Zyte no cobra las bloqueadas, así que esperar y
   // volver a pedir no gasta de más: solo se paga lo que llega.
+  // (10-nov: el bloqueo era tan terco porque dos scans de detalle corrían a la
+  // vez; con un solo flujo el reintento inmediato rescata casi todas. El tope de
+  // peticiones simultáneas ahora es de todo el proceso: ver detalleMl.js.)
   //
   // Importa que sean LAS MISMAS fichas y no otras: la demanda del nicho es el
   // delta de reseñas de una publicación entre dos scans, y una ficha que falta
@@ -527,7 +534,9 @@ export async function procesarScanDetalle(job) {
 
   return { objetivos: objetivos.length, aplicados, yaMedidos: yaMedidos.size, sinMatch, sinReviews, fallidos,
     // las que el proveedor no trajo: en la primera pasada, cuántas volvieron en la segunda y cuántas quedaron
-    caidasProveedor: caidasPrimera, recuperadas, sinLlegar: caidas.length }
+    caidasProveedor: caidasPrimera, recuperadas, sinLlegar: caidas.length,
+    // cuántas fichas buenas salieron recién al reintento inmediato, y cuánto demoró todo el detalle
+    alReintento, minutos: Math.round((Date.now() - inicioDetalle) / 60_000) }
 }
 
 export async function procesarCalcularMetricas(job) {

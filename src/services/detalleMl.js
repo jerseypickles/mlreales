@@ -327,14 +327,43 @@ export async function pedirUna(url, { geolocation, apiKey }) {
   }
 }
 
+// EL TOPE DE CONCURRENCIA ES DEL PROCESO, NO DE CADA LLAMADA (10-nov-2026).
+//
+// El punto 2 de arriba midió que 4 fichas a la vez es donde dejan de crecer las
+// páginas vacías, pero el tope vivía dentro de cada llamada: con dos scans de
+// detalle corriendo juntos (el worker admite dos) salían 8 a la vez, más lo que
+// pidiera el seguimiento de stock. Medido ese día en los jobs de producción: un
+// scan que corrió solo perdió cerca de una de cada seis fichas por bloqueo de
+// Mercado Libre; los que se cruzaron con otro, entre una de cada cuatro y dos
+// de cada tres, y tardaron varias veces más. Y una prueba en vivo, sola,
+// mostró que el reintento inmediato sí rescata casi todas las bloqueadas: lo
+// que sobraba no eran los reintentos, era la presión.
+//
+// El cupo se entrega de mano en mano (quien termina se lo pasa al que espera,
+// sin soltarlo) para que nadie se cuele entre medio y queden 5 en vuelo.
+let enVuelo = 0
+const enEspera = []
+export async function conCupo(fn) {
+  if (enVuelo >= CONCURRENCIA) await new Promise((resolver) => enEspera.push(resolver))
+  else enVuelo++
+  try {
+    return await fn()
+  } finally {
+    const siguiente = enEspera.shift()
+    if (siguiente) siguiente()
+    else enVuelo--
+  }
+}
+
 // Una ficha, reintentando mientras vuelva el cascarón. El reintento no es
 // terquedad: es la corrección medida del punto 1 —la misma URL que en paralelo
 // devolvió probability 0 devolvió la ficha completa al pedirla de nuevo.
-async function conReintento(url, opciones, precioListado) {
+// `pedir` es la petición, inyectable para probar sin red.
+async function conReintento(url, opciones, precioListado, pedir = pedirUna) {
   let ultima = null
   for (let intento = 0; intento <= REINTENTOS; intento++) {
     try {
-      const r = await pedirUna(url, opciones)
+      const r = await conCupo(() => pedir(url, opciones))
       if (confiable(r)) return { ok: true, item: aItemDetalle(r, { precioListado }), intentos: intento + 1 }
       ultima = r
     } catch (err) {
@@ -355,23 +384,27 @@ async function conReintento(url, opciones, precioListado) {
 // `preciosListado` es opcional: un Map url→precio con lo que el scrapeo del
 // listado ya midió. Cuando viene, cada ficha queda contrastada contra una
 // fuente independiente sin costar una petición extra.
+// `intentos` cuenta en qué intento salió cada ficha buena ({1: n, 2: n, 3: n}):
+// es lo que dice si el reintento inmediato está rescatando o solo gastando.
 export async function detallesDeMl(
   urls,
-  { geolocation = 'CL', apiKey = config.zyteApiKey, preciosListado = new Map() } = {},
+  { geolocation = 'CL', apiKey = config.zyteApiKey, preciosListado = new Map(), pedir = pedirUna } = {},
 ) {
   if (!apiKey) throw new ZyteError('falta ZYTE_API_KEY')
   const pendientes = [...new Set((urls ?? []).filter(Boolean))]
   const items = []
   const fallidos = []
+  const intentos = {}
   let sospechosos = 0
 
   let cursor = 0
   async function obrero() {
     while (cursor < pendientes.length) {
       const url = pendientes[cursor++]
-      const r = await conReintento(url, { geolocation, apiKey }, preciosListado.get(url) ?? null)
+      const r = await conReintento(url, { geolocation, apiKey }, preciosListado.get(url) ?? null, pedir)
       if (r.ok) {
         if (r.item._precioCoherente === false) sospechosos++
+        intentos[r.intentos] = (intentos[r.intentos] ?? 0) + 1
         items.push(r.item)
       } else {
         fallidos.push({ url: r.url, motivo: r.motivo })
@@ -387,5 +420,5 @@ export async function detallesDeMl(
       `[detalle-ml] ${sospechosos}/${items.length} fichas con precio incoherente`,
     )
   }
-  return { items, fallidos, pedidas: pendientes.length }
+  return { items, fallidos, pedidas: pendientes.length, intentos }
 }
