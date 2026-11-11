@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura } from './ui.jsx'
+import { EncabezadoPagina, Etiqueta } from './sistema.jsx'
 import { fmtFecha, fmtNum, fmtPrecio } from '../lib/formato.js'
 import { StockCompetidores, MasVendidosMl } from './AprendizajeFuentes.jsx'
 import { RecomendadoVsVendido } from './AprendizajeAcierto.jsx'
@@ -346,19 +347,15 @@ export function Aprendizaje() {
   const modelo = (objetivo) => e?.modelos.find((m) => m.objetivo === objetivo)
   return (
     <main className="apr-pagina">
-      <div className="apr-hero">
-        <div>
-          <span className={`apr-chip ${e?.activo === false ? 'apr-chip-mal' : 'apr-chip-bien'}`}><Activity size={13} aria-hidden="true" />{e?.activo === false ? 'Captura detenida' : 'Capturando datos'}</span>
-          <h2>Aprendizaje</h2>
-          <p>El sistema guarda cada día de ventas, visitas y publicidad de tus productos, y prueba sus modelos sin tocar las recomendaciones.</p>
-        </div>
+      <EncabezadoPagina titulo="Aprendizaje" bajada="El sistema guarda cada día de ventas, visitas y publicidad de tus productos, y prueba sus modelos sin tocar las recomendaciones.">
+        <Etiqueta tono={e?.activo === false ? 'problema' : 'bien'}><Activity size={13} aria-hidden="true" />{e?.activo === false ? 'Captura detenida' : 'Capturando datos'}</Etiqueta>
         <div className="apr-hero-accion">
           <button type="button" className="boton-secundario apr-refrescar" onClick={cargar} disabled={cargando}>
             <RefreshCw size={15} aria-hidden="true" className={cargando ? 'apr-girando' : ''} />{cargando ? 'Actualizando…' : 'Actualizar'}
           </button>
           {e && <small>Actualizado {fmtFecha(e.consultadoEl)}</small>}
         </div>
-      </div>
+      </EncabezadoPagina>
       <nav className="apr-submenu" aria-label="Secciones de aprendizaje">
         {[['resumen', 'Resumen', Activity], ['acierto', 'Recomendado vs vendido', CheckCircle2], ['stock', 'Stock de competidores', PackageX], ['ranking', 'Más vendidos de ML', TrendingUp]].map(([id, nombre, Icono]) => (
           <button key={id} type="button" className={vista === id ? 'activo' : ''} aria-pressed={vista === id} onClick={() => setVista(id)}><Icono size={15} aria-hidden="true" />{nombre}</button>

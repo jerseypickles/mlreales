@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import * as Collapsible from '@radix-ui/react-collapsible'
 import { api } from '../api.js'
 import { IconoExterno, Cargando } from './ui.jsx'
+import { EncabezadoPagina } from './sistema.jsx'
 import { MiniSerie, HistogramaPrecios } from './graficos.jsx'
 import {
   Tag,
@@ -1794,11 +1795,7 @@ export function MisProductos() {
 
   return (
     <main className="mis-productos">
-      <div className="reporte-encabezado propios-encabezado">
-        <div>
-          <h2>Mis productos</h2>
-          <p className="reporte-fecha">{entradas.length} productos · {propiosVigentes.length} publicaciones vigentes</p>
-        </div>
+      <EncabezadoPagina titulo="Mis productos" bajada={`${entradas.length} productos · ${propiosVigentes.length} publicaciones vigentes`}>
         <details className="propios-gestion"><summary><Plus size={16} aria-hidden="true" />Gestionar publicaciones</summary><div className="toolbar">
           {meli?.conectado ? (
             <>
@@ -1849,7 +1846,7 @@ export function MisProductos() {
       </form>
       {datos?.calibracion ? <p className="nota">Calibración reseñas → ventas: {fmtNum(datos.calibracion.ventas)} ventas reales · {fmtNum(datos.calibracion.resenasNuevas)} reseñas nuevas · {datos.calibracion.factorObservado != null ? `factor observado ${datos.calibracion.factorObservado}` : 'factor aún sin datos'}.</p> : null}
         </details>
-      </div>
+      </EncabezadoPagina>
       {error ? <p className="error-bloque">{error}</p> : null}
       {aviso ? <p className="nota">{aviso}</p> : null}
 

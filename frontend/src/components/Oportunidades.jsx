@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarClock, Check, CircleDollarSign, FileText, ImageOff, Lightbulb, MousePointerClick, PencilLine, Ruler, Search, ShieldAlert, ShoppingBag, Sparkles, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
+import { EncabezadoPagina } from './sistema.jsx'
 import { Criterios } from './Criterios.jsx'
 import { compararOportunidades } from '../lib/sidebar.js'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -1814,14 +1815,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
 
   return (
     <main>
-      <div className="reporte-encabezado">
-        <div>
-          <h2>Oportunidades</h2>
-          <p className="reporte-fecha">
-            Qué conviene traer, ordenado por puntaje y urgencia. Elige uno para ver el detalle; <kbd>↑</kbd> <kbd>↓</kbd> para recorrer y <kbd>Esc</kbd> para cerrar.
-          </p>
-        </div>
-      </div>
+      <EncabezadoPagina titulo="Oportunidades" bajada={<>Qué conviene traer, ordenado por puntaje y urgencia. Elige uno para ver el detalle; <kbd>↑</kbd> <kbd>↓</kbd> para recorrer y <kbd>Esc</kbd> para cerrar.</>} />
       {aviso ? <p className="error-bloque">{aviso}</p> : null}
 
       <div className="opx-barra">

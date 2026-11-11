@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Landmark, Link2, ShieldCheck, Check, Clock, TriangleAlert, HelpCircle } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
+import { EncabezadoPagina } from './sistema.jsx'
 import { fmtPrecio, fmtFecha } from '../lib/formato.js'
 
 // POSICIÓN DE IVA.
@@ -446,12 +447,11 @@ export function Contabilidad() {
 
   return (
     <main className="contabilidad">
-      <header className="cont-cabeza">
-        <h2><Landmark aria-hidden="true" /> Contabilidad</h2>
+      <EncabezadoPagina titulo="Contabilidad" bajada="Posición de IVA: débito de ventas contra crédito de importaciones y gastos.">
         <span className={`cont-sii ${sii?.conectada ? 'ok' : 'off'}`} title={sii?.conectada ? 'Con sesión del SII el débito sale del RCV' : 'Sin sesión del SII el débito se estima de las boletas; el crédito de ML se lee igual de su factura'}>
           SII {sii?.conectada ? 'conectado' : `sin sesión${sii?.motivo ? ` (${sii.motivo})` : ''}`}
         </span>
-      </header>
+      </EncabezadoPagina>
 
       <TusF29 resumen={resumen} sel={periodo} onSel={setPeriodo} onRecargar={recargar} />
 

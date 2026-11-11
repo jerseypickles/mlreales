@@ -14,7 +14,7 @@ import { Contabilidad } from './components/Contabilidad.jsx'
 import { Aprendizaje } from './components/Aprendizaje.jsx'
 import { AlertaStock } from './components/AlertaStock.jsx'
 import { Cargando, ScoreRing, MarcaIcono } from './components/ui.jsx'
-import { Radar as RadarIcono, Landmark } from 'lucide-react'
+import { Landmark, TrendingUp, List, Package, Megaphone, Activity } from 'lucide-react'
 import { fmtNum, fmtPrecio, fmtFecha } from './lib/formato.js'
 import { GRUPOS, agruparNichos, anidarFamilias, tienePrecio, sinBusqueda, rechazadoPeroSeBusca } from './lib/sidebar.js'
 
@@ -47,12 +47,12 @@ function VentasChip() {
   if (!resumen || (!resumen.hoy?.unidades && !resumen.semana?.unidades)) return null
   const conHoy = resumen.hoy.unidades > 0
   const { unidades, ingresosClp } = conHoy ? resumen.hoy : resumen.semana
+  // en el pie del menú, con la misma forma de cifra que el resto del sistema
   return (
-    <div className="chip-topbar" title="Ventas reales de tu cuenta ML (órdenes pagadas; se refresca cada ~45 min)">
-      <span className="chip-topbar-texto">
-        🛒 {unidades} {unidades === 1 ? 'venta' : 'ventas'} {conHoy ? 'hoy' : 'esta semana'} ·{' '}
-        {fmtPrecio(ingresosClp)}
-      </span>
+    <div className="menu-ventas" title="Ventas reales de tu cuenta ML (órdenes pagadas; se refresca cada ~45 min)">
+      <span className="menu-ventas-rotulo">{conHoy ? 'Ventas de hoy' : 'Ventas de la semana'}</span>
+      <strong>{fmtPrecio(ingresosClp)}</strong>
+      <span className="menu-ventas-detalle">{unidades} {unidades === 1 ? 'venta' : 'ventas'}</span>
     </div>
   )
 }
@@ -706,29 +706,60 @@ function Candado() {
   )
 }
 
-// Riel de mundos, a la derecha. Icono + etiqueta corta: con dos entradas el
-// icono solo ya sería un acertijo, y esto va a crecer.
-const MUNDOS = [
-  { id: 'inteligencia', titulo: 'Inteligencia', Icono: RadarIcono, ayuda: 'Nichos, búsqueda, oportunidades y tus publicaciones' },
-  { id: 'contabilidad', titulo: 'Contabilidad', Icono: Landmark, ayuda: 'Posición de IVA: débito de ventas contra crédito de importaciones y gastos' },
+// EL MENÚ (11-nov-2026). Pedido del importador: «todo está desordenado, falta
+// darle un diseño completo a todo, no solo una interfaz sino todo global».
+// Las secciones vivían en dos lugares —pestañas arriba para Inteligencia y un
+// riel a la derecha para cambiar de «mundo»— y cada pantalla armaba su propia
+// cabecera. Ahora hay un solo menú a la izquierda, agrupado por lo que se va a
+// hacer, y es igual en todas las pantallas. Contabilidad sigue siendo un mundo
+// aparte por dentro (su propio estado), pero se entra por el mismo menú.
+const MENU = [
+  { titulo: 'Comprar', items: [
+    { id: 'oportunidades', titulo: 'Oportunidades', Icono: TrendingUp },
+    { id: 'nichos', titulo: 'Nichos', Icono: List },
+  ] },
+  { titulo: 'Vender', items: [
+    { id: 'propios', titulo: 'Mis productos', Icono: Package },
+    { id: 'publicidad', titulo: 'Publicidad', Icono: Megaphone },
+  ] },
+  { titulo: 'Aprender', items: [{ id: 'aprendizaje', titulo: 'Aprendizaje', Icono: Activity }] },
+  { titulo: 'Finanzas', items: [{ id: 'contabilidad', titulo: 'Contabilidad', Icono: Landmark }] },
 ]
 
-function RielMundos({ mundo, onCambiar }) {
+function Menu({ actual, onIr, urgentesStock }) {
   return (
-    <nav className="riel" aria-label="Áreas del sistema">
-      {MUNDOS.map(({ id, titulo, Icono, ayuda }) => (
-        <button
-          key={id}
-          className={`riel-boton${mundo === id ? ' activo' : ''}`}
-          onClick={() => onCambiar(id)}
-          title={ayuda}
-          aria-current={mundo === id ? 'page' : undefined}
-        >
-          <Icono aria-hidden="true" />
-          <span>{titulo}</span>
-        </button>
-      ))}
-    </nav>
+    <div className="menu">
+      <div className="menu-marca">
+        <span className="marca-icono" aria-hidden="true">
+          <MarcaIcono />
+        </span>
+        <div className="marca-texto">
+          <strong>MELI Intel</strong>
+          <span>mercadolibre.cl</span>
+        </div>
+      </div>
+      <nav className="menu-nav" aria-label="Navegación principal">
+        {MENU.map((g) => (
+          <div key={g.titulo} className="menu-grupo">
+            <span className="menu-titulo">{g.titulo}</span>
+            {g.items.map(({ id, titulo, Icono }) => (
+              <button
+                key={id}
+                type="button"
+                className={`menu-item${actual === id ? ' activo' : ''}`}
+                aria-current={actual === id ? 'page' : undefined}
+                onClick={() => onIr(id)}
+              >
+                <Icono size={18} aria-hidden="true" />
+                <span>{titulo}</span>
+                {id === 'propios' && urgentesStock ? <span className="menu-contador" title="Productos sin stock en Full o por quebrarse">{urgentesStock}</span> : null}
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <VentasChip />
+    </div>
   )
 }
 
@@ -749,8 +780,8 @@ export default function App() {
   }, [bloqueada])
   const urgentesStock = (alertasStock?.resumen?.quebrados ?? 0) + (alertasStock?.resumen?.enviarYa ?? 0)
   // Los dos mundos del sistema. Son trabajos distintos: uno decide QUÉ traer,
-  // el otro lleva la plata de lo ya traído. Se cambian con el riel de la
-  // derecha, no con las pestañas de arriba, justamente para que no se mezclen.
+  // el otro lleva la plata de lo ya traído. Desde el 11-nov se entra a los dos
+  // por el mismo menú; por dentro siguen separados.
   const [mundo, setMundo] = useState('inteligencia')
 
   useEffect(() => {
@@ -783,56 +814,17 @@ export default function App() {
   if (bloqueada) return <Candado />
 
   return (
-    <div className="app con-riel">
-      <RielMundos mundo={mundo} onCambiar={setMundo} />
-      <header>
-        <div className="marca">
-          <span className="marca-icono" aria-hidden="true">
-            <MarcaIcono />
-          </span>
-          <div className="marca-texto">
-            <h1>MELI Intel</h1>
-            <span className="subtitulo">
-              {mundo === 'contabilidad'
-                ? 'contabilidad · IVA y costos reales'
-                : 'inteligencia de nichos · mercadolibre.cl'}
-            </span>
-          </div>
-        </div>
-        <nav className="secciones" aria-label="Secciones" hidden={mundo !== 'inteligencia'}>
-          <button
-            className={vista === 'oportunidades' ? 'seccion activa' : 'seccion'}
-            onClick={() => setVista('oportunidades')}
-          >
-            Oportunidades
-          </button>
-          <button
-            className={vista === 'nichos' ? 'seccion activa' : 'seccion'}
-            onClick={() => setVista('nichos')}
-          >
-            Nichos
-          </button>
-          <button
-            className={vista === 'propios' ? 'seccion activa' : 'seccion'}
-            onClick={() => setVista('propios')}
-          >
-            Mis productos{urgentesStock ? <span className="as-contador" title="Productos sin stock en Full o por quebrarse">{urgentesStock}</span> : null}
-          </button>
-          <button
-            className={vista === 'publicidad' ? 'seccion activa' : 'seccion'}
-            onClick={() => setVista('publicidad')}
-          >
-            Publicidad
-          </button>
-          <button
-            className={vista === 'aprendizaje' ? 'seccion activa' : 'seccion'}
-            onClick={() => setVista('aprendizaje')}
-          >
-            Aprendizaje
-          </button>
-        </nav>
-        <VentasChip />
-      </header>
+    <div className="app">
+      <Menu
+        actual={mundo === 'contabilidad' ? 'contabilidad' : vista}
+        urgentesStock={urgentesStock}
+        onIr={(id) => {
+          if (id === 'contabilidad') return setMundo('contabilidad')
+          setMundo('inteligencia')
+          setVista(id)
+        }}
+      />
+      <div className="pagina">
       {mundo !== 'contabilidad' ? <AlertaStock datos={alertasStock} alAbrir={() => setVista('propios')} /> : null}
       {mundo === 'contabilidad' ? (
         <Contabilidad />
@@ -891,6 +883,7 @@ export default function App() {
         </main>
       </div>
       )}
+      </div>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
+import { EncabezadoPagina } from './sistema.jsx'
 import { PauseCircle, Split, PlusCircle, TrendingUp, TrendingDown, Target, Layers, Hourglass, Megaphone, CheckCircle2, XCircle, CircleDot, MousePointerClick } from 'lucide-react'
 import { fmtPrecio } from '../lib/formato.js'
 import MesaPublicidad from './MesaPublicidad.jsx'
@@ -745,8 +746,7 @@ export function Publicidad() {
 
   return (
     <main className={`pub${cargando ? ' ads-refrescando' : ''}`}>
-      <header className="pub-cabeza">
-        <h2>Publicidad</h2>
+      <EncabezadoPagina titulo="Publicidad" bajada="Lo que dejó cada campaña después de pagar producto, comisión, envío y anuncios.">
         <div className="pub-controles">
           <button type="button" className="pub-refrescar" onClick={() => { traer(true); traerPlan() }} disabled={cargando || cargandoPlan} title="Vuelve a preguntarle a ML">
             {cargando ? 'actualizando…' : haceCuanto(datos.refrescoEl) ?? 'actualizar'}
@@ -755,7 +755,7 @@ export function Publicidad() {
             {[7, 30].map((d) => <button key={d} className={dias === d ? 'activo' : ''} onClick={() => setDias(d)}>{d} días</button>)}
           </div>
         </div>
-      </header>
+      </EncabezadoPagina>
       <nav className="pub-pestanas" role="tablist">
         {PESTANAS.map(([k, t]) => <button key={k} role="tab" aria-selected={pestana === k} className={pestana === k ? 'activa' : ''} onClick={() => ir(k)}>{t}</button>)}
       </nav>
