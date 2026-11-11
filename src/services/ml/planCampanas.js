@@ -7,6 +7,7 @@ import { protegerPlanPublicidad, carteraCampanas } from './carteraCampanas.js'
 import { configuracionCampana, economiaCompleta, evaluarAjustesAds } from './evaluacionAds.js'
 export { evaluarAjustesAds as evaluarRecomendaciones } from './evaluacionAds.js'
 import { precioVigente } from '../precioVigente.js'
+import { fuerzaOrganica } from './fuerzaOrganica.js'
 
 // "COMIENZA CON ESTO Y VAMOS ANALIZANDO". El plan de campaña del learning machine.
 //
@@ -470,8 +471,10 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
   const ids = propios.map((x) => x.itemIdMl ?? x.sku)
   // toda la historia que ML retiene de publicidad (~100 días)
   const desde = new Date(+ahora - 120 * DIA).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
-  const ads = await AdsDiaMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia costo unidadesAds ventaAds campanaId prints clicks').lean()
-  const libro = await DiaProductoMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia unidades unidadesChile ingresosChileClp promo cambioLogistica').lean()
+  const ads = await AdsDiaMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia costo unidadesAds unidadesOrganicas unidadesDirectas ventaAds campanaId prints clicks').lean()
+  const libro = await DiaProductoMl.find({ itemId: { $in: ids }, dia: { $gte: desde } }).select('itemId dia unidades unidadesChile ingresosChileClp promo cambioLogistica visitas').lean()
+  // dónde aparece cada producto sin pagar, si algún scan reciente lo vio (contexto de fuerzaOrganica)
+  const posiciones = await import('../propios.js').then((m) => m.posicionesRecientes(propios.map((x) => x.sku).filter(Boolean))).catch(() => new Map())
   const diasAdsMedidos = new Set(await AdsDiaMl.distinct('dia', { itemId: '*', completa: true, dia: { $gte: desde } }))
   const hoy = new Date(ahora).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
   const salida = []
@@ -510,7 +513,9 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
         const venta = ventas.get(dia)
         dias.push({ dia, evento: diasEvento.has(dia), gasto: a?.costo ?? 0, unidadesAds: a?.unidadesAds ?? 0, ventaAds: a?.ventaAds ?? 0,
           unidades: venta?.unidadesChile ?? venta?.unidades ?? 0, ingresosClp: venta?.ingresosChileClp ?? null, promo: venta?.promo ?? null, cambioLogistica: venta?.cambioLogistica ?? false,
-          adsMedido: diasAdsMedidos.has(dia), prints: a?.prints ?? 0, clicks: a?.clicks ?? 0, precio: precioDia.get(`${id}|${dia}`) ?? null, stockFraccion: stockDia.get(`${id}|${dia}`) ?? null })
+          adsMedido: diasAdsMedidos.has(dia), prints: a?.prints ?? 0, clicks: a?.clicks ?? 0, precio: precioDia.get(`${id}|${dia}`) ?? null, stockFraccion: stockDia.get(`${id}|${dia}`) ?? null,
+          // para saber si se vende solo: lo que ML cuenta como orgánico y directo, y las visitas del día
+          organicas: a?.unidadesOrganicas ?? 0, directas: a?.unidadesDirectas ?? 0, visitas: venta?.visitas ?? 0 })
       }
       // una campaña apagada hace más de 7 días ya no se revisa como en curso
       const ultimoGasto = susAds.filter((a) => a.costo > 0).map((a) => a.dia).sort().at(-1)
@@ -526,7 +531,13 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     }
     if (!publicacionVigente(prop) || prop.estado !== 'activo') continue
     plan ??= { fase: 'arranque', accion: 'sin-datos', budgetDiario: null, texto: 'Faltan datos para calcular el plan de arranque.' }
-    salida.push({ itemId: id, titulo: prop.titulo ?? null, precio: precioCobrado ?? precio, precioLista: precio, economia: eco, _dias: dias, ...plan })
+    // ¿se vende solo? Solo para los que alguna vez tuvieron anuncio: sin él no hay nada que quitar
+    const vista = posiciones.get(prop.sku)
+    const vendeSolo = dias.length
+      ? fuerzaOrganica(dias, { resenias: ult?.numReviews ?? null, nota: ult?.rating ?? null,
+        posicion: vista && +ahora - +new Date(vista.fecha) <= 30 * DIA ? vista.posicion : null })
+      : null
+    salida.push({ itemId: id, titulo: prop.titulo ?? null, precio: precioCobrado ?? precio, precioLista: precio, economia: eco, vendeSolo, _dias: dias, ...plan })
   }
 
   // LAS REGLAS: el umbral de subir sale de los cambios de gasto de toda la

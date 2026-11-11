@@ -42,7 +42,7 @@ const ACCION = {
 }
 const ICONO = {
   'pausar-anuncio': PauseCircle, separar: Split, 'campana-propia': Split, 'agrupar-chicos': Layers, crear: PlusCircle, 'ajustar-budget': Target,
-  subir: TrendingUp, bajar: TrendingDown, apagar: PauseCircle, 'subir-roas': Target, 'revisar-anuncio': MousePointerClick, arrancar: PlusCircle, 'arrancar-con-cuidado': PlusCircle, esperar: Hourglass,
+  subir: TrendingUp, bajar: TrendingDown, apagar: PauseCircle, 'subir-roas': Target, 'se-vende-solo': CheckCircle2, 'revisar-anuncio': MousePointerClick, arrancar: PlusCircle, 'arrancar-con-cuidado': PlusCircle, esperar: Hourglass,
 }
 // el diagnóstico del clic (ml/planCampanas.js diagnosticoClic)
 const CLIC = {
@@ -207,7 +207,11 @@ function QueHacer({ plan, fotos, max }) {
     const extra = (plan?.productos ?? [])
       .filter((p) => !cubiertos.has(p.itemId) && ['subir', 'bajar', 'subir-roas', 'revisar-anuncio', 'apagar', 'arrancar', 'arrancar-con-cuidado'].includes(p.accion))
       .map((p) => ({ tipo: p.accion, itemId: p.itemId, prioridad: p.accion === 'apagar' ? 1 : 2, texto: `${nombreCorto(p.titulo)}: ${p.texto}` }))
-    return [...est, ...extra].sort((a, b) => a.prioridad - b.prioridad)
+    // el que ya se vende solo y sigue gastando en anuncios: la prueba es el paso
+    const solos = (plan?.productos ?? [])
+      .filter((p) => p.vendeSolo?.estado === 'se-vende-solo' && p.metricas?.gastoDiario > 0)
+      .map((p) => ({ tipo: 'se-vende-solo', itemId: p.itemId, prioridad: 2, texto: `${nombreCorto(p.titulo)}: ${p.vendeSolo.texto}` }))
+    return [...est, ...extra, ...solos].sort((a, b) => a.prioridad - b.prioridad)
   }, [plan])
   if (!pasos.length) return <section className="pub-hacer vacio-ok"><h3>Qué hacer hoy</h3><p>Nada que cambiar: las campañas están como recomienda el learning machine.</p></section>
   const mostrados = max ? pasos.slice(0, max) : pasos
@@ -327,6 +331,42 @@ function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
 }
 
 // ── pestaña Productos: el estudio ────────────────────────────────────────────
+// ¿SE VENDE SOLO? (ml/fuerzaOrganica.js, 11-nov-2026). Pedido del importador: que el
+// learning machine diga cuándo un producto está fuerte y la publicidad le sobra.
+// Manda la prueba (días con anuncio contra días sin anuncio); la mezcla de ML solo avisa.
+const SOLO = {
+  'se-vende-solo': ['se vende solo', 'bien'], mixto: ['vende de las dos formas', 'medio'], 'depende-del-anuncio': ['depende del anuncio', 'mal'],
+  'pocos-datos': ['pocas ventas todavía', 'neutro'], 'sin-ventas': ['no vende de ninguna forma', 'mal'], 'sin-datos': ['sin datos', 'neutro'],
+}
+const alDia = (v) => (Number.isFinite(v) ? `${String(v).replace('.', ',')} al día` : '—')
+function VendeSolo({ v }) {
+  const [t, c] = SOLO[v.estado] ?? [v.estado, 'neutro']
+  const m = v.mezcla, pr = v.prueba
+  const barra = (etiqueta, valor, detalle) => (valor == null ? null : (
+    <div className="pub-medidor">
+      <span>{etiqueta} <strong>{valor}%</strong> <small>{detalle}</small></span>
+      <div className="pub-medidor-barra"><i className="bien" style={{ width: `${Math.min(100, valor)}%` }} /></div>
+    </div>
+  ))
+  return (
+    <section className="pub-caja">
+      <h4>¿Se vende solo? <em className={`pub-accion ${c}`}>{t}</em>{v.base ? <small>{v.base === 'comprobado' ? 'comprobado: con y sin anuncio' : 'indicio: falta hacer la prueba'}</small> : null}</h4>
+      <p className="pub-texto">{v.texto}</p>
+      {m && (m.pctVentasSinAnuncio != null || m.pctVisitasSinAnuncio != null) ? (
+        <div className="pub-solo-barras">
+          {barra('ventas sin anuncio', m.pctVentasSinAnuncio, `${m.organicas} de ${m.organicas + m.directas} · últimos ${m.dias} días con stock`)}
+          {barra('visitas sin anuncio', m.pctVisitasSinAnuncio, `${miles(Math.max(0, m.visitas - m.clicks))} de ${miles(m.visitas)}`)}
+        </div>
+      ) : null}
+      <div className="pub-prod-numeros">
+        <div><span>con anuncio</span><strong>{alDia(pr?.conAnuncio?.ventasDia)}</strong><small>{pr?.conAnuncio?.dias ?? 0} días con stock</small></div>
+        <div><span>sin anuncio</span><strong>{alDia(pr?.sinAnuncio?.ventasDia)}</strong><small>{pr?.sinAnuncio?.dias ?? 0} días con stock</small></div>
+        <div><span>reseñas</span><strong>{v.resenias ?? '—'}{v.nota ? ` · ${String(v.nota).replace('.', ',')}★` : ''}</strong><small>{v.posicion != null ? `puesto ${v.posicion} sin pagar` : 'no se ve en la búsqueda medida'}</small></div>
+      </div>
+    </section>
+  )
+}
+
 function Estudio({ p, ad, efecto, serie, veredicto, ticket }) {
   const a = ACCION[p.accion] ?? { t: p.accion, c: 'neutro' }
   const m = p.metricas ?? {}
@@ -349,6 +389,8 @@ function Estudio({ p, ad, efecto, serie, veredicto, ticket }) {
         <strong>{veredicto.titulo}</strong>
         <ul>{veredicto.razones.map((r, i) => <li key={i}>{r}</li>)}</ul>
       </section>
+
+      {p.vendeSolo ? <VendeSolo v={p.vendeSolo} /> : null}
 
       <section className="pub-caja">
         <h4>Qué hacer <em className={`pub-accion ${a.c}`}>{a.t}</em></h4>
@@ -440,7 +482,7 @@ function Productos({ plan, datos, aprendido, serie, fotos, sel, onSel }) {
               {fotos.get(p.itemId) ? <img src={fotos.get(p.itemId)} alt="" width="40" height="40" loading="lazy" /> : <span className="pub-foto-vacia" />}
               <span>
                 <strong>{g.titulo}</strong>
-                <small>{g.miembros.length > 1 ? `${g.miembros.length} variantes · ` : ''}<em className={`pub-accion ${a.c}`}>{a.t}</em> <i className={`pub-v ${v.tipo}`}>{ETIQUETA[v.tipo]}</i></small>
+                <small>{g.miembros.length > 1 ? `${g.miembros.length} variantes · ` : ''}<em className={`pub-accion ${a.c}`}>{a.t}</em> <i className={`pub-v ${v.tipo}`}>{ETIQUETA[v.tipo]}</i>{g.miembros.some((x) => x.vendeSolo?.estado === 'se-vende-solo') ? <em className="pub-accion bien" title="Puede que la publicidad le sobre: ver «¿Se vende solo?»">se vende solo</em> : null}</small>
               </span>
             </button>
           )
