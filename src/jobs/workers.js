@@ -1109,7 +1109,10 @@ export async function procesarScanPropios(job) {
       console.warn(`[scan-propios] vínculo o costo de productos nuevos omitido: ${err.message}`)
     }
   }
-  return escanearPropios({ soloOficial })
+  const resultado = await escanearPropios({ soloOficial })
+  // llegó una medición nueva: lo guardado de Mis productos y del plan de campañas se sirve mientras se rearma detrás
+  import('../services/cacheVivo.js').then((m) => m.envejecerCachesVivos()).catch(() => {})
+  return resultado
 }
 
 // Optimizador semanal de Mis productos: cablea nichos faltantes, re-audita lo

@@ -9,6 +9,7 @@ import { isObjectIdOrHexString } from 'mongoose'
 import { contextoActual } from '../../services/ml/integracion.js'
 import { OBJETIVO_CONTEXTO } from '../../services/ml/contexto.js'
 import { seleccionarGuiaDemanda } from '../../services/ml/demanda.js'
+import { crearCacheVivo } from '../../services/cacheVivo.js'
 
 const router = Router()
 router.get('/', async (_req, res) => res.json({ activo: config.mlActivo, ...await estadoMl() }))
@@ -173,10 +174,19 @@ router.get('/publicidad', async (_req, res) => {
 })
 // "comienza con esto y vamos analizando": el plan de campaña de cada producto,
 // en vivo, más lo recomendado los días anteriores y el marcador de plata
-router.get('/campanas', async (_req, res) => {
-  const { planesDeCampana, RecomendacionAds } = await import('../../services/ml/planCampanas.js')
-  const [vivo, historial] = await Promise.all([
-    planesDeCampana(),
+// El plan se guarda y se sirve al tiro (services/cacheVivo.js): armarlo tarda
+// entre cinco y diez segundos y solo cambia cuando termina una medición de los
+// productos propios (el worker lo envejece) o cuando se guardan las
+// recomendaciones del día. `?fresca=1` lo rearma: es lo que pide el botón
+// «actualizar» de Publicidad después de volver a leer los anuncios en ML.
+const cachePlanCampanas = crearCacheVivo({
+  nombre: 'plan-campanas',
+  calcular: async () => (await import('../../services/ml/planCampanas.js')).planesDeCampana(),
+})
+router.get('/campanas', async (req, res) => {
+  const { RecomendacionAds } = await import('../../services/ml/planCampanas.js')
+  const [{ valor: vivo }, historial] = await Promise.all([
+    cachePlanCampanas.leer({ fresca: req.query.fresca === '1' }),
     RecomendacionAds.find().sort({ dia: -1 }).limit(300).select('itemId dia fase accion texto budgetDiario roasObjetivo metricas.resultado7 metricas.gastoDiario -_id').lean(),
   ])
   res.json({ ...vivo, historial })
@@ -189,6 +199,7 @@ router.post('/campanas', async (_req, res) => {
   await registrarCampanasDelDia()
   const { planesDeCampana } = await import('../../services/ml/planCampanas.js')
   const r = await planesDeCampana({ guardar: true })
+  cachePlanCampanas.invalidar()
   res.json({ dia: r.dia, guardadas: r.productos?.length ?? 0, acciones: (r.productos ?? []).map((p) => `${p.titulo?.slice(0, 30)}: ${p.accion}`) })
 })
 

@@ -710,9 +710,9 @@ export function Publicidad() {
       .catch((e) => setError(e.message)).finally(() => setCargando(false))
   }, [dias])
   useEffect(() => { traer() }, [traer])
-  const traerPlan = useCallback(async () => {
+  const traerPlan = useCallback(async (fresca = false) => {
     setCargandoPlan(true)
-    const rs = await Promise.allSettled([api.aprendizajeCampanas(), api.aprendizajePublicidad(), api.publicidadSerie(60)])
+    const rs = await Promise.allSettled([api.aprendizajeCampanas(fresca === true), api.aprendizajePublicidad(), api.publicidadSerie(60)])
     if (rs[0].status === 'fulfilled') { setPlan(rs[0].value); setErrorPlan(null) }
     else setErrorPlan(rs[0].reason.message)
     if (rs[1].status === 'fulfilled') setAprendido(rs[1].value)
@@ -720,7 +720,7 @@ export function Publicidad() {
     else setErrorSerie('No se pudo actualizar el historial diario; las propuestas siguen disponibles.')
     setCargandoPlan(false)
   }, [])
-  useEffect(() => { traerPlan(); const id = setInterval(traerPlan, 300_000); return () => clearInterval(id) }, [traerPlan])
+  useEffect(() => { traerPlan(); const id = setInterval(() => traerPlan(), 300_000); return () => clearInterval(id) }, [traerPlan])
   useEffect(() => { const id = setInterval(() => traer(), 60_000); return () => clearInterval(id) }, [traer])
   useEffect(() => { const id = setInterval(() => setTic((t) => t + 1), 15_000); return () => clearInterval(id) }, [])
 
@@ -748,7 +748,7 @@ export function Publicidad() {
     <main className={`pub${cargando ? ' ads-refrescando' : ''}`}>
       <EncabezadoPagina titulo="Publicidad" bajada="Lo que dejó cada campaña después de pagar producto, comisión, envío y anuncios.">
         <div className="pub-controles">
-          <button type="button" className="pub-refrescar" onClick={() => { traer(true); traerPlan() }} disabled={cargando || cargandoPlan} title="Vuelve a preguntarle a ML">
+          <button type="button" className="pub-refrescar" onClick={() => { traer(true).finally(() => traerPlan(true)) }} disabled={cargando || cargandoPlan} title="Vuelve a preguntarle a ML">
             {cargando ? 'actualizando…' : haceCuanto(datos.refrescoEl) ?? 'actualizar'}
           </button>
           <div className="segmentado" role="group" aria-label="Período">

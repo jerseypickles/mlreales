@@ -37,9 +37,13 @@ export function crearCacheTablero({
     const actual = enVuelo.get(clave)
     if (actual && actual.version === version) return actual.promesa
     const ver = version
+    const inicio = Date.now()
     const promesa = Promise.resolve()
       .then(() => calcular({ todos }))
       .then((valor) => {
+        // lo que tarda armar la mesa queda en el log (11-nov-2026): es lo que hay que mirar para optimizarla
+        const ms = Date.now() - inicio
+        if (ms >= 1000) console.log(`[tablero] mesa (${clave}) rearmada en ${ms} ms`)
         const en = ahora()
         // si alguien invalidó mientras se calculaba, el resultado puede ser de
         // antes del cambio: se entrega a quien lo pidió, pero no se guarda

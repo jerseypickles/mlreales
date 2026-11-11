@@ -22,6 +22,7 @@ import { presupuesto } from '../../services/gastos.js'
 import { obtenerColas } from '../../jobs/queues.js'
 import { FILTRO_VIGENTES } from '../../../frontend/src/lib/catalogoPropios.js'
 import { normalizarStockPropio } from '../../services/stockPropio.js'
+import { crearCacheVivo } from '../../services/cacheVivo.js'
 
 const router = Router()
 const manejar = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -48,9 +49,7 @@ router.post(
 
 // Lista con serie de mediciones, posición orgánica, ventas reales (orders),
 // conversión visitas→ventas, margen real 30d y calibración del factor
-router.get(
-  '/',
-  manejar(async (_req, res) => {
+async function armarListaPropios() {
     const propios = (await ProductoPropio.find(FILTRO_VIGENTES).sort({ creadoEl: -1 }).lean()).map(normalizarStockPropio)
     const posiciones = await posicionesRecientes(propios.map((p) => p.sku))
     const ventas = await ventasPorItem({ dias: 30 }).catch(() => new Map())
@@ -242,15 +241,24 @@ router.get(
     }
 
     const todasLasVentas = await VentaMl.find({ estado: { $ne: 'cancelled' } }).lean().catch(() => [])
-    res.json({
+    return {
       propios: lista,
       carteras,
       // cargos que no cuelgan de una venta (Product Ads, cargos de cuenta): no
       // se pueden imputar a un producto pero se pagan igual
       cargosSinImputar: await cargosSinItem({ dias: 30 }).catch(() => []),
       calibracion: calibracionFactor(propios, todasLasVentas),
-    })
-  }),
+    }
+}
+
+// LA LISTA SE GUARDA Y SE SIRVE AL TIRO (11-nov-2026). Rearmarla tarda más de
+// diez segundos y se hacía en cada visita, aunque solo cambia cuando termina una
+// medición (el worker la envejece) o cuando el dueño edita algo (cualquier
+// escritura bajo /api/propios o /api/meli la invalida: ver app.js).
+export const cacheListaPropios = crearCacheVivo({ nombre: 'mis-productos', calcular: armarListaPropios })
+router.get(
+  '/',
+  manejar(async (_req, res) => res.json((await cacheListaPropios.leer()).valor)),
 )
 
 // TODO LO VENDIDO POR PRODUCTO, DESDE SIEMPRE.

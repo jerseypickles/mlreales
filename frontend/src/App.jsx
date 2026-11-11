@@ -804,12 +804,17 @@ export default function App() {
     }
   }, [])
 
+  // La lista de nichos solo se sondea en su pantalla (11-nov-2026). Antes se pedía
+  // cada 15 segundos desde cualquier vista: una respuesta pesada que volvía a
+  // pintar toda la aplicación aunque nadie la estuviera mirando.
+  const enNichos = mundo === 'inteligencia' && vista === 'nichos'
   useEffect(() => {
+    if (!enNichos) return undefined
     cargarNichos()
     // el radar y los scans corren solos: refrescar la lista para ver el avance en vivo
     const intervalo = setInterval(cargarNichos, 15_000)
     return () => clearInterval(intervalo)
-  }, [cargarNichos])
+  }, [cargarNichos, enNichos])
 
   if (bloqueada) return <Candado />
 

@@ -62,7 +62,8 @@ export const api = {
   aprendizaje: (opciones) => pedir('/api/aprendizaje', opciones),
   aprendizajePerfiles: (opciones) => pedir('/api/aprendizaje/perfiles', opciones),
   aprendizajePublicidad: () => pedir('/api/aprendizaje/publicidad'),
-  aprendizajeCampanas: () => pedir('/api/aprendizaje/campanas'),
+  // `fresca`: rearmar el plan en el servidor (botón «actualizar»); sin ella llega el guardado, al tiro
+  aprendizajeCampanas: (fresca = false) => pedir(`/api/aprendizaje/campanas${fresca === true ? '?fresca=1' : ''}`),
   publicidadSerie: (dias = 60) => pedir(`/api/aprendizaje/publicidad/serie?dias=${dias}`),
   aprendizajePronosticos: (opciones) => pedir('/api/aprendizaje/pronosticos', opciones),
   demandaPropia: () => pedir('/api/aprendizaje/demanda-propia'),

@@ -97,7 +97,10 @@ console.log('[bullmq] workers: scan-nicho, scan-detalle, calcular-metricas, anal
 const servidor = crearApp().listen(config.port, () => {
   console.log(`[api] MELI Intel escuchando en http://localhost:${config.port}`)
   // la primera visita a Oportunidades tras un deploy no paga el armado entero
-  import('./services/tableroCache.js').then(({ calentarTablero }) => calentarTablero()).catch(() => {})
+  // la mesa primero y, detrás, las demás respuestas guardadas (Mis productos, plan de campañas): que la primera
+  // visita después de un deploy no espere el cálculo entero
+  import('./services/tableroCache.js').then(({ calentarTablero }) => calentarTablero({ demoraMs: 8_000 })).catch(() => {})
+  import('./services/cacheVivo.js').then(({ calentarCachesVivos }) => calentarCachesVivos()).catch(() => {})
 })
 
 async function apagar(senal) {

@@ -2,7 +2,7 @@ import express from 'express'
 import mongoose from 'mongoose'
 import rutasNichos from './routes/nichos.js'
 import rutasProductos from './routes/productos.js'
-import rutasPropios from './routes/propios.js'
+import rutasPropios, { cacheListaPropios } from './routes/propios.js'
 import rutasDebug from './routes/debug.js'
 import rutasMargen from './routes/margen.js'
 import rutasTendencias from './routes/tendencias.js'
@@ -16,7 +16,7 @@ import rutasMasVendidos from './routes/masVendidos.js'
 import rutasSeguimiento from './routes/seguimiento.js'
 import { obtenerColas } from '../jobs/queues.js'
 import { gastoDelMes, mesActual } from '../services/gastos.js'
-import { invalidarAlEscribir } from '../services/tableroCache.js'
+import { invalidarAlEscribir, crearInvalidador } from '../services/tableroCache.js'
 import { config } from '../config/env.js'
 
 export function crearApp() {
@@ -142,6 +142,8 @@ export function crearApp() {
   // la mesa de Oportunidades se sirve guardada: lo que escribe en nichos,
   // compras, propios o publicaciones la invalida (ver services/tableroCache.js)
   app.use(['/api/nichos', '/api/oportunidades', '/api/propios', '/api/meli'], invalidarAlEscribir)
+  // lo mismo para la lista guardada de Mis productos (services/cacheVivo.js)
+  app.use(['/api/propios', '/api/meli'], crearInvalidador(cacheListaPropios.invalidar))
   app.use('/api/nichos', rutasNichos)
   app.use('/api/productos', rutasProductos)
   app.use('/api/propios', rutasPropios)
