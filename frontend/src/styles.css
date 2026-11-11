@@ -7665,6 +7665,9 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .pub-prod-numeros strong.medio { color: var(--avisa-tinta); }
 .pub-prod-numeros small { font-size: 11px; color: var(--tinta-2); }
 .pub-solo-barras { display: grid; gap: 10px; }
+.pub-mesa-solo { margin: 0; font-size: 12px; color: var(--tinta-2); }
+.pub-mesa-solo strong { color: var(--tinta); }
+.pub-mesa-solo.se-vende-solo strong { color: var(--exito-tinta); }
 .pub-medidor { display: grid; gap: 4px; }
 .pub-medidor-barra { position: relative; height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--tinta-2) 12%, transparent); }
 .pub-medidor-barra i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }

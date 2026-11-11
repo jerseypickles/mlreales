@@ -361,7 +361,7 @@ function VendeSolo({ v }) {
       <div className="pub-prod-numeros">
         <div><span>con anuncio</span><strong>{alDia(pr?.conAnuncio?.ventasDia)}</strong><small>{pr?.conAnuncio?.dias ?? 0} días con stock</small></div>
         <div><span>sin anuncio</span><strong>{alDia(pr?.sinAnuncio?.ventasDia)}</strong><small>{pr?.sinAnuncio?.dias ?? 0} días con stock</small></div>
-        <div><span>reseñas</span><strong>{v.resenias ?? '—'}{v.nota ? ` · ${String(v.nota).replace('.', ',')}★` : ''}</strong><small>{v.posicion != null ? `puesto ${v.posicion} sin pagar` : 'no se ve en la búsqueda medida'}</small></div>
+        <div><span>reseñas</span><strong>{v.resenias ?? '—'}</strong><small>{v.nota ? `nota ${String(v.nota).replace('.', ',')} · ` : ''}{v.posicion != null ? `puesto ${v.posicion} sin pagar` : 'no se ve en la búsqueda medida'}</small></div>
       </div>
     </section>
   )

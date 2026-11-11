@@ -29,11 +29,16 @@ function Seguimiento({ g, serie, onProducto }) {
   const conGasto = diarios.some(d => d.gasto > 0)
   const seleccion = g.miembros.find(p => p.campanaId) ?? g.miembros[0]
   const estado = seleccion.disponibilidad?.disponible ? seleccion.estadoCampana === 'active' ? 'En campaña' : seleccion.campanaId ? 'Campaña pausada' : 'Sin campaña' : seleccion.disponibilidad?.motivo
+  // ¿se vende solo? (ml/fuerzaOrganica.js): acá solo cuando ya hay algo que decir; el detalle va en Productos
+  const opiniones = g.miembros.map(p => p.vendeSolo).filter(v => v && ['se-vende-solo', 'mixto', 'depende-del-anuncio'].includes(v.estado))
+  const solo = opiniones.find(v => v.estado === 'se-vende-solo') ?? opiniones[0]
+  const SOLO = { 'se-vende-solo': 'Se vende solo', mixto: 'Vende con y sin anuncio', 'depende-del-anuncio': 'Depende del anuncio' }
   return <article className="pub-mesa-producto">
     <header><Fotos productos={g.miembros} /><div><h4>{g.titulo}</h4><span>{g.miembros.length > 1 ? `${g.miembros.length} variantes · ` : ''}{estado}</span></div></header>
     <MiniEvolucion serie={diarios} titulo={g.titulo} />
     <dl className="pub-mesa-cifras"><div><dt>Gasto · 14 días</dt><dd>{conGasto ? pesos(tot.gasto) : '—'}</dd></div><div><dt>Ventas por ads</dt><dd>{conGasto ? tot.ventas : '—'}</dd></div><div><dt>Costo por venta</dt><dd>{tot.ventas ? pesos(tot.gasto / tot.ventas) : '—'}</dd></div></dl>
     <p className="pub-mesa-nota">{!serie ? 'Historial diario por cargar; no se puede evaluar todavía.' : conGasto ? tot.completo ? `Resultado estimado: ${pesos(tot.resultado)} tras costo, comisión, envío y ads.` : 'Falta completar costos para saber cuánto dejó.' : 'El seguimiento comienza cuando haya datos de anuncios.'}</p>
+    {solo ? <p className={`pub-mesa-solo ${solo.estado}`} title={solo.texto}><strong>{SOLO[solo.estado]}</strong> · {solo.base === 'comprobado' ? 'comprobado con y sin anuncio' : 'indicio, falta la prueba'}</p> : null}
     <p className="pub-mesa-decision">{seleccion.texto}</p>
     <button className="pub-mesa-enlace" onClick={() => onProducto(seleccion.itemId)}>Ver evolución y variantes <ArrowRight size={15} /></button>
   </article>
