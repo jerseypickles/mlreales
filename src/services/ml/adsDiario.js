@@ -46,7 +46,7 @@ export async function actualizarAdsDiario({ ahora = new Date(), pedir = meliGet,
   let dias = 0, filasEscritas = 0
   for (const dia of pendientes) {
     const respuesta = await pedir(
-      `/marketplace/advertising/MLC/advertisers/${adv}/product_ads/ads/search?limit=50&date_from=${dia}&date_to=${dia}&metrics=${METRICAS_ADS}`,
+      `/advertising/MLC/advertisers/${adv}/product_ads/ads/search?limit=50&date_from=${dia}&date_to=${dia}&metrics=${METRICAS_ADS}`,
       { headers: { 'Api-Version': '2' } },
     )
     if (!Array.isArray(respuesta?.results)) throw new Error(`Product Ads devolvió ${dia} sin results`)

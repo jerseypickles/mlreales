@@ -4,6 +4,7 @@ import { fueraDelRangoMedido } from './publicidad.js'
 import { economiaUnidad } from '../economiaUnidad.js'
 import { publicacionVigente } from '../../../frontend/src/lib/catalogoPropios.js'
 import { protegerPlanPublicidad, carteraCampanas } from './carteraCampanas.js'
+import { ajustarPorCompetitividad } from './competitividadAds.js'
 import { configuracionCampana, economiaCompleta, evaluarAjustesAds } from './evaluacionAds.js'
 export { evaluarAjustesAds as evaluarRecomendaciones } from './evaluacionAds.js'
 import { precioVigente } from '../precioVigente.js'
@@ -606,6 +607,8 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     }
     const propio = propios.find(x => (x.itemIdMl ?? x.sku) === fila.itemId)
     Object.assign(fila, protegerPlanPublicidad(fila, propio, anuncio, campanaDelAnuncio, { ahora, dias: fila._dias }))
+    // lo que ML dice que la campaña deja de mostrar: quita un «subir» que no traería venta y deja el dato a la vista
+    Object.assign(fila, ajustarPorCompetitividad(fila, campanaDelAnuncio?.competitividad ?? null))
     // la bitácora de largo plazo, desde que está en su campaña actual
     if (fila._dias?.length) fila.bitacora = bitacoraProducto(fila._dias, fila.economia, recsViejas.filter((r) => r.itemId === fila.itemId), { desde: fila.desdeCampanaBitacora ?? null })
     delete fila._dias

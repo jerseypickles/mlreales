@@ -340,7 +340,7 @@ async function serieDiaria({ dias = 10 } = {}) {
   for (const f of fechas) {
     try {
       const r = await meliGet(
-        `/marketplace/advertising/${SITE_ADS}/advertisers/${adv}/product_ads/campaigns/search?limit=50&date_from=${f}&date_to=${f}&metrics=${M}`,
+        `/advertising/${SITE_ADS}/advertisers/${adv}/product_ads/campaigns/search?limit=50&date_from=${f}&date_to=${f}&metrics=${M}`,
         { headers: { 'Api-Version': '2' } },
       )
       let p = 0, c = 0, g = 0, u = 0, v = 0

@@ -3,7 +3,8 @@ import * as Collapsible from '@radix-ui/react-collapsible'
 import { api } from '../api.js'
 import { useEstadoGuardado } from '../lib/estadoGuardado.js'
 import { IconoExterno, Cargando } from './ui.jsx'
-import { EncabezadoPagina } from './sistema.jsx'
+import { EncabezadoPagina, Etiqueta, Pendientes } from './sistema.jsx'
+import { calidadDeEntrada, resumenPendientes } from '../lib/calidadMl.js'
 import { MiniSerie, HistogramaPrecios } from './graficos.jsx'
 import {
   Tag,
@@ -33,6 +34,12 @@ import {
   Warehouse,
   ChevronLeft,
   ChevronRight,
+  Video,
+  ListChecks,
+  Barcode,
+  Image as IconoFoto,
+  Type,
+  CircleAlert,
 } from 'lucide-react'
 import { publicacionVigente, inventarioEntrada, coincideFiltro, filtrarEntradas, paginarEntradas, seriePrecioEntrada } from '../lib/catalogoPropios.js'
 import { BotonCopiar } from './Listing.jsx'
@@ -728,6 +735,25 @@ function TendenciaPrecio({ puntos, familia }) {
   return <svg className="pc-tendencia" viewBox="0 0 76 28" role="img" aria-label={`${familia ? 'Precio mínimo entre variantes' : 'Precio'}: últimas ${puntos.length} mediciones`}><title>Historial de precio · {fmtPrecio(valores[0])} → {fmtPrecio(valores.at(-1))}</title><path d={trayectoria} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
 }
 
+// LO QUE PIDE MERCADO LIBRE (11-nov-2026; services/calidadMl.js). ML le pone un puntaje a cada publicación y dice
+// qué le falta. Acá va lo que depende de la publicación (video, características, fotos…). Lo comercial —Premium
+// para dar cuotas, envío gratis, precio mayorista— no se sigue: «hace que gastemos más», dijo el importador.
+const ICONO_PENDIENTE = { UP_SHORTS: Video, UP_TECHNICAL_SPECIFICATIONS_MAIN: ListChecks, UP_PICTURES: IconoFoto, UP_TITLE: Type, UP_GTIN: Barcode }
+function CalidadMl({ calidad }) {
+  if (!calidad) return null
+  const items = calidad.pendientes.map((x) => ({ id: x.clave, Icono: ICONO_PENDIENTE[x.clave] ?? CircleAlert, titulo: x.titulo ?? x.clave, detalle: x.detalle, avance: x.avance }))
+  const resumen = calidad.puntajeProducto != null
+    ? <Etiqueta tono={items.length ? 'atencion' : 'bien'} title="Puntaje de Mercado Libre para los datos del producto (video, características, fotos, título, código universal)">Datos del producto {calidad.puntajeProducto} de 100</Etiqueta>
+    : null
+  return (
+    <Pendientes titulo={items.length ? 'Lo que pide Mercado Libre' : 'Mercado Libre no pide nada más para esta publicación'} resumen={resumen} items={items}>
+      {calidad.comerciales.length
+        ? `El puntaje total de ML es ${calidad.puntaje ?? '—'} (${calidad.nivel ?? 'sin nivel'}) porque además pide condiciones de venta que cuestan plata y acá no se siguen: ${calidad.comerciales.join(', ')}.`
+        : `Puntaje total de ML: ${calidad.puntaje ?? '—'} (${calidad.nivel ?? 'sin nivel'}).`}
+    </Pendientes>
+  )
+}
+
 function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, onGuardarEnCamino, expandida = false, onExpandir, prefijos = null }) {
   const d = deltas(p.mediciones)
   const m = metricas ?? metricasDe(p)
@@ -819,6 +845,10 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
     { k: 'Ingresos 30d', v: m.ventas30d ? fmtPrecio(m.ventas30d.ingresosClp) : '—', Icono: DollarSign },
   ]
 
+  // lo que Mercado Libre pide para esta tarjeta (una publicación, o los colores de la familia)
+  const calidad = calidadDeEntrada(familia ? familia.variantes : [p])
+  const pideMl = resumenPendientes(calidad)
+
   if (!expandida) {
     const r = m.reposicion
     const urg = r ? TONO_URGENCIA[r.urgencia] : null
@@ -842,6 +872,7 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
               {inventario.tieneBodega ? <span><Warehouse aria-hidden="true" />Bodega <b>{fmtNum(inventario.bodega)}</b></span> : null}
               {!inventario.tieneFull && !inventario.tieneBodega ? <span><Package aria-hidden="true" />Stock <b>{fmtNum(m.stock)}</b></span> : null}
               {familia ? <span className="pc-compacta-nvar">{etiquetaVariantes(familia.variantes)}</span> : null}
+              {pideMl ? <span className="pc-compacta-ml" title="Lo que Mercado Libre pide para subir la calidad de esta publicación"><CircleAlert aria-hidden="true" />{pideMl}</span> : null}
             </span>
           </span>
           <span className="pc-compacta-metricas">
@@ -929,6 +960,8 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
           </div>
         ))}
       </div>
+
+      <CalidadMl calidad={calidad} />
 
       {/* el resto no desaparece: baja a un pliegue, que es donde vive lo que se
           consulta a veces y no se decide todos los días */}

@@ -48,6 +48,9 @@ const productoPropioSchema = new mongoose.Schema({
   // última auditoría de listing vs los ganadores del nicho: {estado:
   // 'generando'|'ok'|'error', generadoEl, competidores, resultado, costoUsd…}
   auditoria: { type: mongoose.Schema.Types.Mixed, default: null },
+  // lo que ML pide para esta publicación (services/calidadMl.js): {puntaje, nivel,
+  // puntajeProducto, pendientes[], comerciales[], calculadaEl, leidaEl}
+  calidadMl: { type: mongoose.Schema.Types.Mixed, default: null },
   // HALLAZGOS DE OTROS CEREBROS SOBRE ESTE PRODUCTO.
   //
   // El analista de publicidad, el de nichos y el optimizador de listings corren

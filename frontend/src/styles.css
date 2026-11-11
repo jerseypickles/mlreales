@@ -8509,3 +8509,40 @@ a.op-plan-sello:hover { text-decoration: underline; }
 /* tarjeta base */
 .s-tarjeta { min-width: 0; padding: 16px; border: 1px solid var(--borde); border-radius: var(--radio-g); background: var(--superficie); }
 
+
+
+/* barra partida: de un total, cuánto es cada parte */
+.s-partes { display: grid; gap: 8px; }
+.s-partes-cabeza { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; font-size: 13px; font-weight: 600; color: var(--tinta); }
+.s-partes-cabeza small { font-size: 12px; font-weight: 500; color: var(--tinta-3); }
+.s-partes-barra { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--superficie-2); }
+.s-partes-barra i { display: block; flex-basis: 0; min-width: 4px; }
+.s-partes-leyenda { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--tinta-2); }
+.s-partes-leyenda li { display: inline-flex; align-items: center; gap: 8px; }
+.s-partes-leyenda li > i { width: 8px; height: 8px; border-radius: 999px; }
+.s-partes-leyenda b { font-family: 'Fira Code', monospace; font-weight: 600; color: var(--tinta); }
+.s-partes-lectura { margin: 0; font-size: 13px; line-height: 1.5; color: var(--tinta-2); }
+.s-partes-bien { background: var(--exito); }
+.s-partes-atencion { background: var(--avisa-tinta); }
+.s-partes-problema { background: var(--peligro); }
+.s-partes-destacada { background: var(--acento); }
+.s-partes-neutra { background: var(--borde-fuerte); }
+
+/* lista de pendientes */
+.s-pendientes { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); }
+.s-pendientes-cabeza { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 600; color: var(--tinta); }
+.s-pendientes ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.s-pendientes li { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border-radius: 8px; background: var(--avisa-tenue); }
+.s-pendientes li > svg { flex: none; margin-top: 2px; color: var(--avisa-tinta); }
+.s-pendientes-texto { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.s-pendientes-texto strong { font-size: 13px; font-weight: 600; color: var(--tinta); }
+.s-pendientes-texto small { font-size: 12px; line-height: 1.5; color: var(--tinta-2); }
+.s-pendientes-avance { display: inline-flex; align-items: center; gap: 8px; flex: none; font-size: 12px; color: var(--tinta-2); }
+.s-pendientes-avance > i { display: block; width: 48px; height: 8px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--avisa-tinta) 20%, transparent); }
+.s-pendientes-avance > i > i { display: block; height: 100%; border-radius: 999px; background: var(--avisa-tinta); }
+.s-pendientes-avance b { font-family: 'Fira Code', monospace; font-weight: 600; color: var(--tinta); }
+.s-pendientes-pie { margin: 0; font-size: 12px; line-height: 1.5; color: var(--tinta-3); }
+
+/* Mis productos: lo que pide Mercado Libre, en la tarjeta cerrada */
+.pc-compacta-ml { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px; background: var(--avisa-tenue); color: var(--avisa-tinta); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pc-compacta-ml svg { width: 12px; height: 12px; }

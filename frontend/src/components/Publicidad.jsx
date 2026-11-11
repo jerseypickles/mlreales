@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api.js'
 import { useEstadoGuardado } from '../lib/estadoGuardado.js'
 import { Cargando } from './ui.jsx'
-import { EncabezadoPagina } from './sistema.jsx'
+import { EncabezadoPagina, BarraPartes } from './sistema.jsx'
 import { PauseCircle, Split, PlusCircle, TrendingUp, TrendingDown, Target, Layers, Hourglass, Megaphone, CheckCircle2, XCircle, CircleDot, MousePointerClick } from 'lucide-react'
 import { fmtPrecio } from '../lib/formato.js'
 import MesaPublicidad from './MesaPublicidad.jsx'
@@ -268,6 +268,19 @@ function Resumen({ datos, plan, serieTotal, fotos, onIr }) {
 }
 
 // ── pestaña Campañas ─────────────────────────────────────────────────────────
+// LO QUE LA CAMPAÑA DEJA DE MOSTRAR, SEGÚN ML (11-nov-2026; services/ml/competitividadAds.js). El freno lo dice
+// Mercado Libre; si conviene mover el presupuesto lo dice la plata. Pedido del importador: usarlo «siempre que
+// valga la pena a nosotros», así que «con más presupuesto vendería más» solo aparece cuando la campaña deja plata.
+// Tampoco si el stock no alcanza: más presupuesto sin producto que vender es gasto perdido.
+// `stock`: 'sin' | 'poco' | null, del producto de la campaña al que menos le queda (los días van en el aviso de arriba).
+function lecturaCompetitividad(c, plata, dias, stock) {
+  if (c.freno !== 'presupuesto' || plata == null) return c.texto
+  if (plata <= 0) return `${c.texto} Pero en ${dias} días no dejó plata (${conSigno(plata)}): subirlo sería perder más.`
+  const dejo = `La campaña dejó ${fmtPrecio(Math.round(plata))} en ${dias} días`
+  if (stock) return `${c.texto} ${dejo}, pero ${stock === 'sin' ? 'no queda stock' : 'queda poco stock'}: repón antes de subir el presupuesto.`
+  return `${c.texto} ${dejo}: con más presupuesto vendería más.`
+}
+
 function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
   const campanas = (datos.campanas ?? []).filter((c) => c.estado === 'active').sort((a, b) => (b.metricas?.cost ?? 0) - (a.metricas?.cost ?? 0))
   const gastoHoy = new Map((hoy?.campanas ?? []).map((c) => [c.id, c.metricas?.cost ?? 0]))
@@ -281,6 +294,13 @@ function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
         const g = gastoHoy.get(c.id) ?? 0
         const acciones = (plan?.estructura?.acciones ?? []).filter((a) => a.campana === c.nombre)
         const salud = plan?.cartera?.campanas.find(x => x.id === c.id)
+        // el producto de la campaña al que menos stock le queda
+        const coberturas = productos.map(([id]) => planDe.get(id)?.disponibilidad?.diasCobertura).filter(Number.isFinite)
+        const stock = !coberturas.length ? null : Math.max(...coberturas) === 0 ? 'sin' : Math.min(...coberturas) < 14 ? 'poco' : null
+        // lo que dejó la campaña en el mismo período; sin el costo de algún producto no se puede saber
+        const plataCampana = serie?.porProducto && productos.length && productos.every(([id]) => ecoDe.get(id))
+          ? productos.reduce((total, [id]) => total + (serie.porProducto[id] ?? []).slice(-datos.dias).reduce((a, d) => a + dejaron(d.ventaAds, d.unidadesAds, ecoDe.get(id)) - d.gasto, 0), 0)
+          : null
         const avisos = plan?.cartera?.alertas.filter(x => x.campanaId === c.id) ?? []
         return (
           <section key={c.id} className="pub-campana">
@@ -299,6 +319,13 @@ function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
               <div className="pub-hoy-barra"><i style={{ width: `${Math.min(100, (g / Math.max(1, c.presupuestoDiario ?? 1)) * 100)}%` }} /></div>
               <span>hoy lleva {fmtPrecio(Math.round(g))} de {fmtPrecio(c.presupuestoDiario ?? 0)}</span>
             </div>
+            {c.competitividad ? (
+              <BarraPartes titulo="De cada 100 veces que pudo aparecer" fuente={`según Mercado Libre · ${datos.dias} días`} partes={[
+                { id: 'mostrado', titulo: 'apareció', valor: c.competitividad.mostrado, tono: 'bien' },
+                { id: 'presupuesto', titulo: 'perdió por presupuesto', valor: c.competitividad.perdidoPresupuesto, tono: 'atencion' },
+                { id: 'ranking', titulo: 'perdió por ranking', valor: c.competitividad.perdidoRanking, tono: 'neutra' },
+              ]}>{lecturaCompetitividad(c.competitividad, plataCampana, datos.dias, stock)}</BarraPartes>
+            ) : null}
             <Metricas m={m} />
             {acciones.length ? (
               <ul className="pub-campana-acciones">

@@ -11,6 +11,7 @@ import { sincronizarOrdenes } from './ventasMl.js'
 import { diaChile } from './inventarioFull.js'
 import { dimensionesDeItem } from './envioFull.js'
 import { usaInventarioFull } from './stockPropio.js'
+import { leerCalidadMl, tocaLeerCalidadMl } from './calidadMl.js'
 
 // { largoCm, anchoCm, altoCm, gramos } → "LxAxH,g", el formato de shipping.dimensions
 const comoTextoDimensiones = (d) => (d ? `${d.largoCm}x${d.anchoCm}x${d.altoCm},${d.gramos}` : null)
@@ -284,6 +285,11 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     // los colores de un producto son publicaciones aparte: la familia de ML
     // es la que los junta en una sola tarjeta de Mis productos
     if (oficial) propio.familiaMl = await familiaDeItem(oficial, propio.familiaMl, { refrescar: !soloOficial })
+    // lo que ML pide para esta publicación (video, características…): lo recalcula una vez al día
+    if (oficial?.id && oficial.status === 'active' && tocaLeerCalidadMl(propio.calidadMl, fecha)) {
+      const calidad = await leerCalidadMl(oficial.id).catch(() => null)
+      if (calidad) propio.calidadMl = calidad
+    }
     if (oficial?.shipping) {
       // logística de la publicación: colecta/Flex/Full. El cambio (ej: ML activa
       // el stock de bodega y pasa a fulfillment) es una intervención medible

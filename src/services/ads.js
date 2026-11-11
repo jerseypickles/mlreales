@@ -1,9 +1,15 @@
 import { meliGet, hayCuentaMeli } from './meli.js'
 import { crearCacheVivo } from './cacheVivo.js'
 import { lecturaCompletaAds } from './ml/evaluacionAds.js'
+import { leerCompetitividad, describirCompetitividad } from './ml/competitividadAds.js'
 
-// Product Ads de la cuenta conectada. Rutas /marketplace/advertising validadas
-// en vivo el 4-ago contra las campañas reales (Api-Version: 2 obligatorio).
+// Product Ads de la cuenta conectada (Api-Version: 2 obligatorio).
+//
+// Las rutas son las que publica la documentación de Chile, bajo
+// /advertising/{sitio}/…. Hasta el 11-nov-2026 se usaban las equivalentes bajo
+// /marketplace/advertising/…, validadas el 4-ago; ese día se midió que las dos
+// entregan lo mismo (mismas campañas, mismos anuncios, mismos totales), pero
+// ML solo respalda las documentadas y ya apagó una generación anterior.
 const SITE = 'MLC'
 export const METRICAS_ADS =
   'clicks,prints,cost,cpc,acos,organic_units_quantity,direct_units_quantity,indirect_units_quantity,units_quantity,direct_amount,indirect_amount,total_amount'
@@ -42,7 +48,7 @@ export async function campanasConMetricas({ dias = 30 } = {}) {
   if (!adv) return null
   const { desde, hasta } = rangoDias(dias)
   const r = await meliGet(
-    `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/campaigns/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS_ADS}`,
+    `/advertising/${SITE}/advertisers/${adv}/product_ads/campaigns/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS_ADS}`,
     { headers: { 'Api-Version': '2' } },
   )
   // CUÁNTOS DÍAS LLEVA VIVA LA CAMPAÑA, no cuántos pide la ventana.
@@ -80,6 +86,25 @@ export async function campanasConMetricas({ dias = 30 } = {}) {
   })
 }
 
+// LO QUE CADA CAMPAÑA ACTIVA DEJA DE MOSTRAR, Y POR QUÉ (ver ml/competitividadAds.js).
+// Una lectura por campaña: el detalle es el único recurso que trae estas métricas.
+const METRICAS_COMPETITIVIDAD = 'prints,impression_share,top_impression_share,lost_impression_share_by_budget,lost_impression_share_by_ad_rank,acos_benchmark'
+export async function competitividadDeCampanas(campanas, { dias = 7 } = {}) {
+  const { desde, hasta } = rangoDias(dias)
+  const activas = (campanas ?? []).filter((c) => c.estado === 'active')
+  const pares = await Promise.all(
+    activas.map(async (c) => {
+      const r = await meliGet(
+        `/advertising/${SITE}/product_ads/campaigns/${c.id}?date_from=${desde}&date_to=${hasta}&metrics=${METRICAS_COMPETITIVIDAD}`,
+        { headers: { 'Api-Version': '2' } },
+      ).catch(() => null)
+      const leida = leerCompetitividad(r?.metrics)
+      return [c.id, leida ? { ...leida, ...describirCompetitividad(leida) } : null]
+    }),
+  )
+  return new Map(pares)
+}
+
 // Métricas por anuncio/item (para atribuir pagado vs orgánico por producto)
 export async function adsPorItem({ dias = 30 } = {}) {
   if (!(await hayCuentaMeli())) return new Map()
@@ -87,7 +112,7 @@ export async function adsPorItem({ dias = 30 } = {}) {
   if (!adv) return new Map()
   const { desde, hasta } = rangoDias(dias)
   const r = await meliGet(
-    `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/ads/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS_ADS}`,
+    `/advertising/${SITE}/advertisers/${adv}/product_ads/ads/search?limit=50&date_from=${desde}&date_to=${hasta}&metrics=${METRICAS_ADS}`,
     { headers: { 'Api-Version': '2' } },
   )
   if (!Array.isArray(r?.results)) throw new Error('Lectura de anuncios incompleta')
@@ -185,6 +210,16 @@ export async function resumenAds({ dias = 30, forzar = false, viejaSirve = false
 async function construirResumenAds({ dias = 30 } = {}) {
   const campanas = await campanasConMetricas({ dias })
   if (!campanas) return null
+  // La competitividad se lee en ventanas de una semana o más: ML la calcula una vez al día, así que la de
+  // «hoy» viene vacía. Si falla, el resumen sale igual sin ella.
+  if (dias >= 7) {
+    try {
+      const competitividad = await competitividadDeCampanas(campanas, { dias })
+      for (const c of campanas) c.competitividad = competitividad.get(c.id) ?? null
+    } catch (err) {
+      console.warn(`[ads] competitividad de campañas no disponible: ${err.message}`)
+    }
+  }
   // el rango exacto viaja a la mesa: sin él no se puede cuadrar contra el panel
   // de ML, que por defecto muestra el MES EN CURSO y no 30 días rodantes
   const rango = rangoDias(dias)
@@ -264,7 +299,7 @@ export async function ventanaDesde(campanaId, desde) {
   if (!adv) return null
   const hasta = new Date()
   const r = await meliGet(
-    `/marketplace/advertising/${SITE}/advertisers/${adv}/product_ads/campaigns/search?limit=20&date_from=${dia(
+    `/advertising/${SITE}/advertisers/${adv}/product_ads/campaigns/search?limit=20&date_from=${dia(
       new Date(desde),
     )}&date_to=${dia(hasta)}&metrics=${METRICAS_ADS}`,
     { headers: { 'Api-Version': '2' } },

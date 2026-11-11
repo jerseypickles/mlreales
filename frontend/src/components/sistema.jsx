@@ -92,3 +92,48 @@ export function Aviso({ tono = 'atencion', Icono, titulo, children, accion }) {
 export function Tarjeta({ as: Como = 'section', className = '', children, ...resto }) {
   return <Como className={`s-tarjeta${className ? ` ${className}` : ''}`} {...resto}>{children}</Como>
 }
+
+// Barra partida: de un total, cuánto es cada parte (fracciones de 0 a 1). La leyenda
+// repite cada parte con su número, así el color nunca es lo único que informa.
+// `children` es la lectura de una línea que va debajo.
+// partes: [{ id, titulo, valor, tono }] · tonos: bien, atencion, problema, destacada, neutra
+export function BarraPartes({ titulo, fuente, partes, children }) {
+  const pct = (v) => Math.round(v * 100)
+  return (
+    <div className="s-partes">
+      {titulo ? <div className="s-partes-cabeza"><span>{titulo}</span>{fuente ? <small>{fuente}</small> : null}</div> : null}
+      <div className="s-partes-barra" role="img" aria-label={partes.map((x) => `${x.titulo} ${pct(x.valor)}%`).join(', ')}>
+        {partes.filter((x) => x.valor > 0).map((x) => <i key={x.id} className={`s-partes-${x.tono ?? 'neutra'}`} style={{ flexGrow: x.valor }} />)}
+      </div>
+      <ul className="s-partes-leyenda">
+        {partes.map((x) => <li key={x.id}><i className={`s-partes-${x.tono ?? 'neutra'}`} aria-hidden="true" />{x.titulo} <b>{pct(x.valor)}%</b></li>)}
+      </ul>
+      {children ? <p className="s-partes-lectura">{children}</p> : null}
+    </div>
+  )
+}
+
+// Lista de pendientes: qué falta, uno por línea, con cuánto lleva si se puede medir.
+// `resumen` va a la derecha del título (una etiqueta, una cifra); `children` es la nota del pie.
+// items: [{ id, Icono?, titulo, detalle?, avance? (0 a 1) }]
+export function Pendientes({ titulo, resumen, items, children }) {
+  return (
+    <div className="s-pendientes">
+      <div className="s-pendientes-cabeza"><span>{titulo}</span>{resumen ?? null}</div>
+      {items.length ? (
+        <ul>
+          {items.map(({ id, Icono, titulo: nombre, detalle, avance }) => (
+            <li key={id}>
+              {Icono ? <Icono size={16} aria-hidden="true" /> : null}
+              <span className="s-pendientes-texto"><strong>{nombre}</strong>{detalle ? <small>{detalle}</small> : null}</span>
+              {Number.isFinite(avance) && avance > 0 ? (
+                <span className="s-pendientes-avance" title={`Lleva ${Math.round(avance * 100)}%`}><i><i style={{ width: `${Math.round(avance * 100)}%` }} /></i><b>{Math.round(avance * 100)}%</b></span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {children ? <p className="s-pendientes-pie">{children}</p> : null}
+    </div>
+  )
+}
