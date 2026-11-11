@@ -59,6 +59,30 @@ export function saltos(serie, diasEvento = new Set()) {
   return grupos.map((g) => ({ desde: g[0].dia, hasta: g.at(-1).dia, dias: g }))
 }
 
+// Pura. ¿Estos saltos son un NIVEL NUEVO de la cuenta y no un evento?
+//
+// Un evento comercial dura unos pocos días; cuando la cuenta salta casi todos
+// los días de la semana, lo que cambió es la cuenta. Medido el 11-nov-2026: los
+// productos nuevos entraron a Full y partieron sus campañas, las visitas se
+// duplicaron para quedarse, y el detector marcó como "salto sin explicar" cinco
+// de los siete días siguientes. Como un salto por revisar tampoco es un día
+// normal, la base de comparación nunca se ponía al día y el plan de campañas,
+// el efecto de la publicidad y el costo por venta quedaron juzgando la semana
+// del lanzamiento con dos días: justo los días con ventas eran los descartados.
+//
+// `diasMarcados`: los días de saltos detectados (por revisar o ya reconocidos
+// como nivel nuevo). Con `minimo` de los últimos `dias` marcados, es nivel.
+// Un evento con nombre en el calendario no pasa por acá: sus días no se marcan
+// como salto.
+export const RACHA_NIVEL = { dias: 7, minimo: 5 }
+export function esNivelNuevo(diasMarcados, hasta, { dias = RACHA_NIVEL.dias, minimo = RACHA_NIVEL.minimo } = {}) {
+  const fin = Date.parse(`${hasta}T12:00:00Z`)
+  if (!Number.isFinite(fin)) return false
+  let marcados = 0
+  for (let i = 0; i < dias; i++) if (diasMarcados.has(new Date(fin - i * DIA).toISOString().slice(0, 10))) marcados++
+  return marcados >= minimo
+}
+
 // Pura. El efecto de un evento contra las 2 semanas anteriores normales.
 // `serie`: [{ dia, ventas, visitas, impresiones, clicks, gasto }].
 export function efectoDe(evento, serie, diasEvento = new Set()) {
@@ -106,10 +130,24 @@ export async function revisarEventos({ ahora = new Date() } = {}) {
       nota: `Ventas o visitas muy sobre lo normal (${s.dias.map((d) => `${d.dia}: ${d.ventas} ventas, ${d.visitas} visitas`).join(' · ')}). ¿Qué fue? Si fue un evento, ponle nombre; si no, descártalo.`, actualizadoEl: ahora } }, { upsert: true })
     if (r.upsertedCount) nuevos.push(s)
   }
+  // un salto que ocupa casi toda la semana es el nivel nuevo de la cuenta: sus
+  // días vuelven a ser normales (ver esNivelNuevo). Los ya reconocidos cuentan
+  // para la racha, así el día siguiente del mismo nivel no vuelve a quedar fuera.
+  const ultimoDia = serie.at(-1)?.dia
+  const detectados = await EventoComercial.find({ origen: 'detectado', $or: [{ estado: 'por-revisar' }, { nivelNuevo: true }] }).select('clave desde hasta estado').lean()
+  let nivelNuevo = 0
+  if (ultimoDia && esNivelNuevo(new Set(detectados.flatMap((e) => rangoDias(e.desde, e.hasta))), ultimoDia)) {
+    const desdeRacha = new Date(Date.parse(`${ultimoDia}T12:00:00Z`) - (RACHA_NIVEL.dias - 1) * DIA).toISOString().slice(0, 10)
+    for (const e of detectados.filter((x) => x.estado === 'por-revisar' && x.hasta >= desdeRacha)) {
+      await EventoComercial.updateOne({ clave: e.clave }, { $set: { estado: 'descartado', nivelNuevo: true, actualizadoEl: ahora,
+        nota: 'No fue un evento: la cuenta saltó casi todos los días de esa semana, así que es su nivel nuevo (productos o campañas nuevas). Sus días volvieron a contar como normales.' } })
+      nivelNuevo++
+    }
+  }
   diasEv = await diasDeEvento()
   for (const e of await EventoComercial.find({ estado: { $ne: 'descartado' } }).lean()) {
     const efecto = efectoDe(e, serie, new Set([...diasEv].filter((d) => d < e.desde || d > e.hasta)))
     if (efecto) await EventoComercial.updateOne({ _id: e._id }, { $set: { efecto, actualizadoEl: ahora } })
   }
-  return { nuevos: nuevos.length, eventos: await EventoComercial.countDocuments({ estado: { $ne: 'descartado' } }) }
+  return { nuevos: nuevos.length, nivelNuevo, eventos: await EventoComercial.countDocuments({ estado: { $ne: 'descartado' } }) }
 }

@@ -854,6 +854,9 @@ function EventosComerciales() {
   useEffect(() => { cargar() }, [cargar])
   const guardar = async (cuerpo) => { setOcupado(true); try { await api.guardarEvento(cuerpo); await cargar() } finally { setOcupado(false) } }
   const evs = (d?.eventos ?? []).filter((e) => e.estado !== 'descartado')
+  // los saltos que resultaron ser un nivel nuevo de la cuenta: se descartaron solos
+  // y quedan a la vista, para que se sepa por qué esos días volvieron a contar
+  const nivel = (d?.eventos ?? []).filter((e) => e.nivelNuevo).sort((a, b) => a.desde.localeCompare(b.desde))
   return (
     <section className="pub-caja">
       <h4>Eventos comerciales</h4>
@@ -884,6 +887,11 @@ function EventosComerciales() {
           </div>
         ))}
       </div>
+      {nivel.length ? (
+        <p className="pub-texto" title={nivel.map((e) => (e.desde === e.hasta ? e.desde : `${e.desde} al ${e.hasta}`)).join(' · ')}>
+          <strong>Nivel nuevo desde el {nivel[0].desde}.</strong> La cuenta saltó casi todos los días de esa semana (productos o campañas nuevas), así que no es un evento: {nivel.length} salto{nivel.length === 1 ? '' : 's'} se descart{nivel.length === 1 ? 'ó' : 'aron'} solo{nivel.length === 1 ? '' : 's'} y esos días vuelven a contar en las comparaciones.
+        </p>
+      ) : null}
       <form className="pub-ev-form" onSubmit={(ev) => { ev.preventDefault(); if (nuevo.nombre && nuevo.desde && nuevo.hasta) guardar(nuevo).then(() => setNuevo({ nombre: '', desde: '', hasta: '' })) }}>
         <input placeholder="Evento (ej: Black Friday 2026)" value={nuevo.nombre} onChange={(ev) => setNuevo({ ...nuevo, nombre: ev.target.value })} />
         <input type="date" value={nuevo.desde} onChange={(ev) => setNuevo({ ...nuevo, desde: ev.target.value })} aria-label="desde" />

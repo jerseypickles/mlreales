@@ -14,6 +14,9 @@ const schema = new mongoose.Schema({
   // por confirmar · por-revisar: salto detectado sin explicación · descartado
   estado: { type: String, enum: ['confirmado', 'inferido', 'por-revisar', 'descartado'], default: 'por-revisar' },
   origen: { type: String, enum: ['manual', 'inferido', 'detectado'], default: 'manual' },
+  // el salto resultó ser un nivel nuevo de la cuenta (productos nuevos, campañas
+  // nuevas) y no un evento: se descartó solo y sus días volvieron a ser normales
+  nivelNuevo: { type: Boolean, default: false },
   nota: { type: String, default: null },
   efecto: { type: mongoose.Schema.Types.Mixed, default: null },
   actualizadoEl: { type: Date, default: Date.now },
