@@ -43,9 +43,11 @@ router.get(
   '/ads',
   manejar(async (req, res) => {
     const { resumenAds } = await import('../../services/ads.js')
-    const dias = Math.min(90, Math.max(1, Number(req.query.dias) || 30))
-    // ?forzar=1 salta la caché de 60s: es el botón "actualizar ahora" de la mesa
-    const r = await resumenAds({ dias, forzar: req.query.forzar === '1' })
+    const dias = Math.round(Math.min(90, Math.max(1, Number(req.query.dias) || 30)))
+    // ?forzar=1 vuelve a preguntarle a ML y espera: es el botón "actualizar ahora" de la mesa.
+    // Sin él, la pantalla recibe lo último guardado al tiro (marcado `refrescando` si ya pasó
+    // el minuto) y lo vuelve a pedir a los segundos.
+    const r = await resumenAds({ dias, forzar: req.query.forzar === '1', viejaSirve: true })
     if (!r) return res.status(409).json({ error: 'sin cuenta ML conectada o sin advertiser de Product Ads' })
     res.json(r)
   }),

@@ -17,6 +17,12 @@ import { tableroOportunidades } from './tablero.js'
 //   siguiente espera el cálculo nuevo y nunca recibe la mesa de antes del cambio.
 // Los cálculos se comparten: dos pedidos a la vez esperan el mismo.
 //
+// Desde el 11-nov-2026 solo invalida lo que el importador cambia en la mesa o
+// en un nicho. Lo que cambia en sus productos o publicaciones (un costo, medir,
+// importar, auditar) la ENVEJECE y la manda a rearmar al tiro: antes, después de
+// trabajar en Mis productos, entrar a Oportunidades era esperar el cálculo
+// entero («varias interfaces cuesta mucho que carguen la información»).
+//
 // El estratega y los demás consumidores siguen llamando a tableroOportunidades
 // directo: esto es solo para la pantalla.
 export const FRESCO_MS = 10 * 60e3
@@ -32,11 +38,14 @@ export function crearCacheTablero({
   const guardado = new Map() // 'activos' | 'todos' → { valor, en, version, viejo }
   const enVuelo = new Map() // misma clave → { promesa, version }
   let version = 0
+  // cada vez que algo envejece la mesa: un cálculo que venía en camino puede no traer ese cambio
+  let generacion = 0
 
   function recalcular(clave, todos) {
     const actual = enVuelo.get(clave)
     if (actual && actual.version === version) return actual.promesa
     const ver = version
+    const gen = generacion
     const inicio = Date.now()
     const promesa = Promise.resolve()
       .then(() => calcular({ todos }))
@@ -47,7 +56,8 @@ export function crearCacheTablero({
         const en = ahora()
         // si alguien invalidó mientras se calculaba, el resultado puede ser de
         // antes del cambio: se entrega a quien lo pidió, pero no se guarda
-        if (ver === version) guardado.set(clave, { valor, en, version: ver, viejo: false })
+        // y si algo la envejeció entremedio, se guarda ya vieja: el pedido siguiente la vuelve a rearmar
+        if (ver === version) guardado.set(clave, { valor, en, version: ver, viejo: gen !== generacion })
         return { valor, en }
       })
     const registro = { promesa, version: ver }
@@ -82,16 +92,24 @@ export function crearCacheTablero({
 
   // datos que cambiaron por detrás (scan, análisis): lo guardado sirve mientras se rearma
   function envejecer() {
+    generacion++
     for (const g of guardado.values()) g.viejo = true
   }
 
-  return { leer, invalidar, envejecer }
+  // lo mismo, y además manda a rearmar al tiro lo que ya estaba guardado (lo que nadie ha pedido no se calcula)
+  function rearmar() {
+    envejecer()
+    for (const [clave, g] of guardado) if (g.version === version) recalcular(clave, clave === 'todos').catch(alFallar)
+  }
+
+  return { leer, invalidar, envejecer, rearmar }
 }
 
 const cache = crearCacheTablero()
 export const leerTablero = cache.leer
 export const invalidarTablero = cache.invalidar
 export const envejecerTablero = cache.envejecer
+export const rearmarTablero = cache.rearmar
 
 // Middleware: toda escritura que responde bien invalida la mesa. Se invalida al
 // TERMINAR la respuesta y no al entrar: invalidar antes de que el cambio llegue
@@ -107,6 +125,9 @@ export function crearInvalidador(invalidar) {
   }
 }
 export const invalidarAlEscribir = crearInvalidador(invalidarTablero)
+// Para lo que cambia por fuera de la mesa (productos propios, publicaciones): la guardada se sigue entregando y
+// el rearmado parte al tiro, así que cuando el importador llega a Oportunidades suele estar lista.
+export const envejecerAlEscribir = crearInvalidador(rearmarTablero)
 
 // Arma la mesa una vez al arrancar, para que la primera visita tras un deploy
 // no pague el cálculo entero.

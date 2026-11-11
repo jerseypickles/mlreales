@@ -254,8 +254,8 @@ async function armarListaPropios() {
 // LA LISTA SE GUARDA Y SE SIRVE AL TIRO (11-nov-2026). Rearmarla tarda más de
 // diez segundos y se hacía en cada visita, aunque solo cambia cuando termina una
 // medición (el worker la envejece) o cuando el dueño edita algo (cualquier
-// escritura bajo /api/propios o /api/meli la invalida: ver app.js).
-export const cacheListaPropios = crearCacheVivo({ nombre: 'mis-productos', calcular: armarListaPropios })
+// escritura bajo /api/propios o /api/meli la invalida).
+const cacheListaPropios = crearCacheVivo({ nombre: 'mis-productos', cambiaCon: ['/api/propios', '/api/meli'], calcular: armarListaPropios })
 router.get(
   '/',
   manejar(async (_req, res) => res.json((await cacheListaPropios.leer()).valor)),

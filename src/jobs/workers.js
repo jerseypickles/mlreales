@@ -1109,10 +1109,7 @@ export async function procesarScanPropios(job) {
       console.warn(`[scan-propios] vínculo o costo de productos nuevos omitido: ${err.message}`)
     }
   }
-  const resultado = await escanearPropios({ soloOficial })
-  // llegó una medición nueva: lo guardado de Mis productos y del plan de campañas se sirve mientras se rearma detrás
-  import('../services/cacheVivo.js').then((m) => m.envejecerCachesVivos()).catch(() => {})
-  return resultado
+  return escanearPropios({ soloOficial })
 }
 
 // Optimizador semanal de Mis productos: cablea nichos faltantes, re-audita lo
@@ -1273,10 +1270,21 @@ export function iniciarWorkers() {
   // de listing (job "auditar"), que comparte concurrencia 1 a propósito
   const workerPropios = new Worker(
     COLA_PROPIOS,
-    (job) => {
-      if (job.name === 'auditar') return procesarAuditoriaPropio(job)
-      if (job.name === 'optimizar') return procesarOptimizadorPropios(job)
-      return procesarScanPropios(job)
+    async (job) => {
+      // la auditoría y el optimizador solo cambian la lista de Mis productos; la medición, todo lo demás
+      const soloLista = job.name === 'auditar' || job.name === 'optimizar'
+      try {
+        if (job.name === 'auditar') return await procesarAuditoriaPropio(job)
+        if (job.name === 'optimizar') return await procesarOptimizadorPropios(job)
+        return await procesarScanPropios(job)
+      } finally {
+        // Terminó un trabajo que cambia lo que muestran las pantallas: lo guardado (Mis productos, el plan
+        // de campañas, los anuncios) se sigue sirviendo mientras se rearma detrás, de a uno. Sin esto, una
+        // auditoría terminada seguía «generándose» en pantalla hasta que venciera lo guardado.
+        import('../services/cacheVivo.js')
+          .then((m) => m.envejecerCachesVivos(soloLista ? { solo: ['mis-productos'] } : {}))
+          .catch(() => {})
+      }
     },
     {
       connection: crearConexionRedis(),

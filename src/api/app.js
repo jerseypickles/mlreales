@@ -2,7 +2,7 @@ import express from 'express'
 import mongoose from 'mongoose'
 import rutasNichos from './routes/nichos.js'
 import rutasProductos from './routes/productos.js'
-import rutasPropios, { cacheListaPropios } from './routes/propios.js'
+import rutasPropios from './routes/propios.js'
 import rutasDebug from './routes/debug.js'
 import rutasMargen from './routes/margen.js'
 import rutasTendencias from './routes/tendencias.js'
@@ -16,7 +16,8 @@ import rutasMasVendidos from './routes/masVendidos.js'
 import rutasSeguimiento from './routes/seguimiento.js'
 import { obtenerColas } from '../jobs/queues.js'
 import { gastoDelMes, mesActual } from '../services/gastos.js'
-import { invalidarAlEscribir, crearInvalidador } from '../services/tableroCache.js'
+import { invalidarAlEscribir, envejecerAlEscribir } from '../services/tableroCache.js'
+import { invalidarVivosAlEscribir } from '../services/cacheVivo.js'
 import { config } from '../config/env.js'
 
 export function crearApp() {
@@ -139,11 +140,14 @@ export function crearApp() {
     } catch (err) { next(err) }
   })
 
-  // la mesa de Oportunidades se sirve guardada: lo que escribe en nichos,
-  // compras, propios o publicaciones la invalida (ver services/tableroCache.js)
-  app.use(['/api/nichos', '/api/oportunidades', '/api/propios', '/api/meli'], invalidarAlEscribir)
-  // lo mismo para la lista guardada de Mis productos (services/cacheVivo.js)
-  app.use(['/api/propios', '/api/meli'], crearInvalidador(cacheListaPropios.invalidar))
+  // La mesa de Oportunidades se sirve guardada (services/tableroCache.js). Lo que el dueño cambia en la
+  // mesa o en un nicho la invalida: el pedido siguiente espera la nueva. Lo que cambia en sus productos o
+  // publicaciones la envejece: se sigue entregando mientras se rearma detrás.
+  app.use(['/api/nichos', '/api/oportunidades'], invalidarAlEscribir)
+  app.use(['/api/propios', '/api/meli'], envejecerAlEscribir)
+  // lo mismo para las demás respuestas guardadas (Mis productos, el plan de campañas, los
+  // anuncios, el aprendizaje): cada una dice con qué rutas cambia (services/cacheVivo.js)
+  app.use('/api', invalidarVivosAlEscribir)
   app.use('/api/nichos', rutasNichos)
   app.use('/api/productos', rutasProductos)
   app.use('/api/propios', rutasPropios)

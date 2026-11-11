@@ -1,4 +1,5 @@
 import { meliGet, hayCuentaMeli } from './meli.js'
+import { crearCacheVivo } from './cacheVivo.js'
 import { lecturaCompletaAds } from './ml/evaluacionAds.js'
 
 // Product Ads de la cuenta conectada. Rutas /marketplace/advertising validadas
@@ -116,34 +117,69 @@ export async function adsPorItem({ dias = 30 } = {}) {
   return porItem
 }
 
-// CACHÉ CORTA, PORQUE LA PANTALLA SE MIRA SEGUIDO.
+// LO GUARDADO SE ENTREGA AL TIRO Y SE REFRESCA DETRÁS (11-nov-2026).
 //
-// Armar el resumen son dos llamadas a ML más la economía por anuncio: ~2
-// segundos. Con tres campañas corriendo el tab se abre y se recarga todo el
-// rato, y cada apertura pagaba los 2 segundos completos y una llamada a la API
-// de ML.
+// Armar el resumen son las lecturas de Product Ads más la economía por anuncio.
+// Tenía una caché de 60 segundos, que es lo que corresponde al dato: ML no
+// actualiza las métricas en tiempo real —el gasto se mueve en minutos, las
+// conversiones tardan— así que refrescar más seguido solo consumiría cuota.
+// Pero pasado el minuto cada visita pagaba el armado entero. Medido el 11-nov:
+// ya no son dos segundos sino entre cinco y siete, la pantalla de Publicidad
+// pide dos ventanas a la vez y no mostraba nada hasta tener las dos. Pedido del
+// importador ese día: «varias interfaces cuesta mucho que carguen».
 //
-// 60 segundos es lo que corresponde al dato de abajo: ML no actualiza las
-// métricas de Product Ads en tiempo real —el gasto se mueve en minutos, las
-// conversiones tardan— así que refrescar más seguido no traería nada nuevo,
-// solo consumiría cuota. `refrescoEl` viaja al frontend para que pueda mostrar
-// cuán fresco es lo que está viendo en vez de aparentar tiempo real.
-const cacheResumen = new Map()
+// Ahora la pantalla recibe lo último guardado, marcado `refrescando`, y lo
+// vuelve a pedir a los segundos; `refrescoEl` le dice cuán fresco es lo que ve.
+// Quien calcula con el resumen (el plan de campañas, el analista) no acepta uno
+// pasado: espera el nuevo, como antes.
 const TTL_RESUMEN_MS = 60_000
+const cachesResumen = new Map()
+function cacheResumen(dias) {
+  let c = cachesResumen.get(dias)
+  if (!c) {
+    c = crearCacheVivo({
+      nombre: `anuncios-${dias}d`,
+      frescoMs: TTL_RESUMEN_MS,
+      // un costo, un precio o un presupuesto que cambia el dueño cambia la economía del resumen
+      cambiaCon: ['/api/propios', '/api/meli'],
+      calcular: async () => {
+        const valor = await construirResumenAds({ dias })
+        // sin cuenta no hay nada que guardar: se vuelve a intentar en la visita siguiente
+        if (!valor) throw new SinPublicidad()
+        return valor
+      },
+    })
+    cachesResumen.set(dias, c)
+  }
+  return c
+}
+class SinPublicidad extends Error {
+  constructor() {
+    super('sin cuenta de Mercado Libre conectada o sin advertiser de Product Ads')
+  }
+}
+// Las dos ventanas con que abre la pantalla quedan anotadas desde el arranque:
+// se precalientan y se rearman con cada medición de los productos propios.
+for (const dias of [30, 1]) cacheResumen(dias)
 
 export function invalidarCacheAds() {
-  cacheResumen.clear()
+  for (const c of cachesResumen.values()) c.invalidar()
 }
 
-export async function resumenAds({ dias = 30, forzar = false } = {}) {
-  const clave = `d${dias}`
-  const hit = cacheResumen.get(clave)
-  if (!forzar && hit && Date.now() - hit.el < TTL_RESUMEN_MS) {
-    return { ...hit.valor, refrescoEl: new Date(hit.el).toISOString(), deCache: true }
+// forzar: vuelve a preguntarle a ML y espera (el botón «actualizar»).
+// viejaSirve: si lo guardado pasó el minuto se entrega igual, marcado
+// `refrescando`, y se rearma detrás. Solo la pantalla la pide.
+export async function resumenAds({ dias = 30, forzar = false, viejaSirve = false } = {}) {
+  const pedidoEl = Date.now()
+  let leido
+  try {
+    leido = await cacheResumen(dias).leer({ fresca: forzar, soloFresca: !viejaSirve })
+  } catch (err) {
+    if (err instanceof SinPublicidad) return null
+    throw err
   }
-  const valor = await construirResumenAds({ dias })
-  if (valor) cacheResumen.set(clave, { valor, el: Date.now() })
-  return valor ? { ...valor, refrescoEl: new Date().toISOString(), deCache: false } : valor
+  const { valor, calculadoEl, refrescando } = leido
+  return { ...valor, refrescoEl: calculadoEl.toISOString(), deCache: calculadoEl.getTime() < pedidoEl, refrescando }
 }
 
 async function construirResumenAds({ dias = 30 } = {}) {

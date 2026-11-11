@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import * as Collapsible from '@radix-ui/react-collapsible'
 import { api } from '../api.js'
+import { useEstadoGuardado } from '../lib/estadoGuardado.js'
 import { IconoExterno, Cargando } from './ui.jsx'
 import { EncabezadoPagina } from './sistema.jsx'
 import { MiniSerie, HistogramaPrecios } from './graficos.jsx'
@@ -1501,7 +1502,8 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando, o
 }
 
 export function MisProductos() {
-  const [datos, setDatos] = useState(null)
+  // lo último leído queda en memoria: al volver a la pantalla se muestra al tiro y se actualiza detrás
+  const [datos, setDatos] = useEstadoGuardado('propios-lista', null)
   const [error, setError] = useState(null)
   const [url, setUrl] = useState('')
   const [ocupado, setOcupado] = useState(false)
@@ -1522,7 +1524,7 @@ export function MisProductos() {
 
   const cargar = useCallback(() => {
     api.listarPropios().then(setDatos).catch((e) => setError(e.message))
-  }, [])
+  }, [setDatos])
 
   useEffect(() => {
     cargar()

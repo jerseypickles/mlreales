@@ -12,7 +12,12 @@ import { seleccionarGuiaDemanda } from '../../services/ml/demanda.js'
 import { crearCacheVivo } from '../../services/cacheVivo.js'
 
 const router = Router()
-router.get('/', async (_req, res) => res.json({ activo: config.mlActivo, ...await estadoMl() }))
+// El estado del aprendizaje y los pronósticos por nicho se arman con varias consultas (uno a dos segundos, medido
+// el 11-nov-2026) y solo cambian cuando corre un entrenamiento o una captura. Los piden Aprendizaje y también
+// Oportunidades, que con ellos dibuja la tendencia de cada tarjeta. Se guardan un minuto (la pantalla de
+// Aprendizaje vuelve a preguntar cada minuto); pasado ese plazo se entrega lo guardado y se rearma detrás.
+const cacheEstadoMl = crearCacheVivo({ nombre: 'aprendizaje', frescoMs: 60_000, cambiaCon: ['/api/aprendizaje'], calcular: () => estadoMl() })
+router.get('/', async (_req, res) => res.json({ activo: config.mlActivo, ...(await cacheEstadoMl.leer()).valor }))
 router.get('/perfiles', async (_req, res) => res.json({ perfiles: await perfilesPropiosMl() }))
 // La historia mensual tal como se entrena: permite reproducir una evaluación
 // fuera del servidor sin volver a pagarle al proveedor.
@@ -66,7 +71,16 @@ export function ordenarPorTendencia(nichos) {
     grupo: lugar.get(n).percentil >= 0.8 ? 'arriba' : lugar.get(n).percentil <= 0.2 ? 'abajo' : 'medio' } : null }))
 }
 
-router.get('/pronosticos-nichos', async (_req, res) => {
+const cachePronosticosNichos = crearCacheVivo({
+  nombre: 'pronosticos-nichos',
+  frescoMs: 60_000,
+  // trae el veredicto y la etapa de compra de cada nicho: una edición del dueño en la mesa lo cambia
+  cambiaCon: ['/api/aprendizaje', '/api/nichos', '/api/oportunidades'],
+  calcular: pronosticosPorNicho,
+})
+router.get('/pronosticos-nichos', async (_req, res) => res.json((await cachePronosticosNichos.leer()).valor))
+
+async function pronosticosPorNicho() {
   const { Nicho } = await import('../../models/Nicho.js')
   const { CurvaEstacional } = await import('../../models/CurvaEstacional.js')
   const nichos = await Nicho.find({ estado: 'activo' }).select('keyword veredicto etapaCompra').lean()
@@ -96,8 +110,8 @@ router.get('/pronosticos-nichos', async (_req, res) => {
         ...p.guia,
         real: p.evaluacion?.real ?? null, emitidoEl: p.emitidoEl })) })
   }
-  res.json({ modo: 'sombra', nichos: ordenarPorTendencia(salida) })
-})
+  return { modo: 'sombra', nichos: ordenarPorTendencia(salida) }
+}
 // Cuánto del panel de competidores (Snapshot) sirve para entrenar, con los
 // descartes por motivo. Solo lectura; cacheado 10 minutos.
 router.get('/competidores', async (req, res) => {
@@ -176,11 +190,13 @@ router.get('/publicidad', async (_req, res) => {
 // en vivo, más lo recomendado los días anteriores y el marcador de plata
 // El plan se guarda y se sirve al tiro (services/cacheVivo.js): armarlo tarda
 // entre cinco y diez segundos y solo cambia cuando termina una medición de los
-// productos propios (el worker lo envejece) o cuando se guardan las
+// productos propios (el worker lo envejece) o cuando el dueño cambia algo de lo
+// que se arma: un costo o un precio, una campaña, un evento del calendario, las
 // recomendaciones del día. `?fresca=1` lo rearma: es lo que pide el botón
 // «actualizar» de Publicidad después de volver a leer los anuncios en ML.
 const cachePlanCampanas = crearCacheVivo({
   nombre: 'plan-campanas',
+  cambiaCon: ['/api/propios', '/api/meli', '/api/aprendizaje'],
   calcular: async () => (await import('../../services/ml/planCampanas.js')).planesDeCampana(),
 })
 router.get('/campanas', async (req, res) => {

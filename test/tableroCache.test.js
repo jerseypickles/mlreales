@@ -95,6 +95,42 @@ test('un scan o un análisis envejecen la mesa: se sigue entregando mientras se 
   assert.equal(f.veces(), 2)
 })
 
+test('si algo envejece la mesa mientras se rearma, lo que llega se guarda ya viejo y el pedido siguiente la rearma otra vez', async () => {
+  const f = calculoFalso(), r = reloj()
+  const c = crearCacheTablero({ calcular: f.calcular, ahora: r.ahora, frescoMs: 1000, viejoMs: 10_000 })
+  const p = c.leer(); await vuelta(); f.pendientes[0].resolver(); await p
+  c.envejecer()
+  await c.leer() // parte el cálculo 2 detrás
+  await vuelta()
+  c.envejecer() // un cambio más mientras el 2 viene en camino: puede no traerlo
+  f.pendientes[1].resolver(); await vuelta()
+  const x = await c.leer()
+  assert.deepEqual([x.oportunidades[0].mesa, x.refrescando], [2, true], 'entrega la 2, pero sabe que le falta algo')
+  await vuelta()
+  assert.equal(f.veces(), 3)
+  f.pendientes[2].resolver(); await vuelta()
+  const y = await c.leer()
+  assert.deepEqual([y.oportunidades[0].mesa, y.refrescando], [3, false])
+})
+
+test('un cambio en los productos propios: la mesa guardada se sigue entregando y el rearmado parte al tiro', async () => {
+  const f = calculoFalso(), r = reloj()
+  const c = crearCacheTablero({ calcular: f.calcular, ahora: r.ahora, frescoMs: 1000, viejoMs: 10_000 })
+  c.rearmar()
+  await vuelta()
+  assert.equal(f.veces(), 0, 'lo que nadie ha pedido no se calcula')
+
+  const p = c.leer(); await vuelta(); f.pendientes[0].resolver(); await p
+  c.rearmar()
+  await vuelta()
+  assert.equal(f.veces(), 2, 'parte sin esperar a que alguien entre')
+  const x = await c.leer()
+  assert.deepEqual([x.oportunidades[0].mesa, x.refrescando, f.veces()], [1, true, 2], 'la visita no espera ni duplica el cálculo')
+  f.pendientes[1].resolver(); await vuelta()
+  const y = await c.leer()
+  assert.deepEqual([y.oportunidades[0].mesa, y.refrescando], [2, false])
+})
+
 test('activos y todos se guardan aparte; demasiado vieja se espera; si el rearmado atrás falla sigue la guardada', async () => {
   const f = calculoFalso(), r = reloj()
   const errores = []

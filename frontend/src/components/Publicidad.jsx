@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api.js'
+import { useEstadoGuardado } from '../lib/estadoGuardado.js'
 import { Cargando } from './ui.jsx'
 import { EncabezadoPagina } from './sistema.jsx'
 import { PauseCircle, Split, PlusCircle, TrendingUp, TrendingDown, Target, Layers, Hourglass, Megaphone, CheckCircle2, XCircle, CircleDot, MousePointerClick } from 'lucide-react'
@@ -687,28 +688,44 @@ function FormasCampana({ formas }) {
 const PESTANAS = [['plan', 'Plan de inicio'], ['resumen', 'Resultados'], ['campanas', 'Campañas'], ['productos', 'Productos'], ['lm', 'Learning machine']]
 
 export function Publicidad() {
-  const [datos, setDatos] = useState(null)
-  const [hoy, setHoy] = useState(null)
-  const [plan, setPlan] = useState(null)
+  // Lo último leído queda en memoria: al volver a la pantalla se muestra al tiro y se actualiza detrás
+  const [datos, setDatos] = useEstadoGuardado('pub-datos', null)
+  const [hoy, setHoy] = useEstadoGuardado('pub-hoy', null)
+  const [plan, setPlan] = useEstadoGuardado('pub-plan', null)
   const [errorPlan, setErrorPlan] = useState(null)
   const [cargandoPlan, setCargandoPlan] = useState(true)
-  const [aprendido, setAprendido] = useState(null)
-  const [serie, setSerie] = useState(null)
+  const [aprendido, setAprendido] = useEstadoGuardado('pub-aprendido', null)
+  const [serie, setSerie] = useEstadoGuardado('pub-serie', null)
   const [errorSerie, setErrorSerie] = useState(null)
   const [error, setError] = useState(null)
-  const [dias, setDias] = useState(30)
+  const [dias, setDias] = useEstadoGuardado('pub-dias', 30)
   const [cargando, setCargando] = useState(false)
   const [pestana, setPestana] = useState(() => { try { return localStorage.getItem('pub-pestana-v2') || 'plan' } catch { return 'plan' } })
   const [sel, setSel] = useState(null)
   const [, setTic] = useState(0)
 
   const ir = (p) => { setPestana(p); try { localStorage.setItem('pub-pestana-v2', p) } catch { /* sin almacenamiento */ } }
-  const traer = useCallback((forzar = false) => {
+  // LA PANTALLA NO ESPERA A MERCADO LIBRE (11-nov-2026). Antes no se mostraba nada hasta tener las dos lecturas
+  // de anuncios (el período y «hoy»), y cada una son varios segundos de ML. Ahora el servidor entrega lo último
+  // guardado, marcado `refrescando`, y acá se vuelve a pedir a los segundos; «hoy» llega aparte.
+  const repaso = useRef(null)
+  const pedido = useRef(0)
+  useEffect(() => () => clearTimeout(repaso.current), [])
+  const traer = useCallback((forzar = false, intentos = 0) => {
     setCargando(true)
-    return Promise.all([api.ads(dias, forzar), api.ads(1, forzar).catch(() => null)])
-      .then(([d, h]) => { setDatos(d); setHoy(h); setError(null) })
-      .catch((e) => setError(e.message)).finally(() => setCargando(false))
-  }, [dias])
+    clearTimeout(repaso.current)
+    // una respuesta que llega después de otra más nueva (se cambió el período entremedio) no la pisa
+    const marca = ++pedido.current
+    api.ads(1, forzar).then(setHoy).catch(() => {})
+    return api.ads(dias, forzar)
+      .then((d) => {
+        if (marca !== pedido.current) return
+        setDatos(d); setError(null)
+        if (d.refrescando && intentos < 3) repaso.current = setTimeout(() => traer(false, intentos + 1), 7000)
+      })
+      .catch((e) => { if (marca === pedido.current) setError(e.message) })
+      .finally(() => { if (marca === pedido.current) setCargando(false) })
+  }, [dias, setDatos, setHoy])
   useEffect(() => { traer() }, [traer])
   const traerPlan = useCallback(async (fresca = false) => {
     setCargandoPlan(true)
@@ -719,7 +736,7 @@ export function Publicidad() {
     if (rs[2].status === 'fulfilled') { setSerie(rs[2].value); setErrorSerie(null) }
     else setErrorSerie('No se pudo actualizar el historial diario; las propuestas siguen disponibles.')
     setCargandoPlan(false)
-  }, [])
+  }, [setPlan, setAprendido, setSerie])
   useEffect(() => { traerPlan(); const id = setInterval(() => traerPlan(), 300_000); return () => clearInterval(id) }, [traerPlan])
   useEffect(() => { const id = setInterval(() => traer(), 60_000); return () => clearInterval(id) }, [traer])
   useEffect(() => { const id = setInterval(() => setTic((t) => t + 1), 15_000); return () => clearInterval(id) }, [])
@@ -749,7 +766,7 @@ export function Publicidad() {
       <EncabezadoPagina titulo="Publicidad" bajada="Lo que dejó cada campaña después de pagar producto, comisión, envío y anuncios.">
         <div className="pub-controles">
           <button type="button" className="pub-refrescar" onClick={() => { traer(true).finally(() => traerPlan(true)) }} disabled={cargando || cargandoPlan} title="Vuelve a preguntarle a ML">
-            {cargando ? 'actualizando…' : haceCuanto(datos.refrescoEl) ?? 'actualizar'}
+            {cargando ? 'actualizando…' : `${haceCuanto(datos.refrescoEl) ?? 'actualizar'}${datos.refrescando ? ' · actualizando…' : ''}`}
           </button>
           <div className="segmentado" role="group" aria-label="Período">
             {[7, 30].map((d) => <button key={d} className={dias === d ? 'activo' : ''} onClick={() => setDias(d)}>{d} días</button>)}

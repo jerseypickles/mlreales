@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarClock, Check, CircleDollarSign, FileText, ImageOff, Lightbulb, MousePointerClick, PencilLine, Ruler, Search, ShieldAlert, ShoppingBag, Sparkles, Truck, TrendingDown, TrendingUp, Warehouse, X } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando, Miniatura, ScoreRing } from './ui.jsx'
-import { EncabezadoPagina } from './sistema.jsx'
+import { EncabezadoPagina, Etiqueta } from './sistema.jsx'
 import { Criterios } from './Criterios.jsx'
 import { compararOportunidades } from '../lib/sidebar.js'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
@@ -1815,7 +1815,9 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
 
   return (
     <main>
-      <EncabezadoPagina titulo="Oportunidades" bajada={<>Qué conviene traer, ordenado por puntaje y urgencia. Elige uno para ver el detalle; <kbd>↑</kbd> <kbd>↓</kbd> para recorrer y <kbd>Esc</kbd> para cerrar.</>} />
+      <EncabezadoPagina titulo="Oportunidades" bajada={<>Qué conviene traer, ordenado por puntaje y urgencia. Elige uno para ver el detalle; <kbd>↑</kbd> <kbd>↓</kbd> para recorrer y <kbd>Esc</kbd> para cerrar.</>}>
+        {datos?.refrescando ? <Etiqueta title="Se muestra la última mesa guardada mientras se vuelve a armar con los cambios recientes">actualizando…</Etiqueta> : null}
+      </EncabezadoPagina>
       {aviso ? <p className="error-bloque">{aviso}</p> : null}
 
       <div className="opx-barra">

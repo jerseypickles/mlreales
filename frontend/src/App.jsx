@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, claveApi } from './api.js'
+import { olvidarEstadoGuardado } from './lib/estadoGuardado.js'
 import { Resumen } from './components/Resumen.jsx'
 import { Productos } from './components/Productos.jsx'
 import { Simulador } from './components/Simulador.jsx'
@@ -787,6 +788,7 @@ export default function App() {
   useEffect(() => {
     const alBloquear = () => {
       claveApi.borrar()
+      olvidarEstadoGuardado()
       setBloqueada(true)
     }
     window.addEventListener('api-bloqueada', alBloquear)
@@ -839,7 +841,6 @@ export default function App() {
             setSeleccionado(id)
             setVista('nichos')
           }}
-          alCambiarNichos={cargarNichos}
         />
       ) : vista === 'propios' ? (
         <MisProductos />

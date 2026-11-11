@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEstadoGuardado } from '../lib/estadoGuardado.js'
 import {
   Activity, AlertTriangle, CheckCircle2, ChevronDown, CircleDashed, Eye, Link2, Megaphone, PackageX,
   RefreshCw, Search, ShoppingBag, Store, TrendingDown, TrendingUp, Truck,
@@ -308,7 +309,8 @@ function Seccion({ titulo, bajada, children }) {
 }
 
 export function Aprendizaje() {
-  const [datos, setDatos] = useState(null)
+  // lo último leído queda en memoria: al volver a la pantalla se muestra al tiro y se actualiza detrás
+  const [datos, setDatos] = useEstadoGuardado('aprendizaje-estado', null)
   const [error, setError] = useState(null)
   const [cargando, setCargando] = useState(true)
   // sub-menú de la pestaña: el resumen, y las fuentes que se pueden mirar por dentro
