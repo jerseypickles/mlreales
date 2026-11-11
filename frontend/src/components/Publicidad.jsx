@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api.js'
 import { useEstadoGuardado } from '../lib/estadoGuardado.js'
 import { Cargando } from './ui.jsx'
-import { EncabezadoPagina, BarraPartes } from './sistema.jsx'
+import { EncabezadoPagina, BarraPartes, Etiqueta } from './sistema.jsx'
 import { PauseCircle, Split, PlusCircle, TrendingUp, TrendingDown, Target, Layers, Hourglass, Megaphone, CheckCircle2, XCircle, CircleDot, MousePointerClick } from 'lucide-react'
 import { fmtPrecio } from '../lib/formato.js'
 import MesaPublicidad from './MesaPublicidad.jsx'
@@ -270,15 +270,26 @@ function Resumen({ datos, plan, serieTotal, fotos, onIr }) {
 // ── pestaña Campañas ─────────────────────────────────────────────────────────
 // LO QUE LA CAMPAÑA DEJA DE MOSTRAR, SEGÚN ML (11-nov-2026; services/ml/competitividadAds.js). El freno lo dice
 // Mercado Libre; si conviene mover el presupuesto lo dice la plata. Pedido del importador: usarlo «siempre que
-// valga la pena a nosotros», así que «con más presupuesto vendería más» solo aparece cuando la campaña deja plata.
-// Tampoco si el stock no alcanza: más presupuesto sin producto que vender es gasto perdido.
+// valga la pena a nosotros», así que «conviene subir el presupuesto» solo aparece cuando la campaña deja plata y
+// tiene stock (más presupuesto sin producto que vender es gasto perdido).
+//
+// La primera versión mostraba la barra con una leyenda corta y el importador no la entendió («no entiendo qué
+// quiere decir que esté verde o naranjo»). Por eso ahora cada color lleva su frase completa y arriba va la
+// conclusión, en palabras.
 // `stock`: 'sin' | 'poco' | null, del producto de la campaña al que menos le queda (los días van en el aviso de arriba).
-function lecturaCompetitividad(c, plata, dias, stock) {
-  if (c.freno !== 'presupuesto' || plata == null) return c.texto
-  if (plata <= 0) return `${c.texto} Pero en ${dias} días no dejó plata (${conSigno(plata)}): subirlo sería perder más.`
+function veredictoCompetitividad(c, plata, dias, stock) {
+  // los números ya están en la leyenda: acá va solo la conclusión
+  if (c.freno === 'ranking') return { tono: 'neutra', titulo: 'El presupuesto no es lo que la frena', texto: 'Para salir más habría que ganarles a los otros anuncios (precio, publicación o un ROAS objetivo más bajo). Subir el presupuesto no cambiaría nada.' }
+  if (c.freno === 'ninguno') {
+    return c.mostrado >= 0.5
+      ? { tono: 'bien', titulo: 'Sale la mayoría de las veces', texto: 'No le falta presupuesto.' }
+      : { tono: 'neutra', titulo: 'Sale menos de la mitad de las veces', texto: 'Lo que le quita lugar son sobre todo otros anuncios, no el presupuesto.' }
+  }
+  if (plata == null) return { tono: 'atencion', titulo: 'Se queda sin presupuesto en el día', texto: 'Falta el costo de algún producto para saber si conviene subirlo.' }
+  if (plata <= 0) return { tono: 'atencion', titulo: 'Se queda sin presupuesto, pero no conviene subirlo', texto: `En ${dias} días la campaña no dejó plata (${conSigno(plata)}): con más presupuesto perdería más.` }
   const dejo = `La campaña dejó ${fmtPrecio(Math.round(plata))} en ${dias} días`
-  if (stock) return `${c.texto} ${dejo}, pero ${stock === 'sin' ? 'no queda stock' : 'queda poco stock'}: repón antes de subir el presupuesto.`
-  return `${c.texto} ${dejo}: con más presupuesto vendería más.`
+  if (stock) return { tono: 'atencion', titulo: 'Se queda sin presupuesto, pero primero hay que reponer', texto: `${dejo}, pero ${stock === 'sin' ? 'no queda stock' : 'queda poco stock'}: más presupuesto ahora no tendría qué vender.` }
+  return { tono: 'bien', titulo: 'Conviene subir el presupuesto', texto: `${dejo}: con más presupuesto saldría más veces y vendería más.` }
 }
 
 function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
@@ -319,13 +330,16 @@ function Campanas({ datos, hoy, plan, serie, fotos, ecoDe, onProducto }) {
               <div className="pub-hoy-barra"><i style={{ width: `${Math.min(100, (g / Math.max(1, c.presupuestoDiario ?? 1)) * 100)}%` }} /></div>
               <span>hoy lleva {fmtPrecio(Math.round(g))} de {fmtPrecio(c.presupuestoDiario ?? 0)}</span>
             </div>
-            {c.competitividad ? (
-              <BarraPartes titulo="De cada 100 veces que pudo aparecer" fuente={`según Mercado Libre · ${datos.dias} días`} partes={[
-                { id: 'mostrado', titulo: 'apareció', valor: c.competitividad.mostrado, tono: 'bien' },
-                { id: 'presupuesto', titulo: 'perdió por presupuesto', valor: c.competitividad.perdidoPresupuesto, tono: 'atencion' },
-                { id: 'ranking', titulo: 'perdió por ranking', valor: c.competitividad.perdidoRanking, tono: 'neutra' },
-              ]}>{lecturaCompetitividad(c.competitividad, plataCampana, datos.dias, stock)}</BarraPartes>
-            ) : null}
+            {c.competitividad ? (() => {
+              const v = veredictoCompetitividad(c.competitividad, plataCampana, datos.dias, stock)
+              return (
+                <BarraPartes titulo="De cada 100 veces que el anuncio pudo salir" fuente={`dato de Mercado Libre · últimos ${datos.dias} días`} formato={(valor) => Math.round(valor * 100)} partes={[
+                  { id: 'mostrado', titulo: 'salió', valor: c.competitividad.mostrado, tono: 'bien' },
+                  { id: 'presupuesto', titulo: 'no salió: ya se había gastado el presupuesto del día', valor: c.competitividad.perdidoPresupuesto, tono: 'atencion', ayuda: 'Es lo único que se arregla con más presupuesto.' },
+                  { id: 'ranking', titulo: 'no salió: otro anuncio le ganó el lugar', valor: c.competitividad.perdidoRanking, tono: 'neutra', ayuda: 'Mercado Libre muestra primero los anuncios que ofrecen pagar más por el clic y los de publicaciones que venden mejor. Más presupuesto no cambia esto.' },
+                ]}><Etiqueta tono={v.tono}>{v.titulo}</Etiqueta>{v.texto}</BarraPartes>
+              )
+            })() : null}
             <Metricas m={m} />
             {acciones.length ? (
               <ul className="pub-campana-acciones">

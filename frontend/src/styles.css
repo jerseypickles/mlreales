@@ -8517,11 +8517,12 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .s-partes-cabeza small { font-size: 12px; font-weight: 500; color: var(--tinta-3); }
 .s-partes-barra { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--superficie-2); }
 .s-partes-barra i { display: block; flex-basis: 0; min-width: 4px; }
-.s-partes-leyenda { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--tinta-2); }
-.s-partes-leyenda li { display: inline-flex; align-items: center; gap: 8px; }
-.s-partes-leyenda li > i { width: 8px; height: 8px; border-radius: 999px; }
-.s-partes-leyenda b { font-family: 'Fira Code', monospace; font-weight: 600; color: var(--tinta); }
+.s-partes-leyenda { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--tinta-2); }
+.s-partes-leyenda li { display: flex; align-items: baseline; gap: 8px; }
+.s-partes-leyenda li > i { flex: none; width: 8px; height: 8px; border-radius: 999px; }
+.s-partes-leyenda b { flex: none; min-width: 24px; text-align: right; font-family: 'Fira Code', monospace; font-weight: 600; color: var(--tinta); }
 .s-partes-lectura { margin: 0; font-size: 13px; line-height: 1.5; color: var(--tinta-2); }
+.s-partes-lectura .s-etiqueta { margin-right: 8px; }
 .s-partes-bien { background: var(--exito); }
 .s-partes-atencion { background: var(--avisa-tinta); }
 .s-partes-problema { background: var(--peligro); }

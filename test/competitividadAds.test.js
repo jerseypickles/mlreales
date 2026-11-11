@@ -20,13 +20,13 @@ test('competitividad: las fracciones de ML quedan con nombre y el ACOS de refere
 test('competitividad: dice cuál es el freno sin recomendar gasto', () => {
   const presupuesto = describirCompetitividad(leerCompetitividad(crudas(0.3, 0.45, 0.25)))
   assert.equal(presupuesto.freno, 'presupuesto')
-  assert.match(presupuesto.texto, /45% de sus apariciones porque se le acaba el presupuesto.*25% por ranking/)
+  assert.equal(presupuesto.texto, 'De cada 100 veces que el anuncio pudo salir, en 45 no salió porque ya se había gastado el presupuesto del día y en 25 porque otro anuncio le ganó el lugar.')
   const ranking = describirCompetitividad(leerCompetitividad(crudas(0.2, 0, 0.8)))
   assert.equal(ranking.freno, 'ranking')
-  assert.match(ranking.texto, /80% de sus apariciones por ranking.*El presupuesto no es su freno/)
+  assert.equal(ranking.texto, 'De cada 100 veces que el anuncio pudo salir, en 80 otro anuncio le ganó el lugar. El presupuesto alcanza: subirlo no cambiaría nada.')
   const bien = describirCompetitividad(leerCompetitividad(crudas(0.7, 0, 0.3)))
   assert.equal(bien.freno, 'ninguno')
-  assert.match(bien.texto, /Aparece en el 70%/)
+  assert.equal(bien.texto, 'El anuncio sale en 70 de cada 100 veces que puede salir; en 30 otro anuncio le gana el lugar.')
   assert.equal(describirCompetitividad(null), null)
 })
 
@@ -35,7 +35,7 @@ test('plan: un «subir» se queda en «mantener» si la campaña no pierde nada 
   const r = ajustarPorCompetitividad(fila, leerCompetitividad(crudas(0.2, 0, 0.8)))
   assert.equal(r.accion, 'mantener')
   assert.equal(r.budgetDiario, 2000, 'se queda en lo que gasta hoy')
-  assert.match(r.texto, /Deja plata \(\$5\.200 en 7 días\), pero subir el presupuesto no traería más venta.*pierde 80% por ranking.*Mantén \$2\.000\/día/)
+  assert.match(r.texto, /Deja plata \(\$5\.200 en 7 días\), pero subir el presupuesto no traería más venta.*el presupuesto de hoy alcanza.*en 80 de cada 100 veces.*otro anuncio le gana el lugar.*Mantén \$2\.000\/día/)
   assert.equal(r.competitividad.perdidoRanking, 0.8)
 })
 
@@ -44,7 +44,7 @@ test('plan: si pierde por presupuesto, el «subir» que decidió la plata se man
   const r = ajustarPorCompetitividad(fila, leerCompetitividad(crudas(0.3, 0.45, 0.25)))
   assert.equal(r.accion, undefined, 'no toca la acción')
   assert.equal(r.budgetDiario, undefined)
-  assert.match(r.texto, /^Deja plata con aire\. Sube a \$3\.000\/día\. Mercado Libre lo confirma: la campaña pierde el 45%/)
+  assert.match(r.texto, /^Deja plata con aire\. Sube a \$3\.000\/día\. Mercado Libre lo confirma: de cada 100 veces que el anuncio pudo salir, en 45 no salió/)
 })
 
 test('plan: el dato nunca empuja a gastar más por su cuenta', () => {
@@ -52,7 +52,7 @@ test('plan: el dato nunca empuja a gastar más por su cuenta', () => {
   // deja plata pero sin aire para subir: se agrega el dato, la acción sigue siendo mantener
   const mantener = ajustarPorCompetitividad({ accion: 'mantener', texto: 'Deja plata. Mantén.', metricas: { resultado7: 900, gastoDiario: 2000 } }, comp)
   assert.equal(mantener.accion, undefined)
-  assert.match(mantener.texto, /^Deja plata\. Mantén\. Dato de Mercado Libre: pierde el 45%/)
+  assert.match(mantener.texto, /^Deja plata\. Mantén\. Dato de Mercado Libre: en 45 de cada 100 veces el anuncio no sale/)
   // pierde plata: aunque le falte presupuesto, la recomendación de bajar no se toca
   const bajar = ajustarPorCompetitividad({ accion: 'bajar', texto: 'Pierde. Baja.', metricas: { resultado7: -4000, gastoDiario: 2000 } }, comp)
   assert.deepEqual(Object.keys(bajar), ['competitividad'])

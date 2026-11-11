@@ -96,17 +96,19 @@ export function Tarjeta({ as: Como = 'section', className = '', children, ...res
 // Barra partida: de un total, cuánto es cada parte (fracciones de 0 a 1). La leyenda
 // repite cada parte con su número, así el color nunca es lo único que informa.
 // `children` es la lectura de una línea que va debajo.
-// partes: [{ id, titulo, valor, tono }] · tonos: bien, atencion, problema, destacada, neutra
-export function BarraPartes({ titulo, fuente, partes, children }) {
-  const pct = (v) => Math.round(v * 100)
+// La leyenda es la que explica: una línea por parte, con su número primero y su nombre en palabras completas
+// (un color solo no dice nada). `formato` escribe el número (por defecto, porcentaje); `ayuda` es la explicación
+// larga de una parte, al pasar el cursor.
+// partes: [{ id, titulo, valor, tono, ayuda? }] · tonos: bien, atencion, problema, destacada, neutra
+export function BarraPartes({ titulo, fuente, partes, formato = (v) => `${Math.round(v * 100)}%`, children }) {
   return (
     <div className="s-partes">
       {titulo ? <div className="s-partes-cabeza"><span>{titulo}</span>{fuente ? <small>{fuente}</small> : null}</div> : null}
-      <div className="s-partes-barra" role="img" aria-label={partes.map((x) => `${x.titulo} ${pct(x.valor)}%`).join(', ')}>
+      <div className="s-partes-barra" role="img" aria-label={partes.map((x) => `${formato(x.valor)} ${x.titulo}`).join(', ')}>
         {partes.filter((x) => x.valor > 0).map((x) => <i key={x.id} className={`s-partes-${x.tono ?? 'neutra'}`} style={{ flexGrow: x.valor }} />)}
       </div>
       <ul className="s-partes-leyenda">
-        {partes.map((x) => <li key={x.id}><i className={`s-partes-${x.tono ?? 'neutra'}`} aria-hidden="true" />{x.titulo} <b>{pct(x.valor)}%</b></li>)}
+        {partes.map((x) => <li key={x.id} title={x.ayuda}><i className={`s-partes-${x.tono ?? 'neutra'}`} aria-hidden="true" /><b>{formato(x.valor)}</b><span>{x.titulo}</span></li>)}
       </ul>
       {children ? <p className="s-partes-lectura">{children}</p> : null}
     </div>

@@ -51,16 +51,20 @@ export function leerCompetitividad(metricas) {
 }
 
 // Pura. Cuál es el freno de la campaña y cómo se dice en una línea. No recomienda gasto.
+//
+// Los textos van en palabras de todos los días, contando «de cada 100 veces». La primera versión hablaba de
+// «apariciones» y «ranking» y el importador no la entendió: «no entiendo qué quiere decir que esté verde o naranjo».
 export function describirCompetitividad(c) {
   if (!c) return null
   const U = UMBRALES_COMPETITIVIDAD
+  const salio = pct(c.mostrado), sinPresupuesto = pct(c.perdidoPresupuesto), leGanaron = pct(c.perdidoRanking)
   if (c.perdidoPresupuesto >= U.presupuesto) {
-    return { freno: 'presupuesto', texto: `Pierde el ${pct(c.perdidoPresupuesto)}% de sus apariciones porque se le acaba el presupuesto del día${c.perdidoRanking >= U.presupuesto ? `, y otro ${pct(c.perdidoRanking)}% por ranking` : ''}.` }
+    return { freno: 'presupuesto', texto: `De cada 100 veces que el anuncio pudo salir, en ${sinPresupuesto} no salió porque ya se había gastado el presupuesto del día${c.perdidoRanking >= U.presupuesto ? ` y en ${leGanaron} porque otro anuncio le ganó el lugar` : ''}.` }
   }
   if (c.perdidoRanking >= U.ranking) {
-    return { freno: 'ranking', texto: `Pierde el ${pct(c.perdidoRanking)}% de sus apariciones por ranking: otros anuncios le ganan la subasta. ${c.perdidoPresupuesto < U.sinFreno ? 'El presupuesto no es su freno.' : `Por presupuesto pierde ${pct(c.perdidoPresupuesto)}%.`}` }
+    return { freno: 'ranking', texto: `De cada 100 veces que el anuncio pudo salir, en ${leGanaron} otro anuncio le ganó el lugar. ${c.perdidoPresupuesto < U.sinFreno ? 'El presupuesto alcanza: subirlo no cambiaría nada.' : `Por falta de presupuesto dejó de salir en ${sinPresupuesto}.`}` }
   }
-  return { freno: 'ninguno', texto: `Aparece en el ${pct(c.mostrado)}% de las subastas en que puede salir${c.perdidoRanking > 0 ? `; pierde ${pct(c.perdidoRanking)}% por ranking` : ''}${c.perdidoPresupuesto >= U.sinFreno ? ` y ${pct(c.perdidoPresupuesto)}% por presupuesto` : ''}.` }
+  return { freno: 'ninguno', texto: `El anuncio sale en ${salio} de cada 100 veces que puede salir${c.perdidoRanking > 0 ? `; en ${leGanaron} otro anuncio le gana el lugar` : ''}${c.perdidoPresupuesto >= U.sinFreno ? ` y en ${sinPresupuesto} se queda sin presupuesto` : ''}.` }
 }
 
 // Pura. Cruza la recomendación del plan (ya decidida con la plata) con el dato
@@ -81,17 +85,17 @@ export function ajustarPorCompetitividad(fila, c) {
         ...salida,
         accion: 'mantener',
         budgetDiario: actual,
-        texto: `${Number.isFinite(resultado) ? `Deja plata (${plata(resultado)} en 7 días), pero subir` : 'Subir'} el presupuesto no traería más venta: según Mercado Libre esta campaña no pierde apariciones por presupuesto${c.perdidoRanking >= U.presupuesto ? ` (pierde ${pct(c.perdidoRanking)}% por ranking)` : ''}. Mantén${actual != null ? ` ${plata(actual)}/día` : ''}.`,
+        texto: `${Number.isFinite(resultado) ? `Deja plata (${plata(resultado)} en 7 días), pero subir` : 'Subir'} el presupuesto no traería más venta: según Mercado Libre el presupuesto de hoy alcanza y el anuncio nunca deja de salir por eso${c.perdidoRanking >= U.presupuesto ? ` (en ${pct(c.perdidoRanking)} de cada 100 veces lo que pasa es que otro anuncio le gana el lugar)` : ''}. Mantén${actual != null ? ` ${plata(actual)}/día` : ''}.`,
       }
     }
     if (c.perdidoPresupuesto >= U.presupuesto) {
-      return { ...salida, texto: `${fila.texto} Mercado Libre lo confirma: la campaña pierde el ${pct(c.perdidoPresupuesto)}% de sus apariciones por presupuesto.` }
+      return { ...salida, texto: `${fila.texto} Mercado Libre lo confirma: de cada 100 veces que el anuncio pudo salir, en ${pct(c.perdidoPresupuesto)} no salió porque ya se había gastado el presupuesto del día.` }
     }
     return salida
   }
   // deja plata y el plan no sube (no hay aire en el margen): el dato va al lado, sin empujar a gastar
   if (fila?.accion === 'mantener' && Number.isFinite(resultado) && resultado >= 0 && c.perdidoPresupuesto >= U.presupuesto) {
-    return { ...salida, texto: `${fila.texto} Dato de Mercado Libre: pierde el ${pct(c.perdidoPresupuesto)}% de sus apariciones por presupuesto.` }
+    return { ...salida, texto: `${fila.texto} Dato de Mercado Libre: en ${pct(c.perdidoPresupuesto)} de cada 100 veces el anuncio no sale porque ya se gastó el presupuesto del día.` }
   }
   return salida
 }
