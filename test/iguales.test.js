@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
-import { unidadesDeTitulo, fotoChica, ordenarCandidatos, resumenIguales, sugerenciasDeTanda, claveDePropio, vistaIguales, marcarIgual, marcarLote, fijarUnidadesPropias, sugerirIguales, medidasDeTitulo, textoMedida, compararMedida, relacionSugerida } from '../src/services/iguales.js'
+import { unidadesDeTitulo, fotoChica, ordenarCandidatos, resumenIguales, sugerenciasDeTanda, claveDePropio, vistaIguales, marcarIgual, marcarLote, fijarUnidadesPropias, sugerirIguales, medidasDeTitulo, textoMedida, compararMedida, relacionSugerida, puntajeParecido, parecidoEnPalabras, referenciaParecidos } from '../src/services/iguales.js'
 import { IgualPropio } from '../src/models/IgualPropio.js'
 import { ProductoPropio } from '../src/models/ProductoPropio.js'
 import { Producto } from '../src/models/Producto.js'
@@ -65,6 +65,8 @@ test('iguales: la medida se lee del título y solo se compara directo lo que tie
   assert.equal(compararMedida(mia, medidasDeTitulo('Toallas Grandes Xl')).estado, 'sin-dato')
   // la foto dice si es el mismo producto; el tamaño lo decide el título cuando lo trae
   assert.deepEqual([relacionSugerida('otra-medida', 'igual'), relacionSugerida('igual', 'distinta'), relacionSugerida('igual', 'sin-dato'), relacionSugerida('parecido', 'igual'), relacionSugerida('distinto', 'igual')], ['igual', 'otra-medida', 'igual', 'parecido', 'distinto'])
+  // y «el mismo producto» exige parecerse casi del todo: con puntaje bajo queda como parecido, diga lo que diga la relación
+  assert.deepEqual([relacionSugerida('otra-medida', 'sin-dato', 68), relacionSugerida('igual', 'igual', 80), relacionSugerida('igual', 'igual', 92), relacionSugerida('otra-medida', 'distinta', 90)], ['parecido', 'parecido', 'igual', 'otra-medida'])
   // el largo y la potencia no se escalan: el doble de metros no cuesta el doble
   assert.deepEqual(compararMedida(medidasDeTitulo('Cable 15 M'), medidasDeTitulo('Cable 30 Metros')), { estado: 'distinta', texto: '30 m', factor: null })
 })
@@ -79,9 +81,22 @@ test('iguales: el resumen dice en palabras dónde queda el precio propio por uni
   assert.equal(resumenIguales(16000, []).frase, 'Todavía no marcas a nadie que venda lo mismo.')
 })
 
+test('iguales: cuando ninguna es la misma, lo que más se parece va primero y sirve de referencia', () => {
+  // el puntaje del modelo manda; una lectura sin puntaje vale lo que su relación
+  assert.deepEqual([puntajeParecido('parecido', 78), puntajeParecido('igual', undefined), puntajeParecido('parecido', 250), puntajeParecido('distinto', undefined)], [78, 95, 60, null])
+  assert.deepEqual([90, 78, 55, 20].map(parecidoEnPalabras), ['casi igual al tuyo', 'muy parecido al tuyo', 'algo parecido al tuyo', 'se parece poco al tuyo'])
+  const c = (sku, parecido, precioUnidad, posicion) => ({ sku, posicion, precioUnidad, sugerencia: { relacion: 'parecido', parecido } })
+  const candidatos = [c('a', 55, 9000, 1), c('b', 82, 15000, 40), c('c', 74, 11000, 12), c('d', 82, 13000, 3), { sku: 'e', posicion: 2, precioUnidad: 5000 }]
+  // dentro de lo parecido, de más a menos parecido; a igual puntaje, por su puesto en la búsqueda
+  assert.deepEqual(ordenarCandidatos(candidatos).map((x) => x.sku), ['d', 'b', 'c', 'a', 'e'])
+  // la referencia mira solo lo muy parecido (70 o más), no todo lo que salió en la búsqueda
+  assert.deepEqual(referenciaParecidos(14000, candidatos), { n: 3, desde: 70, masBaratoUnidad: 11000, medianaUnidad: 13000, masCaroUnidad: 15000, masBaratos: 2 })
+  assert.equal(referenciaParecidos(14000, [c('a', 55, 9000, 1)]), null)
+})
+
 test('iguales: lo que el modelo no nombra queda anotado como distinto, para no volver a mirarlo', () => {
-  const s = sugerenciasDeTanda([{ sku: 'a' }, { sku: 'b' }, { sku: 'c' }], [{ n: 2, relacion: 'igual', unidades: 2, motivo: 'misma forma' }, { n: 9, relacion: 'igual', unidades: 1, motivo: 'fuera de la tanda' }], { modelo: 'm' })
-  assert.deepEqual(s.map((x) => [x.sku, x.sugerencia.relacion, x.sugerencia.unidades ?? null]), [['a', 'distinto', null], ['b', 'igual', 2], ['c', 'distinto', null]])
+  const s = sugerenciasDeTanda([{ sku: 'a' }, { sku: 'b' }, { sku: 'c' }], [{ n: 2, relacion: 'igual', parecido: 97, unidades: 2, motivo: 'misma forma' }, { n: 9, relacion: 'igual', unidades: 1, motivo: 'fuera de la tanda' }], { modelo: 'm' })
+  assert.deepEqual(s.map((x) => [x.sku, x.sugerencia.relacion, x.sugerencia.unidades ?? null, x.sugerencia.parecido ?? null]), [['a', 'distinto', null, null], ['b', 'igual', 2, 97], ['c', 'distinto', null, null]])
 })
 
 test('iguales: el dueño marca por la foto y la vista compara el precio por unidad; vale para toda la familia', async () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, X, RotateCcw, ScanSearch, Ruler } from 'lucide-react'
+import { Check, X, RotateCcw, ScanSearch, Ruler, Clock } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
 import { Aviso, Cifra, Cifras, Etiqueta, FichaFoto, Fichas, CampoNumero, Subtitulo, Nota, Acciones } from './sistema.jsx'
@@ -61,6 +61,7 @@ export function QuienVendeLoMismo({ propioId }) {
   const [unidades, setUnidades] = useState({})
   const [todas, setTodas] = useState(false)
   const [verIguales, setVerIguales] = useState(false)
+  const [pedido, setPedido] = useState(false)
   const [lectura, setLectura] = useState(null)
 
   useEffect(() => {
@@ -101,6 +102,8 @@ export function QuienVendeLoMismo({ propioId }) {
   const visibles = todas ? v.candidatos : v.candidatos.slice(0, PRIMERAS)
   const enLote = (relacion) => correr(`lote-${relacion}`, () => api.marcarIgual(propioId, { lote: relacion }))
   const mirando = ocupado === 'fotos'
+  // ya se miraron las fotos y ninguna es el mismo producto: lo que queda es mostrar lo que más se le parece
+  const ningunaIgual = !v.iguales.length && !otras.length && v.fotos.revisadas > 0 && v.fotos.sinRevisar === 0 && !v.fotos.parecenIgual && !v.fotos.parecenOtraMedida
   // la ficha de un confirmado: `otra` = el mismo producto en otra medida (su precio se muestra llevado a la propia)
   const confirmado = (x, otra) => (
     <FichaFoto key={x.sku} foto={x.imagen} enlace={x.url} titulo={x.titulo} principal={fmtPrecio(x.precioUnidad)} secundario={`por unidad · ${presentacion(x)}`}
@@ -119,9 +122,29 @@ export function QuienVendeLoMismo({ propioId }) {
 
   return (
     <div>
+      {v.scan?.dias > 14 ? (
+        <Aviso tono="atencion" Icono={Clock}
+          accion={v.scan.pausado ? null : (
+            <button type="button" className="boton-secundario boton-chico" disabled={!!ocupado || pedido} onClick={() => api.escanear(v.scan.nichoId).then(() => setPedido(true)).catch((e) => setError(e.message))}>
+              {pedido ? 'pedido: tarda entre 10 minutos y una hora' : 'medir de nuevo'}
+            </button>
+          )}>
+          Esta búsqueda se midió por última vez el {fmtFechaCorta(v.fechaScan)}, hace {fmtNum(v.scan.dias)} días: las publicaciones y los precios pueden haber cambiado.
+          {v.scan.pausado ? ' El nicho está pausado, por eso no se ha vuelto a medir; se reactiva en Nichos.' : ''}
+        </Aviso>
+      ) : null}
       <Aviso tono={r.masBaratos > 0 ? 'atencion' : v.iguales.length ? 'bien' : 'neutra'} Icono={ScanSearch}>
-        {r.frase}{otras.length ? ` Hay ${otras.length === 1 ? 'otra publicación' : `otras ${fmtNum(otras.length)}`} del mismo producto en otra medida: ${otras.length === 1 ? 'va' : 'van'} aparte, más abajo.` : ''}
+        {ningunaIgual ? `Por la foto, ninguna publicación es tu mismo producto.${v.fotos.parecidas ? ' Abajo van primero las que más se le parecen; sus precios sirven de referencia, no son tu mismo producto.' : ''}` : r.frase}
+        {otras.length ? ` Hay ${otras.length === 1 ? 'otra publicación' : `otras ${fmtNum(otras.length)}`} del mismo producto en otra medida: ${otras.length === 1 ? 'va' : 'van'} aparte, más abajo.` : ''}
       </Aviso>
+
+      {ningunaIgual && v.parecidos ? (
+        <Cifras>
+          <Cifra etiqueta="Tu precio por unidad" valor={fmtPrecio(v.propio.precioUnidad)} detalle={v.propio.unidades > 1 ? `tu publicación trae ${fmtNum(v.propio.unidades)} a ${fmtPrecio(v.propio.precio)}` : 'tu publicación trae 1 unidad'} />
+          <Cifra etiqueta="La más barata de las parecidas" valor={fmtPrecio(v.parecidos.masBaratoUnidad)} tono={v.parecidos.masBaratos > 0 ? 'problema' : undefined} detalle={`por unidad, entre las ${fmtNum(v.parecidos.n)} que más se parecen`} />
+          <Cifra etiqueta="La mitad de las parecidas cobra menos de" valor={fmtPrecio(v.parecidos.medianaUnidad)} detalle={v.parecidos.masBaratos != null ? `${fmtNum(v.parecidos.masBaratos)} de ${fmtNum(v.parecidos.n)} cobran menos que tú` : 'por unidad'} />
+        </Cifras>
+      ) : null}
 
       {v.iguales.length ? (
         <Cifras>
@@ -158,7 +181,7 @@ export function QuienVendeLoMismo({ propioId }) {
         </details>
       ) : null}
 
-      <Subtitulo titulo="Por revisar" cuenta={v.candidatos.length}>
+      <Subtitulo titulo={ningunaIgual && v.fotos.parecidas ? 'Lo más parecido al tuyo, de más a menos' : 'Por revisar'} cuenta={v.candidatos.length}>
         {v.fotos.sinRevisar > 0 ? (
           <button type="button" className="boton-secundario boton-chico" disabled={!!ocupado} onClick={() => correr('fotos', () => api.sugerirIguales(propioId))}>
             <ScanSearch size={14} aria-hidden="true" /> {mirando ? 'mirando las fotos… tarda cerca de un minuto' : `buscar por foto (${fmtNum(v.fotos.sinRevisar)} sin mirar)`}
@@ -190,7 +213,8 @@ export function QuienVendeLoMismo({ propioId }) {
             <FichaFoto key={c.sku} foto={c.imagen} enlace={c.url} titulo={c.titulo} principal={fmtPrecio(c.precio)} secundario={c.unidades > 1 ? `${fmtPrecio(c.precioUnidad)} por unidad` : null}
               detalle={c.sugerencia?.motivo ?? null}
               etiquetas={<>
-                {c.sugerencia?.relacion === 'igual' ? <Etiqueta tono="destacada">por la foto parece el mismo</Etiqueta> : c.sugerencia?.relacion === 'otra-medida' ? <Etiqueta tono="destacada">por la foto es el mismo en otra medida</Etiqueta> : c.sugerencia?.relacion === 'parecido' ? <Etiqueta tono="atencion">por la foto es parecido</Etiqueta> : null}
+                {c.sugerencia?.relacion === 'igual' ? <Etiqueta tono="destacada">por la foto parece el mismo</Etiqueta> : c.sugerencia?.relacion === 'otra-medida' ? <Etiqueta tono="destacada">por la foto es el mismo en otra medida</Etiqueta>
+                  : c.sugerencia?.relacion === 'parecido' ? <Etiqueta tono={c.sugerencia.parecido >= 70 ? 'destacada' : 'neutra'}>por la foto, {c.sugerencia.enPalabras ?? 'parecido al tuyo'}</Etiqueta> : null}
                 {etiquetaMedida(c.medida)}{senales(c)}
               </>}>
               <CampoNumero antes="trae" valor={unidades[c.sku] ?? c.unidades} deshabilitado={!!ocupado} onCambiar={(n) => setUnidades((u) => ({ ...u, [c.sku]: n }))} />

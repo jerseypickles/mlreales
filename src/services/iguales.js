@@ -130,7 +130,22 @@ export function ordenarCandidatos(candidatos) {
     if (s === 'distinto') return 7
     return m === 0 ? 3 : 6
   }
-  return [...(candidatos ?? [])].sort((a, b) => rango(a) - rango(b) || (a.posicion ?? 999) - (b.posicion ?? 999))
+  return [...(candidatos ?? [])].sort((a, b) => rango(a) - rango(b) || (b.sugerencia?.parecido ?? 0) - (a.sugerencia?.parecido ?? 0) || (a.posicion ?? 999) - (b.posicion ?? 999))
+}
+
+// Pura. Cuando ninguna publicación es el mismo producto, la referencia son las
+// que más se le parecen: cuántas hay sobre `desde` puntos y qué precio por
+// unidad cobran. No reemplaza la comparación con iguales: es contexto, y así se
+// dice. Pedido del dueño (17-nov-2026): «si una publicación por foto se parece
+// más a la de nosotros, indicarlo como lo más parecido… ninguno se asimila al
+// de nosotros, por lo que mostró los primeros».
+export function referenciaParecidos(precioUnidadPropio, candidatos, { desde = 70, max = 12 } = {}) {
+  const xs = (candidatos ?? []).filter((c) => c.sugerencia?.relacion === 'parecido' && (c.sugerencia.parecido ?? 0) >= desde && finito(c.precioUnidad) && c.precioUnidad > 0)
+    .sort((a, b) => b.sugerencia.parecido - a.sugerencia.parecido).slice(0, max)
+  if (!xs.length) return null
+  const precios = xs.map((c) => c.precioUnidad).sort((a, b) => a - b)
+  return { n: xs.length, desde, masBaratoUnidad: precios[0], medianaUnidad: Math.round(mediana(precios)), masCaroUnidad: precios.at(-1),
+    masBaratos: finito(precioUnidadPropio) ? precios.filter((p) => p < precioUnidadPropio).length : null }
 }
 
 const mediana = (xs) => { const v = xs.filter(finito).sort((a, b) => a - b); if (!v.length) return null; const m = Math.floor(v.length / 2); return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2 }
@@ -167,15 +182,29 @@ const ficha = (p, marca, precioUnidadPropio, medidaPropia = {}) => {
     vendidos: p.vendidos ?? null, numReviews: p.numReviews ?? null, esFull: p.esFull ?? null, esTiendaOficial: p.esTiendaOficial ?? null, vendedor: p.vendedor ?? null,
     unidades, precioUnidad, medida: { estado: medida.estado, texto: medida.texto }, precioUnidadEnMiMedida: enMiMedida,
     diferenciaPct: finito(comparable) && finito(precioUnidadPropio) && precioUnidadPropio > 0 ? Math.round(((comparable - precioUnidadPropio) / precioUnidadPropio) * 100) : null,
-    sugerencia: marca?.sugerencia ? { relacion: relacionSugerida(marca.sugerencia.relacion, medida.estado), motivo: marca.sugerencia.motivo ?? null } : null }
+    sugerencia: marca?.sugerencia ? sugerenciaDeFicha(marca.sugerencia, medida.estado) : null }
+}
+
+// Pura. Lo que la ficha muestra de la lectura de fotos: la relación ya cruzada con
+// la medida del título y con el puntaje, el puntaje y, si quedó como parecido,
+// cuánto se parece en palabras.
+function sugerenciaDeFicha(sugerencia, estadoMedida) {
+  const parecido = puntajeParecido(sugerencia.relacion, sugerencia.parecido)
+  const relacion = relacionSugerida(sugerencia.relacion, estadoMedida, parecido)
+  return { relacion, parecido, enPalabras: relacion === 'parecido' ? parecidoEnPalabras(parecido) : null, motivo: sugerencia.motivo ?? null }
 }
 
 // Pura. La foto dice si es el mismo producto; el tamaño, cuando el título lo
 // trae escrito, lo decide el título. Medido el 17-nov-2026 en la primera
 // lectura con medida: el modelo mandó a «otra medida» un pack de 120 del mismo
 // tamaño, porque leyó la cantidad del pack como una medida.
-export function relacionSugerida(relacion, estadoMedida) {
+// Y «el mismo producto» exige parecerse casi del todo: en la primera lectura con
+// puntaje, el modelo llamó «el mismo en otra medida» a un modelo distinto con
+// otro número de cajones, con un puntaje que él mismo dejó bajo el de un igual.
+export const PARECIDO_DEL_MISMO = 85
+export function relacionSugerida(relacion, estadoMedida, parecido = null) {
   if (relacion !== 'igual' && relacion !== 'otra-medida') return relacion
+  if (Number.isFinite(parecido) && parecido < PARECIDO_DEL_MISMO) return 'parecido'
   return estadoMedida === 'igual' ? 'igual' : estadoMedida === 'distinta' ? 'otra-medida' : relacion
 }
 
@@ -191,7 +220,7 @@ async function quedaA(propio, precio) {
 // La vista de «Quién vende lo mismo» de un producto propio.
 export async function vistaIguales(propio, { conEconomia = true } = {}) {
   if (!propio?.nichoId) return { estado: 'sin-nicho' }
-  const nicho = await Nicho.findById(propio.nichoId).select('keyword competenciaExcluida').lean()
+  const nicho = await Nicho.findById(propio.nichoId).select('keyword competenciaExcluida estado').lean()
   if (!nicho) return { estado: 'sin-nicho' }
   const vista = await vistaDelNicho(nicho)
   if (!vista?.productos?.length) return { estado: 'sin-scan', keyword: nicho.keyword }
@@ -249,13 +278,18 @@ export async function vistaIguales(propio, { conEconomia = true } = {}) {
     economia = { hoy, alMasBarato, aLaMediana, conCosto: finito(propio.costoUnitarioClp) }
   }
   const revisadas = [...marcas.values()].filter((m) => m.sugerencia).length
+  const diasDelScan = vista.fechaScan ? Math.floor((Date.now() - +new Date(vista.fechaScan)) / 86400e3) : null
   return {
     estado: 'ok', keyword: nicho.keyword, fechaScan: vista.fechaScan,
+    // la búsqueda de un nicho pausado no se vuelve a medir: se avisa cuán vieja es la foto que se está mirando
+    scan: { dias: diasDelScan, nichoId: String(nicho._id), pausado: nicho.estado === 'pausado' },
+    parecidos: iguales.length ? null : referenciaParecidos(precioUnidadPropio, candidatos),
     propio: { titulo: propio.titulo, imagen: propio.imagen ?? null, precio, unidades: unidadesPropias, unidadesDelTitulo: !(finito(propio.unidadesPack) && propio.unidadesPack >= 1), precioUnidad: precioUnidadPropio,
       medida: textoMedida(medidaPropia) },
     resumen, economia, iguales, otraMedida, candidatos, descartados,
     fotos: { revisadas, sinRevisar: candidatos.filter((c) => !c.sugerencia).length,
-      parecenIgual: candidatos.filter((c) => c.sugerencia?.relacion === 'igual').length, parecenOtraMedida: candidatos.filter((c) => c.sugerencia?.relacion === 'otra-medida').length },
+      parecenIgual: candidatos.filter((c) => c.sugerencia?.relacion === 'igual').length, parecenOtraMedida: candidatos.filter((c) => c.sugerencia?.relacion === 'otra-medida').length,
+      parecidas: candidatos.filter((c) => c.sugerencia?.relacion === 'parecido').length },
   }
 }
 
@@ -299,18 +333,19 @@ export async function fijarUnidadesPropias(propio, unidades) {
 // ─── LA LECTURA DE FOTOS ────────────────────────────────────────────────────
 const SYSTEM_FOTOS = `Eres un comprador experto de Mercado Libre Chile. Te muestro la foto de MI PRODUCTO, con su medida, y después fotos numeradas de otras publicaciones de la misma búsqueda, cada una con su título y precio.
 
-Tu trabajo: decir cuáles venden EL MISMO PRODUCTO FÍSICO que el mío, y si es en la misma medida. Mira la foto antes que el título.
-- "igual": la misma forma, diseño y modelo, Y la misma medida que el mío (tamaño, largo, potencia, capacidad, número de piezas). No importa el color, el vendedor, la marca pegada ni cómo esté tomada la foto. Si la publicación trae varias unidades (un pack), sigue siendo "igual".
-- "otra-medida": el mismo producto, pero en otro tamaño, largo, potencia o capacidad (por ejemplo 60x60 cuando el mío es 90x60, o 30 metros cuando el mío es de 15). En un set o kit, también cuando trae otro número de piezas distintas (un set de 44 piezas no es el de 34).
-- OJO: la cantidad de unidades iguales que trae el pack NO es una medida. 100 paños de 90x60 son "igual" a 60 paños de 90x60: lo que cambia va en "unidades".
-- "parecido": el mismo tipo de producto pero otro modelo u otro diseño.
-- Lo demás (otro producto) NO lo incluyas en la respuesta.
+Tu trabajo: decir cuáles se parecen a mi producto y cuánto. Mira la foto antes que el título. Incluye TODAS las publicaciones que sean el mismo tipo de producto que el mío (sirven para lo mismo y un comprador las miraría como alternativa), aunque ninguna sea idéntica. Lo que es otro tipo de producto NO lo incluyas.
 
-Para cada publicación que incluyas indica:
-- "unidades": cuántas unidades del producto trae (1 si es suelto, 2 si es un pack de dos, 100 si son 100 paños; guíate por la foto y por el título);
-- "medida": la medida que dice el título o que se lee en la foto o en el envase, escrita corta ("60x60 cm", "30 m", "200 w", "44 piezas"); deja "" si no se ve por ningún lado;
-- "motivo": muy corto, por qué es igual o en qué se diferencia.
-Si la medida no se ve, decide por la forma y responde "igual" solo si todo lo demás calza. Ante la duda entre "igual" y "parecido", responde "parecido": una persona va a confirmar mirando la foto.`
+Para cada una:
+- "relacion":
+  - "igual": la misma forma, diseño y modelo, Y la misma medida que el mío (tamaño, largo, potencia, capacidad). No importa el color, el vendedor, la marca pegada ni cómo esté tomada la foto. Si trae varias unidades (un pack), sigue siendo "igual".
+  - "otra-medida": el mismo producto, pero en otro tamaño, largo, potencia o capacidad (por ejemplo 60x60 cuando el mío es 90x60, o 30 metros cuando el mío es de 15). En un set o kit, también cuando trae otro número de piezas distintas (un set de 44 piezas no es el de 34).
+  - "parecido": el mismo tipo de producto pero otro modelo u otro diseño.
+  - OJO: la cantidad de unidades iguales que trae el pack NO es una medida. 100 paños de 90x60 son "igual" a 60 paños de 90x60: lo que cambia va en "unidades".
+- "parecido": un número de 0 a 100 que dice cuánto se parece al mío mirando la foto: 100 es idéntico; 85 a 99, el mismo producto con diferencias mínimas; 70 a 84, muy parecido (mismo formato y tamaño, cambia algún detalle del diseño); 50 a 69, parecido (mismo tipo, diseño distinto); bajo 50, se parece poco. Sé exigente: si ninguna es idéntica, ninguna lleva más de 84.
+- "unidades": cuántas unidades del producto trae (1 si es suelto, 2 si es un pack de dos, 100 si son 100 paños; guíate por la foto y por el título).
+- "medida": la medida que dice el título o que se lee en la foto o en el envase, escrita corta ("60x60 cm", "30 m", "200 w", "44 piezas"); deja "" si no se ve por ningún lado.
+- "motivo": muy corto, en qué se parece y en qué se diferencia del mío ("mismo formato de dos cajones, sin tapa").
+Si la medida no se ve, decide por la forma. Ante la duda entre "igual" y "parecido", responde "parecido" con el puntaje que corresponda: una persona va a confirmar mirando la foto.`
 
 const SCHEMA_FOTOS = {
   type: 'object', additionalProperties: false, required: ['coincidencias'],
@@ -318,13 +353,25 @@ const SCHEMA_FOTOS = {
     coincidencias: {
       type: 'array',
       items: {
-        type: 'object', additionalProperties: false, required: ['n', 'relacion', 'unidades', 'medida', 'motivo'],
-        properties: { n: { type: 'integer' }, relacion: { type: 'string', enum: ['igual', 'otra-medida', 'parecido'] }, unidades: { type: 'integer' }, medida: { type: 'string' }, motivo: { type: 'string' } },
+        type: 'object', additionalProperties: false, required: ['n', 'relacion', 'parecido', 'unidades', 'medida', 'motivo'],
+        properties: { n: { type: 'integer' }, relacion: { type: 'string', enum: ['igual', 'otra-medida', 'parecido'] }, parecido: { type: 'integer' }, unidades: { type: 'integer' }, medida: { type: 'string' }, motivo: { type: 'string' } },
       },
     },
   },
 }
 const POR_TANDA = 60
+
+// Pura. Cuánto se parece, de 0 a 100. Las lecturas anteriores al puntaje (o un
+// modelo que no lo entrega) quedan con el valor de su relación: lo que se dijo
+// igual vale más que lo que se dijo parecido.
+const PARECIDO_POR_RELACION = { igual: 95, 'otra-medida': 90, parecido: 60 }
+export function puntajeParecido(relacion, parecido) {
+  if (Number.isFinite(parecido) && parecido >= 0 && parecido <= 100) return Math.round(parecido)
+  return PARECIDO_POR_RELACION[relacion] ?? null
+}
+// en palabras, para la pantalla
+export const NIVELES_PARECIDO = [[85, 'casi igual al tuyo'], [70, 'muy parecido al tuyo'], [50, 'algo parecido al tuyo'], [0, 'se parece poco al tuyo']]
+export const parecidoEnPalabras = (n) => (Number.isFinite(n) ? NIVELES_PARECIDO.find(([desde]) => n >= desde)[1] : null)
 
 // Pura. De la respuesta del modelo a una sugerencia por publicación de la tanda:
 // lo que no viene en la respuesta se anota como 'distinto' para no volver a mirarlo.
@@ -332,7 +379,7 @@ export function sugerenciasDeTanda(tanda, coincidencias, { modelo = null, el = n
   const porN = new Map((coincidencias ?? []).filter((c) => Number.isInteger(c?.n)).map((c) => [c.n, c]))
   return tanda.map((p, i) => {
     const c = porN.get(i + 1)
-    return { sku: p.sku, sugerencia: c ? { relacion: c.relacion, unidades: c.unidades >= 1 && c.unidades <= 500 ? c.unidades : 1, medida: String(c.medida ?? '').slice(0, 40) || null, motivo: String(c.motivo ?? '').slice(0, 160), modelo, el } : { relacion: 'distinto', modelo, el } }
+    return { sku: p.sku, sugerencia: c ? { relacion: c.relacion, parecido: puntajeParecido(c.relacion, c.parecido), unidades: c.unidades >= 1 && c.unidades <= 500 ? c.unidades : 1, medida: String(c.medida ?? '').slice(0, 40) || null, motivo: String(c.motivo ?? '').slice(0, 160), modelo, el } : { relacion: 'distinto', modelo, el } }
   })
 }
 
