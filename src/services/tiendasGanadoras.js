@@ -27,10 +27,65 @@ export const TiendaVendedor = mongoose.models.TiendaVendedor ?? mongoose.model('
 
 export const urlTienda = (sellerId) => `https://listado.mercadolibre.cl/_CustId_${sellerId}`
 
-// Pura. Lo que la tienda publica hoy y no tenía en la lectura anterior.
+// Pura. Lo que la tienda publica hoy y no estaba entre las publicaciones de antes.
 export function publicacionesNuevas(hoy, antes) {
   const vistos = new Set((antes ?? []).map((i) => i.itemId))
   return (hoy ?? []).filter((i) => i.itemId && !vistos.has(i.itemId))
+}
+
+// Pura. Número de una publicación de ML y su secuencia. ML numera en orden de
+// creación, pero con varias secuencias en paralelo (en oct-2026 conviven
+// MLC1…, MLC2…, MLC3… y MLC4… de 10 dígitos, y el mismo día se crean de dos
+// de ellas), así que solo se comparan números de la misma secuencia: mismo
+// largo y mismo primer dígito.
+export function secuenciaId(itemId) {
+  const m = /^MLC(\d+)$/.exec(itemId ?? '')
+  return m ? { secuencia: `${m[1].length}:${m[1][0]}`, n: Number(m[1]) } : null
+}
+
+// Pura. LOS LANZAMIENTOS DE VERDAD de cada tienda en su última lectura.
+//
+// De cada tienda se lee UNA página (48 publicaciones) y esa página rota: ML
+// la ordena por relevancia, no por fecha. Comparar contra la lectura anterior
+// marcaba como nuevo todo lo que solo subió a la primera página. Medido el
+// 1-nov-2026 sobre todas las lecturas guardadas: nueve de cada diez
+// "lanzamientos" eran publicaciones que ya existían, varias con miles de
+// vendidos, y el radar las recibía como "lo que publicaron esta semana".
+//
+// Dos filtros:
+//  1. lo que la tienda ya mostró en CUALQUIER lectura anterior no es nuevo;
+//  2. una publicación con número menor que otra de su misma secuencia que ya
+//     vimos —en cualquier tienda— hasta la lectura anterior ya existía en esa
+//     fecha. Lo vendido no sirve para decidirlo: una publicación nueva que se
+//     suma a un producto de catálogo muestra lo vendido del catálogo entero.
+// Sin número comparable (secuencia nunca vista) se deja pasar: no hay prueba
+// de que sea vieja.
+export function lanzamientosReales(lecturas) {
+  const t = (d) => +new Date(d.capturadoEl)
+  const orden = (lecturas ?? []).filter((d) => d?.sellerId && Number.isFinite(t(d))).sort((a, b) => t(a) - t(b))
+  const porSeller = new Map()
+  for (const d of orden) porSeller.set(d.sellerId, [...(porSeller.get(d.sellerId) ?? []), d])
+  const salida = []
+  for (const [sellerId, serie] of porSeller) {
+    if (serie.length < 2) continue
+    const ultima = serie.at(-1), previa = serie.at(-2)
+    // lo más nuevo visto por secuencia, en cualquier tienda, hasta la lectura previa
+    const techo = new Map()
+    for (const d of orden) {
+      if (t(d) > t(previa)) break
+      for (const i of d.items ?? []) {
+        const s = secuenciaId(i.itemId)
+        if (s && s.n > (techo.get(s.secuencia) ?? 0)) techo.set(s.secuencia, s.n)
+      }
+    }
+    for (const i of publicacionesNuevas(ultima.items, serie.slice(0, -1).flatMap((d) => d.items ?? []))) {
+      const s = secuenciaId(i.itemId)
+      if (s && techo.has(s.secuencia) && s.n <= techo.get(s.secuencia)) continue
+      salida.push({ ...i, sellerId, vendedor: ultima.vendedor, desde: previa.dia, hasta: ultima.dia })
+    }
+  }
+  // lo más reciente primero: el radar toma solo los primeros
+  return salida.sort((a, b) => String(b.hasta).localeCompare(String(a.hasta)))
 }
 
 async function leerTienda(sellerId, apiKey) {
@@ -58,36 +113,49 @@ export async function pasadaTiendas({ ahora = new Date(), apiKey = config.zyteAp
   const dia = new Date(ahora).toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
   const recientes = new Set(await TiendaVendedor.distinct('sellerId', { capturadoEl: { $gte: new Date(+ahora - CADA_DIAS * DIA) } }))
   const tocan = [...porSeller].filter(([id]) => !recientes.has(id)).slice(0, POR_PASADA)
-  let leidas = 0, nuevas = 0, fallos = 0
+  let leidas = 0, fallos = 0
+  const leidasHoy = new Set()
   const { registrarGasto } = await import('./gastos.js')
   for (const [sellerId, vendedor] of tocan) {
     try {
       const items = await leerTienda(sellerId, apiKey)
       await registrarGasto(null, config.zyteCostoListadoUsd, 'zyte')
-      const antes = await TiendaVendedor.findOne({ sellerId }).sort({ dia: -1 }).lean()
       await TiendaVendedor.updateOne({ sellerId, dia }, { $setOnInsert: { sellerId, vendedor, dia, items, capturadoEl: ahora } }, { upsert: true })
-      if (antes) nuevas += publicacionesNuevas(items, antes.items).length
+      leidasHoy.add(sellerId)
       leidas++
     } catch (err) {
       fallos++
       console.warn(`[tiendas] ${sellerId}: ${err.message}`)
     }
   }
+  // mismo criterio que el radar: solo lanzamientos de verdad (lanzamientosReales)
+  const nuevas = leidas
+    ? lanzamientosReales(await TiendaVendedor.find({}).lean()).filter((l) => leidasHoy.has(l.sellerId) && l.hasta === dia).length
+    : 0
   console.log(`[tiendas] ${leidas}/${tocan.length} tiendas leídas de ${porSeller.size} vendedores que reponen · ${nuevas} publicaciones nuevas · ${fallos} fallos`)
   return { vendedores: porSeller.size, leidas, nuevas, fallos }
 }
 
+// Pura. Lo más reciente primero, con un tope por vendedor: el radar toma solo
+// los primeros, y sin tope una tienda que subió una docena de cosas el mismo
+// día tapaba a todas las demás (1-nov-2026, apenas se limpió el ruido).
+export function repartirPorTienda(lanzamientos, { porTienda = 3, max = 20 } = {}) {
+  const cuenta = new Map()
+  const salida = []
+  for (const l of lanzamientos ?? []) {
+    if (salida.length >= max) break
+    const c = cuenta.get(l.sellerId) ?? 0
+    if (c >= porTienda) continue
+    cuenta.set(l.sellerId, c + 1)
+    salida.push(l)
+  }
+  return salida
+}
+
 // Lo que publicaron de nuevo los vendedores que ganan, para el radar y la API.
 export async function lanzamientosDeGanadores({ max = 20 } = {}) {
-  const docs = await TiendaVendedor.find({}).sort({ dia: -1 }).lean()
-  const porSeller = new Map()
-  for (const d of docs) porSeller.set(d.sellerId, [...(porSeller.get(d.sellerId) ?? []), d])
-  const salida = []
-  for (const [, serie] of porSeller) {
-    if (serie.length < 2) continue
-    for (const i of publicacionesNuevas(serie[0].items, serie[1].items)) salida.push({ ...i, vendedor: serie[0].vendedor, desde: serie[1].dia, hasta: serie[0].dia })
-  }
-  return salida.slice(0, max)
+  const docs = await TiendaVendedor.find({}).select('sellerId vendedor dia capturadoEl items').lean()
+  return repartirPorTienda(lanzamientosReales(docs), { max })
 }
 
 export async function estadoTiendas() {
