@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
-import { saltos, efectoDe, rangoDias, esNivelNuevo, revisarEventos, diasDeEvento } from '../src/services/eventosComerciales.js'
+import { saltos, saltosMismaCanasta, efectoDe, rangoDias, esNivelNuevo, revisarEventos, diasDeEvento } from '../src/services/eventosComerciales.js'
 import { EventoComercial } from '../src/models/EventoComercial.js'
 import { DiaProductoMl } from '../src/models/DiaProductoMl.js'
 
@@ -21,6 +21,42 @@ test('eventos: un salto de ventas o visitas sin evento en el calendario se detec
 test('eventos: un día normal con una venta más no es salto', () => {
   const s = serie(28, (i) => ({ ventas: i === 25 ? 4 : 2, visitas: 50 }))
   assert.equal(saltos(s).length, 0)
+})
+
+// filas por producto: f(i, id) devuelve { ventas, visitas, stockFraccion } o null si ese día no hay fila
+const porProducto = (n, ids, f) => Array.from({ length: n }, (_, i) => ids.map((itemId) => { const x = f(i, itemId); return x && { itemId, dia: new Date(Date.UTC(2026, 8, 10) + i * 86400e3).toISOString().slice(0, 10), ...x } })).flat().filter(Boolean)
+
+test('eventos: un producto que vuelve a tener stock no hace saltar la cuenta', () => {
+  // A vende parejo; B estuvo sin stock tres semanas y vuelve el día 25 con muchas visitas y ventas
+  const filas = porProducto(28, ['A', 'B'], (i, id) => (id === 'A' ? { ventas: 2, visitas: 50, stockFraccion: 1 }
+    : i < 25 ? { ventas: 0, visitas: 3, stockFraccion: 0 } : { ventas: 8, visitas: 120, stockFraccion: 1 }))
+  assert.equal(saltosMismaCanasta(filas).length, 0)
+  // la cuenta entera sí saltaba: por eso se compara igual con igual
+  const cuenta = Array.from({ length: 28 }, (_, i) => ({ dia: filas[i * 2].dia, ventas: filas[i * 2].ventas + filas[i * 2 + 1].ventas, visitas: filas[i * 2].visitas + filas[i * 2 + 1].visitas }))
+  assert.equal(saltos(cuenta).length, 1)
+})
+
+test('eventos: más visitas con la misma venta por visita es tráfico, no evento', () => {
+  // el anuncio gasta el triple desde el día 25: triple de visitas y triple de ventas, la conversión no cambia
+  const filas = porProducto(28, ['A', 'B'], (i) => (i >= 25 ? { ventas: 6, visitas: 150, stockFraccion: 1 } : { ventas: 2, visitas: 50, stockFraccion: 1 }))
+  assert.equal(saltosMismaCanasta(filas).length, 0)
+})
+
+test('eventos: cuando lo que ya estaba a la venta vende mucho más por visita, es un salto', () => {
+  // dos días como el CyberDay: algo más de visitas y la conversión al doble o más
+  const filas = porProducto(28, ['A', 'B'], (i) => (i === 25 || i === 26 ? { ventas: 6, visitas: 40, stockFraccion: 1 } : { ventas: 1, visitas: 25, stockFraccion: 1 }))
+  const g = saltosMismaCanasta(filas)
+  assert.equal(g.length, 1)
+  assert.equal(g[0].dias.length, 2)
+  assert.equal(g[0].dias[0].productos, 2)
+  // si esos días ya están en el calendario, no se vuelven a marcar
+  assert.equal(saltosMismaCanasta(filas, new Set(rangoDias(g[0].desde, g[0].hasta))).length, 0)
+})
+
+test('eventos: cuando la cuenta viene creciendo, un buen día de la última semana no es un salto', () => {
+  // tres semanas en 2 ventas, la última en 6 con más visitas, y un día de 9
+  const filas = porProducto(30, ['A'], (i) => (i < 22 ? { ventas: 2, visitas: 50, stockFraccion: 1 } : i === 29 ? { ventas: 9, visitas: 110, stockFraccion: 1 } : { ventas: 6, visitas: 90, stockFraccion: 1 }))
+  assert.equal(saltosMismaCanasta(filas).filter((g) => g.hasta === filas.at(-1).dia).length, 0)
 })
 
 test('eventos: el efecto se mide contra las dos semanas anteriores normales', () => {
@@ -52,8 +88,8 @@ test('eventos: cuando la cuenta cambia de nivel, sus días dejan de tratarse com
   try {
     const dia = (i) => new Date(Date.UTC(2026, 2, 1) + i * 86400e3).toISOString().slice(0, 10)
     const fila = (i, visitas, unidades) => ({ itemId: 'A', dia: dia(i), visitas, unidades, ordenes: unidades, actualizadoEl: new Date() })
-    // 30 días normales y, desde el día 30, el triple de visitas para quedarse (entraron productos nuevos)
-    await DiaProductoMl.insertMany(Array.from({ length: 40 }, (_, i) => (i < 30 ? fila(i, 50, 2) : fila(i, 150, 6))))
+    // 30 días normales y, desde el día 30, el triple de visitas y el doble de venta por visita, para quedarse
+    await DiaProductoMl.insertMany(Array.from({ length: 40 }, (_, i) => (i < 30 ? fila(i, 50, 2) : fila(i, 150, 12))))
     const correr = (i) => revisarEventos({ ahora: new Date(`${dia(i)}T15:00:00Z`) })
 
     // los primeros cuatro días del nivel nuevo quedan como saltos por revisar: no son días normales
@@ -83,7 +119,7 @@ test('eventos: un salto de dos días sigue esperando que el dueño diga qué fue
   await mongoose.connect(mongod.getUri())
   try {
     const dia = (i) => new Date(Date.UTC(2026, 2, 1) + i * 86400e3).toISOString().slice(0, 10)
-    await DiaProductoMl.insertMany(Array.from({ length: 40 }, (_, i) => ({ itemId: 'A', dia: dia(i), visitas: i === 30 || i === 31 ? 150 : 50, unidades: i === 30 || i === 31 ? 9 : 2, ordenes: 2, actualizadoEl: new Date() })))
+    await DiaProductoMl.insertMany(Array.from({ length: 40 }, (_, i) => ({ itemId: 'A', dia: dia(i), visitas: i === 30 || i === 31 ? 150 : 50, unidades: i === 30 || i === 31 ? 12 : 2, ordenes: 2, actualizadoEl: new Date() })))
     for (const i of [31, 32, 33, 34, 35, 36, 37, 38]) await revisarEventos({ ahora: new Date(`${dia(i)}T15:00:00Z`) })
     const saltosGuardados = await EventoComercial.find({ origen: 'detectado' }).lean()
     assert.equal(saltosGuardados.every((e) => e.estado === 'por-revisar' && !e.nivelNuevo), true)

@@ -38,6 +38,8 @@ const mediana = (xs) => { const v = xs.filter(Number.isFinite).sort((a, b) => a 
 // Pura. Los días que saltan contra la mediana de las 3 semanas anteriores
 // (sin contar días de evento): ventas ≥3× y +5, o visitas ≥1,6× y +30. Se
 // agrupan los días seguidos. `serie`: [{ dia, ventas, visitas }] en orden.
+// Es la primera versión, sobre la cuenta entera: la revisión diaria usa
+// saltosMismaCanasta (más abajo); esta queda para comparar.
 export function saltos(serie, diasEvento = new Set()) {
   const marcados = []
   for (let i = 0; i < serie.length; i++) {
@@ -49,6 +51,72 @@ export function saltos(serie, diasEvento = new Set()) {
     const saltaVentas = d.ventas >= Math.max(3 * (mv ?? 0), (mv ?? 0) + 5)
     const saltanVisitas = mvis != null && d.visitas >= Math.max(1.6 * mvis, mvis + 30)
     if (saltaVentas || saltanVisitas) marcados.push({ dia: d.dia, ventas: d.ventas, visitas: d.visitas, medianaVentas: mv, medianaVisitas: mvis })
+  }
+  const grupos = []
+  for (const m of marcados) {
+    const ult = grupos.at(-1)
+    if (ult && Date.parse(`${m.dia}T12:00:00Z`) - Date.parse(`${ult.at(-1).dia}T12:00:00Z`) <= DIA) ult.push(m)
+    else grupos.push([m])
+  }
+  return grupos.map((g) => ({ desde: g[0].dia, hasta: g.at(-1).dia, dias: g }))
+}
+
+// Pura. ¿El producto estaba a la venta ese día? Con el stock medido, medio día
+// o más; sin esa medición (historia antigua), que haya tenido visitas o ventas.
+const conStock = (f) => (f.stockFraccion != null ? f.stockFraccion >= 0.5 : (f.visitas ?? 0) > 0 || (f.ventas ?? 0) > 0)
+
+// Pura. LOS SALTOS, COMPARANDO IGUAL CON IGUAL.
+//
+// `saltos` mira la cuenta entera contra su propia mediana. Medido el
+// 17-nov-2026 sobre toda la historia: de los días que marcó, la mayoría no
+// eran eventos del mercado sino cambios de la propia cuenta. Tres días seguidos
+// quedaron como "salto sin explicar" y el dueño no había hecho nada: varios
+// productos volvieron a tener stock en Full y sus anuncios se reactivaron
+// solos. Antes había pasado lo mismo al subir el gasto en publicidad, al
+// publicar productos nuevos y en el lanzamiento. En todos esos casos subieron
+// las visitas, no lo que se vende por visita, y el aprendizaje de publicidad
+// perdió justo los días en que el gasto cambió.
+//
+// Un evento del mercado es otra cosa: lo que YA estaba a la venta vende mucho
+// más por cada visita (en el CyberDay la conversión se duplicó con las mismas
+// impresiones). Entonces:
+//   1. misma canasta: cada día se compara solo con los productos que tenían
+//      stock ese día y también en casi toda su base;
+//   2. saltan las ventas (≥3× y +5, como siempre) contra lo normal de las tres
+//      semanas anteriores o de la última semana, lo que sea más alto: cuando la
+//      cuenta viene creciendo, un buen día no es un salto;
+//   3. y además sube la conversión (ventas por visita) al menos 1,5×. Más
+//      visitas con la misma venta por visita es tráfico, no evento.
+// Las visitas solas ya no marcan nada. `filas`: [{ itemId, dia, ventas,
+// visitas, stockFraccion }].
+export const SALTO = { ventana: 21, reciente: 7, minimoBase: 10, parteConStock: 0.7, factorVentas: 3, masVentas: 5, factorConversion: 1.5, visitasBase: 100 }
+export function saltosMismaCanasta(filas, diasEvento = new Set(), o = {}) {
+  const c = { ...SALTO, ...o }
+  const porDia = new Map()
+  for (const f of filas ?? []) {
+    if (!porDia.has(f.dia)) porDia.set(f.dia, new Map())
+    porDia.get(f.dia).set(f.itemId, f)
+  }
+  const dias = [...porDia.keys()].sort()
+  const marcados = []
+  for (let i = 0; i < dias.length; i++) {
+    const dia = dias[i]
+    if (diasEvento.has(dia)) continue
+    const base = dias.slice(Math.max(0, i - c.ventana), i).filter((b) => !diasEvento.has(b))
+    if (base.length < c.minimoBase) continue
+    const estaba = (id, d) => { const x = porDia.get(d).get(id); return !!x && conStock(x) }
+    const canasta = [...porDia.get(dia).values()].filter((f) => conStock(f) && base.filter((b) => estaba(f.itemId, b)).length >= c.parteConStock * base.length).map((f) => f.itemId)
+    if (!canasta.length) continue
+    const total = (d) => canasta.reduce((a, id) => { const x = porDia.get(d).get(id); return { ventas: a.ventas + (x?.ventas ?? 0), visitas: a.visitas + (x?.visitas ?? 0) } }, { ventas: 0, visitas: 0 })
+    const hoy = total(dia), antes = base.map(total)
+    const normal = Math.max(mediana(antes.map((x) => x.ventas)) ?? 0, mediana(antes.slice(-c.reciente).map((x) => x.ventas)) ?? 0)
+    if (hoy.ventas < Math.max(c.factorVentas * normal, normal + c.masVentas)) continue
+    const visitasBase = antes.reduce((a, x) => a + x.visitas, 0), ventasBase = antes.reduce((a, x) => a + x.ventas, 0)
+    // sin visitas suficientes en la base no se puede decir si cambió la conversión
+    if (visitasBase < c.visitasBase || !(hoy.visitas > 0)) continue
+    const conversion = hoy.ventas / hoy.visitas, conversionBase = ventasBase / visitasBase
+    if (conversion < c.factorConversion * conversionBase) continue
+    marcados.push({ dia, ventas: hoy.ventas, visitas: hoy.visitas, medianaVentas: normal, conversionPct: Math.round(conversion * 1000) / 10, conversionBasePct: Math.round(conversionBase * 1000) / 10, productos: canasta.length })
   }
   const grupos = []
   for (const m of marcados) {
@@ -118,16 +186,24 @@ async function serieDeLaCuenta({ ahora, dias = 60 }) {
     .map((d) => ({ dia: d._id, ventas: d.ventas, visitas: d.visitas, impresiones: ads.get(d._id)?.prints ?? 0, clicks: ads.get(d._id)?.clicks ?? 0, gasto: ads.get(d._id)?.costo ?? 0 }))
 }
 
+// Lo mismo, producto por producto: para comparar igual con igual (saltosMismaCanasta).
+async function filasPorProducto({ ahora, dias = 60 }) {
+  const { DiaProductoMl } = await import('../models/DiaProductoMl.js')
+  const desde = diaChile(+ahora - dias * DIA), hoy = diaChile(ahora)
+  const libro = await DiaProductoMl.find({ dia: { $gte: desde, $lt: hoy } }).select('itemId dia unidades visitas stockFraccion').lean()
+  return libro.map((l) => ({ itemId: l.itemId, dia: l.dia, ventas: l.unidades ?? 0, visitas: l.visitas ?? 0, stockFraccion: l.stockFraccion ?? null }))
+}
+
 // Una vez al día: mide el efecto de cada evento y anota los saltos sin explicar.
 export async function revisarEventos({ ahora = new Date() } = {}) {
   await asegurarSemilla()
   const serie = await serieDeLaCuenta({ ahora })
   let diasEv = await diasDeEvento()
   const nuevos = []
-  for (const s of saltos(serie, diasEv)) {
+  for (const s of saltosMismaCanasta(await filasPorProducto({ ahora }), diasEv)) {
     const clave = `salto-${s.desde}`
     const r = await EventoComercial.updateOne({ clave }, { $setOnInsert: { clave, nombre: 'Salto sin explicar', desde: s.desde, hasta: s.hasta, estado: 'por-revisar', origen: 'detectado',
-      nota: `Ventas o visitas muy sobre lo normal (${s.dias.map((d) => `${d.dia}: ${d.ventas} ventas, ${d.visitas} visitas`).join(' · ')}). ¿Qué fue? Si fue un evento, ponle nombre; si no, descártalo.`, actualizadoEl: ahora } }, { upsert: true })
+      nota: `Lo que ya estaba a la venta vendió mucho más de lo normal por cada visita (${s.dias.map((d) => `${d.dia}: ${d.ventas} ventas con ${d.visitas} visitas, ${d.conversionPct} de cada 100 visitas compraron contra ${d.conversionBasePct} lo normal`).join(' · ')}). ¿Qué fue? Si fue un evento, ponle nombre; si no, descártalo.`, actualizadoEl: ahora } }, { upsert: true })
     if (r.upsertedCount) nuevos.push(s)
   }
   // un salto que ocupa casi toda la semana es el nivel nuevo de la cuenta: sus
