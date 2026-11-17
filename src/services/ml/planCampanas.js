@@ -5,7 +5,7 @@ import { economiaUnidad } from '../economiaUnidad.js'
 import { publicacionVigente } from '../../../frontend/src/lib/catalogoPropios.js'
 import { protegerPlanPublicidad, carteraCampanas } from './carteraCampanas.js'
 import { ajustarPorCompetitividad } from './competitividadAds.js'
-import { configuracionCampana, economiaCompleta, evaluarAjustesAds } from './evaluacionAds.js'
+import { configuracionCampana, economiaCompleta, evaluarAjustesAds, notasPorCambio } from './evaluacionAds.js'
 export { evaluarAjustesAds as evaluarRecomendaciones } from './evaluacionAds.js'
 import { precioVigente } from '../precioVigente.js'
 import { fuerzaOrganica } from './fuerzaOrganica.js'
@@ -637,6 +637,9 @@ export async function planesDeCampana({ ahora = new Date(), guardar = false } = 
     console.warn(`[plan-campanas] estructura de campañas no leída: ${err.message}`)
   }
   const cartera = adsVivos ? carteraCampanas({ productos: salida, campanas: adsVivos.campanas ?? [], porItem: adsVivos.porItem ?? {}, formas, ahora }) : null
+  // la nota por hechos de cada decisión sobre una campaña (evaluacionAds.js): lo que dejaba antes y después
+  const nombreCampana = new Map((adsVivos?.campanas ?? []).map((c) => [c.id, c.nombre ?? null]))
+  evaluacion.porHechos = notasPorCambio(cambios, diasPorItem, ecoPorItem, { hoy, nombreDe: (id) => nombreCampana.get(id) ?? null })
   if (estructura && cartera) {
     const familias = new Set(cartera.grupos.filter(g => g.miembros.length > 1).flatMap(g => g.miembros.map(p => p.itemId)))
     estructura.acciones = estructura.acciones.filter(a => a.tipo !== 'crear' && !(['separar', 'campana-propia', 'agrupar-chicos'].includes(a.tipo) && [a.itemId, ...(a.itemIds ?? [])].some(id => familias.has(id))))

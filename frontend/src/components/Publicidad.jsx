@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api.js'
 import { useEstadoGuardado } from '../lib/estadoGuardado.js'
 import { Cargando } from './ui.jsx'
-import { EncabezadoPagina, BarraPartes, Etiqueta } from './sistema.jsx'
+import { EncabezadoPagina, BarraPartes, Etiqueta, Tarjeta, Subtitulo, AntesDespues, Nota } from './sistema.jsx'
 import { PauseCircle, Split, PlusCircle, TrendingUp, TrendingDown, Target, Layers, Hourglass, Megaphone, CheckCircle2, XCircle, CircleDot, MousePointerClick } from 'lucide-react'
-import { fmtPrecio } from '../lib/formato.js'
+import { fmtPrecio, fmtFechaCorta } from '../lib/formato.js'
 import MesaPublicidad from './MesaPublicidad.jsx'
 
 // PUBLICIDAD EN CUATRO PESTAÑAS (30-sep-2026). El importador pidió, tras un
@@ -538,6 +538,38 @@ function Productos({ plan, datos, aprendido, serie, fotos, sel, onSel }) {
   )
 }
 
+// Tus cambios en campañas y cómo les fue (plan.evaluacion.porHechos, 17-nov-2026). La evaluación estricta pedía
+// que cada cambio calzara exacto con una recomendación y no pasó ninguno; esta deja a la vista el hecho: lo que
+// dejaba la campaña al día antes y después de cada decisión. La etiqueta dice la nota; el color solo la repite.
+const NOTA_CAMBIO = { mejoro: ['bien', 'mejoró'], empeoro: ['problema', 'empeoró'], parecido: ['neutra', 'quedó parecido'] }
+const ESTADO_CAMBIO = { midiendo: ['destacada', 'midiendo'], 'sin-base': ['neutra', 'sin días para comparar'], 'cambiada-antes': ['neutra', 'se cambió de nuevo'], 'sin-dias': ['neutra', 'sin días limpios'] }
+function CambiosConNota({ notas }) {
+  if (!notas?.casos?.length) return null
+  const r = notas.resumen
+  return (
+    <Tarjeta>
+      <Subtitulo titulo="Tus cambios en campañas y cómo les fue" cuenta={r.decisiones}>
+        <span>{r.conNota ? `${r.mejoraron} mejoraron, ${r.empeoraron} empeoraron y ${r.parecidos} quedaron parecido` : 'todavía ninguno con nota'}{r.midiendo ? ` · ${r.midiendo} midiendo` : ''}</span>
+      </Subtitulo>
+      <div className="s-decisiones">
+        {notas.casos.map((k) => {
+          const [tono, texto] = k.estado === 'con-nota' ? NOTA_CAMBIO[k.resultado] : ESTADO_CAMBIO[k.estado] ?? ['neutra', k.estado]
+          return (
+            <Tarjeta as="div" className="s-decision" key={k.clave}>
+              <div className="s-decision-cabeza"><strong>{k.campana ?? `Campaña ${k.campanaId}`}</strong><Etiqueta tono={tono}>{texto}</Etiqueta></div>
+              <p>{k.cambio}. <small>{fmtFechaCorta(`${k.dia}T12:00:00`)}</small></p>
+              {/* el después solo se muestra con sus días completos: con uno o dos días el número engaña */}
+              {k.estado === 'con-nota' || k.estado === 'midiendo' ? <AntesDespues antes={k.antes.plataDia} despues={k.estado === 'con-nota' ? k.despues.plataDia : null} formato={(v) => `${v < 0 ? '−' : ''}${fmtPrecio(Math.abs(v))} al día`} /> : null}
+              <small>{k.lectura}{k.seguiaElPlan === true ? ' El plan recomendaba algo en esa dirección.' : k.seguiaElPlan === false ? ' El plan decía otra cosa.' : ''}{k.sinCosto ? ' Falta el costo de algún producto: es antes de descontarlo.' : ''}</small>
+            </Tarjeta>
+          )
+        })}
+      </div>
+      <Nota>{notas.nota}</Nota>
+    </Tarjeta>
+  )
+}
+
 // ── pestaña Learning machine ─────────────────────────────────────────────────
 function LearningMachine({ plan, aprendido, fotos }) {
   const e = aprendido?.ultimo?.efecto
@@ -619,10 +651,12 @@ function LearningMachine({ plan, aprendido, fotos }) {
 
       <RankingPropios />
 
+      <CambiosConNota notas={ev?.porHechos} />
+
       <div className="pub-aprende-tarjetas">
         <div>
-          <strong>Ajustes observados y evaluados</strong>
-          <p>{ev?.evaluadas ? <>{ev.evaluadas} ajustes coincidentes con una recomendación: <b>{ev.tasaAcierto ?? '—'}%</b> tuvieron mayor contribución estimada.</> : 'Todavía sin ajustes evaluables con configuración observada y costos completos.'}</p>
+          <strong>Ajustes que calzan exacto con una recomendación</strong>
+          <p>{ev?.evaluadas ? <>{ev.evaluadas} ajustes coincidentes con una recomendación: <b>{ev.tasaAcierto ?? '—'}%</b> tuvieron mayor contribución estimada.</> : 'Ninguno todavía: pide un solo cambio a la vez, al peso de lo recomendado. Arriba están tus cambios reales con su nota.'}</p>
         </div>
         {r ? (
           <div>

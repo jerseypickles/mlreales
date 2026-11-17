@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { economiaCompleta, configuracionCampana, cambioDeConfiguracion, evaluarAjustesAds } from '../src/services/ml/evaluacionAds.js'
+import { economiaCompleta, configuracionCampana, cambioDeConfiguracion, evaluarAjustesAds, describirCambio, notasPorCambio } from '../src/services/ml/evaluacionAds.js'
 import { transicionesSemanales, bitacoraProducto, economiaVenta } from '../src/services/ml/planCampanas.js'
 import { casoAjusteAds } from './helpers/adsFixtures.js'
 
@@ -103,3 +103,55 @@ test('una respuesta parcial o sin results no certifica cobertura de anuncios', a
   assert.equal(lecturaCompletaAds({ results: [{}], paging: { total: 1 } }), true)
   assert.equal(lecturaCompletaAds({ results: [] }), true)
 })
+
+// ─── nota por hechos de cada decisión sobre una campaña ─────────────────────
+const config = (x = {}) => ({ estado: 'active', presupuestoDiario: 4000, roasObjetivo: 5, estrategia: 'PROFITABILITY', anuncios: [{ itemId: 'A', estado: 'active' }], ...x })
+const ecoA = { comisionPct: 15, envio: 1000, costo: 5000, cargoFijo: 0 }
+// del 1 al 20 de marzo: hasta el 10 gasta 2.000 al día y vende una; después gasta 1.000 y vende una
+const diasA = (cambios = {}) => Array.from({ length: 20 }, (_, i) => {
+  const dia = `2026-03-${String(i + 1).padStart(2, '0')}`
+  return { dia, evento: false, adsMedido: true, stockFraccion: 1, gasto: i + 1 <= 10 ? 2000 : 1000, unidadesAds: 1, ventaAds: 10000, ...(cambios[dia] ?? {}) }
+})
+const decision = (dia, antes, despues, extra = {}) => ({ clave: `c-${dia}`, campanaId: 7, observadoEl: `${dia}T15:00:00Z`, antes, despues, ...extra })
+const notas = (cambios, { hoy = '2026-03-20', dias = diasA() } = {}) => notasPorCambio(cambios, new Map([['A', dias]]), new Map([['A', ecoA]]), { hoy, nombreDe: () => 'CAMPAÑA' })
+
+test('un cambio de campaña se describe en palabras y lo que Mercado Libre mueve por stock no es una decisión', () => {
+  const antes = config({ anuncios: [{ itemId: 'A', estado: 'active' }, { itemId: 'B', estado: 'active' }, { itemId: 'C', estado: 'active' }] })
+  const d = describirCambio(antes, config({ presupuestoDiario: 2000, roasObjetivo: 6, anuncios: [{ itemId: 'A', estado: 'active' }, { itemId: 'B', estado: 'paused' }] }))
+  assert.deepEqual(d.partes.map((p) => [p.dial, p.sentido]), [['presupuesto', 'baja'], ['roas', 'sube'], ['anuncios', 'baja']])
+  assert.equal(d.texto, 'Bajaste el presupuesto de $4.000 a $2.000 al día, subiste el ROAS objetivo de 5 a 6 y sacaste 2 anuncios')
+  // un anuncio que queda en espera por stock (o vuelve) no lo decidió el dueño
+  assert.equal(describirCambio(config(), config({ anuncios: [{ itemId: 'A', estado: 'hold' }] })).partes.length, 0)
+  assert.equal(describirCambio(config({ anuncios: [{ itemId: 'A', estado: 'hold' }] }), config()).partes.length, 0)
+})
+
+test('cada decisión recibe nota por la plata que dejaba la campaña antes y después, aunque cambie dos diales a la vez', () => {
+  const c = decision('2026-03-10', config(), config({ presupuestoDiario: 2000, roasObjetivo: 6 }), { recomendaciones: [{ itemId: 'A', accion: 'bajar', calculadoEl: '2026-03-09T10:00:00Z' }] })
+  const r = notas([c])
+  const [caso] = r.casos
+  // antes: 10.000 × 0,85 − 6.000 − 2.000 de gasto = 500 al día; después, con 1.000 de gasto, 1.500
+  assert.deepEqual([caso.estado, caso.resultado, caso.antes.plataDia, caso.despues.plataDia, caso.antes.dias, caso.despues.dias], ['con-nota', 'mejoro', 500, 1500, 7, 7])
+  assert.equal(caso.seguiaElPlan, true)
+  assert.equal(caso.campana, 'CAMPAÑA')
+  assert.match(caso.lectura, /Antes dejaba \$500 al día y después \$1\.500: mejoró/)
+  assert.deepEqual(r.resumen, { decisiones: 1, conNota: 1, n: 1, mejoraron: 1, empeoraron: 0, parecidos: 0, midiendo: 0, siguiendoElPlan: { n: 1, mejoraron: 1, empeoraron: 0 }, sinSeguirlo: { n: 0, mejoraron: 0, empeoraron: 0 } })
+  // un cambio que solo mueve Mercado Libre por stock no entra a la cuenta
+  assert.equal(notas([decision('2026-03-10', config(), config({ anuncios: [{ itemId: 'A', estado: 'hold' }] }))]).casos.length, 0)
+})
+
+test('los días con evento o sin stock no cuentan, y una nota espera sus días o se pierde si la campaña se cambia de nuevo', () => {
+  const c = decision('2026-03-10', config(), config({ presupuestoDiario: 2000 }))
+  // un día de evento y uno sin stock después del cambio: se saltan y se completan los siete con los días siguientes
+  const conHuecos = notas([c], { dias: diasA({ '2026-03-12': { evento: true }, '2026-03-13': { stockFraccion: 0 } }) }).casos[0]
+  assert.deepEqual([conHuecos.estado, conHuecos.despues.dias, conHuecos.despues.plataDia], ['con-nota', 7, 1500])
+  // a los dos días todavía se está midiendo
+  const reciente = notas([c], { hoy: '2026-03-13' }).casos[0]
+  assert.deepEqual([reciente.estado, reciente.faltanDias], ['midiendo', 3])
+  // si la campaña se cambia otra vez a los dos días, la primera queda sin nota y la segunda sin base
+  const otra = decision('2026-03-12', config({ presupuestoDiario: 2000 }), config({ presupuestoDiario: 3000 }))
+  const dos = notas([c, otra]).casos
+  assert.deepEqual(dos.map((k) => [k.dia, k.estado]), [['2026-03-12', 'sin-base'], ['2026-03-10', 'cambiada-antes']])
+  // sin economía del producto que vendió no se inventa la plata
+  assert.equal(notasPorCambio([c], new Map([['A', diasA()]]), new Map(), { hoy: '2026-03-20' }).casos[0].estado, 'sin-base')
+})
+
