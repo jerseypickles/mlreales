@@ -139,3 +139,70 @@ export function Pendientes({ titulo, resumen, items, children }) {
     </div>
   )
 }
+
+// Título de un bloque dentro de una tarjeta o sección, con su cuenta y, a la derecha, una acción o una nota.
+export function Subtitulo({ titulo, cuenta, children }) {
+  return (
+    <div className="s-subtitulo">
+      <h3>{titulo}{cuenta != null ? <span className="s-cuenta">{cuenta}</span> : null}</h3>
+      {children ? <div className="s-subtitulo-lado">{children}</div> : null}
+    </div>
+  )
+}
+
+// La grilla de fichas con foto.
+export function Fichas({ children }) {
+  return <div className="s-fichas">{children}</div>
+}
+
+// Ficha con foto: una publicación para mirarla y decidir algo. La foto manda —el producto se reconoce por ella—;
+// al lado van el dato principal (y uno secundario), el título, una línea de detalle, las etiquetas y, en `children`,
+// las acciones. `grafico` es su serie en el tiempo, si la tiene. `tono` 'destacada' marca la propia.
+export function FichaFoto({ foto, enlace, titulo, principal, secundario, detalle, etiquetas, grafico, tono, children }) {
+  const imagen = foto ? <img src={foto} alt="" loading="lazy" width="112" height="112" /> : null
+  return (
+    <div className={`s-ficha${tono ? ` s-ficha-${tono}` : ''}`}>
+      {enlace ? <a className="s-ficha-foto" href={enlace} target="_blank" rel="noreferrer" title="Abrir la publicación">{imagen}</a> : <span className="s-ficha-foto">{imagen}</span>}
+      <div className="s-ficha-datos">
+        <div className="s-ficha-precio"><strong>{principal}</strong>{secundario ? <span>{secundario}</span> : null}</div>
+        {titulo ? <p className="s-ficha-titulo" title={titulo}>{titulo}</p> : null}
+        {detalle ? <p className="s-ficha-detalle">{detalle}</p> : null}
+        {etiquetas ? <div className="s-ficha-etiquetas">{etiquetas}</div> : null}
+        {grafico ? <div className="s-ficha-grafico">{grafico}</div> : null}
+        {children ? <div className="s-ficha-acciones">{children}</div> : null}
+      </div>
+    </div>
+  )
+}
+
+// Un número corto que se escribe en la misma línea: «trae [2] unidades». Avisa el valor al salir del campo o con Enter.
+export function CampoNumero({ antes, despues, valor, onCambiar, min = 1, max = 500, deshabilitado = false }) {
+  return (
+    <label className="s-campo-numero">
+      {antes ? <span>{antes}</span> : null}
+      <input type="number" inputMode="numeric" min={min} max={max} defaultValue={valor} key={valor} disabled={deshabilitado}
+        onBlur={(e) => { const n = Number(e.target.value); if (Number.isFinite(n) && n >= min && n <= max && n !== valor) onCambiar(n) }}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+      {despues ? <span>{despues}</span> : null}
+    </label>
+  )
+}
+
+// Antes y después de un cambio, en plata: dos barras que salen de un mismo cero (a la derecha lo que dejó, a la
+// izquierda lo que perdió), cada una con su número. El color repite el signo, no lo reemplaza.
+export function AntesDespues({ antes, despues, formato = (v) => String(v), etiquetas = ['antes', 'después'] }) {
+  const tope = Math.max(Math.abs(antes ?? 0), Math.abs(despues ?? 0), 1)
+  const fila = (nombre, v) => (
+    <div className="s-ad-fila">
+      <span>{nombre}</span>
+      <span className="s-ad-barra" aria-hidden="true">{Number.isFinite(v) ? <i className={v < 0 ? 's-ad-menos' : 's-ad-mas'} style={{ width: `${(Math.abs(v) / tope) * 50}%`, [v < 0 ? 'right' : 'left']: '50%' }} /> : null}</span>
+      <b className={Number.isFinite(v) && v < 0 ? 's-problema' : undefined}>{Number.isFinite(v) ? formato(v) : '—'}</b>
+    </div>
+  )
+  return <div className="s-ad">{fila(etiquetas[0], antes)}{fila(etiquetas[1], despues)}</div>
+}
+
+// Una línea de ayuda o de lectura bajo un bloque. `centrada` para el pie con un botón.
+export function Nota({ children, centrada = false }) {
+  return <p className={`s-nota${centrada ? ' s-nota-centrada' : ''}`}>{children}</p>
+}

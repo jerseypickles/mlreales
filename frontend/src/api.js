@@ -95,6 +95,10 @@ export const api = {
   // su gama dentro del nicho: { desde, hasta } | { automatico } | { agregar | sacar | restaurar: sku }
   gamaPropio: (id) => pedir(`/api/propios/${id}/gama`),
   ajustarGama: (id, cambio) => pedir(`/api/propios/${id}/gama`, { ...json(cambio), method: 'PATCH' }),
+  // quién vende lo mismo: { sku, relacion: 'igual' | 'distinto' | null, unidades } | { unidadesPropias }
+  igualesPropio: (id) => pedir(`/api/iguales/${id}`),
+  marcarIgual: (id, cambio) => pedir(`/api/iguales/${id}`, { ...json(cambio), method: 'PATCH' }),
+  sugerirIguales: (id) => pedir(`/api/iguales/${id}/sugerir`, { method: 'POST' }),
   auditarPropio: (id) => pedir(`/api/propios/${id}/auditar`, { method: 'POST' }),
   autoCablearPropios: () => pedir('/api/propios/auto-cablear', { method: 'POST' }),
   aplicarPropio: (id, cambios) => pedir(`/api/propios/${id}/aplicar`, json(cambios)),

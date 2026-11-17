@@ -8547,3 +8547,50 @@ a.op-plan-sello:hover { text-decoration: underline; }
 /* Mis productos: lo que pide Mercado Libre, en la tarjeta cerrada */
 .pc-compacta-ml { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px; background: var(--avisa-tenue); color: var(--avisa-tinta); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .pc-compacta-ml svg { width: 12px; height: 12px; }
+
+/* título de un bloque */
+.s-subtitulo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: 16px 0 8px; }
+.s-subtitulo h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--tinta); }
+.s-subtitulo-lado { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--tinta-3); }
+
+/* ficha con foto */
+.s-fichas { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.s-ficha { display: flex; gap: 12px; min-width: 0; padding: 12px; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); }
+.s-ficha-destacada { border-color: var(--acento-borde); background: var(--acento-tenue); }
+.s-ficha-foto { flex: none; display: block; width: 112px; height: 112px; border: 1px solid var(--borde); border-radius: 8px; overflow: hidden; background: var(--superficie); }
+.s-ficha-foto img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.s-ficha-datos { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.s-ficha-precio { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.s-ficha-precio strong { font-family: 'Fira Code', monospace; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--tinta); }
+.s-ficha-precio span { font-size: 12px; color: var(--tinta-2); }
+.s-ficha-titulo { display: -webkit-box; margin: 0; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13px; line-height: 1.4; color: var(--tinta-2); }
+.s-ficha-detalle { margin: 0; font-size: 12px; line-height: 1.5; color: var(--tinta-3); }
+.s-ficha-etiquetas { display: flex; flex-wrap: wrap; gap: 4px; }
+.s-ficha-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px; }
+.s-ficha-grafico { min-width: 0; }
+.s-nota { margin: 8px 0; font-size: 13px; line-height: 1.5; color: var(--tinta-2); }
+.s-nota-centrada { display: flex; justify-content: center; margin: 12px 0 0; }
+
+/* número corto en la misma línea */
+.s-campo-numero { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--tinta-2); }
+.s-campo-numero input { width: 56px; padding: 4px 8px; border: 1px solid var(--borde-fuerte); border-radius: 8px; background: var(--superficie); font-family: 'Fira Code', monospace; font-size: 13px; color: var(--tinta); }
+.s-campo-numero input:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
+
+/* antes y después, en plata */
+.s-ad { display: grid; gap: 4px; }
+.s-ad-fila { display: grid; grid-template-columns: 56px minmax(60px, 1fr) max-content; align-items: center; gap: 8px; font-size: 12px; color: var(--tinta-2); }
+.s-ad-barra { position: relative; height: 8px; border-radius: 999px; background: var(--superficie-2); }
+.s-ad-barra::after { content: ''; position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px; background: var(--borde-fuerte); }
+.s-ad-barra i { position: absolute; top: 0; bottom: 0; min-width: 2px; border-radius: 999px; }
+.s-ad-mas { background: var(--exito); }
+.s-ad-menos { background: var(--peligro); }
+.s-ad-fila b { font-family: 'Fira Code', monospace; font-size: 13px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; color: var(--tinta); }
+.s-ad-fila b.s-problema { color: var(--peligro); }
+
+/* una decisión sobre una campaña y cómo le fue */
+.s-decisiones { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.s-decision { display: grid; gap: 8px; align-content: start; }
+.s-decision-cabeza { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.s-decision-cabeza strong { font-size: 14px; font-weight: 600; color: var(--tinta); }
+.s-decision p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--tinta-2); }
+.s-decision small { font-size: 12px; line-height: 1.5; color: var(--tinta-3); }

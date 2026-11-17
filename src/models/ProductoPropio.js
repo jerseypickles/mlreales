@@ -42,6 +42,10 @@ const productoPropioSchema = new mongoose.Schema({
   // para que el learning machine decida con costo desde el día 1; se confirma)
   costoOrigen: { type: String, default: null },
   costoEl: { type: Date, default: null },
+  // unidades que trae esta publicación (un pack de 2 son 2): para comparar el
+  // precio por unidad con quienes venden lo mismo (services/iguales.js). Sin
+  // dato se lee del título.
+  unidadesPack: { type: Number, default: null },
   // categoría ML del item (la trae la API oficial en el scan): permite calcular
   // la comisión exacta para el margen
   categoriaMl: { type: String, default: null },

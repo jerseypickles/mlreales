@@ -203,7 +203,7 @@ export function gamasParaAnalista(resumen) {
 // para que abrir varias tarjetas del mismo nicho no repita las agregaciones
 const cacheScan = new Map()
 const TTL_SCAN_MS = 10 * 60e3
-async function vistaDelNicho(nicho, { fresca = false } = {}) {
+export async function vistaDelNicho(nicho, { fresca = false } = {}) {
   const k = String(nicho._id)
   const hit = cacheScan.get(k)
   if (!fresca && hit && Date.now() - hit.en < TTL_SCAN_MS) return hit.vista

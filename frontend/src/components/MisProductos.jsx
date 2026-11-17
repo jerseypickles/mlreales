@@ -40,10 +40,12 @@ import {
   Image as IconoFoto,
   Type,
   CircleAlert,
+  ScanSearch,
 } from 'lucide-react'
 import { publicacionVigente, inventarioEntrada, coincideFiltro, filtrarEntradas, paginarEntradas, seriePrecioEntrada } from '../lib/catalogoPropios.js'
 import { BotonCopiar } from './Listing.jsx'
 import { PlanPublicidad } from './PlanPublicidad.jsx'
+import { QuienVendeLoMismo } from './QuienVendeLoMismo.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 import { agruparPorFamilia, ordenarEntradas, metricasDe, etiquetaVariantes, nombreVariante } from '../lib/familiasPropias.js'
 
@@ -682,6 +684,16 @@ function SeccionGama({ p }) {
   )
 }
 
+// Quién vende lo mismo (QuienVendeLoMismo.jsx): se pide al abrir, lee el último scan del nicho.
+function SeccionIguales({ p }) {
+  if (!p.nichoId) return null
+  return (
+    <Seccion icono={ScanSearch} titulo="Quién vende lo mismo" resumen="el mismo producto en otras publicaciones, con su precio por unidad">
+      <QuienVendeLoMismo propioId={p._id} />
+    </Seccion>
+  )
+}
+
 const PRINCIPALES = new Set(['Ventas 7d', 'Margen 30d', 'ML cobra 30d'])
 
 // CADA COLOR TIENE SU STOCK. El producto se decide junto (precio, costo,
@@ -1036,6 +1048,7 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
       </div>
 
       <SeccionGama p={p} />
+      <SeccionIguales p={p} />
 
       {promo || p.promoMl?.ofertaPropia || p.promoMl?.campanasDisponibles?.length ? (
         <Seccion

@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 import rutasNichos from './routes/nichos.js'
 import rutasProductos from './routes/productos.js'
 import rutasPropios from './routes/propios.js'
+import rutasIguales from './routes/iguales.js'
 import rutasDebug from './routes/debug.js'
 import rutasMargen from './routes/margen.js'
 import rutasTendencias from './routes/tendencias.js'
@@ -151,6 +152,7 @@ export function crearApp() {
   app.use('/api/nichos', rutasNichos)
   app.use('/api/productos', rutasProductos)
   app.use('/api/propios', rutasPropios)
+  app.use('/api/iguales', rutasIguales)
   app.use('/api/debug', rutasDebug)
   app.use('/api/margen', rutasMargen)
   app.use('/api/tendencias', rutasTendencias)
