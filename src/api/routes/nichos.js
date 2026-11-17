@@ -542,7 +542,9 @@ router.post(
     try {
       const analisis = await analizarNicho(nicho)
       // misma regla que el pipeline: descubrimiento del radar que no da, se pausa y deja de gastar
-      if (nicho.origen === 'radar' && analisis.veredicto === 'no_entrar' && nicho.estado === 'activo') {
+      // (salvo donde el dueño tiene una publicación vigente: services/nichoPropio.js)
+      const { seVendeEn } = await import('../../services/nichoPropio.js')
+      if (nicho.origen === 'radar' && analisis.veredicto === 'no_entrar' && nicho.estado === 'activo' && !(await seVendeEn(nicho._id))) {
         nicho.estado = 'pausado'
         await nicho.save()
       }

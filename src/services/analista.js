@@ -561,7 +561,13 @@ export async function analizarNicho(nicho) {
   // leer mal el listado y el nicho queda pendiente de otro escaneo, no apagado
   if (analisis.veredicto === 'no_entrar' && reporte.analisis.esGraduacion && nicho.estado === 'activo') {
     const { seBusca } = await import('./nivelBusqueda.js')
-    if (seBusca(nivelBusqueda)) {
+    const { seVendeEn } = await import('./nichoPropio.js')
+    // y tampoco se pausa donde el dueño tiene una publicación vigente: «no entrar» habla de importar más, y para
+    // vender lo que ya está publicado hace falta su búsqueda al día (nichoPropio.js)
+    if (await seVendeEn(nicho._id)) {
+      nicho.notaEtapa = 'no_entrar, pero hay una publicación propia: su búsqueda se sigue midiendo cada semana'
+      console.log(`[analista] "${nicho.keyword}" NO se pausa: ${nicho.notaEtapa}`)
+    } else if (seBusca(nivelBusqueda)) {
       nicho.notaEtapa = `no_entrar, pero la búsqueda está viva (${nivelBusqueda.nivel}): pendiente de revisión`
       console.log(`[analista] "${nicho.keyword}" NO se pausa: ${nicho.notaEtapa}`)
     } else {

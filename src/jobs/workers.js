@@ -617,7 +617,8 @@ export async function procesarCalcularMetricas(job) {
   const mediccionCompleta = job.data?.conDetalle === true || !config.nivel2Activo
   if (nicho.fase === 'screening' && mediccionCompleta && reporte.metricas.scoreOportunidad != null) {
     if (reporte.metricas.scoreOportunidad < config.screeningScoreMin) {
-      if (nicho.origen === 'radar' && nicho.estado === 'activo') {
+      const { seVendeEn } = await import('../services/nichoPropio.js')
+      if (nicho.origen === 'radar' && nicho.estado === 'activo' && !(await seVendeEn(nicho._id))) {
         nicho.estado = 'pausado'
         await nicho.save()
       }
@@ -691,7 +692,9 @@ export async function procesarAnalisisNicho(job) {
   // pendiente de otro escaneo en vez de apagado (regla del importador, 9-ago).
   const { seBusca } = await import('../services/nivelBusqueda.js')
   let pausado = false
-  if (nicho.origen === 'radar' && analisis.veredicto === 'no_entrar' && nicho.estado === 'activo') {
+  const { seVendeEn } = await import('../services/nichoPropio.js')
+  // (donde el dueño tiene una publicación vigente tampoco se pausa: ver nichoPropio.js)
+  if (nicho.origen === 'radar' && analisis.veredicto === 'no_entrar' && nicho.estado === 'activo' && !(await seVendeEn(nicho._id))) {
     if (seBusca(nicho.nivelBusqueda)) {
       console.log(
         `[analisis] "${nicho.keyword}": no_entrar pero la búsqueda está viva (${nicho.nivelBusqueda.nivel}) — queda pendiente de re-escaneo, no se pausa`,
