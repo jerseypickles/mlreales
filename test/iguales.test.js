@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
-import { unidadesDeTitulo, fotoChica, ordenarCandidatos, resumenIguales, sugerenciasDeTanda, claveDePropio, vistaIguales, marcarIgual, fijarUnidadesPropias, sugerirIguales } from '../src/services/iguales.js'
+import { unidadesDeTitulo, fotoChica, ordenarCandidatos, resumenIguales, sugerenciasDeTanda, claveDePropio, vistaIguales, marcarIgual, marcarLote, fijarUnidadesPropias, sugerirIguales, medidasDeTitulo, textoMedida, compararMedida, relacionSugerida } from '../src/services/iguales.js'
 import { IgualPropio } from '../src/models/IgualPropio.js'
 import { ProductoPropio } from '../src/models/ProductoPropio.js'
 import { Producto } from '../src/models/Producto.js'
@@ -36,8 +36,37 @@ test('iguales: la foto se pide en su variante chica y lo sugerido por la foto va
   const orden = ordenarCandidatos([
     { sku: 'a', posicion: 1 }, { sku: 'b', posicion: 9, sugerencia: { relacion: 'parecido' } },
     { sku: 'c', posicion: 30, sugerencia: { relacion: 'igual' } }, { sku: 'd', posicion: 2, sugerencia: { relacion: 'distinto' } }, { sku: 'e', posicion: 3 },
+    // la medida ordena dentro de lo que la foto dice que es el mismo, y sube lo que calza por medida aunque nadie lo haya mirado
+    { sku: 'f', posicion: 40, sugerencia: { relacion: 'igual' }, medida: { estado: 'igual' } }, { sku: 'g', posicion: 5, sugerencia: { relacion: 'igual' }, medida: { estado: 'distinta' } },
+    { sku: 'h', posicion: 50, sugerencia: { relacion: 'otra-medida' } }, { sku: 'i', posicion: 60, medida: { estado: 'igual' } },
   ]).map((x) => x.sku)
-  assert.deepEqual(orden, ['c', 'b', 'a', 'e', 'd'])
+  assert.deepEqual(orden, ['f', 'c', 'g', 'h', 'i', 'b', 'a', 'e', 'd'])
+})
+
+test('iguales: la medida se lee del título y solo se compara directo lo que tiene la misma', () => {
+  const casos = [
+    ['60 Toallas Desechables Para Cocina 90x60 Cm', { dimensiones: [60, 90] }, '90×60 cm'],
+    ['Toallas 60 x 90cm Pack 100', { dimensiones: [60, 90] }, '90×60 cm'],
+    ['Cable De Extension Para Jardin 15 M Con Enchufe', { largoM: 15 }, '15 m'],
+    ['Lampara De Mesa 300w Led', { watts: 300 }, '300 w'],
+    ['Set Pinceles De Pintura 34 Piezas', { piezas: 34 }, '34 piezas'],
+    ['Jabon Liquido 1,5 Litros', { ml: 1500 }, '1,5 L'],
+    ['Oferta 2x1 En Lamparas', {}, null],
+    ['Polera Talla M', {}, null],
+  ]
+  for (const [titulo, medidas, texto] of casos) {
+    assert.deepEqual(medidasDeTitulo(titulo), medidas, titulo)
+    assert.equal(textoMedida(medidasDeTitulo(titulo)), texto, titulo)
+  }
+  const mia = medidasDeTitulo('60 Toallas Desechables 90x60 Cm')
+  // el mismo tamaño escrito al revés es igual; uno más chico es otra medida y dice cuántas veces cabe en la propia
+  assert.deepEqual(compararMedida(mia, medidasDeTitulo('Toallas 60x90')), { estado: 'igual', texto: '90×60 cm', factor: 1 })
+  assert.deepEqual(compararMedida(mia, medidasDeTitulo('100 Toallas 60x60 Cm')), { estado: 'distinta', texto: '60×60 cm', factor: 1.5 })
+  assert.equal(compararMedida(mia, medidasDeTitulo('Toallas Grandes Xl')).estado, 'sin-dato')
+  // la foto dice si es el mismo producto; el tamaño lo decide el título cuando lo trae
+  assert.deepEqual([relacionSugerida('otra-medida', 'igual'), relacionSugerida('igual', 'distinta'), relacionSugerida('igual', 'sin-dato'), relacionSugerida('parecido', 'igual'), relacionSugerida('distinto', 'igual')], ['igual', 'otra-medida', 'igual', 'parecido', 'distinto'])
+  // el largo y la potencia no se escalan: el doble de metros no cuesta el doble
+  assert.deepEqual(compararMedida(medidasDeTitulo('Cable 15 M'), medidasDeTitulo('Cable 30 Metros')), { estado: 'distinta', texto: '30 m', factor: null })
 })
 
 test('iguales: el resumen dice en palabras dónde queda el precio propio por unidad', () => {
@@ -62,7 +91,7 @@ test('iguales: el dueño marca por la foto y la vista compara el precio por unid
     const nicho = await Nicho.create({ keyword: 'lampara de prueba' })
     const fecha = new Date('2026-11-04T19:31:00Z')
     const pub = (sku, titulo, precio, posicion) => ({ prod: { sku, titulo, url: `https://x/${sku}`, imagen: `https://x/${sku}-O.webp`, itemId: sku }, snap: { sku, fecha, precio, posicion, keyword: 'lampara de prueba', vendidos: 100 } })
-    const pubs = [pub('MLC1', 'Pack X2 Lampara De Mesa 300w', 18000, 1), pub('MLC2', 'Lampara De Mesa 300w Plateada', 12000, 2), pub('MLC3', 'Guirnalda De Luces', 9000, 3), pub('MLC4', 'Lampara De Mesa 300w Tienda', 24000, 4), pub('MLC900', 'Mi Lampara De Mesa 300w Negra', 16000, 5)]
+    const pubs = [pub('MLC1', 'Pack X2 Lampara De Mesa 300w', 18000, 1), pub('MLC2', 'Lampara De Mesa 300w Plateada', 12000, 2), pub('MLC3', 'Guirnalda De Luces', 9000, 3), pub('MLC4', 'Pack X2 Lampara De Mesa 150w Tienda', 24000, 4), pub('MLC900', 'Mi Lampara De Mesa 300w Negra', 16000, 5)]
     await Producto.insertMany(pubs.map((x) => x.prod))
     await Snapshot.insertMany(pubs.map((x) => x.snap))
     const propio = (sku) => ({ sku, url: `https://x/${sku}`, titulo: 'Mi Lampara De Mesa 300w', imagen: 'https://x/mio-O.jpg', nichoId: nicho._id, familiaMl: { id: 'F1' }, mediciones: [{ fecha, precio: 16000 }] })
@@ -93,6 +122,14 @@ test('iguales: el dueño marca por la foto y la vista compara el precio por unid
     assert.deepEqual([v.propio.unidades, v.propio.precioUnidad, v.resumen.masBaratos], [2, 8000, 0])
     await fijarUnidadesPropias(negro, 1)
 
+    // el mismo producto en otra medida va aparte: no entra al resumen y su precio se lleva a la medida propia
+    await marcarIgual(negro, { sku: 'MLC4', relacion: 'otra-medida' })
+    v = await ver()
+    assert.deepEqual([v.propio.medida, v.iguales.length, v.otraMedida.map((x) => [x.sku, x.unidades, x.precioUnidad, x.medida.estado, x.medida.texto]).join()], ['300 w', 2, 'MLC4,2,12000,distinta,150 w'])
+    assert.equal(v.iguales.find((x) => x.sku === 'MLC1').medida.estado, 'igual')
+    assert.equal(v.resumen.confirmados, 2)
+    await marcarIgual(negro, { sku: 'MLC4', relacion: null })
+
     // quitar la marca la devuelve a lo que falta revisar; un sku raro se rechaza
     await marcarIgual(negro, { sku: 'MLC3', relacion: null })
     assert.equal((await ver()).candidatos.map((c) => c.sku).join(), 'MLC3,MLC4')
@@ -105,8 +142,16 @@ test('iguales: el dueño marca por la foto y la vista compara el precio por unid
     const r = await sugerirIguales(await ProductoPropio.findById(negro._id).lean(), { pedir, bajarFoto })
     assert.deepEqual([r.revisadas, r.parecen, r.costoUsd, vistas], [2, 1, 0.02, 3]) // la foto propia + las dos pendientes
     v = await ver()
-    assert.deepEqual(v.candidatos.map((c) => [c.sku, c.sugerencia.relacion]), [['MLC4', 'igual'], ['MLC3', 'distinto']])
+    assert.deepEqual(v.candidatos.map((c) => [c.sku, c.sugerencia.relacion]), [['MLC4', 'otra-medida'], ['MLC3', 'distinto']])
     assert.equal(v.iguales.length, 2) // nada se marcó solo
+    // la foto dijo «igual» de MLC4, pero su título dice 150w y el propio es de 300w: se propone como otra medida
+    assert.deepEqual([v.fotos.parecenIgual, v.fotos.parecenOtraMedida], [0, 1])
+    // confirmar el grupo de una vez marca solo lo que la lectura propone con esa relación
+    assert.equal(await marcarLote(negro, 'igual'), 0)
+    assert.equal(await marcarLote(negro, 'otra-medida'), 1)
+    v = await ver()
+    assert.deepEqual([v.otraMedida.map((x) => x.sku).join(), v.candidatos.map((c) => c.sku).join()], ['MLC4', 'MLC3'])
+    await assert.rejects(marcarLote(negro, 'distinto'), /lote/)
     assert.equal((await GastoMensual.findOne({}).lean())?.usd, 0.02) // el gasto de la lectura queda anotado
     assert.equal((await sugerirIguales(await ProductoPropio.findById(negro._id).lean(), { pedir, bajarFoto })).revisadas, 0)
     assert.equal(await IgualPropio.countDocuments({ clave: 'familia:F1' }), 4)

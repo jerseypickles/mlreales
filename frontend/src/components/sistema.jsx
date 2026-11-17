@@ -156,21 +156,24 @@ export function Fichas({ children }) {
 }
 
 // Ficha con foto: una publicación para mirarla y decidir algo. La foto manda —el producto se reconoce por ella—;
-// al lado van el dato principal (y uno secundario), el título, una línea de detalle, las etiquetas y, en `children`,
-// las acciones. `grafico` es su serie en el tiempo, si la tiene. `tono` 'destacada' marca la propia.
+// al lado van el dato principal (y uno secundario), el título y una línea de detalle. Abajo, a todo el ancho de la
+// ficha, las etiquetas, su serie en el tiempo (`grafico`) y las acciones (`children`): al lado de la foto se apilaban
+// de a una por línea y la ficha quedaba el doble de alta. `tono` 'destacada' marca la propia.
 export function FichaFoto({ foto, enlace, titulo, principal, secundario, detalle, etiquetas, grafico, tono, children }) {
-  const imagen = foto ? <img src={foto} alt="" loading="lazy" width="112" height="112" /> : null
+  const imagen = foto ? <img src={foto} alt="" loading="lazy" width="96" height="96" /> : null
   return (
     <div className={`s-ficha${tono ? ` s-ficha-${tono}` : ''}`}>
-      {enlace ? <a className="s-ficha-foto" href={enlace} target="_blank" rel="noreferrer" title="Abrir la publicación">{imagen}</a> : <span className="s-ficha-foto">{imagen}</span>}
-      <div className="s-ficha-datos">
-        <div className="s-ficha-precio"><strong>{principal}</strong>{secundario ? <span>{secundario}</span> : null}</div>
-        {titulo ? <p className="s-ficha-titulo" title={titulo}>{titulo}</p> : null}
-        {detalle ? <p className="s-ficha-detalle">{detalle}</p> : null}
-        {etiquetas ? <div className="s-ficha-etiquetas">{etiquetas}</div> : null}
-        {grafico ? <div className="s-ficha-grafico">{grafico}</div> : null}
-        {children ? <div className="s-ficha-acciones">{children}</div> : null}
+      <div className="s-ficha-cabeza">
+        {enlace ? <a className="s-ficha-foto" href={enlace} target="_blank" rel="noreferrer" title="Abrir la publicación">{imagen}</a> : <span className="s-ficha-foto">{imagen}</span>}
+        <div className="s-ficha-datos">
+          <div className="s-ficha-precio"><strong>{principal}</strong>{secundario ? <span>{secundario}</span> : null}</div>
+          {titulo ? <p className="s-ficha-titulo" title={titulo}>{titulo}</p> : null}
+          {detalle ? <p className="s-ficha-detalle">{detalle}</p> : null}
+        </div>
       </div>
+      {etiquetas ? <div className="s-ficha-etiquetas">{etiquetas}</div> : null}
+      {grafico ? <div className="s-ficha-grafico">{grafico}</div> : null}
+      {children ? <div className="s-ficha-acciones">{children}</div> : null}
     </div>
   )
 }
@@ -205,4 +208,9 @@ export function AntesDespues({ antes, despues, formato = (v) => String(v), etiqu
 // Una línea de ayuda o de lectura bajo un bloque. `centrada` para el pie con un botón.
 export function Nota({ children, centrada = false }) {
   return <p className={`s-nota${centrada ? ' s-nota-centrada' : ''}`}>{children}</p>
+}
+
+// Una fila de acciones sobre un bloque (confirmar varias cosas de una vez), con una aclaración corta al lado.
+export function Acciones({ children }) {
+  return <div className="s-acciones">{children}</div>
 }

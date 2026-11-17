@@ -12,12 +12,13 @@ const igualPropioSchema = new mongoose.Schema({
   clave: { type: String, required: true },
   // la publicación ajena (Producto.sku)
   sku: { type: String, required: true },
-  // lo que dijo el dueño: 'igual' (el mismo producto) o 'distinto'
-  relacion: { type: String, enum: ['igual', 'distinto'], default: null },
+  // lo que dijo el dueño: 'igual' (el mismo producto en la misma medida), 'otra-medida' (el mismo en otro
+  // tamaño, largo o potencia: no se compara directo) o 'distinto'
+  relacion: { type: String, enum: ['igual', 'otra-medida', 'distinto'], default: null },
   // unidades que trae esa publicación (un pack de 2 son 2)
   unidades: { type: Number, default: 1 },
   marcadoEl: { type: Date, default: null },
-  // lo que propuso la lectura de fotos: { relacion, unidades, motivo, modelo, el }. No decide nada.
+  // lo que propuso la lectura de fotos: { relacion, unidades, medida, motivo, modelo, el }. No decide nada.
   sugerencia: { type: mongoose.Schema.Types.Mixed, default: null },
 })
 igualPropioSchema.index({ clave: 1, sku: 1 }, { unique: true })

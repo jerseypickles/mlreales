@@ -54,11 +54,82 @@ export function unidadesDeTitulo(titulo) {
 // reconocer el producto y pesa menos de la mitad que la de 500 px.
 export const fotoChica = (url) => String(url ?? '').replace(/-[A-Z]\.(webp|jpe?g|png)$/i, '-V.$1')
 
-const ORDEN_SUGERENCIA = { igual: 0, parecido: 1 }
-// Pura. Lo que falta revisar: primero lo que la lectura de fotos cree que es
-// el mismo, después lo parecido, y lo demás por posición en la búsqueda.
+// ─── LA MEDIDA ──────────────────────────────────────────────────────────────
+// Pedido del dueño al usar la primera versión (17-nov-2026): «el de nosotros
+// es 90x60… los de abajo pueden ser igual pero el tamaño de nosotros es
+// diferente, lo mismo que otros productos: falta que sea más inteligente». La
+// primera versión comparaba el precio por unidad sin mirar el tamaño, y la
+// publicación más barata por unidad era la misma cosa en un formato más chico.
+// Dos publicaciones del mismo producto solo se comparan directo si además
+// tienen la misma medida: el tamaño, el largo, la potencia, las piezas.
+
+const num = (x) => Number(String(x).replace(',', '.'))
+// Pura. Las medidas que trae un título, por tipo. Las dimensiones quedan en
+// centímetros y ordenadas (90x60 y 60x90 son lo mismo).
+export function medidasDeTitulo(titulo) {
+  const t = ` ${sinTildes(titulo).replace(/\s+/g, ' ')} `
+  const m = {}
+  const dims = /(\d{1,4}(?:[.,]\d{1,2})?) ?(?:x|×|\*) ?(\d{1,4}(?:[.,]\d{1,2})?)(?: ?(?:x|×|\*) ?(\d{1,4}(?:[.,]\d{1,2})?))? ?(cm|mm|mts?|m)?\b/.exec(t)
+  if (dims) {
+    const factor = dims[4] === 'mm' ? 0.1 : dims[4] && dims[4] !== 'cm' ? 100 : 1
+    const lados = [dims[1], dims[2], dims[3]].filter(Boolean).map((x) => Math.round(num(x) * factor * 10) / 10).sort((a, b) => a - b)
+    // «2x1» sin unidad es una oferta, no una medida
+    if (dims[4] || lados.at(-1) >= 10) m.dimensiones = lados
+  }
+  const sinDims = dims ? t.replace(dims[0], ' ') : t
+  const uno = (re, f = (x) => x) => { const r = re.exec(sinDims); return r ? f(num(r[1])) : null }
+  const poner = (k, v) => { if (v != null && Number.isFinite(v) && v > 0) m[k] = v }
+  poner('largoM', uno(/\b(\d{1,3}(?:[.,]\d)?) ?(?:m|mt|mts|metros?)\b/))
+  poner('watts', uno(/\b(\d{1,5}) ?(?:w|watts?)\b/))
+  poner('piezas', uno(/\b(\d{1,4}) ?(?:piezas?|pzas?|pzs?|pcs)\b/))
+  poner('ml', uno(/\b(\d{1,5}) ?(?:ml|cc)\b/) ?? uno(/\b(\d{1,3}(?:[.,]\d{1,2})?) ?(?:l|lt|lts|litros?)\b/, (x) => x * 1000))
+  poner('gramos', uno(/\b(\d{1,5}) ?(?:g|gr|grs|gramos?)\b/) ?? uno(/\b(\d{1,3}(?:[.,]\d{1,2})?) ?(?:kg|kilos?)\b/, (x) => x * 1000))
+  poner('leds', uno(/\b(\d{1,4}) ?leds?\b/))
+  poner('mah', uno(/\b(\d{3,6}) ?mah\b/))
+  return m
+}
+
+const NOMBRE_MEDIDA = { dimensiones: (v) => `${[...v].reverse().map((x) => String(x).replace('.', ',')).join('×')} cm`, largoM: (v) => `${String(v).replace('.', ',')} m`, watts: (v) => `${v} w`, piezas: (v) => `${v} piezas`,
+  ml: (v) => (v >= 1000 ? `${String(v / 1000).replace('.', ',')} L` : `${v} ml`), gramos: (v) => (v >= 1000 ? `${String(v / 1000).replace('.', ',')} kg` : `${v} g`), leds: (v) => `${v} led`, mah: (v) => `${v} mAh` }
+// en qué orden se nombra la medida de un producto: la primera que tenga
+const ORDEN_MEDIDAS = ['dimensiones', 'largoM', 'watts', 'piezas', 'ml', 'gramos', 'mah', 'leds']
+// Pura. La medida en palabras: «90×60 cm», «15 m», «300 w».
+export function textoMedida(medidas) {
+  const k = ORDEN_MEDIDAS.find((x) => medidas?.[x] != null)
+  return k ? NOMBRE_MEDIDA[k](medidas[k]) : null
+}
+const igualValor = (a, b) => (Array.isArray(a) ? Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]) : a === b)
+
+// Pura. ¿La otra publicación tiene la misma medida que la propia? Se miran solo
+// los tipos de medida que trae el título propio. Si ninguno aparece en la otra,
+// no se sabe. `factor` dice cuántas veces cabe la otra en la propia cuando la
+// medida es de superficie, volumen o peso (un paño de 90×60 son 1,5 de 60×60):
+// con eso se lleva su precio al tamaño propio. Largo, potencia y piezas no se
+// escalan: el doble de metros no cuesta el doble.
+export function compararMedida(propia, otra) {
+  const tipos = ORDEN_MEDIDAS.filter((k) => propia?.[k] != null && otra?.[k] != null)
+  if (!tipos.length) return { estado: 'sin-dato', texto: textoMedida(otra ?? {}), factor: null }
+  const distinto = tipos.find((k) => !igualValor(propia[k], otra[k]))
+  if (!distinto) return { estado: 'igual', texto: NOMBRE_MEDIDA[tipos[0]](otra[tipos[0]]), factor: 1 }
+  const tamano = (v) => (Array.isArray(v) ? v.reduce((a, x) => a * x, 1) : v)
+  const escalable = ['dimensiones', 'ml', 'gramos'].includes(distinto) && (!Array.isArray(propia[distinto]) || propia[distinto].length === otra[distinto].length)
+  const factor = escalable && tamano(otra[distinto]) > 0 ? Math.round((tamano(propia[distinto]) / tamano(otra[distinto])) * 1000) / 1000 : null
+  return { estado: 'distinta', texto: NOMBRE_MEDIDA[distinto](otra[distinto]), factor }
+}
+
+// Pura. Lo que falta revisar, en el orden en que conviene mirarlo: lo que la
+// foto dice que es el mismo (primero en la medida propia, después sin medida a
+// la vista, después en otra medida), lo que solo calza por medida, lo parecido
+// y el resto por su puesto en la búsqueda.
 export function ordenarCandidatos(candidatos) {
-  const rango = (c) => ORDEN_SUGERENCIA[c.sugerencia?.relacion] ?? (c.sugerencia?.relacion === 'distinto' ? 3 : 2)
+  const porMedida = { igual: 0, 'sin-dato': 1, distinta: 2 }
+  const rango = (c) => {
+    const s = c.sugerencia?.relacion, m = porMedida[c.medida?.estado ?? 'sin-dato']
+    if (s === 'igual' || s === 'otra-medida') return (s === 'otra-medida' ? 2 : m)
+    if (s === 'parecido') return 5
+    if (s === 'distinto') return 7
+    return m === 0 ? 3 : 6
+  }
   return [...(candidatos ?? [])].sort((a, b) => rango(a) - rango(b) || (a.posicion ?? 999) - (b.posicion ?? 999))
 }
 
@@ -83,13 +154,29 @@ export function resumenIguales(precioUnidadPropio, iguales) {
   return { ...base, masBaratos, lugar: masBaratos + 1, de: n + 1, brechaPct, frase }
 }
 
-const ficha = (p, marca, precioUnidadPropio) => {
+const ficha = (p, marca, precioUnidadPropio, medidaPropia = {}) => {
   const unidades = marca?.relacion ? marca.unidades ?? 1 : marca?.sugerencia?.unidades ?? unidadesDeTitulo(p.titulo)
   const precioUnidad = finito(p.precio) && p.precio > 0 ? Math.round(p.precio / unidades) : null
+  // la medida: del título; si el título no la trae, la que leyó la foto
+  let medida = compararMedida(medidaPropia, medidasDeTitulo(p.titulo))
+  if (medida.estado === 'sin-dato' && marca?.sugerencia?.medida) medida = compararMedida(medidaPropia, medidasDeTitulo(marca.sugerencia.medida))
+  // su precio por unidad llevado a la medida propia, cuando se puede escalar
+  const enMiMedida = finito(precioUnidad) && medida.estado === 'distinta' && finito(medida.factor) ? Math.round(precioUnidad * medida.factor) : null
+  const comparable = enMiMedida ?? precioUnidad
   return { sku: p.sku, titulo: p.titulo, precio: p.precio ?? null, imagen: p.imagen ?? null, url: p.url ?? null, posicion: p.posicion ?? null,
     vendidos: p.vendidos ?? null, numReviews: p.numReviews ?? null, esFull: p.esFull ?? null, esTiendaOficial: p.esTiendaOficial ?? null, vendedor: p.vendedor ?? null,
-    unidades, precioUnidad, diferenciaPct: finito(precioUnidad) && finito(precioUnidadPropio) && precioUnidadPropio > 0 ? Math.round(((precioUnidad - precioUnidadPropio) / precioUnidadPropio) * 100) : null,
-    sugerencia: marca?.sugerencia ? { relacion: marca.sugerencia.relacion, motivo: marca.sugerencia.motivo ?? null } : null }
+    unidades, precioUnidad, medida: { estado: medida.estado, texto: medida.texto }, precioUnidadEnMiMedida: enMiMedida,
+    diferenciaPct: finito(comparable) && finito(precioUnidadPropio) && precioUnidadPropio > 0 ? Math.round(((comparable - precioUnidadPropio) / precioUnidadPropio) * 100) : null,
+    sugerencia: marca?.sugerencia ? { relacion: relacionSugerida(marca.sugerencia.relacion, medida.estado), motivo: marca.sugerencia.motivo ?? null } : null }
+}
+
+// Pura. La foto dice si es el mismo producto; el tamaño, cuando el título lo
+// trae escrito, lo decide el título. Medido el 17-nov-2026 en la primera
+// lectura con medida: el modelo mandó a «otra medida» un pack de 120 del mismo
+// tamaño, porque leyó la cantidad del pack como una medida.
+export function relacionSugerida(relacion, estadoMedida) {
+  if (relacion !== 'igual' && relacion !== 'otra-medida') return relacion
+  return estadoMedida === 'igual' ? 'igual' : estadoMedida === 'distinta' ? 'otra-medida' : relacion
 }
 
 // Lo que queda por venta (después de Mercado Libre y del costo, antes de la
@@ -118,32 +205,37 @@ export async function vistaIguales(propio, { conEconomia = true } = {}) {
   const precio = precioDePropio(propio)
   const unidadesPropias = finito(propio.unidadesPack) && propio.unidadesPack >= 1 ? propio.unidadesPack : unidadesDeTitulo(propio.titulo)
   const precioUnidadPropio = finito(precio) && precio > 0 ? Math.round(precio / unidadesPropias) : null
+  const medidaPropia = medidasDeTitulo(propio.titulo)
 
   // los confirmados que ya no salen en el último scan se muestran con su último dato conocido
-  const fuera = [...marcas.values()].filter((m) => m.relacion === 'igual' && !enScan.has(m.sku)).map((m) => m.sku)
+  const esMismo = (m) => m.relacion === 'igual' || m.relacion === 'otra-medida'
+  const fuera = [...marcas.values()].filter((m) => esMismo(m) && !enScan.has(m.sku)).map((m) => m.sku)
   const ultimos = new Map()
   if (fuera.length) {
     const prods = new Map((await Producto.find({ sku: { $in: fuera } }).lean()).map((p) => [p.sku, p]))
     const snaps = await Snapshot.aggregate([{ $match: { sku: { $in: fuera } } }, { $sort: { fecha: -1 } }, { $group: { _id: '$sku', s: { $first: '$$ROOT' } } }])
     for (const { _id, s } of snaps) if (prods.has(_id)) ultimos.set(_id, { ...prods.get(_id), precio: s.precio, vendidos: s.vendidos, numReviews: s.numReviews, posicion: null, vistoEl: s.fecha })
   }
-  const iguales = [...marcas.values()].filter((m) => m.relacion === 'igual')
-    .map((m) => { const p = enScan.get(m.sku) ?? ultimos.get(m.sku); return p ? { ...ficha(p, m, precioUnidadPropio), enUltimoScan: enScan.has(m.sku), vistoEl: p.vistoEl ?? null } : null })
-    .filter(Boolean).sort((a, b) => (a.precioUnidad ?? Infinity) - (b.precioUnidad ?? Infinity))
-  const candidatos = ordenarCandidatos(delScan.filter((p) => !marcas.get(p.sku)?.relacion).map((p) => ficha(p, marcas.get(p.sku), precioUnidadPropio)))
-  const descartados = delScan.filter((p) => marcas.get(p.sku)?.relacion === 'distinto').map((p) => ficha(p, marcas.get(p.sku), precioUnidadPropio))
+  const confirmados = (relacion, precioDe) => [...marcas.values()].filter((m) => m.relacion === relacion)
+    .map((m) => { const p = enScan.get(m.sku) ?? ultimos.get(m.sku); return p ? { ...ficha(p, m, precioUnidadPropio, medidaPropia), enUltimoScan: enScan.has(m.sku), vistoEl: p.vistoEl ?? null } : null })
+    .filter(Boolean).sort((a, b) => (precioDe(a) ?? Infinity) - (precioDe(b) ?? Infinity))
+  // el mismo producto en la medida propia (lo que se compara directo) y en otra medida (va aparte)
+  const iguales = confirmados('igual', (x) => x.precioUnidad)
+  const otraMedida = confirmados('otra-medida', (x) => x.precioUnidadEnMiMedida ?? x.precioUnidad)
+  const candidatos = ordenarCandidatos(delScan.filter((p) => !marcas.get(p.sku)?.relacion).map((p) => ficha(p, marcas.get(p.sku), precioUnidadPropio, medidaPropia)))
+  const descartados = delScan.filter((p) => marcas.get(p.sku)?.relacion === 'distinto').map((p) => ficha(p, marcas.get(p.sku), precioUnidadPropio, medidaPropia))
 
   // la historia de precio de cada confirmado, de los snapshots de sus scans
-  if (iguales.length) {
+  if (iguales.length || otraMedida.length) {
     const desde = new Date(Date.now() - 120 * 86400e3)
-    const hist = await Snapshot.find({ sku: { $in: iguales.map((x) => x.sku) }, fecha: { $gte: desde }, precio: { $gt: 0 } }).select('sku fecha precio').sort({ fecha: 1 }).lean()
+    const hist = await Snapshot.find({ sku: { $in: [...iguales, ...otraMedida].map((x) => x.sku) }, fecha: { $gte: desde }, precio: { $gt: 0 } }).select('sku fecha precio').sort({ fecha: 1 }).lean()
     const porSku = new Map()
     for (const h of hist) {
       const dia = h.fecha.toISOString().slice(0, 10), serie = porSku.get(h.sku) ?? porSku.set(h.sku, []).get(h.sku)
       if (serie.at(-1)?.dia === dia) serie[serie.length - 1] = { dia, precio: h.precio }
       else serie.push({ dia, precio: h.precio })
     }
-    for (const x of iguales) x.historia = (porSku.get(x.sku) ?? []).slice(-20)
+    for (const x of [...iguales, ...otraMedida]) x.historia = (porSku.get(x.sku) ?? []).slice(-20)
   }
 
   const resumen = resumenIguales(precioUnidadPropio, iguales.filter((x) => x.enUltimoScan))
@@ -159,23 +251,41 @@ export async function vistaIguales(propio, { conEconomia = true } = {}) {
   const revisadas = [...marcas.values()].filter((m) => m.sugerencia).length
   return {
     estado: 'ok', keyword: nicho.keyword, fechaScan: vista.fechaScan,
-    propio: { titulo: propio.titulo, imagen: propio.imagen ?? null, precio, unidades: unidadesPropias, unidadesDelTitulo: !(finito(propio.unidadesPack) && propio.unidadesPack >= 1), precioUnidad: precioUnidadPropio },
-    resumen, economia, iguales, candidatos, descartados,
-    fotos: { revisadas, sinRevisar: candidatos.filter((c) => !c.sugerencia).length },
+    propio: { titulo: propio.titulo, imagen: propio.imagen ?? null, precio, unidades: unidadesPropias, unidadesDelTitulo: !(finito(propio.unidadesPack) && propio.unidadesPack >= 1), precioUnidad: precioUnidadPropio,
+      medida: textoMedida(medidaPropia) },
+    resumen, economia, iguales, otraMedida, candidatos, descartados,
+    fotos: { revisadas, sinRevisar: candidatos.filter((c) => !c.sugerencia).length,
+      parecenIgual: candidatos.filter((c) => c.sugerencia?.relacion === 'igual').length, parecenOtraMedida: candidatos.filter((c) => c.sugerencia?.relacion === 'otra-medida').length },
   }
 }
 
-// Lo que dijo el dueño de una publicación: 'igual', 'distinto' o null (quitar
-// la marca). Vale para todos los colores de la familia, porque la clave es de
-// la familia. `unidades`: cuántas trae esa publicación.
+// Lo que dijo el dueño de una publicación: 'igual' (el mismo producto, en la
+// misma medida), 'otra-medida' (el mismo en otro tamaño, largo o potencia),
+// 'distinto' o null (quitar la marca). Vale para todos los colores de la
+// familia, porque la clave es de la familia. `unidades`: cuántas trae.
 export async function marcarIgual(propio, { sku, relacion = null, unidades = null } = {}) {
   if (!/^MLC[A-Z]?\d+$/i.test(String(sku ?? ''))) { const e = new Error('sku de la publicación no válido'); e.status = 400; throw e }
-  if (![null, 'igual', 'distinto'].includes(relacion)) { const e = new Error("relacion debe ser 'igual', 'distinto' o null"); e.status = 400; throw e }
+  if (![null, 'igual', 'otra-medida', 'distinto'].includes(relacion)) { const e = new Error("relacion debe ser 'igual', 'otra-medida', 'distinto' o null"); e.status = 400; throw e }
   const cambios = { relacion, marcadoEl: relacion ? new Date() : null }
   if (finito(unidades) && unidades >= 1 && unidades <= 500) cambios.unidades = Math.round(unidades)
   // sin el dato, lo que diga el título de esa publicación (un «Pack X2» parte en 2)
-  else if (relacion === 'igual') cambios.unidades = unidadesDeTitulo((await Producto.findOne({ sku }).select('titulo').lean())?.titulo)
+  else if (relacion === 'igual' || relacion === 'otra-medida') cambios.unidades = unidadesDeTitulo((await Producto.findOne({ sku }).select('titulo').lean())?.titulo)
   await IgualPropio.updateOne({ clave: claveDePropio(propio), sku }, { $set: cambios }, { upsert: true })
+}
+
+// Confirma de una vez todo lo que falta revisar y que la lectura propone como
+// `relacion` ('igual' o 'otra-medida'), con las unidades propuestas. En un nicho
+// parejo son decenas de publicaciones: el dueño confirma el grupo y después
+// saca a mano las que no correspondan.
+export async function marcarLote(propio, relacion) {
+  if (!['igual', 'otra-medida'].includes(relacion)) { const e = new Error("el lote debe ser 'igual' u 'otra-medida'"); e.status = 400; throw e }
+  const v = await vistaIguales(propio, { conEconomia: false })
+  if (v.estado !== 'ok') return 0
+  const lote = v.candidatos.filter((c) => c.sugerencia?.relacion === relacion)
+  if (!lote.length) return 0
+  const ahora = new Date()
+  await IgualPropio.bulkWrite(lote.map((c) => ({ updateOne: { filter: { clave: claveDePropio(propio), sku: c.sku }, update: { $set: { relacion, unidades: c.unidades ?? 1, marcadoEl: ahora } }, upsert: true } })))
+  return lote.length
 }
 
 // Cuántas unidades trae la publicación PROPIA (un pack de 2 son 2): se guarda
@@ -187,15 +297,20 @@ export async function fijarUnidadesPropias(propio, unidades) {
 }
 
 // ─── LA LECTURA DE FOTOS ────────────────────────────────────────────────────
-const SYSTEM_FOTOS = `Eres un comprador experto de Mercado Libre Chile. Te muestro la foto de MI PRODUCTO y después fotos numeradas de otras publicaciones de la misma búsqueda, cada una con su título y precio.
+const SYSTEM_FOTOS = `Eres un comprador experto de Mercado Libre Chile. Te muestro la foto de MI PRODUCTO, con su medida, y después fotos numeradas de otras publicaciones de la misma búsqueda, cada una con su título y precio.
 
-Tu trabajo: decir cuáles venden EL MISMO PRODUCTO FÍSICO que el mío. Mira la foto antes que el título.
-- "igual": la misma forma, diseño y modelo. No importa el color, el vendedor, la marca pegada ni cómo esté tomada la foto. Si la publicación trae varias unidades del mismo producto (un pack), sigue siendo "igual".
-- "parecido": el mismo tipo de producto pero otro modelo, otro tamaño u otro diseño.
+Tu trabajo: decir cuáles venden EL MISMO PRODUCTO FÍSICO que el mío, y si es en la misma medida. Mira la foto antes que el título.
+- "igual": la misma forma, diseño y modelo, Y la misma medida que el mío (tamaño, largo, potencia, capacidad, número de piezas). No importa el color, el vendedor, la marca pegada ni cómo esté tomada la foto. Si la publicación trae varias unidades (un pack), sigue siendo "igual".
+- "otra-medida": el mismo producto, pero en otro tamaño, largo, potencia o capacidad (por ejemplo 60x60 cuando el mío es 90x60, o 30 metros cuando el mío es de 15). En un set o kit, también cuando trae otro número de piezas distintas (un set de 44 piezas no es el de 34).
+- OJO: la cantidad de unidades iguales que trae el pack NO es una medida. 100 paños de 90x60 son "igual" a 60 paños de 90x60: lo que cambia va en "unidades".
+- "parecido": el mismo tipo de producto pero otro modelo u otro diseño.
 - Lo demás (otro producto) NO lo incluyas en la respuesta.
 
-Para cada publicación que incluyas indica cuántas unidades del producto trae ("unidades": 1 si es suelto, 2 si es un pack de dos, etc.; guíate por la foto y por el título) y un motivo muy corto de por qué es igual o en qué se diferencia.
-Ante la duda entre "igual" y "parecido", responde "parecido": una persona va a confirmar mirando la foto.`
+Para cada publicación que incluyas indica:
+- "unidades": cuántas unidades del producto trae (1 si es suelto, 2 si es un pack de dos, 100 si son 100 paños; guíate por la foto y por el título);
+- "medida": la medida que dice el título o que se lee en la foto o en el envase, escrita corta ("60x60 cm", "30 m", "200 w", "44 piezas"); deja "" si no se ve por ningún lado;
+- "motivo": muy corto, por qué es igual o en qué se diferencia.
+Si la medida no se ve, decide por la forma y responde "igual" solo si todo lo demás calza. Ante la duda entre "igual" y "parecido", responde "parecido": una persona va a confirmar mirando la foto.`
 
 const SCHEMA_FOTOS = {
   type: 'object', additionalProperties: false, required: ['coincidencias'],
@@ -203,8 +318,8 @@ const SCHEMA_FOTOS = {
     coincidencias: {
       type: 'array',
       items: {
-        type: 'object', additionalProperties: false, required: ['n', 'relacion', 'unidades', 'motivo'],
-        properties: { n: { type: 'integer' }, relacion: { type: 'string', enum: ['igual', 'parecido'] }, unidades: { type: 'integer' }, motivo: { type: 'string' } },
+        type: 'object', additionalProperties: false, required: ['n', 'relacion', 'unidades', 'medida', 'motivo'],
+        properties: { n: { type: 'integer' }, relacion: { type: 'string', enum: ['igual', 'otra-medida', 'parecido'] }, unidades: { type: 'integer' }, medida: { type: 'string' }, motivo: { type: 'string' } },
       },
     },
   },
@@ -217,7 +332,7 @@ export function sugerenciasDeTanda(tanda, coincidencias, { modelo = null, el = n
   const porN = new Map((coincidencias ?? []).filter((c) => Number.isInteger(c?.n)).map((c) => [c.n, c]))
   return tanda.map((p, i) => {
     const c = porN.get(i + 1)
-    return { sku: p.sku, sugerencia: c ? { relacion: c.relacion, unidades: c.unidades >= 1 && c.unidades <= 500 ? c.unidades : 1, motivo: String(c.motivo ?? '').slice(0, 160), modelo, el } : { relacion: 'distinto', modelo, el } }
+    return { sku: p.sku, sugerencia: c ? { relacion: c.relacion, unidades: c.unidades >= 1 && c.unidades <= 500 ? c.unidades : 1, medida: String(c.medida ?? '').slice(0, 40) || null, motivo: String(c.motivo ?? '').slice(0, 160), modelo, el } : { relacion: 'distinto', modelo, el } }
   })
 }
 
@@ -245,7 +360,7 @@ export async function sugerirIguales(propio, { max = 240, pedir = null, bajarFot
     const fotos = await Promise.all(candidatos.map((c) => foto(c.imagen)))
     const tanda = candidatos.filter((_, j) => fotos[j])
     if (!tanda.length) return { sugerencias: [], costoUsd: 0 }
-    const bloques = [{ type: 'text', text: `MI PRODUCTO: "${propio.titulo}"` }, mia, { type: 'text', text: `PUBLICACIONES DE LA BÚSQUEDA "${v.keyword}" (${tanda.length}):` }]
+    const bloques = [{ type: 'text', text: `MI PRODUCTO: "${propio.titulo}"${v.propio.medida ? ` · medida: ${v.propio.medida}` : ''} · trae ${v.propio.unidades} ${v.propio.unidades === 1 ? 'unidad' : 'unidades'}` }, mia, { type: 'text', text: `PUBLICACIONES DE LA BÚSQUEDA "${v.keyword}" (${tanda.length}):` }]
     let n = 0
     candidatos.forEach((c, j) => { if (!fotos[j]) return; n++; bloques.push({ type: 'text', text: `#${n} · ${c.titulo} · $${c.precio ?? '?'}` }, fotos[j]) })
     const r = await (pedir ?? pedirJSON)({ system: SYSTEM_FOTOS, user: bloques, schema: SCHEMA_FOTOS, maxTokens: 6000 })

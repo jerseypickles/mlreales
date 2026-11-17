@@ -26,16 +26,18 @@ router.get(
   }),
 )
 
-// { sku, relacion: 'igual' | 'distinto' | null, unidades } marca una publicación ajena;
+// { sku, relacion: 'igual' | 'otra-medida' | 'distinto' | null, unidades } marca una publicación ajena;
+// { lote: 'igual' | 'otra-medida' } confirma de una vez todo lo que la lectura propone con esa relación;
 // { unidadesPropias } dice cuántas unidades trae la publicación propia
 router.patch(
   '/:id',
   manejar(async (req, res) => {
     const propio = await propioDe(req, res)
     if (!propio) return
-    const { vistaIguales, marcarIgual, fijarUnidadesPropias } = await import('../../services/iguales.js')
+    const { vistaIguales, marcarIgual, marcarLote, fijarUnidadesPropias } = await import('../../services/iguales.js')
     const b = req.body ?? {}
     if (b.unidadesPropias != null) await fijarUnidadesPropias(propio, Number(b.unidadesPropias))
+    if (b.lote) await marcarLote(propio, b.lote)
     if (b.sku) await marcarIgual(propio, { sku: b.sku, relacion: b.relacion ?? null, unidades: b.unidades != null ? Number(b.unidades) : null })
     res.json(await vistaIguales(await ProductoPropio.findById(req.params.id).lean()))
   }),

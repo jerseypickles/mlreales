@@ -8555,9 +8555,10 @@ a.op-plan-sello:hover { text-decoration: underline; }
 
 /* ficha con foto */
 .s-fichas { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-.s-ficha { display: flex; gap: 12px; min-width: 0; padding: 12px; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); }
+.s-ficha { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); }
 .s-ficha-destacada { border-color: var(--acento-borde); background: var(--acento-tenue); }
-.s-ficha-foto { flex: none; display: block; width: 112px; height: 112px; border: 1px solid var(--borde); border-radius: 8px; overflow: hidden; background: var(--superficie); }
+.s-ficha-cabeza { display: flex; gap: 12px; min-width: 0; }
+.s-ficha-foto { flex: none; display: block; width: 96px; height: 96px; border: 1px solid var(--borde); border-radius: 8px; overflow: hidden; background: var(--superficie); }
 .s-ficha-foto img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .s-ficha-datos { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
 .s-ficha-precio { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
@@ -8566,13 +8567,14 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .s-ficha-titulo { display: -webkit-box; margin: 0; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13px; line-height: 1.4; color: var(--tinta-2); }
 .s-ficha-detalle { margin: 0; font-size: 12px; line-height: 1.5; color: var(--tinta-3); }
 .s-ficha-etiquetas { display: flex; flex-wrap: wrap; gap: 4px; }
-.s-ficha-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px; }
+.s-ficha-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; }
 .s-ficha-grafico { min-width: 0; }
 .s-nota { margin: 8px 0; font-size: 13px; line-height: 1.5; color: var(--tinta-2); }
 .s-nota-centrada { display: flex; justify-content: center; margin: 12px 0 0; }
+.s-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 12px; color: var(--tinta-3); }
 
 /* número corto en la misma línea */
-.s-campo-numero { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--tinta-2); }
+.s-campo-numero { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; color: var(--tinta-2); }
 .s-campo-numero input { width: 56px; padding: 4px 8px; border: 1px solid var(--borde-fuerte); border-radius: 8px; background: var(--superficie); font-family: 'Fira Code', monospace; font-size: 13px; color: var(--tinta); }
 .s-campo-numero input:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
 
