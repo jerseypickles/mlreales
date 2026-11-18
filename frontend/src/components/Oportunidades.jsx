@@ -10,6 +10,7 @@ import { GraficoTemporada, GraficoPrecio, GraficoPronostico } from './PanelOport
 import { calzaConBusqueda } from '../lib/calzaConBusqueda.js'
 import { tituloTrae } from '../lib/tituloTrae.js'
 import { PlanPublicidad } from './PlanPublicidad.jsx'
+import { RevisarProducto } from './RevisarProducto.jsx'
 import { HistogramaPrecios } from './graficos.jsx'
 import { momentoDeCompra, compararPorMomento } from '../lib/momentoCompra.js'
 
@@ -1169,6 +1170,7 @@ function PanelNicho({ o, rank, mismaCompraQue, porKeyword, onAbrir, onRecargar, 
     ['temporada', 'Temporada · precio'],
     ['competencia', 'Competencia'],
     ['compra', 'Compra'],
+    ['revisar', 'Antes de comprar'],
     ...(o.mejoras?.length ? [['mejoras', `Mejoras (${o.mejoras.length})`]] : []),
   ]
   return (
@@ -1229,6 +1231,7 @@ function PanelNicho({ o, rank, mismaCompraQue, porKeyword, onAbrir, onRecargar, 
           ) : null}
           {pestana === 'competencia' ? <CompetenciaNicho o={o} /> : null}
           {pestana === 'compra' ? <CompraNicho o={o} onRecargar={onRecargar} onEtapa={onEtapa} mismaCompraQue={mismaCompraQue} /> : null}
+          {pestana === 'revisar' ? <RevisarProducto nichoId={o.nichoId} keyword={o.keyword} /> : null}
           {pestana === 'mejoras' && o.mejoras?.length ? <MejorasNicho o={o} onRecargar={onRecargar} /> : null}
         </>
       )}

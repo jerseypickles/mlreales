@@ -100,6 +100,11 @@ export const api = {
   precioIguales: () => pedir('/api/iguales/resumen'),
   marcarIgual: (id, cambio) => pedir(`/api/iguales/${id}`, { ...json(cambio), method: 'PATCH' }),
   sugerirIguales: (id) => pedir(`/api/iguales/${id}/sugerir`, { method: 'POST' }),
+  // revisar un producto antes de traerlo: los candidatos de un nicho (el `id` de uno sirve en las llamadas de arriba)
+  candidatosDeNicho: (nichoId) => pedir(`/api/iguales/candidatos?nichoId=${nichoId}`),
+  crearCandidato: (datos) => pedir('/api/iguales/candidatos', json(datos)),
+  cambiarCandidato: (id, cambios) => pedir(`/api/iguales/candidatos/${id}`, { ...json(cambios), method: 'PATCH' }),
+  borrarCandidato: (id) => pedir(`/api/iguales/candidatos/${id}`, { method: 'DELETE' }),
   auditarPropio: (id) => pedir(`/api/propios/${id}/auditar`, { method: 'POST' }),
   autoCablearPropios: () => pedir('/api/propios/auto-cablear', { method: 'POST' }),
   aplicarPropio: (id, cambios) => pedir(`/api/propios/${id}/aplicar`, json(cambios)),

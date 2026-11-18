@@ -8687,3 +8687,30 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .s-franja-agotados .s-franja-grilla { margin-top: 8px; }
 .s-franja-cuerpo > .s-nota { margin: 0; }
 @media (max-width: 760px) { .s-franja-fotos { display: none; } }
+
+/* campos de formulario: el nombre arriba, el control y una ayuda corta */
+.s-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 16px; align-content: start; }
+.s-campo { display: grid; gap: 4px; min-width: 0; align-content: start; font-size: 13px; color: var(--tinta-2); }
+.s-campo-ancho { grid-column: 1 / -1; }
+.s-campo > span { font-weight: 600; color: var(--tinta); }
+.s-campo input, .s-campo select { width: 100%; padding: 8px 12px; border: 1px solid var(--borde-fuerte); border-radius: 8px; background: var(--superficie); color: var(--tinta); font: inherit; font-size: 14px; }
+.s-campo input:focus-visible, .s-campo select:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
+.s-campo small { font-size: 12px; line-height: 1.4; color: var(--tinta-3); }
+.s-campo-numero-largo input { width: 104px; }
+/* campo de foto: se elige, se arrastra encima o se pega */
+.s-campo-foto { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px dashed var(--borde-fuerte); border-radius: 10px; background: var(--superficie-2); cursor: pointer; }
+.s-campo-foto:hover, .s-campo-foto:focus-visible, .s-campo-foto-encima { border-color: var(--acento); background: var(--acento-tenue); outline: none; }
+.s-campo-foto input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.s-campo-foto-imagen { display: grid; place-items: center; flex: 0 0 96px; width: 96px; height: 96px; border: 1px solid var(--borde); border-radius: 8px; background: var(--superficie); color: var(--tinta-3); overflow: hidden; }
+.s-campo-foto-imagen img { width: 100%; height: 100%; object-fit: contain; }
+.s-campo-foto-texto { display: grid; gap: 4px; min-width: 0; font-size: 13px; color: var(--tinta-2); }
+.s-campo-foto-texto strong { font-size: 14px; font-weight: 600; color: var(--tinta); }
+.s-campo-foto-texto small { font-size: 12px; line-height: 1.4; color: var(--tinta-3); }
+/* la fila propia en una comparación */
+.s-fila-destacada { box-shadow: inset 4px 0 0 var(--acento); background: var(--acento-tenue); }
+/* revisar un producto antes de traerlo: el formulario, las fichas de lo revisado y la revisión abierta */
+.s-revisar { display: grid; gap: 16px; min-width: 0; }
+.s-revisar > * { min-width: 0; margin-top: 0; margin-bottom: 0; }
+.s-revisar-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; align-items: start; padding: 16px; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie); }
+.s-revisar-pie { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 12px; line-height: 1.4; color: var(--tinta-3); }
+.s-revisar-pie button { display: inline-flex; align-items: center; gap: 8px; }

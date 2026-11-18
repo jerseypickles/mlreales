@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, X, RotateCcw, ScanSearch, Ruler, Clock } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
-import { Aviso, Cifra, Cifras, Etiqueta, FichaFoto, Fichas, CampoNumero, Subtitulo, Nota, Acciones, ReglaPrecios } from './sistema.jsx'
+import { Aviso, Cifra, Cifras, Etiqueta, FichaFoto, Fichas, CampoNumero, Subtitulo, Nota, Acciones, ReglaPrecios, Filas, Fila, Dato, Nivel } from './sistema.jsx'
 import { MiniSerie } from './graficos.jsx'
 import { fmtNum, fmtPrecio, fmtFechaCorta } from '../lib/formato.js'
 
@@ -24,6 +24,26 @@ import { fmtNum, fmtPrecio, fmtFechaCorta } from '../lib/formato.js'
 // cambia de lugar entre los que venden lo mismo (la mitad, los tres más baratos, el más barato), cada uno con lo que
 // queda por venta y cuánto más habría que vender para juntar la misma plata. No recomienda ninguno: el importador elige.
 
+//
+// QUÉ DA LA BÚSQUEDA POR ESA PLATA y ANTES DE COMPRAR (18-nov-2026). Lectura del importador de lo que no se le
+// vendió: «fallamos por traer lo mismo que los demás, sobre todo en diseño y watts». Dos cosas nuevas en esta misma
+// pantalla: (1) para cualquier producto con medida en el título, cuántas publicaciones dan más medida por la misma
+// plata; (2) la pantalla sirve igual para un producto que todavía no se compra (RevisarProducto.jsx sube la foto
+// del proveedor): la vista trae `candidato` y `revision`, y cambian las palabras («el precio que piensas»).
+
+// las palabras que cambian entre una publicación propia y un producto que todavía no se compra
+const TEXTOS = {
+  propio: { precioUnidad: 'Tu precio por unidad', trae: (u, p) => (u > 1 ? `tu publicación trae ${fmtNum(u)} a ${fmtPrecio(p)}` : 'tu publicación trae 1 unidad'), aTuPrecio: 'A tu precio de hoy',
+    marca: 'tú hoy', bajo: 'bajo tu precio de hoy', elTuyo: 'el tuyo', queHoy: 'que hoy', loDeHoy: 'lo de hoy', escalones: 'Si haces un descuento' },
+  candidato: { precioUnidad: 'El precio que piensas, por unidad', trae: (u, p) => (u > 1 ? `la publicación traería ${fmtNum(u)} a ${fmtPrecio(p)}` : 'la publicación traería 1 unidad'), aTuPrecio: 'Al precio que piensas',
+    marca: 'el precio que piensas', bajo: 'bajo el precio que piensas', elTuyo: 'el que piensas traer', queHoy: 'que al precio que piensas', loDeHoy: 'lo que venderías a ese precio', escalones: 'A qué precio quedarías dónde' },
+}
+// la lectura de la revisión de un producto por comprar: el título dice el caso, el color solo lo repite
+const REVISION = {
+  'sin-leer': ['neutra', 'Falta mirar las fotos.'], 'lo-venden': ['atencion', 'Ya lo venden.'], 'otra-medida': ['atencion', 'Lo venden en otra medida.'],
+  parecidos: ['bien', 'Nadie vende este mismo.'], 'nada-parecido': ['neutra', 'No se parece a nada de la búsqueda.'],
+}
+
 const SIN_DATOS = {
   'sin-nicho': 'Este producto no tiene nicho asignado: sin su búsqueda no hay con quién compararlo.',
   'sin-scan': 'El nicho todavía no tiene un scan con publicaciones.',
@@ -34,12 +54,12 @@ const ESCALON_CORTO = { mediana: 'en la mitad', 'tres-mas-baratos': 'entre los 3
 const ordinal = (n) => `${fmtNum(n)}.º`
 const veces = (n) => `${String(n).replace('.', ',')} ${n === 1 ? 'vez' : 'veces'}`
 // lo que cambia por venta en un escalón, en palabras
-const lecturaEscalon = (e, conCosto) => {
+const lecturaEscalon = (e, conCosto, t = TEXTOS.propio) => {
   if (e.pierde) return 'A ese precio cada venta deja pérdida.'
   const partes = []
-  if (Number.isFinite(e.diferencia) && e.diferencia < 0) partes.push(`Son ${fmtPrecio(-e.diferencia)} menos por venta que hoy.`)
-  if (Number.isFinite(e.diferencia) && e.diferencia > 0) partes.push(`Son ${fmtPrecio(e.diferencia)} más por venta que hoy: a ese precio Mercado Libre te cobra menos.`)
-  if (e.veces > 1) partes.push(`Para juntar la misma plata tendrías que vender ${veces(e.veces)} lo de hoy.`)
+  if (Number.isFinite(e.diferencia) && e.diferencia < 0) partes.push(`Son ${fmtPrecio(-e.diferencia)} menos por venta ${t.queHoy}.`)
+  if (Number.isFinite(e.diferencia) && e.diferencia > 0) partes.push(`Son ${fmtPrecio(e.diferencia)} más por venta ${t.queHoy}: a ese precio Mercado Libre te cobra menos.`)
+  if (e.veces > 1) partes.push(`Para juntar la misma plata tendrías que vender ${veces(e.veces)} ${t.loDeHoy}.`)
   if (!conCosto && Number.isFinite(e.quedaSinCosto)) partes.push('Falta cargar el costo del producto para saber cuánto ganas ahí.')
   return partes.join(' ')
 }
@@ -72,8 +92,48 @@ const queda = (e, conCosto) => {
   return { valor: v < 0 ? `pierdes ${fmtPrecio(-v)}` : `te quedan ${fmtPrecio(v)}`, tono: v < 0 ? 'problema' : 'bien', detalle: `por venta a ${fmtPrecio(e.precio)}${conCosto ? ', antes de publicidad' : ', para pagar el producto'}` }
 }
 
-export function QuienVendeLoMismo({ propioId }) {
-  const [v, setV] = useState(null)
+// lo que da la búsqueda por esa plata, en la medida del producto (watts, piezas, metros…)
+const COLUMNAS_MEDIDA = [{ id: 'medida', titulo: 'Medida', ancha: true }, { id: 'cuantas', titulo: 'Publicaciones' }, { id: 'precio', titulo: 'Por unidad, la mitad cobra menos de' }, { id: 'vendidos', titulo: 'Llevan vendido' }]
+function PorLaPlata({ m, fecha }) {
+  if (!m?.conMedida) return null
+  const tope = Math.max(...m.grupos.map((g) => g.n), 1)
+  return (
+    <>
+      <Subtitulo titulo="Qué da la búsqueda por esa plata">
+        <span>{fmtNum(m.conMedida)} {m.conMedida === 1 ? 'publicación dice' : 'publicaciones dicen'} su {m.nombre} en el título · scan del {fmtFechaCorta(fecha)}</span>
+      </Subtitulo>
+      <Aviso tono={m.masPorMenos.n > 0 ? 'atencion' : 'neutra'} Icono={Ruler}>{m.frase}</Aviso>
+      <Filas columnas={COLUMNAS_MEDIDA}>
+        {m.grupos.map((g) => (
+          <Fila key={g.texto} columnas={COLUMNAS_MEDIDA} tono={g.esLaMia ? 'destacada' : undefined} celdas={{
+            medida: <Dato valor={g.texto}>{g.esLaMia ? <Etiqueta tono="destacada">esta medida</Etiqueta> : null}</Dato>,
+            cuantas: <Dato valor={fmtNum(g.n)}><Nivel fraccion={g.n / tope} tono={g.esLaMia ? 'destacada' : 'neutra'} /></Dato>,
+            precio: <Dato valor={g.medianaUnidad != null ? fmtPrecio(g.medianaUnidad) : '—'} detalle={g.n > 1 ? `desde ${fmtPrecio(g.masBaratoUnidad)}` : g.n === 1 ? null : 'nadie la ofrece'} />,
+            vendidos: <Dato valor={g.vendidos > 0 ? `+${fmtNum(g.vendidos)}` : '—'} detalle={g.vendidos > 0 ? 'entre todas' : null} />,
+          }} />
+        ))}
+      </Filas>
+      {m.masPorMenos.ejemplos.length ? (
+        <>
+          <Nota>Las que dan más {m.nombre} por la misma plata o menos, primero las que más han vendido:</Nota>
+          <Fichas>
+            {m.masPorMenos.ejemplos.map((x) => (
+              <FichaFoto key={x.sku} foto={x.imagen} enlace={x.url} titulo={x.titulo} principal={fmtPrecio(x.precioUnidad)} secundario="por unidad"
+                etiquetas={<><Etiqueta tono="atencion">{x.medida}</Etiqueta>{x.vendidos ? <Etiqueta>+{fmtNum(x.vendidos)} vendidos</Etiqueta> : null}</>} />
+            ))}
+          </Fichas>
+        </>
+      ) : null}
+    </>
+  )
+}
+
+// `propioId`: una publicación propia o un producto que todavía no se compra. `leerAlAbrir`: mira las fotos apenas
+// carga si nunca se han mirado (recién subido). `alCambiar(vista)`: avisa cada vista nueva a quien lo contiene.
+export function QuienVendeLoMismo({ propioId, leerAlAbrir = false, alCambiar = null }) {
+  const [v, setVista] = useState(null)
+  const yaLeyo = useRef(false)
+  const setV = (x) => { setVista(x); if (x) alCambiar?.(x) }
   const [error, setError] = useState(null)
   const [ocupado, setOcupado] = useState(null)
   const [unidades, setUnidades] = useState({})
@@ -105,12 +165,21 @@ export function QuienVendeLoMismo({ propioId }) {
     }
   }
   const marcar = (c, relacion) => correr(c.sku, () => api.marcarIgual(propioId, { sku: c.sku, relacion, ...(relacion === 'igual' || relacion === 'otra-medida' ? { unidades: unidades[c.sku] ?? c.unidades ?? 1 } : {}) }))
+  // un producto recién subido: las fotos de la búsqueda se miran solas, una vez
+  useEffect(() => {
+    if (!leerAlAbrir || yaLeyo.current || v?.estado !== 'ok' || v.fotos.revisadas > 0 || !v.fotos.sinRevisar) return
+    yaLeyo.current = true
+    correr('fotos', () => api.sugerirIguales(propioId))
+  }, [v, leerAlAbrir])
 
   if (error && !v) return <p className="vacio">{error}</p>
   if (!v) return <Cargando texto="leyendo el último scan del nicho…" />
   if (v.estado !== 'ok') return <p className="vacio">{SIN_DATOS[v.estado] ?? v.estado}</p>
 
   const r = v.resumen ?? {}
+  const cand = v.candidato ?? null
+  const rev = v.revision ?? null
+  const t = TEXTOS[cand ? 'candidato' : 'propio']
   const eco = v.economia
   const otras = v.otraMedida ?? []
   const hoy = queda(eco?.hoy, eco?.conCosto)
@@ -152,35 +221,52 @@ export function QuienVendeLoMismo({ propioId }) {
           {v.scan.pausado ? ' El nicho está pausado, por eso no se ha vuelto a medir; se reactiva en Nichos.' : ''}
         </Aviso>
       ) : null}
-      <Aviso tono={r.masBaratos > 0 ? 'atencion' : v.iguales.length ? 'bien' : 'neutra'} Icono={ScanSearch}>
+      {rev ? (
+        <Aviso tono={REVISION[rev.estado]?.[0] ?? 'neutra'} Icono={ScanSearch} titulo={mirando ? 'Mirando las fotos…' : REVISION[rev.estado]?.[1]}>
+          {mirando ? `Estoy comparando tu foto con las ${fmtNum(rev.total)} publicaciones de la búsqueda. Tarda cerca de un minuto.` : rev.frase}
+        </Aviso>
+      ) : null}
+      {rev?.mismos ? (
+        <Cifras>
+          <Cifra etiqueta="Venden este mismo producto" valor={`${fmtNum(rev.mismos.n)} de ${fmtNum(rev.total)}`}
+            detalle={rev.mismos.sinConfirmar ? `publicaciones de la búsqueda · ${fmtNum(rev.mismos.sinConfirmar)} según la foto, falta que ${rev.mismos.sinConfirmar === 1 ? 'la' : 'las'} confirmes` : 'publicaciones de la búsqueda, confirmadas por ti'} />
+          <Cifra etiqueta="La más barata cobra" valor={fmtPrecio(rev.mismos.masBaratoUnidad)} tono={rev.mismos.masBaratos > 0 ? 'problema' : undefined} detalle={`por unidad · la mitad cobra menos de ${fmtPrecio(rev.mismos.medianaUnidad)}`} />
+          <Cifra etiqueta="Llevan vendido" valor={rev.mismos.vendidos > 0 ? `+${fmtNum(rev.mismos.vendidos)}` : 'sin dato'} detalle="unidades entre todas desde que se publicaron (el piso que muestra Mercado Libre)" />
+          {v.propio.precioUnidad ? (
+            <Cifra etiqueta={t.aTuPrecio} valor={hoy ? hoy.valor : `quedarías ${ordinal(rev.mismos.masBaratos + 1)} de ${fmtNum(rev.mismos.n + 1)}`} tono={hoy?.tono}
+              detalle={hoy ? `${hoy.detalle}${eco?.aproximada ? ' (cuenta aproximada)' : ''} · quedarías ${ordinal(rev.mismos.masBaratos + 1)} de ${fmtNum(rev.mismos.n + 1)} por precio` : 'por precio, del más barato al más caro'} />
+          ) : null}
+        </Cifras>
+      ) : null}
+      {rev ? null : <Aviso tono={r.masBaratos > 0 ? 'atencion' : v.iguales.length ? 'bien' : 'neutra'} Icono={ScanSearch}>
         {ningunaIgual ? `Por la foto, ninguna publicación es tu mismo producto.${v.fotos.parecidas ? ' Abajo van primero las que más se le parecen; sus precios sirven de referencia, no son tu mismo producto.' : ''}` : r.frase}
         {otras.length ? ` Hay ${otras.length === 1 ? 'otra publicación' : `otras ${fmtNum(otras.length)}`} del mismo producto en otra medida: ${otras.length === 1 ? 'va' : 'van'} aparte, más abajo.` : ''}
-      </Aviso>
+      </Aviso>}
 
       {ningunaIgual && v.parecidos ? (
         <Cifras>
-          <Cifra etiqueta="Tu precio por unidad" valor={fmtPrecio(v.propio.precioUnidad)} detalle={v.propio.unidades > 1 ? `tu publicación trae ${fmtNum(v.propio.unidades)} a ${fmtPrecio(v.propio.precio)}` : 'tu publicación trae 1 unidad'} />
+          <Cifra etiqueta={t.precioUnidad} valor={fmtPrecio(v.propio.precioUnidad)} detalle={t.trae(v.propio.unidades, v.propio.precio)} />
           <Cifra etiqueta="La más barata de las parecidas" valor={fmtPrecio(v.parecidos.masBaratoUnidad)} tono={v.parecidos.masBaratos > 0 ? 'problema' : undefined} detalle={`por unidad, entre las ${fmtNum(v.parecidos.n)} que más se parecen`} />
           <Cifra etiqueta="La mitad de las parecidas cobra menos de" valor={fmtPrecio(v.parecidos.medianaUnidad)} detalle={v.parecidos.masBaratos != null ? `${fmtNum(v.parecidos.masBaratos)} de ${fmtNum(v.parecidos.n)} cobran menos que tú` : 'por unidad'} />
         </Cifras>
       ) : null}
 
-      {v.iguales.length ? (
+      {v.iguales.length && !rev ? (
         <Cifras>
-          <Cifra etiqueta="Tu precio por unidad" valor={fmtPrecio(v.propio.precioUnidad)} detalle={v.propio.unidades > 1 ? `tu publicación trae ${fmtNum(v.propio.unidades)} a ${fmtPrecio(v.propio.precio)}` : 'tu publicación trae 1 unidad'} />
+          <Cifra etiqueta={t.precioUnidad} valor={fmtPrecio(v.propio.precioUnidad)} detalle={t.trae(v.propio.unidades, v.propio.precio)} />
           {r.masBarato ? <Cifra etiqueta="El más barato cobra" valor={fmtPrecio(r.masBarato.precioUnidad)} tono={r.masBaratos > 0 ? 'problema' : undefined} detalle={`por unidad · ${presentacion(r.masBarato)}`} /> : null}
           {r.medianaUnidad ? <Cifra etiqueta="La mitad cobra menos de" valor={fmtPrecio(r.medianaUnidad)} detalle="por unidad, entre los que venden lo mismo en tu medida" /> : null}
-          {hoy ? <Cifra etiqueta="A tu precio de hoy" valor={hoy.valor} tono={hoy.tono} detalle={`${hoy.detalle}${r.lugar ? ` · quedas ${ordinal(r.lugar)} de ${fmtNum(r.de)} por precio` : ''}`} /> : null}
+          {hoy ? <Cifra etiqueta={t.aTuPrecio} valor={hoy.valor} tono={hoy.tono} detalle={`${hoy.detalle}${r.lugar ? ` · quedas ${ordinal(r.lugar)} de ${fmtNum(r.de)} por precio` : ''}`} /> : null}
         </Cifras>
       ) : null}
 
       {enScan.length && v.propio.precioUnidad ? (
         <>
-          <Subtitulo titulo="Si haces un descuento"><span>a qué precio cambias de lugar y cuánto deja cada venta ahí</span></Subtitulo>
+          <Subtitulo titulo={t.escalones}><span>a qué precio cambias de lugar y cuánto deja cada venta ahí</span></Subtitulo>
           <ReglaPrecios titulo="Lo que cobra por unidad cada uno que vende lo mismo" fuente={`${fmtNum(enScan.length)} ${enScan.length === 1 ? 'publicación' : 'publicaciones'} · scan del ${fmtFechaCorta(v.fechaScan)}`}
             puntos={enScan.map((x) => x.precioUnidad)} formato={fmtPrecio}
             marcas={[
-              { id: 'hoy', valor: v.propio.precioUnidad, titulo: `tú hoy${r.lugar ? `: ${ordinal(r.lugar)} de ${fmtNum(r.de)}` : ''}`, tono: 'destacada' },
+              { id: 'hoy', valor: v.propio.precioUnidad, titulo: `${t.marca}${r.lugar ? `: ${ordinal(r.lugar)} de ${fmtNum(r.de)}` : ''}`, tono: 'destacada' },
               ...escalones.map((e) => ({ id: e.meta, valor: e.precioUnidad, titulo: `${ESCALON_CORTO[e.meta]}: ${ordinal(e.lugar)} de ${fmtNum(e.de)}`, tono: e.pierde ? 'problema' : e.pierde === false ? 'bien' : 'neutra' })),
             ]}>
             Cada rayita es una publicación que vende lo mismo{v.propio.medida ? ' en tu medida' : ''}. Mientras más a la izquierda, más barata.
@@ -191,27 +277,38 @@ export function QuienVendeLoMismo({ propioId }) {
                 const q = queda(e, eco.conCosto)
                 return (
                   <Cifra key={e.meta} etiqueta={ESCALON[e.meta]} valor={fmtPrecio(e.precio)}
-                    detalle={`o menos · ${fmtNum(e.descuentoPct)}% bajo tu precio de hoy${v.propio.unidades > 1 ? ` · ${fmtPrecio(e.precioUnidad)} por unidad` : ''}`}>
+                    detalle={`o menos · ${fmtNum(e.descuentoPct)}% ${t.bajo}${v.propio.unidades > 1 ? ` · ${fmtPrecio(e.precioUnidad)} por unidad` : ''}`}>
                     <Etiqueta tono="destacada">quedarías {ordinal(e.lugar)} de {fmtNum(e.de)}</Etiqueta>
                     {q ? <Etiqueta tono={eco.conCosto ? q.tono : 'neutra'}>{q.valor} por venta{eco.conCosto ? '' : ', para pagar el producto'}</Etiqueta> : null}
-                    {lecturaEscalon(e, eco.conCosto) ? <p>{lecturaEscalon(e, eco.conCosto)}</p> : null}
+                    {lecturaEscalon(e, eco.conCosto, t) ? <p>{lecturaEscalon(e, eco.conCosto, t)}</p> : null}
                   </Cifra>
                 )
               })}
             </Cifras>
-          ) : <Nota>{r.masBaratos === 0 ? 'Nadie cobra menos que tú por unidad: no hay descuento que te mueva de lugar.' : 'A tu precio de hoy, un descuento chico no cambia tu lugar.'}</Nota>}
-          {escalones.length ? <Nota>Son cuentas para decidir, no una recomendación. Lo que queda es después de la comisión y el envío de Mercado Libre{eco?.conCosto ? ' y del costo del producto' : ''}, antes de publicidad.</Nota> : null}
+          ) : <Nota>{r.masBaratos === 0 ? 'Nadie cobra menos que tú por unidad: no hay descuento que te mueva de lugar.' : `${t.aTuPrecio}, un descuento chico no cambia tu lugar.`}</Nota>}
+          {escalones.length ? <Nota>Son cuentas para decidir, no una recomendación. Lo que queda es después de la comisión y el envío de Mercado Libre{eco?.conCosto ? ' y del costo del producto' : ''}, antes de publicidad.{eco?.aproximada ? ' Como el producto todavía no existe en Mercado Libre, la comisión y el envío son los medidos en tus ventas: es una aproximación.' : ''}</Nota> : null}
         </>
       ) : null}
+
+      {rev?.mismos && !enScan.length ? <Nota>Confirma abajo las que son el mismo producto y vas a ver a qué precio quedarías dónde y cuánto quedaría por venta.</Nota> : null}
+      <PorLaPlata m={v.porLaPlata} fecha={v.fechaScan} />
 
       <Subtitulo titulo={v.propio.medida ? `Venden lo mismo, en tu medida (${v.propio.medida})` : 'Venden lo mismo'} cuenta={v.iguales.length}>
         <span>precios del scan del {fmtFechaCorta(v.fechaScan)} en “{v.keyword}”</span>
       </Subtitulo>
       <Fichas>
-        <FichaFoto tono="destacada" foto={v.propio.imagen} principal={fmtPrecio(v.propio.precioUnidad)} secundario="por unidad · el tuyo" titulo={v.propio.titulo}
+        <FichaFoto tono="destacada" foto={v.propio.imagen} principal={v.propio.precioUnidad ? fmtPrecio(v.propio.precioUnidad) : 'sin precio'} secundario={`por unidad · ${t.elTuyo}`} titulo={v.propio.titulo}
           etiquetas={v.propio.medida ? <Etiqueta tono="destacada">{v.propio.medida}</Etiqueta> : null}>
           <CampoNumero antes="trae" despues={v.propio.unidades === 1 ? 'unidad' : 'unidades'} valor={v.propio.unidades} deshabilitado={!!ocupado}
             onCambiar={(n) => correr('propio', () => api.marcarIgual(propioId, { unidadesPropias: n }))} />
+          {cand ? (
+            <>
+              <CampoNumero largo antes="piensas venderlo a $" valor={cand.precioClp ?? undefined} min={1} max={50000000} deshabilitado={!!ocupado}
+                onCambiar={(n) => correr('propio', () => api.cambiarCandidato(propioId, { precioClp: n }))} />
+              <CampoNumero largo antes="te costaría $" despues="por unidad, puesto en Chile" valor={cand.costoUnitarioClp ?? undefined} min={0} max={50000000} deshabilitado={!!ocupado}
+                onCambiar={(n) => correr('propio', () => api.cambiarCandidato(propioId, { costoUnitarioClp: n }))} />
+            </>
+          ) : null}
         </FichaFoto>
         {(verIguales ? v.iguales : v.iguales.slice(0, PRIMERAS - 1)).map((x) => confirmado(x, false))}
       </Fichas>

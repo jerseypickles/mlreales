@@ -23,6 +23,9 @@ import { config } from '../config/env.js'
 
 export function crearApp() {
   const app = express()
+  // la foto de un producto por revisar viaja dentro del pedido (ya achicada en el navegador) y pasa el tope por
+  // defecto de 100 kb. Va antes del lector general, que no vuelve a leer un cuerpo ya leído.
+  app.use('/api/iguales/candidatos', express.json({ limit: '1500kb' }))
   app.use(express.json())
 
   // el dashboard corre en otro dominio (static site); CORS_ORIGEN restringe si se define

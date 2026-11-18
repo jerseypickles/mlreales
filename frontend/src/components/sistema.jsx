@@ -13,6 +13,8 @@
 // prefijo `s-`. Lo que una pantalla necesite y no esté acá se agrega acá, no en
 // la pantalla.
 
+import { useState } from 'react'
+
 // Cabecera de página. `children` son las acciones de la derecha (buscador, un
 // solo botón principal, estado).
 export function EncabezadoPagina({ titulo, bajada, children }) {
@@ -211,15 +213,48 @@ export function FichaFoto({ foto, enlace, titulo, principal, secundario, detalle
   )
 }
 
-// Un número corto que se escribe en la misma línea: «trae [2] unidades». Avisa el valor al salir del campo o con Enter.
-export function CampoNumero({ antes, despues, valor, onCambiar, min = 1, max = 500, deshabilitado = false }) {
+// Un número corto que se escribe en la misma línea: «trae [2] unidades». Avisa el valor al salir del campo o con Enter;
+// un campo vacío no avisa nada. `largo` deja espacio para una cifra de plata.
+export function CampoNumero({ antes, despues, valor, onCambiar, min = 1, max = 500, deshabilitado = false, largo = false }) {
   return (
-    <label className="s-campo-numero">
+    <label className={`s-campo-numero${largo ? ' s-campo-numero-largo' : ''}`}>
       {antes ? <span>{antes}</span> : null}
       <input type="number" inputMode="numeric" min={min} max={max} defaultValue={valor} key={valor} disabled={deshabilitado}
-        onBlur={(e) => { const n = Number(e.target.value); if (Number.isFinite(n) && n >= min && n <= max && n !== valor) onCambiar(n) }}
+        onBlur={(e) => { if (e.target.value === '') return; const n = Number(e.target.value); if (Number.isFinite(n) && n >= min && n <= max && n !== valor) onCambiar(n) }}
         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
       {despues ? <span>{despues}</span> : null}
+    </label>
+  )
+}
+
+// Un campo de formulario: su nombre arriba, el control y, si hace falta, una ayuda corta debajo. `ancho` lo deja
+// ocupar la fila entera. Varios juntos van dentro de <Campos>.
+export function Campo({ etiqueta, ayuda, ancho = false, children }) {
+  return (
+    <label className={`s-campo${ancho ? ' s-campo-ancho' : ''}`}>
+      <span>{etiqueta}</span>
+      {children}
+      {ayuda ? <small>{ayuda}</small> : null}
+    </label>
+  )
+}
+export function Campos({ children }) {
+  return <div className="s-campos">{children}</div>
+}
+
+// Campo para una foto: se elige el archivo, se arrastra encima o se pega con Ctrl+V. `foto` es la imagen ya
+// elegida (una dirección o un data URL) y se muestra en chico; `onArchivo` recibe el archivo tal como viene, para
+// que la pantalla lo achique antes de subirlo.
+export function CampoFoto({ foto, onArchivo, Icono, texto = 'Elegir una foto', ayuda, deshabilitado = false }) {
+  const [encima, setEncima] = useState(false)
+  const tomar = (archivos) => { const a = [...(archivos ?? [])].find((x) => String(x.type ?? '').startsWith('image/')); if (a && !deshabilitado) onArchivo(a) }
+  return (
+    <label className={`s-campo-foto${encima ? ' s-campo-foto-encima' : ''}`} tabIndex={0}
+      onDragOver={(e) => { e.preventDefault(); setEncima(true) }} onDragLeave={() => setEncima(false)}
+      onDrop={(e) => { e.preventDefault(); setEncima(false); tomar(e.dataTransfer.files) }} onPaste={(e) => tomar(e.clipboardData?.files)}>
+      <input type="file" accept="image/*" disabled={deshabilitado} onChange={(e) => { tomar(e.target.files); e.target.value = '' }} />
+      <span className="s-campo-foto-imagen">{foto ? <img src={foto} alt="" /> : Icono ? <Icono size={24} aria-hidden="true" /> : null}</span>
+      <span className="s-campo-foto-texto"><strong>{foto ? 'Cambiar la foto' : texto}</strong>{ayuda ? <small>{ayuda}</small> : null}</span>
     </label>
   )
 }

@@ -82,12 +82,26 @@ export function medidasDeTitulo(titulo) {
   const poner = (k, v) => { if (v != null && Number.isFinite(v) && v > 0) m[k] = v }
   poner('largoM', uno(/\b(\d{1,3}(?:[.,]\d)?) ?(?:m|mt|mts|metros?)\b/))
   poner('watts', uno(/\b(\d{1,5}) ?(?:w|watts?)\b/))
-  poner('piezas', uno(/\b(\d{1,4}) ?(?:piezas?|pzas?|pzs?|pcs)\b/))
+  poner('piezas', uno(/\b(\d{1,4}) ?(?:piezas?|pzas?|pzs?|pcs)\b/) ?? piezasDeSet(sinDims))
   poner('ml', uno(/\b(\d{1,5}) ?(?:ml|cc)\b/) ?? uno(/\b(\d{1,3}(?:[.,]\d{1,2})?) ?(?:l|lt|lts|litros?)\b/, (x) => x * 1000))
   poner('gramos', uno(/\b(\d{1,5}) ?(?:g|gr|grs|gramos?)\b/) ?? uno(/\b(\d{1,3}(?:[.,]\d{1,2})?) ?(?:kg|kilos?)\b/, (x) => x * 1000))
   poner('leds', uno(/\b(\d{1,4}) ?leds?\b/))
   poner('mah', uno(/\b(\d{3,6}) ?mah\b/))
   return m
+}
+
+// Pura. Las piezas de un set cuando el título no dice «piezas»: «Set 56 Pinceles», «Kit de 12 Destornilladores», «Set 8 +
+// Estuche». Medido el 18-nov-2026 en una búsqueda de sets: casi ningún título traía la palabra, y sin eso un set
+// de 34 no se podía comparar con uno de 56. Solo en títulos que dicen set, kit o juego; el número pegado a esa
+// palabra o el que va delante de lo que trae. Lo que es una unidad, un color o una medida no cuenta.
+const NO_SON_PIEZAS = new Set([...NO_SON_UNIDADES, 'unidades', 'unidad', 'unids', 'unid', 'uds', 'packs', 'sets', 'kits', 'juegos', 'plazas', 'personas', 'puestos', 'tallas', 'capas', 'tonos',
+  'litros', 'gramos', 'kilos', 'voltios', 'cuotas', 'cm', 'mm', 'm', 'mt', 'mts', 'w', 'ml', 'l', 'lt', 'lts', 'kg', 'g', 'gr', 'grs', 'v', 'en', 'x', 'de'])
+function piezasDeSet(t) {
+  if (!/\b(?:set|kit|juego)\b/.test(t)) return null
+  const m = /\b(?:set|kit|juego) (?:de )?(\d{1,4})\b(?: ([a-zñ]+))?/.exec(t) ?? /\b(\d{1,4}) ([a-zñ]{4,}s)\b/.exec(t)
+  if (!m || (m[2] && NO_SON_PIEZAS.has(m[2]))) return null
+  const n = Number(m[1])
+  return n >= 2 ? n : null
 }
 
 const NOMBRE_MEDIDA = { dimensiones: (v) => `${[...v].reverse().map((x) => String(x).replace('.', ',')).join('×')} cm`, largoM: (v) => `${String(v).replace('.', ',')} m`, watts: (v) => `${v} w`, piezas: (v) => `${v} piezas`,
@@ -116,6 +130,62 @@ export function compararMedida(propia, otra) {
   const escalable = ['dimensiones', 'ml', 'gramos'].includes(distinto) && (!Array.isArray(propia[distinto]) || propia[distinto].length === otra[distinto].length)
   const factor = escalable && tamano(otra[distinto]) > 0 ? Math.round((tamano(propia[distinto]) / tamano(otra[distinto])) * 1000) / 1000 : null
   return { estado: 'distinta', texto: NOMBRE_MEDIDA[distinto](otra[distinto]), factor }
+}
+
+// ─── QUÉ DA LA BÚSQUEDA POR ESA PLATA ───────────────────────────────────────
+// Lectura del dueño (18-nov-2026) de por qué no se movió parte de su primera importación: «fallamos por traer lo
+// mismo que los demás, sobre todo en diseño y watts». Medido ese día en el scan: a la plata de su producto, la
+// búsqueda ofrecía bastante más medida, y la medida propia se vendía a poco más de la mitad. La foto dice quién
+// vende el mismo producto; esto dice lo otro que compara el comprador: cuánto le dan por lo que paga.
+//
+// Pura. Se mira un solo tipo de medida: el primero que trae el título propio (watts, piezas, metros…). De las
+// publicaciones del scan que traen esa medida: cuántas tienen la misma y a cuánto la venden, y cuántas dan MÁS
+// medida por la misma plata o menos. Se cuenta; no hay umbrales elegidos a mano.
+// `publicaciones`: [{ sku, titulo, precioUnidad, vendidos, imagen, url, medidas? }] (sin `medidas`, las del título).
+const NOMBRE_TIPO = { dimensiones: 'tamaño', largoM: 'largo', watts: 'watts', piezas: 'piezas', ml: 'contenido', gramos: 'peso', mah: 'batería', leds: 'leds' }
+const tamano = (v) => (Array.isArray(v) ? v.reduce((a, x) => a * x, 1) : v)
+export function medidaPorLaPlata(medidaPropia, precioUnidadPropio, publicaciones, { ejemplos = 3, maxGrupos = 12 } = {}) {
+  const tipo = ORDEN_MEDIDAS.find((k) => medidaPropia?.[k] != null)
+  if (!tipo) return null
+  const mia = medidaPropia[tipo], miTamano = tamano(mia), texto = NOMBRE_MEDIDA[tipo](mia)
+  const sirve = (m) => m != null && (Array.isArray(mia) ? Array.isArray(m) && m.length === mia.length : !Array.isArray(m))
+  const xs = (publicaciones ?? []).map((p) => ({ p, m: (p.medidas ?? medidasDeTitulo(p.titulo))[tipo] }))
+    .filter((x) => sirve(x.m) && finito(x.p.precioUnidad) && x.p.precioUnidad > 0).map((x) => ({ ...x, t: tamano(x.m) }))
+  const conPrecio = finito(precioUnidadPropio) && precioUnidadPropio > 0
+  const porValor = new Map()
+  for (const x of xs) {
+    const k = JSON.stringify(x.m)
+    porValor.set(k, [...(porValor.get(k) ?? []), x])
+  }
+  const grupo = (lista) => ({ valor: lista[0].m, texto: NOMBRE_MEDIDA[tipo](lista[0].m), tamano: lista[0].t, n: lista.length,
+    masBaratoUnidad: Math.min(...lista.map((x) => x.p.precioUnidad)), medianaUnidad: Math.round(mediana(lista.map((x) => x.p.precioUnidad))),
+    vendidos: lista.reduce((a, x) => a + (finito(x.p.vendidos) ? x.p.vendidos : 0), 0), esLaMia: lista[0].t === miTamano })
+  let grupos = [...porValor.values()].map(grupo)
+  // con muchas medidas distintas quedan las que más publicaciones tienen (y siempre la propia)
+  if (grupos.length > maxGrupos) grupos = [...grupos].sort((a, b) => b.esLaMia - a.esLaMia || b.n - a.n).slice(0, maxGrupos)
+  if (!grupos.some((g) => g.esLaMia)) grupos.push({ valor: mia, texto, tamano: miTamano, n: 0, masBaratoUnidad: null, medianaUnidad: null, vendidos: 0, esLaMia: true })
+  grupos.sort((a, b) => a.tamano - b.tamano)
+  const iguales = xs.filter((x) => x.t === miTamano)
+  const misma = { n: iguales.length, masBaratos: conPrecio ? iguales.filter((x) => x.p.precioUnidad < precioUnidadPropio).length : null,
+    masBaratoUnidad: iguales.length ? Math.min(...iguales.map((x) => x.p.precioUnidad)) : null, medianaUnidad: iguales.length ? Math.round(mediana(iguales.map((x) => x.p.precioUnidad))) : null }
+  const mas = conPrecio ? xs.filter((x) => x.t > miTamano && x.p.precioUnidad <= precioUnidadPropio) : []
+  const mayor = mas.length ? mas.reduce((a, x) => (x.t > a.t ? x : a)) : null
+  const masPorMenos = { n: mas.length, mayor: mayor ? NOMBRE_MEDIDA[tipo](mayor.m) : null,
+    ejemplos: [...mas].sort((a, b) => (b.p.vendidos ?? 0) - (a.p.vendidos ?? 0) || b.t - a.t).slice(0, ejemplos)
+      .map((x) => ({ sku: x.p.sku, titulo: x.p.titulo, imagen: x.p.imagen ?? null, url: x.p.url ?? null, precioUnidad: x.p.precioUnidad, medida: NOMBRE_MEDIDA[tipo](x.m), vendidos: x.p.vendidos ?? null })) }
+  // lo contrario: quién da menos medida y cobra lo mismo o más
+  const menosPorMas = conPrecio ? xs.filter((x) => x.t < miTamano && x.p.precioUnidad >= precioUnidadPropio).length : null
+  const nombre = NOMBRE_TIPO[tipo]
+  const partes = []
+  if (!xs.length) partes.push(`Ninguna publicación de la búsqueda dice su ${nombre} en el título: no hay con qué comparar ${texto}.`)
+  else {
+    if (conPrecio) partes.push(mas.length
+      ? `Por ${pesos(precioUnidadPropio)} o menos, ${mas.length === 1 ? '1 publicación ofrece' : `${mas.length} publicaciones ofrecen`} más ${nombre} que ${texto} (hasta ${masPorMenos.mayor}).`
+      : `Por ${pesos(precioUnidadPropio)} o menos, ninguna publicación ofrece más ${nombre} que ${texto}.`)
+    partes.push(!iguales.length ? `Con ${texto} no hay ninguna otra.`
+      : `Con ${texto} hay ${iguales.length}${conPrecio ? ` y ${misma.masBaratos === 0 ? 'ninguna cobra menos' : misma.masBaratos === iguales.length ? (iguales.length === 1 ? 'cobra menos' : 'todas cobran menos') : `${misma.masBaratos} ${misma.masBaratos === 1 ? 'cobra' : 'cobran'} menos`}` : ''}; la mitad cobra menos de ${pesos(misma.medianaUnidad)} por unidad.`)
+  }
+  return { tipo, nombre, texto, conMedida: xs.length, misma, masPorMenos, menosPorMas, grupos, frase: partes.join(' ') }
 }
 
 // Pura. Lo que falta revisar, en el orden en que conviene mirarlo: lo que la
@@ -339,6 +409,11 @@ export async function vistaIguales(propio, { conEconomia = true, conHistoria = t
     const [hoy, ...quedan] = await Promise.all([queda(propio, precio), ...escalones.map((e) => queda(propio, e.precio))])
     economia = { hoy, conCosto, escalones: escalones.map((e, i) => ({ ...e, ...plataDelEscalon(hoy, quedan[i], conCosto) })) }
   }
+  // qué da la búsqueda por esa plata: todo lo que salió en el último scan, con la medida de su título o, si el
+  // título no la trae, la que leyó la foto
+  const medidasDe = (x) => { const leida = marcas.get(x.sku)?.sugerencia?.medida; return { ...(leida ? medidasDeTitulo(leida) : {}), ...medidasDeTitulo(x.titulo) } }
+  const delUltimoScan = [...iguales.filter((x) => x.enUltimoScan), ...otraMedida.filter((x) => x.enUltimoScan), ...candidatos, ...descartados]
+  const porLaPlata = medidaPorLaPlata(medidaPropia, precioUnidadPropio, delUltimoScan.map((x) => ({ ...x, medidas: medidasDe(x) })))
   const revisadas = [...marcas.values()].filter((m) => m.sugerencia).length
   const sinRevisar = candidatos.filter((c) => !c.sugerencia).length
   const parecen = (relacion) => candidatos.filter((c) => c.sugerencia?.relacion === relacion).length
@@ -350,7 +425,7 @@ export async function vistaIguales(propio, { conEconomia = true, conHistoria = t
     parecidos: iguales.length ? null : referenciaParecidos(precioUnidadPropio, candidatos),
     propio: { titulo: propio.titulo, imagen: propio.imagen ?? null, precio, unidades: unidadesPropias, unidadesDelTitulo: !(finito(propio.unidadesPack) && propio.unidadesPack >= 1), precioUnidad: precioUnidadPropio,
       medida: textoMedida(medidaPropia) },
-    resumen, economia, iguales, otraMedida, candidatos, descartados,
+    resumen, economia, iguales, otraMedida, candidatos, descartados, porLaPlata,
     fotos: { revisadas, sinRevisar, parecenIgual: parecen('igual'), parecenOtraMedida: parecen('otra-medida'), parecidas: parecen('parecido') },
     // ya se miraron todas las fotos y ninguna es el mismo producto: lo que queda es lo que más se le parece
     ningunaIgual: !iguales.length && !otraMedida.length && revisadas > 0 && sinRevisar === 0 && !parecen('igual') && !parecen('otra-medida'),
@@ -516,7 +591,8 @@ export async function sugerirIguales(propio, { max = 240, pedir = null, bajarFot
   const { imagenEnLinea } = await import('./auditor.js')
   const { pedirJSON } = await import('./llm.js')
   const foto = bajarFoto ?? ((url) => imagenEnLinea(fotoChica(url)))
-  const mia = propio.imagen ? await foto(propio.imagen) : null
+  // un producto que todavía no se compra trae su foto ya lista (la subió el dueño): no hay nada que bajar
+  const mia = propio.fotoEnLinea ?? (propio.imagen ? await foto(propio.imagen) : null)
   if (!mia) { const e = new Error('No pude bajar la foto de tu producto para comparar.'); e.status = 502; throw e }
   const clave = claveDePropio(propio)
   // las tandas van a la vez: cada una es una llamada con sus fotos, y en fila la lectura de un nicho entero
