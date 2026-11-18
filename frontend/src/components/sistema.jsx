@@ -56,13 +56,15 @@ export function Selector({ opciones, actual, onCambiar, etiqueta }) {
   )
 }
 
-// Una cifra de resumen: qué mide, el número y de dónde sale o contra qué se compara.
-export function Cifra({ etiqueta, valor, detalle, tono, title }) {
+// Una cifra de resumen: qué mide, el número y de dónde sale o contra qué se compara. `children` es lo que cambia
+// con esa cifra cuando es una opción entre varias (etiquetas y una lectura en palabras): va debajo, separado.
+export function Cifra({ etiqueta, valor, detalle, tono, title, children }) {
   return (
     <div className="s-cifra" title={title}>
       <span className="s-cifra-etiqueta">{etiqueta}</span>
       <strong className={tono ? `s-${tono}` : undefined}>{valor}</strong>
       {detalle ? <span className="s-cifra-detalle">{detalle}</span> : null}
+      {children ? <div className="s-cifra-extra">{children}</div> : null}
     </div>
   )
 }
@@ -109,6 +111,37 @@ export function BarraPartes({ titulo, fuente, partes, formato = (v) => `${Math.r
       </div>
       <ul className="s-partes-leyenda">
         {partes.map((x) => <li key={x.id} title={x.ayuda}><i className={`s-partes-${x.tono ?? 'neutra'}`} aria-hidden="true" /><b>{formato(x.valor)}</b><span>{x.titulo}</span></li>)}
+      </ul>
+      {children ? <p className="s-partes-lectura">{children}</p> : null}
+    </div>
+  )
+}
+
+// Regla de precios: dónde cae un precio entre los de otros. Cada precio ajeno es una rayita sobre la línea y las
+// marcas (el propio de hoy, los que se están mirando) van encima, más altas y con su color. La leyenda repite cada
+// marca con su número y su nombre: la posición en la línea nunca es lo único que informa. Los precios más altos (uno
+// de cada diez) se juntan en el borde derecho, para que uno solo no aplaste a todos los demás contra la izquierda.
+// puntos: [número] · marcas: [{ id, valor, titulo, tono? }] · tonos: destacada, bien, atencion, problema, neutra
+// `children` es la lectura de una línea que va debajo.
+export function ReglaPrecios({ titulo, fuente, puntos = [], marcas = [], formato = (v) => String(v), children }) {
+  const precios = puntos.filter((p) => Number.isFinite(p) && p > 0).sort((a, b) => a - b)
+  const visibles = marcas.filter((m) => Number.isFinite(m.valor) && m.valor > 0)
+  if (!precios.length && !visibles.length) return null
+  const valores = visibles.map((m) => m.valor)
+  const desde = Math.min(precios[0] ?? Infinity, ...valores)
+  const hasta = Math.max(precios.length ? precios[Math.floor((precios.length - 1) * 0.9)] : 0, ...valores, desde + 1)
+  const x = (v) => `${Math.min(100, Math.max(0, ((v - desde) / (hasta - desde)) * 100))}%`
+  const fuera = precios.filter((p) => p > hasta).length
+  return (
+    <div className="s-regla">
+      {titulo ? <div className="s-partes-cabeza"><span>{titulo}</span>{fuente ? <small>{fuente}</small> : null}</div> : null}
+      <div className="s-regla-pista" role="img" aria-label={[`${precios.length} precios, de ${formato(desde)} a ${formato(hasta)}`, ...visibles.map((m) => `${formato(m.valor)} ${m.titulo}`)].join(', ')}>
+        {precios.map((p, i) => <i key={i} style={{ left: x(p) }} />)}
+        {visibles.map((m) => <b key={m.id} className={`s-partes-${m.tono ?? 'destacada'}`} style={{ left: x(m.valor) }} />)}
+      </div>
+      <div className="s-regla-extremos"><span>{formato(desde)}</span><span>{formato(hasta)}{fuera ? ' o más' : ''}</span></div>
+      <ul className="s-partes-leyenda">
+        {visibles.map((m) => <li key={m.id}><i className={`s-partes-${m.tono ?? 'destacada'}`} aria-hidden="true" /><b>{formato(m.valor)}</b><span>{m.titulo}</span></li>)}
       </ul>
       {children ? <p className="s-partes-lectura">{children}</p> : null}
     </div>

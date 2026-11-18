@@ -97,6 +97,7 @@ export const api = {
   ajustarGama: (id, cambio) => pedir(`/api/propios/${id}/gama`, { ...json(cambio), method: 'PATCH' }),
   // quién vende lo mismo: { sku, relacion: 'igual' | 'distinto' | null, unidades } | { unidadesPropias }
   igualesPropio: (id) => pedir(`/api/iguales/${id}`),
+  precioIguales: () => pedir('/api/iguales/resumen'),
   marcarIgual: (id, cambio) => pedir(`/api/iguales/${id}`, { ...json(cambio), method: 'PATCH' }),
   sugerirIguales: (id) => pedir(`/api/iguales/${id}/sugerir`, { method: 'POST' }),
   auditarPropio: (id) => pedir(`/api/propios/${id}/auditar`, { method: 'POST' }),

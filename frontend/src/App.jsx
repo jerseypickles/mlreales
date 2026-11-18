@@ -770,6 +770,8 @@ export default function App() {
   const [errorLista, setErrorLista] = useState(null)
   const [bloqueada, setBloqueada] = useState(false)
   const [vista, setVista] = useState('oportunidades')
+  // desde Publicidad se llega a Mis productos buscando un producto (su aviso de precio contra los que venden lo mismo)
+  const [buscarPropio, setBuscarPropio] = useState(null)
   // alerta temprana de stock en Full: liviana (solo Mongo), cada 10 minutos
   const [alertasStock, setAlertasStock] = useState(null)
   useEffect(() => {
@@ -828,11 +830,12 @@ export default function App() {
         onIr={(id) => {
           if (id === 'contabilidad') return setMundo('contabilidad')
           setMundo('inteligencia')
+          setBuscarPropio(null)
           setVista(id)
         }}
       />
       <div className="pagina">
-      {mundo !== 'contabilidad' ? <AlertaStock datos={alertasStock} alAbrir={() => setVista('propios')} /> : null}
+      {mundo !== 'contabilidad' ? <AlertaStock datos={alertasStock} alAbrir={() => { setBuscarPropio(null); setVista('propios') }} /> : null}
       {mundo === 'contabilidad' ? (
         <Contabilidad />
       ) : vista === 'oportunidades' ? (
@@ -843,9 +846,9 @@ export default function App() {
           }}
         />
       ) : vista === 'propios' ? (
-        <MisProductos />
+        <MisProductos buscarInicial={buscarPropio} />
       ) : vista === 'publicidad' ? (
-        <Publicidad />
+        <Publicidad onVerPropio={(titulo) => { setBuscarPropio(titulo); setVista('propios') }} />
       ) : vista === 'aprendizaje' ? (
         <Aprendizaje />
       ) : (

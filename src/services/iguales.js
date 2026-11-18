@@ -25,6 +25,7 @@ import { Nicho } from '../models/Nicho.js'
 import { Snapshot } from '../models/Snapshot.js'
 import { Producto } from '../models/Producto.js'
 import { precioDePropio, vistaDelNicho } from './gama.js'
+import { FILTRO_VIGENTES } from '../../frontend/src/lib/catalogoPropios.js'
 
 const finito = Number.isFinite
 const sinTildes = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -145,11 +146,17 @@ export function referenciaParecidos(precioUnidadPropio, candidatos, { desde = 70
   if (!xs.length) return null
   const precios = xs.map((c) => c.precioUnidad).sort((a, b) => a - b)
   return { n: xs.length, desde, masBaratoUnidad: precios[0], medianaUnidad: Math.round(mediana(precios)), masCaroUnidad: precios.at(-1),
-    masBaratos: finito(precioUnidadPropio) ? precios.filter((p) => p < precioUnidadPropio).length : null }
+    masBaratos: finito(precioUnidadPropio) ? precios.filter((p) => p < precioUnidadPropio).length : null, precios }
 }
 
 const mediana = (xs) => { const v = xs.filter(finito).sort((a, b) => a - b); if (!v.length) return null; const m = Math.floor(v.length / 2); return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2 }
 const pesos = (n) => `$${Math.round(n).toLocaleString('es-CL')}`
+
+// Pura. Dónde queda un precio cuando `masBaratos` de los `n` que venden lo mismo
+// cobran menos. «Caro» es que más de la mitad cobre menos: sale de contar, no de
+// un porcentaje elegido a mano.
+export const nivelDePrecio = (masBaratos, n) => (masBaratos === 0 ? 'ninguno-mas-barato' : masBaratos === n ? 'todos-mas-baratos' : masBaratos > n / 2 ? 'mitad-cara' : 'mitad-barata')
+export const NIVELES_CAROS = ['mitad-cara', 'todos-mas-baratos']
 
 // Pura. Dónde queda el precio propio POR UNIDAD entre los que venden lo mismo.
 // `iguales`: [{ sku, precio, unidades, precioUnidad }].
@@ -166,7 +173,59 @@ export function resumenIguales(precioUnidadPropio, iguales) {
   const frase = masBaratos === 0
     ? `De ${n} que ${n === 1 ? 'vende' : 'venden'} lo mismo, ninguno cobra menos que tú por unidad.`
     : `De ${n} que ${n === 1 ? 'vende' : 'venden'} lo mismo, ${masBaratos === n ? (n === 1 ? 'cobra' : 'todos cobran') : `${masBaratos} ${masBaratos === 1 ? 'cobra' : 'cobran'}`} menos que tú por unidad. El más barato cobra ${pesos(masBarato.precioUnidad)}, un ${brechaPct}% menos.`
-  return { ...base, masBaratos, lugar: masBaratos + 1, de: n + 1, brechaPct, frase }
+  return { ...base, masBaratos, lugar: masBaratos + 1, de: n + 1, brechaPct, nivel: nivelDePrecio(masBaratos, n), frase }
+}
+
+// ─── A QUÉ PRECIO SE CAMBIA DE LUGAR ────────────────────────────────────────
+// Pedido del dueño (18-nov-2026), para decidir descuentos: no basta saber que
+// hay más baratos, hay que ver a qué precio se queda dónde y cuánto deja cada
+// venta ahí. Los escalones son los precios en que la publicación propia pasa a
+// otro lugar entre los que venden lo mismo: quedar en la mitad, entre los tres
+// más baratos e igualar al más barato. No recomiendan ninguno: el dueño elige.
+
+// Pura. `iguales`: [{ precioUnidad }]. Van del descuento más chico al más grande
+// y cada escalón mejora el lugar del anterior: si un precio más alto ya consigue
+// ese lugar, el más bajo sobra (con pocos rivales, «la mitad» y «los tres más
+// baratos» son el mismo lugar). El precio se redondea hacia abajo a la decena,
+// así nunca queda sobre el que se quiere alcanzar. Dos metas que piden el mismo
+// precio son un solo escalón, con el nombre de la más exigente.
+export function escalonesDePrecio(precioPropio, unidadesPropias, iguales) {
+  const u = finito(unidadesPropias) && unidadesPropias >= 1 ? unidadesPropias : 1
+  const precios = (iguales ?? []).map((x) => x.precioUnidad).filter((p) => finito(p) && p > 0).sort((a, b) => a - b)
+  if (!precios.length || !finito(precioPropio) || precioPropio <= 0) return []
+  const n = precios.length
+  const lugarA = (precioUnidad) => precios.filter((p) => p < precioUnidad).length + 1
+  const metas = [['mediana', mediana(precios)], ...(n >= 4 ? [['tres-mas-baratos', precios[2]]] : []), ['mas-barato', precios[0]]]
+  const posibles = metas.map(([meta, unidad], exigencia) => {
+    const precio = Math.floor((unidad * u) / 10) * 10
+    const precioUnidad = Math.round(precio / u)
+    return { exigencia, meta, precio, precioUnidad, lugar: lugarA(precioUnidad), de: n + 1, rebaja: precioPropio - precio, descuentoPct: Math.max(1, Math.round((1 - precio / precioPropio) * 100)) }
+  }).filter((e) => e.precio > 0 && e.precio < precioPropio).sort((a, b) => b.precio - a.precio || b.exigencia - a.exigencia)
+  const salida = []
+  let lugar = lugarA(Math.round(precioPropio / u))
+  for (const { exigencia, ...e } of posibles) {
+    if (e.lugar >= lugar) continue
+    salida.push(e)
+    lugar = e.lugar
+  }
+  return salida
+}
+
+// Pura. Lo que cambia por venta al pasar del precio de hoy a un escalón.
+// `hoy` y `alPrecio` vienen de quedaA(): { queda, quedaSinCosto }.
+//  · `diferencia` vale con o sin costo cargado: el costo es el mismo a los dos
+//    precios. Puede ser positiva: bajo el precio del envío gratis obligatorio el
+//    vendedor paga menos envío, y un precio menor puede dejar más por venta.
+//  · `veces`: cuántas veces lo de hoy habría que vender a ese precio para juntar
+//    la misma plata. Solo con costo: sin él, lo que «queda» todavía tiene que
+//    pagar el producto y la cuenta saldría más optimista de lo que es.
+//  · `pierde`: a ese precio cada venta deja pérdida (también solo con costo).
+export function plataDelEscalon(hoy, alPrecio, conCosto) {
+  if (!alPrecio) return { queda: null, quedaSinCosto: null, diferencia: null, veces: null, pierde: null }
+  const diferencia = finito(hoy?.quedaSinCosto) && finito(alPrecio.quedaSinCosto) ? alPrecio.quedaSinCosto - hoy.quedaSinCosto : null
+  const pierde = conCosto && finito(alPrecio.queda) ? alPrecio.queda <= 0 : null
+  const veces = conCosto && finito(hoy?.queda) && hoy.queda > 0 && finito(alPrecio.queda) && alPrecio.queda > 0 ? Math.round((hoy.queda / alPrecio.queda) * 10) / 10 : null
+  return { queda: alPrecio.queda ?? null, quedaSinCosto: alPrecio.quedaSinCosto ?? null, diferencia, veces, pierde }
 }
 
 const ficha = (p, marca, precioUnidadPropio, medidaPropia = {}) => {
@@ -217,8 +276,11 @@ async function quedaA(propio, precio) {
   return e ? { precio: Math.round(precio), queda: e.gananciaClp ?? null, quedaSinCosto: e.quedaParaProductoClp ?? null } : null
 }
 
-// La vista de «Quién vende lo mismo» de un producto propio.
-export async function vistaIguales(propio, { conEconomia = true } = {}) {
+// La vista de «Quién vende lo mismo» de un producto propio. `conEconomia` y
+// `conHistoria` se apagan cuando solo interesa dónde queda el precio (el
+// resumen de todos los productos): son las dos lecturas más pesadas. `queda`
+// es la cuenta de lo que deja una venta a un precio (se cambia en los tests).
+export async function vistaIguales(propio, { conEconomia = true, conHistoria = true, queda = quedaA } = {}) {
   if (!propio?.nichoId) return { estado: 'sin-nicho' }
   const nicho = await Nicho.findById(propio.nichoId).select('keyword competenciaExcluida estado').lean()
   if (!nicho) return { estado: 'sin-nicho' }
@@ -255,7 +317,7 @@ export async function vistaIguales(propio, { conEconomia = true } = {}) {
   const descartados = delScan.filter((p) => marcas.get(p.sku)?.relacion === 'distinto').map((p) => ficha(p, marcas.get(p.sku), precioUnidadPropio, medidaPropia))
 
   // la historia de precio de cada confirmado, de los snapshots de sus scans
-  if (iguales.length || otraMedida.length) {
+  if (conHistoria && (iguales.length || otraMedida.length)) {
     const desde = new Date(Date.now() - 120 * 86400e3)
     const hist = await Snapshot.find({ sku: { $in: [...iguales, ...otraMedida].map((x) => x.sku) }, fecha: { $gte: desde }, precio: { $gt: 0 } }).select('sku fecha precio').sort({ fecha: 1 }).lean()
     const porSku = new Map()
@@ -267,17 +329,19 @@ export async function vistaIguales(propio, { conEconomia = true } = {}) {
     for (const x of [...iguales, ...otraMedida]) x.historia = (porSku.get(x.sku) ?? []).slice(-20)
   }
 
-  const resumen = resumenIguales(precioUnidadPropio, iguales.filter((x) => x.enUltimoScan))
+  const vigentes = iguales.filter((x) => x.enUltimoScan)
+  const resumen = resumenIguales(precioUnidadPropio, vigentes)
+  // lo que deja cada venta hoy y en cada precio que cambia el lugar (escalonesDePrecio)
   let economia = null
   if (conEconomia && finito(precio)) {
-    const [hoy, alMasBarato, aLaMediana] = await Promise.all([
-      quedaA(propio, precio),
-      resumen.masBarato && resumen.masBarato.precioUnidad < precioUnidadPropio ? quedaA(propio, resumen.masBarato.precioUnidad * unidadesPropias) : null,
-      resumen.medianaUnidad && resumen.medianaUnidad < precioUnidadPropio ? quedaA(propio, resumen.medianaUnidad * unidadesPropias) : null,
-    ])
-    economia = { hoy, alMasBarato, aLaMediana, conCosto: finito(propio.costoUnitarioClp) }
+    const conCosto = finito(propio.costoUnitarioClp)
+    const escalones = escalonesDePrecio(precio, unidadesPropias, vigentes)
+    const [hoy, ...quedan] = await Promise.all([queda(propio, precio), ...escalones.map((e) => queda(propio, e.precio))])
+    economia = { hoy, conCosto, escalones: escalones.map((e, i) => ({ ...e, ...plataDelEscalon(hoy, quedan[i], conCosto) })) }
   }
   const revisadas = [...marcas.values()].filter((m) => m.sugerencia).length
+  const sinRevisar = candidatos.filter((c) => !c.sugerencia).length
+  const parecen = (relacion) => candidatos.filter((c) => c.sugerencia?.relacion === relacion).length
   const diasDelScan = vista.fechaScan ? Math.floor((Date.now() - +new Date(vista.fechaScan)) / 86400e3) : null
   return {
     estado: 'ok', keyword: nicho.keyword, fechaScan: vista.fechaScan,
@@ -287,10 +351,66 @@ export async function vistaIguales(propio, { conEconomia = true } = {}) {
     propio: { titulo: propio.titulo, imagen: propio.imagen ?? null, precio, unidades: unidadesPropias, unidadesDelTitulo: !(finito(propio.unidadesPack) && propio.unidadesPack >= 1), precioUnidad: precioUnidadPropio,
       medida: textoMedida(medidaPropia) },
     resumen, economia, iguales, otraMedida, candidatos, descartados,
-    fotos: { revisadas, sinRevisar: candidatos.filter((c) => !c.sugerencia).length,
-      parecenIgual: candidatos.filter((c) => c.sugerencia?.relacion === 'igual').length, parecenOtraMedida: candidatos.filter((c) => c.sugerencia?.relacion === 'otra-medida').length,
-      parecidas: candidatos.filter((c) => c.sugerencia?.relacion === 'parecido').length },
+    fotos: { revisadas, sinRevisar, parecenIgual: parecen('igual'), parecenOtraMedida: parecen('otra-medida'), parecidas: parecen('parecido') },
+    // ya se miraron todas las fotos y ninguna es el mismo producto: lo que queda es lo que más se le parece
+    ningunaIgual: !iguales.length && !otraMedida.length && revisadas > 0 && sinRevisar === 0 && !parecen('igual') && !parecen('otra-medida'),
   }
+}
+
+// ─── EL PRECIO PROPIO CONTRA LOS QUE VENDEN LO MISMO, EN UNA LÍNEA ──────────
+// Para Publicidad (18-nov-2026). Medido el día anterior en una campaña propia:
+// decenas de clics pagados sin una venta, mientras el mismo producto se vendía
+// en packs a la mitad por unidad. El plan de campañas mira lo que deja cada
+// venta, no si el precio compite; este dato va al lado para verlo antes de
+// gastar. Es un aviso, no una regla: no cambia lo que recomienda el plan.
+//
+// Pura. De la vista de un producto: con qué se compara (`base`) y dónde queda.
+//  · 'confirmados': lo que el dueño marcó como el mismo producto en su medida;
+//  · 'por-foto': nada confirmado todavía, pero la lectura de fotos propone
+//    iguales. Vale como indicio y lo dice: falta que el dueño confirme;
+//  · 'parecidos': por la foto nadie vende el mismo. Los precios de lo más
+//    parecido son solo referencia y nunca marcan «caro».
+export function posicionDeVista(v) {
+  if (v?.estado !== 'ok' || !finito(v.propio?.precioUnidad) || v.propio.precioUnidad <= 0) return null
+  const comun = { precio: v.propio.precio, unidades: v.propio.unidades, precioUnidad: v.propio.precioUnidad, medida: v.propio.medida ?? null,
+    keyword: v.keyword ?? null, scanDias: v.scan?.dias ?? null, sinRevisar: v.fotos?.sinRevisar ?? 0 }
+  // `precios`: lo que cobra por unidad cada uno de aquellos con los que se compara, de menor a mayor (para dibujarlos)
+  const cifras = (r, xs) => ({ n: r.de - 1, masBaratos: r.masBaratos, lugar: r.lugar, de: r.de, masBaratoUnidad: r.masBarato.precioUnidad, medianaUnidad: r.medianaUnidad,
+    brechaPct: r.brechaPct, nivel: r.nivel, caro: NIVELES_CAROS.includes(r.nivel), precios: xs.map((x) => x.precioUnidad).filter((p) => finito(p) && p > 0).sort((a, b) => a - b) })
+  if (v.resumen?.nivel) return { ...comun, base: 'confirmados', ...cifras(v.resumen, (v.iguales ?? []).filter((x) => x.enUltimoScan !== false)), frase: v.resumen.frase }
+  const propuestas = (v.candidatos ?? []).filter((c) => c.sugerencia?.relacion === 'igual')
+  const r = resumenIguales(v.propio.precioUnidad, propuestas)
+  if (r.nivel) {
+    const { n } = cifras(r, propuestas)
+    const cuantos = r.masBaratos === 0 ? (n === 1 ? 'no cobra' : 'ninguna cobra') : r.masBaratos === n ? (n === 1 ? 'cobra' : 'todas cobran') : `${r.masBaratos} ${r.masBaratos === 1 ? 'cobra' : 'cobran'}`
+    return { ...comun, base: 'por-foto', ...cifras(r, propuestas),
+      frase: `Por la foto, ${n === 1 ? '1 publicación parece' : `${n} publicaciones parecen`} tu mismo producto y ${cuantos} menos que tú por unidad.${r.masBaratos ? ` La más barata cobra ${pesos(r.masBarato.precioUnidad)}, un ${r.brechaPct}% menos.` : ''} Falta que lo confirmes.` }
+  }
+  const p = v.parecidos
+  if (!p || v.iguales?.length || v.otraMedida?.length || !(v.fotos?.revisadas > 0) || v.fotos.parecenOtraMedida > 0) return null
+  return { ...comun, base: 'parecidos', n: p.n, masBaratos: p.masBaratos, lugar: p.masBaratos + 1, de: p.n + 1, masBaratoUnidad: p.masBaratoUnidad, medianaUnidad: p.medianaUnidad,
+    brechaPct: Math.round(((v.propio.precioUnidad - p.masBaratoUnidad) / v.propio.precioUnidad) * 100), nivel: nivelDePrecio(p.masBaratos, p.n), caro: false, precios: p.precios ?? [],
+    frase: `Por la foto, ${v.ningunaIgual ? 'nadie vende' : 'de lo mirado hasta ahora nadie vende'} tu mismo producto. De ${p.n === 1 ? 'la publicación que más se le parece' : `las ${p.n} que más se le parecen`}, ${p.masBaratos === 0 ? 'ninguna cobra' : p.masBaratos === 1 ? '1 cobra' : `${p.masBaratos} cobran`} menos que tú por unidad; la mitad cobra menos de ${pesos(p.medianaUnidad)}.` }
+}
+
+// El precio de cada publicación propia vigente contra los que venden lo mismo.
+// Solo las que tienen alguna lectura de fotos o alguna marca; los colores de
+// una familia comparten las marcas y casi siempre el precio, así que su vista
+// se arma una vez. Sin economía ni historia: es para mirar muchos de una vez.
+export async function posicionesDePrecio() {
+  const claves = new Set(await IgualPropio.distinct('clave'))
+  if (!claves.size) return []
+  const propios = (await ProductoPropio.find({ estado: 'activo', ...FILTRO_VIGENTES, nichoId: { $ne: null } })
+    .select({ sku: 1, itemIdMl: 1, titulo: 1, imagen: 1, nichoId: 1, familiaMl: 1, promoMl: 1, unidadesPack: 1, mediciones: { $slice: -1 } }).lean())
+    .filter((p) => claves.has(claveDePropio(p)))
+  const vistas = new Map()
+  const posicionDe = (p) => {
+    const llave = `${claveDePropio(p)}|${precioDePropio(p)}|${p.unidadesPack ?? ''}`
+    if (!vistas.has(llave)) vistas.set(llave, vistaIguales(p, { conEconomia: false, conHistoria: false }).then(posicionDeVista).catch(() => null))
+    return vistas.get(llave)
+  }
+  const posiciones = await Promise.all(propios.map(posicionDe))
+  return propios.map((p, i) => (posiciones[i] ? { id: String(p._id), itemId: p.itemIdMl ?? p.sku, titulo: p.titulo ?? null, imagen: p.imagen ?? null, ...posiciones[i] } : null)).filter(Boolean)
 }
 
 // Lo que dijo el dueño de una publicación: 'igual' (el mismo producto, en la

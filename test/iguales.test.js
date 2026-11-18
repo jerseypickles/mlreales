@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
-import { unidadesDeTitulo, fotoChica, ordenarCandidatos, resumenIguales, sugerenciasDeTanda, claveDePropio, vistaIguales, marcarIgual, marcarLote, fijarUnidadesPropias, sugerirIguales, medidasDeTitulo, textoMedida, compararMedida, relacionSugerida, puntajeParecido, parecidoEnPalabras, referenciaParecidos } from '../src/services/iguales.js'
+import { unidadesDeTitulo, fotoChica, ordenarCandidatos, resumenIguales, sugerenciasDeTanda, claveDePropio, vistaIguales, marcarIgual, marcarLote, fijarUnidadesPropias, sugerirIguales, medidasDeTitulo, textoMedida, compararMedida, relacionSugerida, puntajeParecido, parecidoEnPalabras, referenciaParecidos, nivelDePrecio, escalonesDePrecio, plataDelEscalon, posicionDeVista, posicionesDePrecio } from '../src/services/iguales.js'
 import { IgualPropio } from '../src/models/IgualPropio.js'
 import { ProductoPropio } from '../src/models/ProductoPropio.js'
 import { Producto } from '../src/models/Producto.js'
@@ -79,6 +79,75 @@ test('iguales: el resumen dice en palabras dónde queda el precio propio por uni
   assert.equal(resumenIguales(8000, iguales).frase, 'De 3 que venden lo mismo, ninguno cobra menos que tú por unidad.')
   assert.equal(resumenIguales(16000, [iguales[0]]).frase, 'De 1 que vende lo mismo, cobra menos que tú por unidad. El más barato cobra $9.000, un 44% menos.')
   assert.equal(resumenIguales(16000, []).frase, 'Todavía no marcas a nadie que venda lo mismo.')
+  // «caro» es que más de la mitad cobre menos: sale de contar
+  assert.deepEqual([r.nivel, resumenIguales(8000, iguales).nivel, resumenIguales(16000, []).nivel], ['mitad-cara', 'ninguno-mas-barato', undefined])
+  assert.deepEqual([nivelDePrecio(0, 5), nivelDePrecio(2, 5), nivelDePrecio(3, 5), nivelDePrecio(5, 5), nivelDePrecio(1, 2), nivelDePrecio(1, 1)],
+    ['ninguno-mas-barato', 'mitad-barata', 'mitad-cara', 'todos-mas-baratos', 'mitad-barata', 'todos-mas-baratos'])
+})
+
+test('iguales: los escalones de descuento son los precios que cambian de lugar, del descuento más chico al más grande', () => {
+  const rivales = (...ps) => ps.map((precioUnidad) => ({ precioUnidad }))
+  const ver = (precio, unidades, xs) => escalonesDePrecio(precio, unidades, xs).map((e) => [e.meta, e.precio, e.lugar, e.de, e.descuentoPct])
+  // con seis: quedar en la mitad, entre los tres más baratos e igualar al más barato
+  const seis = rivales(9000, 10000, 11000, 12000, 13000, 14000)
+  assert.deepEqual(ver(16000, 1, seis), [['mediana', 11500, 4, 7, 28], ['tres-mas-baratos', 11000, 3, 7, 31], ['mas-barato', 9000, 1, 7, 44]])
+  // solo lo que está bajo el precio de hoy: en la mitad ya se está
+  assert.deepEqual(ver(11200, 1, seis), [['tres-mas-baratos', 11000, 3, 7, 2], ['mas-barato', 9000, 1, 7, 20]])
+  assert.deepEqual(ver(8000, 1, seis), [])
+  // con cuatro, la mitad y los tres más baratos son el mismo lugar: queda el precio más alto que lo consigue
+  assert.deepEqual(ver(16000, 1, rivales(9000, 10000, 11000, 12000)), [['tres-mas-baratos', 11000, 3, 5, 31], ['mas-barato', 9000, 1, 5, 44]])
+  // con cinco piden el mismo precio: un solo escalón, con el nombre de la meta más exigente
+  assert.deepEqual(ver(16000, 1, rivales(9000, 10000, 11000, 12000, 13000)), [['tres-mas-baratos', 11000, 3, 6, 31], ['mas-barato', 9000, 1, 6, 44]])
+  assert.deepEqual(ver(16000, 1, rivales(9000)), [['mas-barato', 9000, 1, 2, 44]])
+  // un pack propio: la meta es por unidad y el precio que se propone es el del pack, redondeado hacia abajo a la decena
+  const pack = escalonesDePrecio(24000, 12, rivales(1249, 1500, 2500, 2600))
+  assert.deepEqual(pack.map((e) => [e.meta, e.precio, e.precioUnidad, e.lugar, e.de, e.rebaja, e.descuentoPct]), [['mas-barato', 14980, 1248, 1, 5, 9020, 38]])
+  assert.deepEqual(escalonesDePrecio(null, 1, seis), [])
+
+  // lo que cambia por venta en un escalón
+  const hoy = { queda: 4000, quedaSinCosto: 9000 }
+  assert.deepEqual(plataDelEscalon(hoy, { queda: 2500, quedaSinCosto: 7500 }, true), { queda: 2500, quedaSinCosto: 7500, diferencia: -1500, veces: 1.6, pierde: false })
+  assert.deepEqual(plataDelEscalon(hoy, { queda: -300, quedaSinCosto: 4700 }, true), { queda: -300, quedaSinCosto: 4700, diferencia: -4300, veces: null, pierde: true })
+  // bajo el precio del envío gratis obligatorio, un precio menor puede dejar más por venta
+  assert.deepEqual(plataDelEscalon(hoy, { queda: 4600, quedaSinCosto: 9600 }, true), { queda: 4600, quedaSinCosto: 9600, diferencia: 600, veces: 0.9, pierde: false })
+  // sin el costo cargado no se dice cuántas veces ni si pierde: lo que queda todavía tiene que pagar el producto
+  assert.deepEqual(plataDelEscalon({ queda: null, quedaSinCosto: 9000 }, { queda: null, quedaSinCosto: 7500 }, false), { queda: null, quedaSinCosto: 7500, diferencia: -1500, veces: null, pierde: null })
+  assert.deepEqual(plataDelEscalon(hoy, null, true), { queda: null, quedaSinCosto: null, diferencia: null, veces: null, pierde: null })
+})
+
+test('iguales: el precio propio contra los que venden lo mismo, en una línea y diciendo con qué se compara', () => {
+  const propio = { precio: 16000, unidades: 1, precioUnidad: 16000, medida: '300 w' }
+  const iguales = [{ sku: 'a', precio: 18000, unidades: 2, precioUnidad: 9000 }, { sku: 'b', precio: 12000, unidades: 1, precioUnidad: 12000 }, { sku: 'c', precio: 20000, unidades: 1, precioUnidad: 20000 }]
+  const base = { estado: 'ok', keyword: 'lampara', scan: { dias: 2 }, propio, otraMedida: [], fotos: { revisadas: 3, sinRevisar: 0, parecenIgual: 0, parecenOtraMedida: 0 }, parecidos: null }
+  const corto = (p) => p && [p.base, p.nivel, p.caro, p.n, p.masBaratos, p.lugar, p.de, p.masBaratoUnidad, p.medianaUnidad, p.brechaPct]
+
+  // lo que el dueño confirmó manda
+  const confirmados = posicionDeVista({ ...base, resumen: resumenIguales(16000, iguales), iguales, candidatos: [] })
+  assert.deepEqual(corto(confirmados), ['confirmados', 'mitad-cara', true, 3, 2, 3, 4, 9000, 12000, 44])
+  assert.deepEqual(confirmados.precios, [9000, 12000, 20000]) // lo que cobra cada uno por unidad, para dibujarlo
+  assert.equal(confirmados.frase, 'De 3 que venden lo mismo, 2 cobran menos que tú por unidad. El más barato cobra $9.000, un 44% menos.')
+
+  // sin nada confirmado, lo que propone la foto vale como indicio y lo dice
+  const c = (sku, precioUnidad, relacion, parecido) => ({ sku, precioUnidad, sugerencia: { relacion, parecido } })
+  const sinMarcar = { ...base, resumen: resumenIguales(16000, []), iguales: [] }
+  const porFoto = posicionDeVista({ ...sinMarcar, candidatos: [c('a', 9000, 'igual'), c('b', 20000, 'igual'), c('x', 5000, 'parecido', 80), c('y', 4000, 'otra-medida')] })
+  assert.deepEqual(corto(porFoto), ['por-foto', 'mitad-barata', false, 2, 1, 2, 3, 9000, 14500, 44])
+  assert.deepEqual(porFoto.precios, [9000, 20000]) // solo lo que la foto propone como el mismo en la medida propia
+  assert.equal(porFoto.frase, 'Por la foto, 2 publicaciones parecen tu mismo producto y 1 cobra menos que tú por unidad. La más barata cobra $9.000, un 44% menos. Falta que lo confirmes.')
+  assert.equal(posicionDeVista({ ...sinMarcar, candidatos: [c('a', 9000, 'igual'), c('b', 12000, 'igual')] }).frase,
+    'Por la foto, 2 publicaciones parecen tu mismo producto y todas cobran menos que tú por unidad. La más barata cobra $9.000, un 44% menos. Falta que lo confirmes.')
+  assert.equal(posicionDeVista({ ...sinMarcar, candidatos: [c('b', 20000, 'igual')] }).frase, 'Por la foto, 1 publicación parece tu mismo producto y no cobra menos que tú por unidad. Falta que lo confirmes.')
+
+  // nadie vende el mismo: lo más parecido es solo referencia y nunca marca «caro»
+  const parecidas = [c('p', 11000, 'parecido', 74), c('q', 15000, 'parecido', 82), c('r', 13000, 'parecido', 82)]
+  const unico = posicionDeVista({ ...sinMarcar, candidatos: parecidas, parecidos: referenciaParecidos(16000, parecidas), ningunaIgual: true })
+  assert.deepEqual(corto(unico), ['parecidos', 'todos-mas-baratos', false, 3, 3, 4, 4, 11000, 13000, 31])
+  assert.deepEqual(unico.precios, [11000, 13000, 15000])
+  assert.equal(unico.frase, 'Por la foto, nadie vende tu mismo producto. De las 3 que más se le parecen, 3 cobran menos que tú por unidad; la mitad cobra menos de $13.000.')
+
+  // sin lectura de fotos ni marcas no hay nada que decir
+  assert.equal(posicionDeVista({ ...sinMarcar, candidatos: [{ sku: 'z', precioUnidad: 9000 }], fotos: { revisadas: 0, sinRevisar: 1 } }), null)
+  assert.equal(posicionDeVista({ estado: 'sin-scan' }), null)
 })
 
 test('iguales: cuando ninguna es la misma, lo que más se parece va primero y sirve de referencia', () => {
@@ -90,7 +159,7 @@ test('iguales: cuando ninguna es la misma, lo que más se parece va primero y si
   // dentro de lo parecido, de más a menos parecido; a igual puntaje, por su puesto en la búsqueda
   assert.deepEqual(ordenarCandidatos(candidatos).map((x) => x.sku), ['d', 'b', 'c', 'a', 'e'])
   // la referencia mira solo lo muy parecido (70 o más), no todo lo que salió en la búsqueda
-  assert.deepEqual(referenciaParecidos(14000, candidatos), { n: 3, desde: 70, masBaratoUnidad: 11000, medianaUnidad: 13000, masCaroUnidad: 15000, masBaratos: 2 })
+  assert.deepEqual(referenciaParecidos(14000, candidatos), { n: 3, desde: 70, masBaratoUnidad: 11000, medianaUnidad: 13000, masCaroUnidad: 15000, masBaratos: 2, precios: [11000, 13000, 15000] })
   assert.equal(referenciaParecidos(14000, [c('a', 55, 9000, 1)]), null)
 })
 
@@ -115,6 +184,7 @@ test('iguales: el dueño marca por la foto y la vista compara el precio por unid
     const ver = async (p = negro) => vistaIguales(await ProductoPropio.findById(p._id).lean(), { conEconomia: false })
 
     // al principio todo está por revisar, y la publicación propia que sale en la búsqueda no es un rival
+    assert.deepEqual(await posicionesDePrecio(), []) // sin lecturas ni marcas no hay nada que resumir
     let v = await ver()
     assert.deepEqual([v.estado, v.iguales.length, v.candidatos.map((c) => c.sku).join(), v.propio.precioUnidad], ['ok', 0, 'MLC1,MLC2,MLC3,MLC4', 16000])
     assert.equal(v.candidatos[0].unidades, 2) // el pack parte con las unidades de su título
@@ -130,6 +200,15 @@ test('iguales: el dueño marca por la foto y la vista compara el precio por unid
     assert.equal(v.iguales[0].historia.length, 1)
     // el otro color de la familia ve las mismas marcas
     assert.equal((await ver(blanco)).iguales.length, 2)
+    // el resumen de todos los productos: los dos colores, con lo confirmado como base
+    assert.deepEqual((await posicionesDePrecio()).map((x) => [x.itemId, x.base, x.nivel, x.caro, x.masBaratos, x.n, x.precioUnidad]),
+      [['MLC900', 'confirmados', 'todos-mas-baratos', true, 2, 2, 16000], ['MLC901', 'confirmados', 'todos-mas-baratos', true, 2, 2, 16000]])
+    // la economía trae lo que deja cada venta hoy y en cada escalón de precio
+    const queda = async (_p, precio) => ({ precio, queda: precio - 10000, quedaSinCosto: precio - 6000 })
+    const eco = (await vistaIguales(await ProductoPropio.findById(negro._id).lean(), { queda })).economia
+    assert.deepEqual([eco.hoy.queda, eco.conCosto], [6000, false])
+    assert.deepEqual(eco.escalones.map((e) => [e.meta, e.precio, e.lugar, e.de, e.queda, e.diferencia, e.veces, e.pierde]),
+      [['mediana', 10500, 2, 3, 500, -5500, null, null], ['mas-barato', 9000, 1, 3, -1000, -7000, null, null]])
 
     // la publicación propia es un pack de 2: el precio por unidad baja a la mitad, en toda la familia
     await fijarUnidadesPropias(negro, 2)

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { AlertTriangle, ArrowRight, Boxes, Check, FlaskConical, Layers, Search, Wallet } from 'lucide-react'
 import { fmtPrecio } from '../lib/formato.js'
 import { serieGrupoPublicidad } from '../lib/seriePublicidad.js'
+import { PrecioIguales, AvisoPreciosCaros } from './PrecioIguales.jsx'
 
 const pesos = (v) => Number.isFinite(v) ? fmtPrecio(Math.round(v)) : '—'
 const veces = (v) => Number.isFinite(v) ? `${v.toLocaleString('es-CL', { maximumFractionDigits: 1 })}x` : '—'
@@ -23,7 +24,7 @@ function MiniEvolucion({ serie, titulo }) {
 }
 
 
-function Seguimiento({ g, serie, onProducto }) {
+function Seguimiento({ g, serie, onProducto, precio }) {
   const diarios = serieGrupoPublicidad(g, serie?.porProducto)
   const tot = diarios.reduce((a, d) => ({ gasto: a.gasto + d.gasto, ventas: a.ventas + d.unidadesAds, clicks: a.clicks + d.clicks, resultado: a.resultado + d.resultado, completo: a.completo && d.costoCompleto }), { gasto: 0, ventas: 0, clicks: 0, resultado: 0, completo: true })
   const conGasto = diarios.some(d => d.gasto > 0)
@@ -40,11 +41,12 @@ function Seguimiento({ g, serie, onProducto }) {
     <p className="pub-mesa-nota">{!serie ? 'Historial diario por cargar; no se puede evaluar todavía.' : conGasto ? tot.completo ? `Resultado estimado: ${pesos(tot.resultado)} tras costo, comisión, envío y ads.` : 'Falta completar costos para saber cuánto dejó.' : 'El seguimiento comienza cuando haya datos de anuncios.'}</p>
     {solo ? <p className={`pub-mesa-solo ${solo.estado}`} title={solo.texto}><strong>{SOLO[solo.estado]}</strong> · {solo.base === 'comprobado' ? 'comprobado con y sin anuncio' : 'indicio, falta la prueba'}</p> : null}
     <p className="pub-mesa-decision">{seleccion.texto}</p>
+    <PrecioIguales pos={precio} corto />
     <button className="pub-mesa-enlace" onClick={() => onProducto(seleccion.itemId)}>Ver evolución y variantes <ArrowRight size={15} /></button>
   </article>
 }
 
-function Propuesta({ p, productos, onProducto, seleccionada, onSeleccionar }) {
+function Propuesta({ p, productos, onProducto, seleccionada, onSeleccionar, precioDe }) {
   const [detalle, setDetalle] = useState(false)
   const miembros = p.itemIds.map(id => productos.get(id)).filter(Boolean)
   const nombre = p.tipo === 'nicho' ? miembros.map(x => x.familia?.nombre ?? x.titulo).filter((x, i, a) => a.indexOf(x) === i).join(' + ') : p.titulo
@@ -54,6 +56,7 @@ function Propuesta({ p, productos, onProducto, seleccionada, onSeleccionar }) {
     <h4>{nombre}</h4>
     <dl className="pub-mesa-cifras"><div><dt>Comenzar con</dt><dd>{pesos(p.presupuestoDiario)}<small>/día</small></dd></div><div><dt>ROAS objetivo</dt><dd>{veces(p.roasObjetivo)}</dd></div><div><dt>Plan · 14 días</dt><dd>{pesos(p.presupuesto14Dias)}</dd></div></dl>
     <p>{p.motivo}</p>
+    <PrecioIguales pos={miembros.map(x => precioDe.get(x.itemId)).find(Boolean)} corto />
     <div className="pub-propuesta-pie"><span>{miembros.length} publicaciones · {miembros.every(x => Number.isFinite(x.disponibilidad?.stock)) ? miembros.reduce((a, x) => a + x.disponibilidad.stock, 0) : '—'} u disponibles</span><button aria-expanded={detalle} onClick={() => setDetalle(!detalle)}>{detalle ? 'Ocultar detalle' : 'Ver composición'}</button></div>
     {detalle ? <div className="pub-propuesta-detalle"><p>{p.revision}</p><p>El monto de 14 días es una planificación de gasto; el cobro real depende de la entrega de ML.</p>
       {miembros.map(x => <button key={x.itemId} onClick={() => onProducto(x.itemId)}><span>{x.titulo}</span><small>{pesos(x.economia?.deja)} disponibles por venta antes de ads · {x.economia?.envioBase === 'facturado' ? 'envío medido' : 'envío estimado'}{x.economia?.envioSupuesto ? ' con caja supuesta' : ''}</small><ArrowRight size={14} /></button>)}
@@ -62,13 +65,14 @@ function Propuesta({ p, productos, onProducto, seleccionada, onSeleccionar }) {
   </article>
 }
 
-export default function MesaPublicidad({ plan, serie, error, cargando, onReintentar, onProducto, onCampanas }) {
+export default function MesaPublicidad({ plan, serie, error, cargando, onReintentar, onProducto, onCampanas, precioDe = new Map() }) {
   const [vista, setVista] = useState('arranque')
   const [busqueda, setBusqueda] = useState('')
   const [elegidas, setElegidas] = useState([])
   const c = plan?.cartera
   const productos = useMemo(() => new Map((plan?.productos ?? []).map(p => [p.itemId, p])), [plan])
   const propuestas = c?.propuestas ?? []
+  const enPropuesta = new Set(propuestas.flatMap(p => p.itemIds))
   const elegidasVigentes = propuestas.filter(p => elegidas.includes(p.id))
   const presupuesto = elegidasVigentes.reduce((a, p) => a + p.presupuestoDiario, 0)
   if (!c) return <section className="pub-mesa-carga" role="status"><FlaskConical /><h3>{cargando ? 'Calculando el plan de tu catálogo…' : 'El plan de publicidad no está disponible'}</h3><p>{error ?? plan?.motivo ?? 'Se revisan stock, economía y campañas antes de proponer el inicio.'}</p>{!cargando ? <button onClick={onReintentar}>Volver a consultar</button> : null}</section>
@@ -82,15 +86,16 @@ export default function MesaPublicidad({ plan, serie, error, cargando, onReinten
       <button onClick={() => setVista('arranque')} aria-pressed={vista === 'arranque'}><FlaskConical /><span>Propuestas de inicio<strong>{propuestas.length}</strong><small>{c.resumen.productos} productos evaluados</small></span></button>
       <button onClick={() => setVista('seguimiento')} aria-pressed={vista === 'seguimiento'}><Boxes /><span>Seguir el resultado<strong>{c.grupos.filter(g => g.campañas.length).length}</strong><small>productos con campaña asignada</small></span></button>
     </div>
+    <AvisoPreciosCaros grupos={c.grupos.filter(g => g.campañas.length || g.miembros.some(p => enPropuesta.has(p.itemId)))} precioDe={precioDe} onProducto={onProducto} />
     {c.alertas.length ? <section className="pub-mesa-alertas"><header><h3><AlertTriangle size={17} />Revisar antes de aumentar</h3><button onClick={onCampanas}>Ver campañas <ArrowRight size={15} /></button></header>{c.alertas.slice(0, 3).map((a, i) => <div key={`${a.tipo}-${i}`}><strong>{a.titulo}</strong><p>{a.texto}</p></div>)}{c.alertas.length > 3 ? <small>Hay {c.alertas.length - 3} avisos más en campañas.</small> : null}</section> : null}
     <div className="pub-mesa-herramientas"><div className="segmentado" role="group" aria-label="Plan de publicidad"><button className={vista === 'arranque' ? 'activo' : ''} onClick={() => setVista('arranque')}>Con cuánto comenzar</button><button className={vista === 'seguimiento' ? 'activo' : ''} onClick={() => setVista('seguimiento')}>Cómo van los productos</button></div><label><Search size={17} /><span className="sr-solo">Buscar en publicidad</span><input type="search" value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar producto o variante…" /></label></div>
     {vista === 'arranque' ? <>
       <div className="pub-mesa-intro"><div><h3>Comienza con una prueba medible</h3><p>Presupuesto por campaña compartida. Revisión a los 7 y 14 días, con resultado por producto y variante.</p></div><span>Propuesta · sin aplicar a ML</span></div>
-      <div className="pub-mesa-grilla">{propuestos.map(p => <Propuesta key={p.id} p={p} productos={productos} onProducto={onProducto} seleccionada={elegidas.includes(p.id)} onSeleccionar={() => setElegidas(xs => xs.includes(p.id) ? xs.filter(x => x !== p.id) : [...xs, p.id])} />)}</div>
+      <div className="pub-mesa-grilla">{propuestos.map(p => <Propuesta key={p.id} p={p} productos={productos} onProducto={onProducto} precioDe={precioDe} seleccionada={elegidas.includes(p.id)} onSeleccionar={() => setElegidas(xs => xs.includes(p.id) ? xs.filter(x => x !== p.id) : [...xs, p.id])} />)}</div>
       {!propuestos.length ? <p className="pub-mesa-vacio">{busqueda ? 'No hay propuestas con esa búsqueda.' : 'No hay propuestas de inicio con los datos y stock disponibles. Revisa cada producto en seguimiento.'}</p> : null}
       <section className="pub-mesa-simulacion"><Wallet /><div><strong>{elegidasVigentes.length} {elegidasVigentes.length === 1 ? 'propuesta seleccionada' : 'propuestas seleccionadas'}</strong><span>La selección solo simula el gasto.</span></div><div><strong>{pesos(presupuesto)} / día</strong><span>{pesos(presupuesto * 14)} planificados en 14 días</span></div>{elegidas.length ? <button onClick={() => setElegidas([])}>Limpiar</button> : null}</section>
       <details className="pub-mesa-criterio"><summary><Layers size={16} />Cómo decide agrupar</summary><p>Los colores de una familia oficial comparten la propuesta inicial. Productos distintos solo se proponen juntos si tienen nicho, etapa de arranque, precio y objetivo de rentabilidad comparables. Los productos ya en campaña conservan su seguimiento.</p><p>{c.criterio.mismoNichoProbado ? 'Hay observaciones para comparar campañas por nicho.' : 'Todavía falta muestra para afirmar que agrupar por nicho rinde más: es una hipótesis que se debe medir.'} La prueba muestra el gasto y las ventas por publicación para detectar si una absorbe el presupuesto.</p></details>
-    </> : <><div className="pub-mesa-intro"><div><h3>Resultado y siguiente decisión</h3><p>Últimas 14 fechas registradas. El detalle conserva el historial y la medición de cada variante.</p></div><span>{grupos.length} productos</span></div><div className="pub-mesa-grilla">{grupos.map(g => <Seguimiento key={g.id} g={g} serie={serie} onProducto={onProducto} />)}</div>{!grupos.length ? <p className="pub-mesa-vacio">No hay productos con esa búsqueda.</p> : null}</>}
+    </> : <><div className="pub-mesa-intro"><div><h3>Resultado y siguiente decisión</h3><p>Últimas 14 fechas registradas. El detalle conserva el historial y la medición de cada variante.</p></div><span>{grupos.length} productos</span></div><div className="pub-mesa-grilla">{grupos.map(g => <Seguimiento key={g.id} g={g} serie={serie} onProducto={onProducto} precio={g.miembros.map(p => precioDe.get(p.itemId)).find(Boolean)} />)}</div>{!grupos.length ? <p className="pub-mesa-vacio">No hay productos con esa búsqueda.</p> : null}</>}
     <small className="pub-mesa-fecha"><Check size={13} /> Plan leído {fecha(c.calculadoEl)} · stock según la última medición de cada publicación</small>
   </div>
 }

@@ -8486,6 +8486,8 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .s-cifra strong.s-bien { color: var(--exito-tinta); }
 .s-cifra strong.s-problema { color: var(--peligro); }
 .s-cifra-detalle { font-size: 13px; color: var(--tinta-2); }
+.s-cifra-extra { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--borde); }
+.s-cifra-extra p { flex-basis: 100%; margin: 0; font-size: 13px; line-height: 1.5; color: var(--tinta-2); }
 
 /* etiquetas de estado: cinco y nada más */
 .s-etiqueta { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
@@ -8596,3 +8598,10 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .s-decision-cabeza strong { font-size: 14px; font-weight: 600; color: var(--tinta); }
 .s-decision p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--tinta-2); }
 .s-decision small { font-size: 12px; line-height: 1.5; color: var(--tinta-3); }
+
+/* Regla de precios (sistema.jsx): una línea con una rayita por precio ajeno y las marcas propias encima. */
+.s-regla { display: grid; gap: 8px; margin: 0 0 16px; padding: 16px; border: 1px solid var(--borde); border-radius: var(--radio-g); background: var(--superficie); }
+.s-regla-pista { position: relative; height: 32px; border-bottom: 2px solid var(--borde-fuerte); }
+.s-regla-pista i { position: absolute; bottom: 0; width: 2px; height: 12px; margin-left: -1px; border-radius: 2px 2px 0 0; background: var(--tinta-3); opacity: 0.6; }
+.s-regla-pista b { position: absolute; bottom: 0; width: 4px; height: 28px; margin-left: -2px; border-radius: 4px 4px 0 0; }
+.s-regla-extremos { display: flex; justify-content: space-between; gap: 12px; font-family: 'Fira Code', monospace; font-size: 12px; color: var(--tinta-3); }

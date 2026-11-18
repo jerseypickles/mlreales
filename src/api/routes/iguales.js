@@ -15,6 +15,16 @@ const propioDe = async (req, res) => {
   return propio
 }
 
+// el precio de cada publicación propia contra los que venden lo mismo, en una línea por producto (lo usa
+// Publicidad). Va antes de `/:id`: si no, «resumen» se leería como el id de un producto
+router.get(
+  '/resumen',
+  manejar(async (_req, res) => {
+    const { posicionesDePrecio } = await import('../../services/iguales.js')
+    res.json({ productos: await posicionesDePrecio() })
+  }),
+)
+
 // la vista: los confirmados con su precio por unidad, lo que falta revisar y lo descartado
 router.get(
   '/:id',

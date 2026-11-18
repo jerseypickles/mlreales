@@ -3,9 +3,10 @@ import { api } from '../api.js'
 import { useEstadoGuardado } from '../lib/estadoGuardado.js'
 import { Cargando } from './ui.jsx'
 import { EncabezadoPagina, BarraPartes, Etiqueta, Tarjeta, Subtitulo, AntesDespues, Nota } from './sistema.jsx'
-import { PauseCircle, Split, PlusCircle, TrendingUp, TrendingDown, Target, Layers, Hourglass, Megaphone, CheckCircle2, XCircle, CircleDot, MousePointerClick } from 'lucide-react'
+import { PauseCircle, Split, PlusCircle, TrendingUp, TrendingDown, Target, Layers, Hourglass, Megaphone, CheckCircle2, XCircle, CircleDot, MousePointerClick, Tag } from 'lucide-react'
 import { fmtPrecio, fmtFechaCorta } from '../lib/formato.js'
 import MesaPublicidad from './MesaPublicidad.jsx'
+import { PrecioIguales, pasoPrecio } from './PrecioIguales.jsx'
 
 // PUBLICIDAD EN CUATRO PESTAÑAS (30-sep-2026). El importador pidió, tras un
 // primer rediseño demasiado escueto: vista por campaña, gráficos en el tiempo,
@@ -44,7 +45,7 @@ const ACCION = {
 }
 const ICONO = {
   'pausar-anuncio': PauseCircle, separar: Split, 'campana-propia': Split, 'agrupar-chicos': Layers, crear: PlusCircle, 'ajustar-budget': Target,
-  subir: TrendingUp, bajar: TrendingDown, apagar: PauseCircle, 'subir-roas': Target, 'se-vende-solo': CheckCircle2, 'revisar-anuncio': MousePointerClick, arrancar: PlusCircle, 'arrancar-con-cuidado': PlusCircle, esperar: Hourglass,
+  subir: TrendingUp, bajar: TrendingDown, apagar: PauseCircle, 'subir-roas': Target, 'se-vende-solo': CheckCircle2, 'revisar-anuncio': MousePointerClick, precio: Tag, arrancar: PlusCircle, 'arrancar-con-cuidado': PlusCircle, esperar: Hourglass,
 }
 // el diagnóstico del clic (ml/planCampanas.js diagnosticoClic)
 const CLIC = {
@@ -202,7 +203,7 @@ function Metricas({ m }) {
 }
 
 // ── pestaña Resumen ──────────────────────────────────────────────────────────
-function QueHacer({ plan, fotos, max }) {
+function QueHacer({ plan, fotos, max, precioDe }) {
   const pasos = useMemo(() => {
     const est = plan?.estructura?.acciones ?? []
     const cubiertos = new Set(est.flatMap((a) => [a.itemId, ...(a.itemIds ?? [])]).filter(Boolean))
@@ -213,8 +214,14 @@ function QueHacer({ plan, fotos, max }) {
     const solos = (plan?.productos ?? [])
       .filter((p) => p.vendeSolo?.estado === 'se-vende-solo' && p.metricas?.gastoDiario > 0)
       .map((p) => ({ tipo: 'se-vende-solo', itemId: p.itemId, prioridad: 2, texto: `${nombreCorto(p.titulo)}: ${p.vendeSolo.texto}` }))
-    return [...est, ...extra, ...solos].sort((a, b) => a.prioridad - b.prioridad)
-  }, [plan])
+    // el que gasta en anuncios y se ve caro contra los que venden lo mismo (un paso por producto, no por color)
+    const vistos = new Set()
+    const caros = (plan?.productos ?? [])
+      .filter((p) => p.metricas?.gastoDiario > 0 && pasoPrecio(precioDe?.get(p.itemId)))
+      .filter((p) => { const k = nombreCorto(p.titulo); return vistos.has(k) ? false : vistos.add(k) })
+      .map((p) => ({ tipo: 'precio', itemId: p.itemId, prioridad: 2, texto: `${nombreCorto(p.titulo)}: ${pasoPrecio(precioDe.get(p.itemId))}` }))
+    return [...est, ...extra, ...solos, ...caros].sort((a, b) => a.prioridad - b.prioridad)
+  }, [plan, precioDe])
   if (!pasos.length) return <section className="pub-hacer vacio-ok"><h3>Qué hacer hoy</h3><p>Nada que cambiar: las campañas están como recomienda el learning machine.</p></section>
   const mostrados = max ? pasos.slice(0, max) : pasos
   return (
@@ -236,7 +243,7 @@ function QueHacer({ plan, fotos, max }) {
   )
 }
 
-function Resumen({ datos, plan, serieTotal, fotos, onIr }) {
+function Resumen({ datos, plan, serieTotal, fotos, onIr, precioDe }) {
   const economia = datos.economia ?? {}
   const tot = datos.totales ?? { gasto: 0, venta: 0, unidades: 0 }
   const conActividad = Object.values(economia).filter(f => f.gasto > 0 || f.unidades > 0)
@@ -261,7 +268,7 @@ function Resumen({ datos, plan, serieTotal, fotos, onIr }) {
         <h3>Día a día <small>últimos {serieTotal.length} días</small></h3>
         <GraficoPlata dias={serieTotal} />
       </section>
-      <QueHacer plan={plan} fotos={fotos} max={5} />
+      <QueHacer plan={plan} fotos={fotos} max={5} precioDe={precioDe} />
       <button type="button" className="pub-link" onClick={() => onIr('productos')}>Ver el estudio de cada producto →</button>
     </>
   )
@@ -410,7 +417,7 @@ function VendeSolo({ v }) {
   )
 }
 
-function Estudio({ p, ad, efecto, serie, veredicto, ticket }) {
+function Estudio({ p, ad, efecto, serie, veredicto, ticket, precio, onVerPropio }) {
   const a = ACCION[p.accion] ?? { t: p.accion, c: 'neutro' }
   const m = p.metricas ?? {}
   const eco = p.economia
@@ -434,6 +441,9 @@ function Estudio({ p, ad, efecto, serie, veredicto, ticket }) {
       </section>
 
       {p.vendeSolo ? <VendeSolo v={p.vendeSolo} /> : null}
+
+      {/* el precio contra los que venden lo mismo (PrecioIguales.jsx): va antes de «qué hacer» con el anuncio */}
+      <PrecioIguales pos={precio} conRegla onVer={onVerPropio ? (x) => onVerPropio(x.titulo) : null} />
 
       <section className="pub-caja">
         <h4>Qué hacer <em className={`pub-accion ${a.c}`}>{a.t}</em></h4>
@@ -496,7 +506,7 @@ function Estudio({ p, ad, efecto, serie, veredicto, ticket }) {
   )
 }
 
-function Productos({ plan, datos, aprendido, serie, fotos, sel, onSel }) {
+function Productos({ plan, datos, aprendido, serie, fotos, sel, onSel, precioDe, onVerPropio }) {
   const productos = [...(plan?.productos ?? [])].sort((a, b) => (b.metricas?.gasto7 ?? 0) - (a.metricas?.gasto7 ?? 0))
   const acciones = plan?.estructura?.acciones ?? []
   const efectoDe = new Map((aprendido?.ultimo?.efecto?.productos ?? []).map((p) => [p.itemId, p]))
@@ -525,7 +535,7 @@ function Productos({ plan, datos, aprendido, serie, fotos, sel, onSel }) {
               {fotos.get(p.itemId) ? <img src={fotos.get(p.itemId)} alt="" width="40" height="40" loading="lazy" /> : <span className="pub-foto-vacia" />}
               <span>
                 <strong>{g.titulo}</strong>
-                <small>{g.miembros.length > 1 ? `${g.miembros.length} variantes · ` : ''}<em className={`pub-accion ${a.c}`}>{a.t}</em> <i className={`pub-v ${v.tipo}`}>{ETIQUETA[v.tipo]}</i>{g.miembros.some((x) => x.vendeSolo?.estado === 'se-vende-solo') ? <em className="pub-accion bien" title="Puede que la publicidad le sobre: ver «¿Se vende solo?»">se vende solo</em> : null}</small>
+                <small>{g.miembros.length > 1 ? `${g.miembros.length} variantes · ` : ''}<em className={`pub-accion ${a.c}`}>{a.t}</em> <i className={`pub-v ${v.tipo}`}>{ETIQUETA[v.tipo]}</i>{g.miembros.some((x) => x.vendeSolo?.estado === 'se-vende-solo') ? <em className="pub-accion bien" title="Puede que la publicidad le sobre: ver «¿Se vende solo?»">se vende solo</em> : null}{g.miembros.some((x) => precioDe.get(x.itemId)?.caro) ? <em className="pub-accion medio" title="La mayoría de los que venden lo mismo cobra menos por unidad">precio alto</em> : null}</small>
               </span>
             </button>
           )
@@ -533,7 +543,8 @@ function Productos({ plan, datos, aprendido, serie, fotos, sel, onSel }) {
       </nav>
       <div className="pub-estudio-con-variantes">{grupoActual?.miembros.length > 1 ? <nav className="pub-variantes-selector" aria-label="Variante del producto">{grupoActual.miembros.map(p => <button key={p.itemId} aria-pressed={p.itemId === actual.itemId} onClick={() => onSel(p.itemId)}>{p.familia?.variante ?? p.titulo}<small>{p.disponibilidad?.stock ?? '—'} u</small></button>)}</nav> : null}
       <Estudio p={actual} ad={{ ...datos.economia?.[actual.itemId], foto: fotos.get(actual.itemId), metricas: datos.porItem?.[actual.itemId]?.metricas }}
-        efecto={efectoDe.get(actual.itemId)} serie={serie?.porProducto?.[actual.itemId]} veredicto={veredictos.get(actual.itemId)} ticket={ticketDe(actual.precio)} /></div>
+        efecto={efectoDe.get(actual.itemId)} serie={serie?.porProducto?.[actual.itemId]} veredicto={veredictos.get(actual.itemId)} ticket={ticketDe(actual.precio)}
+        precio={precioDe.get(actual.itemId)} onVerPropio={onVerPropio} /></div>
     </div>
   )
 }
@@ -762,7 +773,7 @@ function FormasCampana({ formas }) {
 // ── la página ────────────────────────────────────────────────────────────────
 const PESTANAS = [['plan', 'Plan de inicio'], ['resumen', 'Resultados'], ['campanas', 'Campañas'], ['productos', 'Productos'], ['lm', 'Learning machine']]
 
-export function Publicidad() {
+export function Publicidad({ onVerPropio }) {
   // Lo último leído queda en memoria: al volver a la pantalla se muestra al tiro y se actualiza detrás
   const [datos, setDatos] = useEstadoGuardado('pub-datos', null)
   const [hoy, setHoy] = useEstadoGuardado('pub-hoy', null)
@@ -771,6 +782,8 @@ export function Publicidad() {
   const [cargandoPlan, setCargandoPlan] = useState(true)
   const [aprendido, setAprendido] = useEstadoGuardado('pub-aprendido', null)
   const [serie, setSerie] = useEstadoGuardado('pub-serie', null)
+  // el precio de cada producto contra los que venden lo mismo (PrecioIguales.jsx): llega aparte y no frena al plan
+  const [precios, setPrecios] = useEstadoGuardado('pub-precios', null)
   const [errorSerie, setErrorSerie] = useState(null)
   const [error, setError] = useState(null)
   const [dias, setDias] = useEstadoGuardado('pub-dias', 30)
@@ -813,10 +826,13 @@ export function Publicidad() {
     setCargandoPlan(false)
   }, [setPlan, setAprendido, setSerie])
   useEffect(() => { traerPlan(); const id = setInterval(() => traerPlan(), 300_000); return () => clearInterval(id) }, [traerPlan])
+  const traerPrecios = useCallback(() => api.precioIguales().then(setPrecios).catch(() => {}), [setPrecios])
+  useEffect(() => { traerPrecios() }, [traerPrecios])
   useEffect(() => { const id = setInterval(() => traer(), 60_000); return () => clearInterval(id) }, [traer])
   useEffect(() => { const id = setInterval(() => setTic((t) => t + 1), 15_000); return () => clearInterval(id) }, [])
 
   const ecoDe = useMemo(() => new Map((plan?.productos ?? []).map((p) => [p.itemId, p.economia])), [plan])
+  const precioDe = useMemo(() => new Map((precios?.productos ?? []).map((x) => [x.itemId, x])), [precios])
   // la curva total: la suma de cada producto con SU economía
   const serieTotal = useMemo(() => {
     if (!serie?.porProducto) return []
@@ -840,7 +856,7 @@ export function Publicidad() {
     <main className={`pub${cargando ? ' ads-refrescando' : ''}`}>
       <EncabezadoPagina titulo="Publicidad" bajada="Lo que dejó cada campaña después de pagar producto, comisión, envío y anuncios.">
         <div className="pub-controles">
-          <button type="button" className="pub-refrescar" onClick={() => { traer(true).finally(() => traerPlan(true)) }} disabled={cargando || cargandoPlan} title="Vuelve a preguntarle a ML">
+          <button type="button" className="pub-refrescar" onClick={() => { traerPrecios(); traer(true).finally(() => traerPlan(true)) }} disabled={cargando || cargandoPlan} title="Vuelve a preguntarle a ML">
             {cargando ? 'actualizando…' : `${haceCuanto(datos.refrescoEl) ?? 'actualizar'}${datos.refrescando ? ' · actualizando…' : ''}`}
           </button>
           <div className="segmentado" role="group" aria-label="Período">
@@ -854,11 +870,11 @@ export function Publicidad() {
       {error ? <p className="ads-error-suave">No se pudo actualizar: {error}. Se muestra la última lectura.</p> : null}
 
       {errorSerie ? <p className="ads-error-suave">{errorSerie}</p> : null}
-      {pestana === 'plan' ? <MesaPublicidad plan={plan} serie={serie} error={errorPlan} cargando={cargandoPlan} onReintentar={traerPlan} onCampanas={() => ir('campanas')} onProducto={(id) => { setSel(id); ir('productos') }} /> : null}
+      {pestana === 'plan' ? <MesaPublicidad plan={plan} serie={serie} error={errorPlan} cargando={cargandoPlan} onReintentar={traerPlan} onCampanas={() => ir('campanas')} onProducto={(id) => { setSel(id); ir('productos') }} precioDe={precioDe} /> : null}
       {pestana !== 'plan' && errorPlan ? <p className="ads-error-suave">No se pudo actualizar el plan: {errorPlan}</p> : null}
-      {pestana === 'resumen' ? <Resumen datos={datos} plan={plan} serieTotal={serieTotal} fotos={fotos} onIr={ir} /> : null}
+      {pestana === 'resumen' ? <Resumen datos={datos} plan={plan} serieTotal={serieTotal} fotos={fotos} onIr={ir} precioDe={precioDe} /> : null}
       {pestana === 'campanas' ? <Campanas datos={datos} hoy={hoy} plan={plan} serie={serie} fotos={fotos} ecoDe={ecoDe} onProducto={(id) => { setSel(id); ir('productos') }} /> : null}
-      {pestana === 'productos' ? <Productos plan={plan} datos={datos} aprendido={aprendido} serie={serie} fotos={fotos} sel={sel} onSel={setSel} /> : null}
+      {pestana === 'productos' ? <Productos plan={plan} datos={datos} aprendido={aprendido} serie={serie} fotos={fotos} sel={sel} onSel={setSel} precioDe={precioDe} onVerPropio={onVerPropio} /> : null}
       {pestana === 'lm' ? <LearningMachine plan={plan} aprendido={aprendido} fotos={fotos} /> : null}
     </main>
   )

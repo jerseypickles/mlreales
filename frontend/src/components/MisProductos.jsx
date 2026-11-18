@@ -1547,7 +1547,8 @@ function PanelAuditoria({ propio, onCerrar, onRegenerar, onAplicar, aplicando, o
   )
 }
 
-export function MisProductos() {
+// `buscarInicial`: el texto con que parte el buscador cuando se llega desde otra pantalla a ver un producto.
+export function MisProductos({ buscarInicial = null }) {
   // lo último leído queda en memoria: al volver a la pantalla se muestra al tiro y se actualiza detrás
   const [datos, setDatos] = useEstadoGuardado('propios-lista', null)
   const [error, setError] = useState(null)
@@ -1557,7 +1558,7 @@ export function MisProductos() {
   // una sola tarjeta abierta a la vez: dos expandidas vuelven a ser una lista
   const [expandido, setExpandido] = useState(null)
   const [orden, setOrden] = useState('urgencia')
-  const [busqueda, setBusqueda] = useState('')
+  const [busqueda, setBusqueda] = useState(buscarInicial ?? '')
   const [filtro, setFiltro] = useState('todos')
   const [pagina, setPagina] = useState(1)
   useEffect(() => { setPagina(1); setExpandido(null) }, [busqueda, filtro, orden])
