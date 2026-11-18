@@ -150,6 +150,9 @@ const productoPropioSchema = new mongoose.Schema({
   // Lo que la bodega de Full recibió, visto por el scan cuando sube su total
   // (inventarioFull.recepcionEnBodega): las últimas entradas, una por día.
   entradasFull: { type: [{ _id: false, dia: String, unidades: Number }], default: [] },
+  // Lo que el dueño dijo de reponer este producto en Full: 'no' (se acabó o se liquida: no avisar), 'si' (seguir
+  // avisando aunque lleve mucho sin stock) o null (lo decide el tiempo sin stock: inventarioFull.sinReposicion).
+  reponerFull: { type: String, default: null },
 
   creadoEl: { type: Date, default: Date.now },
 })

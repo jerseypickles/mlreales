@@ -305,7 +305,7 @@ export function coberturaYReposicion({ stock, velocidadDia, enCamino = 0, objeti
 // Las ventas del rato entre dos lecturas achican un poco lo recibido: el error
 // va hacia abajo, que en reposición es el barato.
 export function recepcionEnBodega({ totalPrevio, total, enCamino = null, entradas = [], hoy = new Date() } = {}) {
-  const sinCambio = { recibido: 0, enCamino, entradas: entradas ?? [] }
+  const sinCambio = { recibido: 0, entrada: false, enCamino, entradas: entradas ?? [] }
   if (!Number.isFinite(totalPrevio) || !Number.isFinite(total) || total <= totalPrevio) return sinCambio
   const recibido = total - totalPrevio
   const anotado = Number.isFinite(enCamino?.unidades) && enCamino.unidades > 0
@@ -316,7 +316,8 @@ export function recepcionEnBodega({ totalPrevio, total, enCamino = null, entrada
   if (previas.some((e) => e.dia === dia)) nuevas = previas.map((e) => (e.dia === dia ? { dia, unidades: e.unidades + recibido } : e))
   else if (anotado || recibido >= 2) nuevas = [...previas, { dia, unidades: recibido }].slice(-5)
   const restante = anotado ? enCamino.unidades - recibido : 0
-  return { recibido, enCamino: anotado ? (restante > 0 ? { ...enCamino, unidades: restante } : null) : enCamino, entradas: nuevas }
+  // `entrada`: quedó guardada como un envío que llegó (no una devolución suelta)
+  return { recibido, entrada: nuevas !== previas, enCamino: anotado ? (restante > 0 ? { ...enCamino, unidades: restante } : null) : enCamino, entradas: nuevas }
 }
 
 // Semáforo, con los cortes puestos donde importan para importación desde China
@@ -341,28 +342,63 @@ export function urgencia(diasCobertura) {
 export const PLAZO_ENVIO_FULL_DIAS = 7
 const MARGEN_DIAS = 3
 
-export function alertaDeStock({ reposicion, stockPorDia = new Map(), precioClp = null, hoy = new Date() } = {}) {
+//
+// AGOTADO NO ES LO MISMO QUE SIN STOCK (18-nov-2026). Pedido del dueño mirando la franja: «debería ser inteligente
+// y muestra lo que ya se fue hace harto, que no llega stock». Medido ese día: la mayoría de las publicaciones que
+// la franja daba por «sin stock» llevaba semanas o meses así y sin nada en camino (productos que se liquidaron y no
+// se reponen), y eran justo las que salían primero, con una plata perdida por día que ya no era real. Lo que
+// Mercado Libre declara en la bodega propia (`selling_address`) no sirve para saberlo: sigue mostrando el stock
+// inicial de productos agotados hace meses. Por eso se distinguen tres casos de «no hay stock»:
+//   · 'quebrado'   se acabó hace poco y nadie anotó un envío: hay que mandar;
+//   · 'en_camino'  se acabó, pero ya hay un envío anotado: se espera, no se grita;
+//   · 'agotado'    se acabó y no viene más (sinReposicion): deja de ser una alerta.
+
+// Pura. Desde cuándo y cuántos días lleva sin stock: el último día en que alguna medición lo vio con stock.
+export function sinStockDesde(stockPorDia = new Map(), hoy = new Date()) {
+  const desde = [...stockPorDia].sort(([a], [b]) => (a < b ? -1 : 1)).filter(([, v]) => v.conStock > 0).at(-1)?.[0] ?? null
+  return { desde, dias: desde ? Math.max(1, Math.round((+new Date(`${diaChile(hoy)}T12:00:00Z`) - +new Date(`${desde}T12:00:00Z`)) / 86_400_000)) : null }
+}
+
+// Pura. ¿Se acabó y no viene más? Sin stock, sin nada anotado en camino y:
+//   · el dueño dijo que no se repone (`decision: 'no'`), o
+//   · lleva dos plazos de envío a Full sin stock y nadie dijo que sí se repone (`decision: 'si'`): quien tenía
+//     stock para mandar ya lo habría mandado.
+export const DIAS_PARA_AGOTADO = 2 * PLAZO_ENVIO_FULL_DIAS
+export function sinReposicion({ stock, enCamino = 0, diasSinStock = null, decision = null } = {}) {
+  if (stock > 0 || enCamino > 0) return false
+  if (decision === 'no') return true
+  if (decision === 'si') return false
+  return Number.isFinite(diasSinStock) && diasSinStock >= DIAS_PARA_AGOTADO
+}
+
+// `decision`: lo que el dueño dijo de reponer este producto ('si', 'no' o null). Con 'no' y stock, se está
+// liquidando: no se avisa que se acaba.
+export function alertaDeStock({ reposicion, stockPorDia = new Map(), precioClp = null, hoy = new Date(), decision = null } = {}) {
   if (!reposicion) return null
   const { stock, enCamino, velocidadDia, diasCobertura, aEnviar } = reposicion
-  const dias = [...stockPorDia].sort(([a], [b]) => (a < b ? -1 : 1))
-  const ultimoConStock = dias.filter(([, v]) => v.conStock > 0).at(-1)?.[0] ?? null
+  const { desde: ultimoConStock, dias: diasSin } = sinStockDesde(stockPorDia, hoy)
   const tuvoStock = ultimoConStock !== null
   let nivel = 'ok'
-  if (stock <= 0) nivel = tuvoStock || velocidadDia > 0 ? 'quebrado' : 'sin_ventas'
+  if (stock <= 0) {
+    if (!(tuvoStock || velocidadDia > 0)) nivel = 'sin_ventas'
+    else if (enCamino > 0) nivel = 'en_camino'
+    else nivel = sinReposicion({ stock, enCamino, diasSinStock: diasSin, decision }) ? 'agotado' : 'quebrado'
+  } else if (decision === 'no') nivel = 'ok'
   else if (diasCobertura == null) nivel = 'sin_ventas'
   else if (diasCobertura <= PLAZO_ENVIO_FULL_DIAS + MARGEN_DIAS) nivel = 'enviar_ya'
   else if (diasCobertura <= 21) nivel = 'preparar'
   const masDias = (n) => new Date(+hoy + n * 86_400_000)
   const fechaQuiebre = stock > 0 && diasCobertura != null ? masDias(diasCobertura) : null
-  const diasQuebrado = nivel === 'quebrado' && ultimoConStock
-    ? Math.max(1, Math.round((+new Date(`${diaChile(hoy)}T12:00:00Z`) - +new Date(`${ultimoConStock}T12:00:00Z`)) / 86_400_000)) : null
+  const sinStock = ['quebrado', 'en_camino', 'agotado'].includes(nivel)
+  const diasQuebrado = sinStock ? diasSin : null
+  // la plata que se va por día solo es real mientras se pueda reponer: de un agotado ya no se pierde nada nuevo
   const perdidaDiaClp = nivel === 'quebrado' && velocidadDia > 0 && Number.isFinite(precioClp) ? Math.round(velocidadDia * precioClp) : null
   return {
-    nivel, stock, enCamino, velocidadDia, diasCobertura, aEnviar,
+    nivel, stock, enCamino, velocidadDia, diasCobertura, aEnviar, decision,
     fechaQuiebre,
     // pasado este día, lo que se despache llega con la bodega ya vacía
     despacharAntesDel: fechaQuiebre ? masDias(Math.max(0, diasCobertura - PLAZO_ENVIO_FULL_DIAS)) : null,
-    sinStockDesde: nivel === 'quebrado' ? ultimoConStock : null,
+    sinStockDesde: sinStock ? ultimoConStock : null,
     diasQuebrado,
     perdidaDiaClp,
     perdidaAcumuladaClp: perdidaDiaClp != null && diasQuebrado != null ? perdidaDiaClp * diasQuebrado : null,

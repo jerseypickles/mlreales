@@ -12,7 +12,8 @@
 
 import { publicacionVigente } from './catalogoPropios.js'
 
-export const PESO_URGENCIA = { quebrado: 0, critico: 1, reponer: 2, holgado: 3, sin_ventas: 4 }
+// agotado (se acabó y no viene más) y liquidando (queda stock y no se repone) no piden nada: van al final
+export const PESO_URGENCIA = { quebrado: 0, critico: 1, reponer: 2, holgado: 3, sin_ventas: 4, liquidando: 5, agotado: 6 }
 
 // lo que se quiebra antes va primero; a igual urgencia, menos días de cobertura
 export function compararUrgencia(a, b) {

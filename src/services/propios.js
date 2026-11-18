@@ -233,6 +233,8 @@ export async function escanearPropios({ soloOficial = false } = {}) {
         console.log(`[scan-propios] ${propio.sku} bodega recibió ${llegada.recibido}: en camino ${propio.enCamino?.unidades ?? 0} → ${llegada.enCamino?.unidades ?? 0}`)
         propio.enCamino = llegada.enCamino
         propio.entradasFull = llegada.entradas
+        // llegó un envío a un producto marcado «no se repone»: se repuso, así que vuelve a avisar
+        if (llegada.entrada && propio.reponerFull === 'no') propio.reponerFull = null
       }
       propio.inventarioFull = {
         ...inventario,

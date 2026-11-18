@@ -835,7 +835,7 @@ export default function App() {
         }}
       />
       <div className="pagina">
-      {mundo !== 'contabilidad' ? <AlertaStock datos={alertasStock} alAbrir={() => { setBuscarPropio(null); setVista('propios') }} /> : null}
+      {mundo !== 'contabilidad' ? <AlertaStock datos={alertasStock} alAbrir={(p) => { setBuscarPropio(p?.titulo ?? null); setMundo('inteligencia'); setVista('propios') }} /> : null}
       {mundo === 'contabilidad' ? (
         <Contabilidad />
       ) : vista === 'oportunidades' ? (
@@ -846,7 +846,7 @@ export default function App() {
           }}
         />
       ) : vista === 'propios' ? (
-        <MisProductos buscarInicial={buscarPropio} />
+        <MisProductos key={buscarPropio ?? 'todos'} buscarInicial={buscarPropio} />
       ) : vista === 'publicidad' ? (
         <Publicidad onVerPropio={(titulo) => { setBuscarPropio(titulo); setVista('propios') }} />
       ) : vista === 'aprendizaje' ? (

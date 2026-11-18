@@ -299,6 +299,8 @@ test('la bodega recibe: se descuenta lo anotado en camino y la entrada queda gua
   const muchas = [1, 2, 3, 4, 5].map((n) => ({ dia: `2026-03-0${n}`, unidades: 10 }))
   assert.deepEqual(recepcionEnBodega({ totalPrevio: 0, total: 10, entradas: muchas, hoy }).entradas.map((e) => e.dia), ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-10'])
   // si el total no sube (ventas) o falta una lectura, nada cambia
-  assert.deepEqual(recepcionEnBodega({ totalPrevio: 10, total: 8, enCamino, entradas: muchas, hoy }), { recibido: 0, enCamino, entradas: muchas })
+  assert.deepEqual(recepcionEnBodega({ totalPrevio: 10, total: 8, enCamino, entradas: muchas, hoy }), { recibido: 0, entrada: false, enCamino, entradas: muchas })
+  // `entrada` dice si de verdad llegó un envío (y no una devolución suelta): con eso se sabe que el producto se repuso
+  assert.deepEqual([recepcionEnBodega({ totalPrevio: 10, total: 50, hoy }).entrada, recepcionEnBodega({ totalPrevio: 10, total: 11, hoy }).entrada], [true, false])
   assert.equal(recepcionEnBodega({ totalPrevio: undefined, total: 8, hoy }).recibido, 0)
 })

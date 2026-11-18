@@ -449,7 +449,7 @@ function CalidadMl({ calidad }) {
   )
 }
 
-function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, onGuardarEnvio, expandida = false, onExpandir, prefijos = null }) {
+function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, onGuardarEnvio, onDecidirReposicion, expandida = false, onExpandir, prefijos = null }) {
   const m = metricas ?? metricasDe(p)
   const a = p.auditoria
   const generando =
@@ -473,6 +473,8 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
     const entrada = { p, variantes: familia?.variantes, m }
     const inventario = inventarioEntrada(entrada)
     const alerta = r?.urgencia === 'quebrado' ? 'Sin stock en Full'
+      : r?.urgencia === 'agotado' ? 'Agotado, sin reposición'
+      : r?.urgencia === 'liquidando' ? 'Se liquida: no se repone'
       : r && ['critico', 'reponer'].includes(r.urgencia) ? `${r.diasCobertura ?? '—'} días de cobertura`
       : m.pausada ? 'Publicación pausada' : null
     return (
@@ -577,7 +579,7 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
         </Cifras>
       </div>
 
-      <StockFull filas={filasStock} mostrarPrecio={m.precioHasta != null} onAbrir={onAbrir} onGuardarEnvio={onGuardarEnvio} />
+      <StockFull filas={filasStock} mostrarPrecio={m.precioHasta != null} onAbrir={onAbrir} onGuardarEnvio={onGuardarEnvio} onDecidir={onDecidirReposicion} />
 
       <div className="pc-secciones">
         <Seccion icono={PiggyBank} titulo="Plata por venta" tono={plata?.tono} resumen={plata?.texto ?? 'sin precio medido'} abiertaPorDefecto={Boolean(e) && e.gananciaClp == null}>
@@ -1300,6 +1302,18 @@ export function MisProductos({ buscarInicial = null }) {
     await cargar()
   }
 
+  // lo que el dueño dice de reponer una publicación en Full: 'no' (se acabó o se liquida: deja de avisar), 'si'
+  // (seguir avisando aunque lleve mucho sin stock) o null (lo decide el tiempo sin stock)
+  async function decidirReposicion(p, decision) {
+    setError(null)
+    try {
+      await api.ajustarPropio(p._id, { reponerFull: decision })
+    } catch (err) {
+      setError(err.message)
+    }
+    await cargar()
+  }
+
   // escribe el precio EN Mercado Libre (no es un campo local): se confirma
   // antes porque lo ve el comprador en cuanto ML lo procesa. En un producto
   // con colores va a todas sus publicaciones: cada color tiene su precio en ML
@@ -1526,6 +1540,7 @@ export function MisProductos({ buscarInicial = null }) {
                 onVerAuditoria={(x) => setAuditoriaDe(x._id)}
                 onGuardarCosto={guardarCosto}
                 onGuardarEnvio={guardarEnvio}
+                onDecidirReposicion={decidirReposicion}
                 onCambiarPrecio={cambiarPrecio}
                 expandida={expandido === e.clave}
                 onExpandir={(abrir) => setExpandido(abrir ? e.clave : null)}

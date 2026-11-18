@@ -16,6 +16,8 @@ import {
   diasSinStockEnVentana,
   alertaDeStock,
   PLAZO_ENVIO_FULL_DIAS,
+  sinStockDesde,
+  sinReposicion,
 } from '../../services/inventarioFull.js'
 import { llmDisponible } from '../../services/llm.js'
 import { presupuesto } from '../../services/gastos.js'
@@ -277,7 +279,7 @@ router.get(
   '/alertas-stock',
   manejar(async (_req, res) => {
     const hoy = new Date()
-    const propios = (await ProductoPropio.find({ estado: 'activo', ...FILTRO_VIGENTES }).select('sku itemIdMl titulo imagen url estadoMl envioMl inventarioFull mediciones stockDiario enCamino').lean()).map(normalizarStockPropio)
+    const propios = (await ProductoPropio.find({ estado: 'activo', ...FILTRO_VIGENTES }).select('sku itemIdMl titulo imagen url estadoMl envioMl inventarioFull mediciones stockDiario enCamino reponerFull familiaMl').lean()).map(normalizarStockPropio)
     const [ventas, ventas7, primeras] = await Promise.all([
       ventasPorItem({ dias: 30 }).catch(() => new Map()), ventasPorItem({ dias: 7 }).catch(() => new Map()), primeraVentaPorItem().catch(() => new Map()),
     ])
@@ -288,14 +290,15 @@ router.get(
       const reposicion = reposicionSegura(p, v30, ventas7.get(id) ?? null, { primeraVenta: primeras.get(id) ?? null, hoy })
       const ultima = (p.mediciones ?? []).at(-1) ?? null
       const precioClp = v30?.unidades > 0 ? v30.ingresosClp / v30.unidades : (ultima?.precioEfectivo ?? ultima?.precio ?? null)
-      const alerta = alertaDeStock({ reposicion, stockPorDia: stockPorDiaDe({ stockDiario: p.stockDiario, mediciones: p.mediciones }), precioClp, hoy })
-      if (alerta) productos.push({ id: String(p._id), sku: p.sku, itemId: id, titulo: p.titulo, imagen: p.imagen, url: p.url, estadoMl: p.estadoMl ?? null, ...alerta })
+      const alerta = alertaDeStock({ reposicion, stockPorDia: stockPorDiaDe({ stockDiario: p.stockDiario, mediciones: p.mediciones }), precioClp, hoy, decision: reposicion?.decision ?? null })
+      if (alerta) productos.push({ id: String(p._id), sku: p.sku, itemId: id, titulo: p.titulo, variante: p.familiaMl?.variante ?? null, imagen: p.imagen, url: p.url, estadoMl: p.estadoMl ?? null, ...alerta,
+        enCaminoDesde: reposicion?.enCaminoDesde ?? null, aEnviarSiRepone: reposicion?.aEnviarSiRepone ?? null })
     }
-    const orden = { quebrado: 0, enviar_ya: 1, preparar: 2, ok: 3, sin_ventas: 4 }
+    const orden = { quebrado: 0, enviar_ya: 1, preparar: 2, en_camino: 3, agotado: 4, ok: 5, sin_ventas: 6 }
     productos.sort((a, b) => orden[a.nivel] - orden[b.nivel] || (b.perdidaDiaClp ?? 0) - (a.perdidaDiaClp ?? 0) || (a.diasCobertura ?? 999) - (b.diasCobertura ?? 999))
     const de = (n) => productos.filter((x) => x.nivel === n)
     res.json({ plazoEnvioFullDias: PLAZO_ENVIO_FULL_DIAS, productos,
-      resumen: { quebrados: de('quebrado').length, enviarYa: de('enviar_ya').length, preparar: de('preparar').length,
+      resumen: { quebrados: de('quebrado').length, enviarYa: de('enviar_ya').length, preparar: de('preparar').length, enCamino: de('en_camino').length, agotados: de('agotado').length,
         perdidaDiaClp: de('quebrado').reduce((a, x) => a + (x.perdidaDiaClp ?? 0), 0), perdidaAcumuladaClp: de('quebrado').reduce((a, x) => a + (x.perdidaAcumuladaClp ?? 0), 0) } })
   }),
 )
@@ -453,6 +456,14 @@ router.patch(
         }
         propio.enCamino = { unidades, fecha: new Date(), totalBodegaAlEnviar: propio.inventarioFull?.total ?? null }
       }
+      await propio.save()
+    }
+    // lo que el dueño dice de reponer este producto en Full: 'no' (se acabó o se liquida: no avisar), 'si' (seguir
+    // avisando aunque lleve mucho sin stock) o null (lo decide el tiempo sin stock)
+    if ('reponerFull' in (req.body ?? {})) {
+      const d = req.body.reponerFull
+      if (![null, 'si', 'no'].includes(d)) return res.status(400).json({ error: "reponerFull debe ser 'si', 'no' o null" })
+      propio.reponerFull = d
       await propio.save()
     }
     res.json({ propio })
@@ -686,9 +697,19 @@ function reposicionDe(p, v30, v7, { primeraVenta = null, hoy = new Date() } = {}
 
   const enCamino = Number.isFinite(p.enCamino?.unidades) && p.enCamino.unidades > 0 ? p.enCamino.unidades : 0
   const r = coberturaYReposicion({ stock, velocidadDia, enCamino })
+  // agotado sin reposición (se acabó y no viene más) o liquidándose (queda stock y el dueño dijo que no se repone):
+  // ninguno de los dos pide mandar nada (inventarioFull.sinReposicion)
+  const decision = ['si', 'no'].includes(p.reponerFull) ? p.reponerFull : null
+  const sin = stock <= 0 ? sinStockDesde(stockPorDia, hoy) : { desde: null, dias: null }
+  const agotado = sinReposicion({ stock, enCamino, diasSinStock: sin.dias, decision })
+  const liquidando = !agotado && decision === 'no' && stock > 0
   return {
     ...r,
-    urgencia: urgencia(r.diasCobertura),
+    urgencia: agotado ? 'agotado' : liquidando ? 'liquidando' : urgencia(r.diasCobertura),
+    ...(agotado || liquidando ? { aEnviar: 0, aEnviarSiRepone: r.aEnviar } : {}),
+    decision,
+    sinStockDesde: sin.desde,
+    diasSinStock: sin.dias,
     base: '7d+30d',
     vendiendoDesde: desdeEl,
     // días de la ventana de 30 que se descontaron por quiebre: explica por qué

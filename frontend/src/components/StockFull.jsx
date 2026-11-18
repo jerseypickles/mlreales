@@ -26,16 +26,28 @@ const hace = (dia) => Math.round((Date.now() - +new Date(`${dia}T12:00:00Z`)) / 
 const MOTIVO = { lost: 'perdidas', damaged: 'dañadas', internalProcess: 'en un proceso interno', internal_process: 'en un proceso interno', transfer: 'en traslado entre bodegas', withdrawal: 'en retiro',
   not_supported: 'no admitidas', noFiscalCoverage: 'sin respaldo tributario', no_fiscal_coverage: 'sin respaldo tributario' }
 
-// qué hacer con el stock de una publicación, en palabras; el tono solo lo repite
+// Qué hacer con el stock de una publicación, en palabras; el tono solo lo repite. `decidir` es lo que el dueño puede
+// decir ahí mismo sobre reponerla ({ texto, decision }): «sin stock» no es una sola cosa (inventarioFull.alertaDeStock).
 export function queHacer(r) {
   if (!r) return null
+  // se acabó y no viene más: no pide nada. Si fue por el tiempo sin stock, el dueño puede decir que sí lo repone
+  if (r.urgencia === 'agotado') return {
+    tono: 'neutra', texto: 'agotado',
+    detalle: r.decision === 'no' ? 'dijiste que no se repone: ya no avisa' : `${r.diasSinStock ? `${dias(r.diasSinStock)} sin stock y ` : ''}nada en camino: dejó de avisar`,
+    decidir: { texto: 'sí lo voy a reponer', decision: 'si' },
+  }
+  if (r.urgencia === 'liquidando') return { tono: 'neutra', texto: 'se liquida', detalle: 'dijiste que no se repone: no avisa cuando se acabe', decidir: { texto: 'volver a avisar', decision: null } }
   if (r.urgencia === 'sin_ventas') return { tono: 'neutra', texto: 'sin ventas', detalle: 'no hay ventas para calcular cuánto mandar' }
+  const noSeRepone = { texto: 'no se repone', decision: 'no' }
+  // sin stock, pero con un envío anotado: se espera
+  if (!(r.stock > 0) && r.enCamino > 0) return { tono: 'atencion', texto: 'esperando el envío', detalle: `sin stock hasta que Full reciba ${r.enCamino === 1 ? 'la que va' : `las ${fmtNum(r.enCamino)} que van`} en camino` }
   const conCamino = r.enCamino > 0 ? ' con lo que va en camino' : ''
   if (r.aEnviar > 0) {
     const grave = r.urgencia === 'quebrado' || r.urgencia === 'critico'
     return {
       tono: grave ? 'problema' : 'atencion', texto: `manda ${fmtNum(r.aEnviar)}${r.enCamino > 0 ? ' más' : ''}`,
-      detalle: r.urgencia === 'quebrado' ? 'está sin stock' : `alcanza para ${dias(r.diasCobertura)}${conCamino}; la idea es tener ${OBJETIVO_DIAS}`,
+      detalle: r.urgencia === 'quebrado' ? `está sin stock${r.diasSinStock ? ` hace ${dias(r.diasSinStock)}` : ''}` : `alcanza para ${dias(r.diasCobertura)}${conCamino}; la idea es tener ${OBJETIVO_DIAS}`,
+      decidir: noSeRepone,
     }
   }
   return { tono: 'bien', texto: 'bien por ahora', detalle: r.diasCobertura != null ? `alcanza para ${dias(r.diasCobertura)}${conCamino}` : null }
@@ -48,7 +60,9 @@ export function resumenStock(filas) {
   if (!conRepo.length) return { valor, detalle: 'en tu bodega' }
   const enCamino = conRepo.reduce((s, f) => s + (f.p.reposicion.enCamino ?? 0), 0)
   const camino = enCamino > 0 ? ` · ${fmtNum(enCamino)} en camino` : ''
-  const sinStock = conRepo.filter((f) => !(f.p.reposicion.stock > 0))
+  const agotados = conRepo.filter((f) => f.p.reposicion.urgencia === 'agotado')
+  if (agotados.length === filas.length) return { valor, detalle: 'agotado, sin reposición' }
+  const sinStock = conRepo.filter((f) => !(f.p.reposicion.stock > 0) && f.p.reposicion.urgencia !== 'agotado')
   const conDias = conRepo.map((f) => ({ f, d: diasConStock(f.p.reposicion) })).filter((x) => x.d != null).sort((x, y) => x.d - y.d)
   if (sinStock.length) {
     const cuantos = filas.length === 1 ? 'sin stock' : sinStock.length === filas.length ? `los ${fmtNum(filas.length)} sin stock` : `${fmtNum(sinStock.length)} de ${fmtNum(filas.length)} sin stock`
@@ -78,7 +92,7 @@ function EnFull({ r }) {
 
 // filas: [{ p, nombre, m }] — una por publicación (los colores de la familia, o el producto solo con `nombre` null).
 // onGuardarEnvio([{ p, unidades }]) guarda lo que va en camino de cada una (unidades null lo borra).
-export function StockFull({ filas, mostrarPrecio = false, onAbrir, onGuardarEnvio }) {
+export function StockFull({ filas, mostrarPrecio = false, onAbrir, onGuardarEnvio, onDecidir }) {
   const [anotando, setAnotando] = useState(false)
   const [cantidades, setCantidades] = useState({})
   const [guardando, setGuardando] = useState(false)
@@ -104,6 +118,10 @@ export function StockFull({ filas, mostrarPrecio = false, onAbrir, onGuardarEnvi
   async function quitar(p) {
     setGuardando(true)
     try { await onGuardarEnvio([{ p, unidades: null }]) } finally { setGuardando(false) }
+  }
+  async function decidir(p, decision) {
+    setGuardando(true)
+    try { await onDecidir(p, decision) } finally { setGuardando(false) }
   }
 
   const columnas = [
@@ -160,7 +178,12 @@ export function StockFull({ filas, mostrarPrecio = false, onAbrir, onGuardarEnvi
               ) : llego ? (
                 <Dato detalle={`Full lo recibió el ${fmtFechaCorta(`${llego.dia}T12:00:00Z`)}`}><Etiqueta tono="bien">llegaron {fmtNum(llego.unidades)}</Etiqueta></Dato>
               ) : <Dato detalle="nada anotado" />,
-              hacer: hacer ? <Dato detalle={hacer.detalle}><Etiqueta tono={hacer.tono}>{hacer.texto}</Etiqueta></Dato> : null,
+              hacer: hacer ? (
+                <Dato detalle={hacer.detalle}>
+                  <Etiqueta tono={hacer.tono}>{hacer.texto}</Etiqueta>
+                  {hacer.decidir && onDecidir && !anotando ? <button type="button" className="boton-plano boton-chico" disabled={guardando} onClick={() => decidir(p, hacer.decidir.decision)}>{hacer.decidir.texto}</button> : null}
+                </Dato>
+              ) : null,
             }} />
           )
         })}
@@ -169,7 +192,7 @@ export function StockFull({ filas, mostrarPrecio = false, onAbrir, onGuardarEnvi
         <Nota>
           {anotando
             ? 'Escribe cuántas unidades mandaste de cada uno y deja en blanco lo que no enviaste. Cuenta como stock que viene y deja de pedirte reponer.'
-            : 'Mercado Libre no informa los envíos que van en camino: se anotan acá. Lo que Full recibe se ve solo y se descuenta.'}
+            : 'Mercado Libre no informa los envíos que van en camino: se anotan acá. Lo que Full recibe se ve solo y se descuenta. Lo que lleva dos semanas sin stock y sin nada en camino deja de avisar.'}
         </Nota>
       ) : null}
     </div>
