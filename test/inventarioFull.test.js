@@ -5,6 +5,7 @@ import {
   velocidadPonderada,
   redondearEnvio,
   coberturaYReposicion,
+  recepcionEnBodega,
   urgencia,
   primeraEntrada,
   diasSinStockEnVentana,
@@ -51,6 +52,8 @@ test('la cobertura cuenta lo que va EN CAMINO', () => {
   const con = coberturaYReposicion({ stock: 9, velocidadDia: 1, enCamino: 30 })
   assert.equal(sin.diasCobertura, 9)
   assert.equal(con.diasCobertura, 39)
+  // lo que va en camino todavía no se puede vender: lo de la bodega sigue alcanzando para lo mismo
+  assert.deepEqual([sin.diasConStock, con.diasConStock], [9, 9])
   assert.ok(con.aEnviar < sin.aEnviar, 'y pide reponer menos')
 })
 
@@ -275,4 +278,27 @@ test('stockPorDiaDe: la serie diaria manda y las mediciones sueltas completan lo
   assert.deepEqual(m.get('2026-08-31'), { mediciones: 2, conStock: 1 })
   assert.equal(primerDiaConStock(m).toISOString().slice(0, 10), '2026-08-30')
   assert.equal(primerDiaConStock(new Map()), null)
+})
+
+test('la bodega recibe: se descuenta lo anotado en camino y la entrada queda guardada sin que nadie la anote', () => {
+  const hoy = new Date('2026-03-10T15:00:00Z')
+  // sin anotar nada: una entrada de varias unidades se guarda sola
+  let r = recepcionEnBodega({ totalPrevio: 10, total: 50, hoy })
+  assert.deepEqual([r.recibido, r.enCamino, r.entradas], [40, null, [{ dia: '2026-03-10', unidades: 40 }]])
+  // una sola unidad sin envío anotado casi siempre es una devolución: no se guarda como entrada
+  assert.deepEqual(recepcionEnBodega({ totalPrevio: 10, total: 11, hoy }).entradas, [])
+  // lo anotado se descuenta con lo que llegó; llega en partes y lo del mismo día se suma
+  const enCamino = { unidades: 40, fecha: new Date('2026-03-09T12:00:00Z') }
+  r = recepcionEnBodega({ totalPrevio: 10, total: 35, enCamino, hoy })
+  assert.deepEqual([r.recibido, r.enCamino.unidades, r.entradas], [25, 15, [{ dia: '2026-03-10', unidades: 25 }]])
+  r = recepcionEnBodega({ totalPrevio: 35, total: 36, enCamino: r.enCamino, entradas: r.entradas, hoy })
+  assert.deepEqual([r.enCamino.unidades, r.entradas], [14, [{ dia: '2026-03-10', unidades: 26 }]])
+  r = recepcionEnBodega({ totalPrevio: 36, total: 56, enCamino: r.enCamino, entradas: r.entradas, hoy: new Date('2026-03-11T15:00:00Z') })
+  assert.deepEqual([r.enCamino, r.entradas.map((e) => e.unidades)], [null, [26, 20]]) // llegó más de lo anotado: se borra
+  // se guardan las últimas cinco
+  const muchas = [1, 2, 3, 4, 5].map((n) => ({ dia: `2026-03-0${n}`, unidades: 10 }))
+  assert.deepEqual(recepcionEnBodega({ totalPrevio: 0, total: 10, entradas: muchas, hoy }).entradas.map((e) => e.dia), ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-10'])
+  // si el total no sube (ventas) o falta una lectura, nada cambia
+  assert.deepEqual(recepcionEnBodega({ totalPrevio: 10, total: 8, enCamino, entradas: muchas, hoy }), { recibido: 0, enCamino, entradas: muchas })
+  assert.equal(recepcionEnBodega({ totalPrevio: undefined, total: 8, hoy }).recibido, 0)
 })

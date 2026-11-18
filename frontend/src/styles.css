@@ -4572,9 +4572,9 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
 .seccion-cabeza {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 12px 16px;
   border: none;
   background: color-mix(in srgb, var(--tinta) 2%, var(--superficie));
   cursor: pointer;
@@ -4582,12 +4582,12 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
   transition: background 0.2s ease;
 }
 .seccion-cabeza:hover { background: color-mix(in srgb, var(--tinta) 4%, var(--superficie)); }
-.seccion-icono { width: 13px; height: 13px; flex: none; color: var(--tinta-3); }
-.seccion-titulo { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; flex: none; }
+.seccion-icono { width: 16px; height: 16px; flex: none; color: var(--tinta-3); }
+.seccion-titulo { font-size: 14px; font-weight: 600; flex: none; color: var(--tinta); }
 .seccion-resumen {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--tinta-3);
   white-space: nowrap;
   overflow: hidden;
@@ -4595,7 +4595,7 @@ details.cartera > summary:focus-visible { outline: 2px solid var(--acento); outl
 }
 .seccion-chevron { width: 14px; height: 14px; flex: none; color: var(--tinta-3); transition: transform 0.2s ease; }
 [data-state='open'] .seccion-chevron { transform: rotate(180deg); }
-.seccion-contenido { padding: 10px 12px 12px; }
+.seccion-contenido { padding: 16px; }
 .tono-aviso .seccion-cabeza { background: color-mix(in srgb, #f59e0b 7%, var(--superficie)); }
 .tono-aviso .seccion-icono, .tono-aviso .seccion-titulo { color: #b45309; }
 .tono-exito .seccion-cabeza { background: color-mix(in srgb, var(--exito) 6%, var(--superficie)); }
@@ -8605,3 +8605,54 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .s-regla-pista i { position: absolute; bottom: 0; width: 2px; height: 12px; margin-left: -1px; border-radius: 2px 2px 0 0; background: var(--tinta-3); opacity: 0.6; }
 .s-regla-pista b { position: absolute; bottom: 0; width: 4px; height: 28px; margin-left: -2px; border-radius: 4px 4px 0 0; }
 .s-regla-extremos { display: flex; justify-content: space-between; gap: 12px; font-family: 'Fira Code', monospace; font-size: 12px; color: var(--tinta-3); }
+
+/* Nivel, dato y filas para comparar (sistema.jsx). */
+.s-nivel { display: flex; width: 100%; max-width: 160px; height: 8px; border-radius: 999px; overflow: hidden; background: var(--superficie-2); }
+.s-nivel i { display: block; height: 100%; }
+.s-nivel-extra { background: repeating-linear-gradient(135deg, var(--acento-borde) 0 4px, var(--acento-tenue) 4px 8px); }
+.s-dato { display: grid; gap: 4px; min-width: 0; justify-items: start; }
+.s-dato strong { font-family: 'Fira Code', monospace; font-size: 15px; font-weight: 600; line-height: 1.3; font-variant-numeric: tabular-nums; color: var(--tinta); }
+.s-dato strong.s-bien { color: var(--exito-tinta); }
+.s-dato strong.s-problema { color: var(--peligro); }
+.s-dato small { font-size: 12px; line-height: 1.4; color: var(--tinta-3); }
+.s-filas { border: 1px solid var(--borde); border-radius: var(--radio-g); background: var(--superficie); overflow: hidden; }
+.s-filas-cabeza, .s-fila { display: grid; grid-template-columns: var(--s-filas-columnas); gap: 16px; align-items: center; padding: 12px 16px; }
+.s-filas-cabeza { padding-block: 8px; font-size: 12px; color: var(--tinta-3); background: var(--superficie-2); }
+.s-fila { border-top: 1px solid var(--borde); }
+.s-fila-problema { box-shadow: inset 4px 0 0 var(--peligro); }
+.s-fila-atencion { box-shadow: inset 4px 0 0 var(--avisa-tinta); }
+.s-fila-bien { box-shadow: inset 4px 0 0 var(--exito); }
+.s-fila-celda { min-width: 0; }
+.s-fila-quien { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.s-fila-quien img, .s-fila-quien .s-fila-sin-foto { flex: none; width: 40px; height: 40px; border-radius: 8px; object-fit: contain; background: var(--superficie-2); }
+.s-fila-quien button { padding: 0; border: 0; background: none; cursor: pointer; line-height: 0; }
+.s-fila-quien > div { display: grid; gap: 4px; justify-items: start; min-width: 0; }
+.s-fila-quien > div > span { display: inline-flex; align-items: center; gap: 8px; }
+.s-fila-quien strong { font-size: 14px; font-weight: 600; color: var(--tinta); }
+.s-fila-quien a { display: inline-flex; color: var(--tinta-3); }
+.s-fila-quien a:hover { color: var(--acento); }
+@media (max-width: 760px) {
+  .s-filas-cabeza { display: none; }
+  .s-fila { grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+  .s-fila-celda::before { content: attr(data-titulo); display: block; margin-bottom: 4px; font-size: 12px; color: var(--tinta-3); }
+  .s-fila-celda-ancha { grid-column: 1 / -1; }
+  .s-fila-celda-ancha::before { display: none; }
+}
+
+/* La tarjeta abierta de Mis productos (18-nov-2026): cifras arriba, stock por color y secciones que se abren. */
+.pc-cifras { margin-top: 16px; }
+.pc-cifras .s-cifras { margin-bottom: 0; }
+.pc-secciones { margin-top: 16px; }
+.pc-abierta .s-subtitulo { margin-top: 20px; }
+.s-plata { display: grid; gap: 16px; }
+.s-plata-campos { display: flex; flex-wrap: wrap; gap: 12px 24px; }
+.s-plata-campos > * { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--tinta-2); }
+.s-plata-campos input { width: 160px; padding: 6px 8px; border: 1px solid var(--borde-fuerte); border-radius: 8px; background: var(--superficie); color: var(--tinta); font-family: 'Fira Code', monospace; font-size: 14px; }
+.s-plata-campos b { font-family: 'Fira Code', monospace; font-size: 15px; font-weight: 600; color: var(--tinta); }
+.s-acciones label { font-size: 13px; color: var(--tinta-2); }
+/* En teléfono la cabecera de la tarjeta no se queda pegada arriba (ocupaba media pantalla) y los botones van en su
+   propia línea, para que el título tenga el ancho completo. */
+@media (max-width: 760px) {
+  .pc-abierta .pc-head { position: static; flex-wrap: wrap; }
+  .pc-abierta .pc-acciones { order: -1; flex-basis: 100%; justify-content: flex-end; }
+}

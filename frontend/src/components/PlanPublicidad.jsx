@@ -1,5 +1,6 @@
 import { Megaphone } from 'lucide-react'
 import { fmtPrecio } from '../lib/formato.js'
+import { Aviso, Cifra, Cifras, Nota } from './sistema.jsx'
 
 // EL PLAN DE PUBLICIDAD ANTES DE ANUNCIAR (src/services/ml/publicidad.js): lo
 // que los anuncios de la cuenta enseñaron —lo que cuesta cada venta por
@@ -15,10 +16,39 @@ const TONOS = {
   'no-cierra': { clase: 'mal', titulo: 'No cierra ni sin publicidad' },
 }
 
+const TONO_SISTEMA = { bien: 'bien', medio: 'atencion', mal: 'problema' }
+// el veredicto en una línea, para el resumen de la sección cuando está cerrada
+export function resumenPlan(plan) {
+  if (!plan) return null
+  const t = TONOS[plan.veredicto] ?? TONOS['depende-del-costo']
+  return `${t.titulo}${plan.presupuestoDiario > 0 ? ` · para partir, ${fmtPrecio(plan.presupuestoDiario)} al día` : ''}`
+}
+
+// DENTRO DE LA TARJETA DE MIS PRODUCTOS (18-nov-2026): nueve cifras chicas en una fila, con nombres como «aguanta
+// de publicidad» o «ROAS objetivo», no se leían. Quedan el veredicto en palabras y las cuatro cuentas que deciden:
+// cuánto aguanta una venta, cuánto cuesta una venta por anuncio en la cuenta, cuánto quedaría y con cuánto partir.
+function PlanCompacto({ plan, t, x }) {
+  const conCosto = plan.costoUnitario != null
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <Aviso tono={TONO_SISTEMA[t.clase]} Icono={Megaphone} titulo={`${t.titulo}.`}>{plan.texto}.</Aviso>
+      <Cifras>
+        {conCosto && plan.aguantaPorVenta != null ? <Cifra etiqueta="Una venta aguanta" valor={fmtPrecio(plan.aguantaPorVenta)} detalle="de publicidad sin perder plata" /> : null}
+        {!conCosto ? <Cifra etiqueta="El producto puede costarte hasta" valor={plan.costoMaximo > 0 ? fmtPrecio(plan.costoMaximo) : 'no cierra'} tono={plan.costoMaximo > 0 ? undefined : 'problema'} detalle="para que una venta por anuncio no pierda; falta cargar el costo" /> : null}
+        {plan.referencia?.mediana ? <Cifra etiqueta="Una venta por anuncio cuesta" valor={fmtPrecio(plan.referencia.mediana)} detalle="lo que se ha pagado en tu cuenta" /> : null}
+        {conCosto && plan.gananciaPorVentaAds != null ? <Cifra etiqueta="Te quedaría por venta con anuncio" valor={fmtPrecio(plan.gananciaPorVentaAds)} tono={plan.gananciaPorVentaAds > 0 ? 'bien' : 'problema'} detalle="después de pagar el anuncio" /> : null}
+        {plan.presupuestoDiario > 0 ? <Cifra etiqueta="Para partir" valor={`${fmtPrecio(plan.presupuestoDiario)} al día`} detalle={`${conCosto ? `ROAS objetivo ${x(plan.roasObjetivo)} · ` : ''}prueba de 14 días: ${fmtPrecio(plan.presupuestoPrueba14Dias)}`} /> : null}
+      </Cifras>
+      <Nota>Sale de lo que enseñaron {plan.aprendidoDe} anuncios de tu cuenta (confianza {plan.confianza}). El detalle de cada campaña está en Publicidad.</Nota>
+    </div>
+  )
+}
+
 export function PlanPublicidad({ plan, compacto = false }) {
   if (!plan) return null
   const t = TONOS[plan.veredicto] ?? TONOS['depende-del-costo']
   const x = (v) => (v != null ? `${String(v).replace('.', ',')}x` : '—')
+  if (compacto) return <PlanCompacto plan={plan} t={t} x={x} />
   return (
     <div className={`plan-ads plan-${t.clase}${compacto ? ' compacto' : ''}`} onClick={(e) => e.stopPropagation()}>
       <div className="plan-ads-cab">

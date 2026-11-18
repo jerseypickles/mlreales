@@ -225,12 +225,14 @@ export async function escanearPropios({ soloOficial = false } = {}) {
       // (parte de) lo que el importador anotó como en camino. Se descuenta y se
       // borra al completarse. Las ventas de esos 45 min lo achican un poco:
       // error hacia abajo, que en reposición es el barato.
-      const totalPrevio = propio.inventarioFull?.total
-      if (propio.enCamino?.unidades > 0 && Number.isFinite(totalPrevio) && inventario.total > totalPrevio) {
-        const recibido = inventario.total - totalPrevio
-        const restante = propio.enCamino.unidades - recibido
-        console.log(`[scan-propios] ${propio.sku} bodega recibió ${recibido}: en camino ${propio.enCamino.unidades} → ${Math.max(0, restante)}`)
-        propio.enCamino = restante > 0 ? { ...propio.enCamino, unidades: restante } : null
+      // La entrada además queda guardada aunque nadie haya anotado el envío:
+      // es lo único de un envío a Full que Mercado Libre deja ver.
+      const { recepcionEnBodega } = await import('./inventarioFull.js')
+      const llegada = recepcionEnBodega({ totalPrevio: propio.inventarioFull?.total, total: inventario.total, enCamino: propio.enCamino, entradas: propio.entradasFull })
+      if (llegada.recibido > 0) {
+        console.log(`[scan-propios] ${propio.sku} bodega recibió ${llegada.recibido}: en camino ${propio.enCamino?.unidades ?? 0} → ${llegada.enCamino?.unidades ?? 0}`)
+        propio.enCamino = llegada.enCamino
+        propio.entradasFull = llegada.entradas
       }
       propio.inventarioFull = {
         ...inventario,

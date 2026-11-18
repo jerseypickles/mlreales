@@ -3,17 +3,14 @@ import * as Collapsible from '@radix-ui/react-collapsible'
 import { api } from '../api.js'
 import { useEstadoGuardado } from '../lib/estadoGuardado.js'
 import { IconoExterno, Cargando } from './ui.jsx'
-import { EncabezadoPagina, Etiqueta, Pendientes } from './sistema.jsx'
+import { EncabezadoPagina, Etiqueta, Pendientes, Cifra, Cifras } from './sistema.jsx'
 import { calidadDeEntrada, resumenPendientes } from '../lib/calidadMl.js'
 import { MiniSerie, HistogramaPrecios } from './graficos.jsx'
 import {
   Tag,
-  ShoppingCart,
-  DollarSign,
   PiggyBank,
   Percent,
   Eye,
-  Star,
   Package,
   Sparkles,
   PackagePlus,
@@ -41,26 +38,18 @@ import {
   Type,
   CircleAlert,
   ScanSearch,
+  Megaphone,
 } from 'lucide-react'
 import { publicacionVigente, inventarioEntrada, coincideFiltro, filtrarEntradas, paginarEntradas, seriePrecioEntrada } from '../lib/catalogoPropios.js'
 import { BotonCopiar } from './Listing.jsx'
-import { PlanPublicidad } from './PlanPublicidad.jsx'
+import { PlanPublicidad, resumenPlan } from './PlanPublicidad.jsx'
+import { StockFull, resumenStock } from './StockFull.jsx'
+import { PlataVenta, resumenPlata } from './PlataVenta.jsx'
 import { QuienVendeLoMismo } from './QuienVendeLoMismo.jsx'
 import { fmtNum, fmtPrecio, fmtFecha } from '../lib/formato.js'
 import { agruparPorFamilia, ordenarEntradas, metricasDe, etiquetaVariantes, nombreVariante } from '../lib/familiasPropias.js'
 
 const FACTOR_VENTAS = 25 // misma heurística del score: ~1 reseña por cada 25 ventas
-
-function deltas(mediciones) {
-  if (!mediciones?.length) return null
-  const ultima = mediciones[mediciones.length - 1]
-  const previa = mediciones.length > 1 ? mediciones[mediciones.length - 2] : null
-  const delta = (campo) =>
-    previa && Number.isFinite(ultima[campo]) && Number.isFinite(previa[campo])
-      ? ultima[campo] - previa[campo]
-      : null
-  return { ultima, dReviews: delta('numReviews'), dPrecio: delta('precio'), dVendidos: delta('vendidos') }
-}
 
 // estado: 'buena' | 'mala' | 'atenta' | undefined — pinta el tile según el negocio
 function Metrica({ etiqueta, children, alerta, estado, Icono }) {
@@ -171,164 +160,6 @@ function Seccion({ icono: Icono, titulo, resumen, tono, children, abiertaPorDefe
   )
 }
 
-// Qué pasa con CADA venta al precio de hoy, y cuánto queda para pagar el
-// producto. Es la pregunta que el importador hace de verdad: "¿en cuánto me
-// tiene que llegar para que esto valga la pena?". El techo se muestra aunque
-// todavía no haya costo cargado — sirve para decidir la compra.
-// `aplicaA`: en un producto con colores, el precio y el costo que se escriben
-// acá van a todas sus publicaciones, y se dice
-function GananciaUnidad({ p, aplicaA = null, onGuardarCosto, onCambiarPrecio }) {
-  const e = p.economiaUnidad
-  const [costo, setCosto] = useState(p.costoUnitarioClp ?? '')
-  const [guardando, setGuardando] = useState(false)
-  const [editandoPrecio, setEditandoPrecio] = useState(false)
-  const [precio, setPrecio] = useState('')
-  const [aplicando, setAplicando] = useState(false)
-  useEffect(() => {
-    setCosto(p.costoUnitarioClp ?? '')
-  }, [p.costoUnitarioClp])
-  if (!e) return null
-
-  async function guardar(ev) {
-    ev.preventDefault()
-    setGuardando(true)
-    try {
-      await onGuardarCosto(p, costo === '' ? null : Number(costo))
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  async function aplicarPrecio(ev) {
-    ev.preventDefault()
-    setAplicando(true)
-    try {
-      await onCambiarPrecio(p, Number(precio))
-      setEditandoPrecio(false)
-    } finally {
-      setAplicando(false)
-    }
-  }
-
-  const g = e.gananciaClp
-  return (
-    <div className="pc-ganancia" onClick={(ev) => ev.stopPropagation()}>
-      {editandoPrecio ? (
-        <form className="gan-precio-form" onSubmit={aplicarPrecio}>
-          <label>nuevo precio</label>
-          <input
-            type="number"
-            min="1"
-            step="1"
-            autoFocus
-            value={precio}
-            onChange={(ev) => setPrecio(ev.target.value)}
-            placeholder={String(e.precioClp)}
-          />
-          <button type="submit" className="boton-secundario boton-chico" disabled={aplicando || !precio}>
-            {aplicando ? 'aplicando…' : 'aplicar en ML'}
-          </button>
-          <button type="button" className="boton-plano boton-chico" onClick={() => setEditandoPrecio(false)}>
-            cancelar
-          </button>
-        </form>
-      ) : (
-        <div className="gan-titulo">
-          Por cada venta a {fmtPrecio(e.precioClp)}
-          <button
-            type="button"
-            className="gan-cambiar"
-            title="Cambiar el precio en Mercado Libre"
-            onClick={() => {
-              setPrecio(String(e.precioClp))
-              setEditandoPrecio(true)
-            }}
-          >
-            cambiar
-          </button>
-          {aplicaA ? <span className="gan-aplica">precio y costo valen para {aplicaA}</span> : null}
-        </div>
-      )}
-      <ul className="gan-desglose">
-        <li>
-          <span>comisión ML{e.comisionPct ? ` ${e.comisionPct}%` : ''}</span>
-          <b>{e.comisionClp != null ? `−${fmtPrecio(e.comisionClp)}` : 'sin dato'}</b>
-        </li>
-        {/* Mercado Envíos cobra lo mismo desde la bodega que desde Full, y el
-            servidor ya lo descuenta para los dos (21-oct): la línea decía "no
-            incluido (no es Full)" mientras "te queda" ya lo restaba. */}
-        {e.esFull || e.envioClp != null || e.faltaEnvio ? (
-          <li>
-            {/* El envío facturado le gana a la tarifa, cruzado orden a orden:
-                la mayoría paga la base ($799) y una parte paga el despacho
-                real ($2.100-7.200), y el promedio es lo que cuesta vender. */}
-            <span
-              title={
-                e.envioBase === 'facturado'
-                  ? `Promedio por unidad de lo que ML facturó de envío en 60 días, cobro por cobro con su orden.${
-                      e.envioBaseClp != null ? ` La mayoría de las órdenes paga ${fmtPrecio(e.envioBaseClp)}; ${e.envioPctOrdenesSobreBase ?? 0}% paga más del doble (ML cobra el despacho real).` : ''
-                    }${
-                      e.envioTarifarioClp != null ? ` El tarifario estimaba ${fmtPrecio(e.envioTarifarioClp)}.` : ''
-                    }`
-                  : `Estimado del tarifario de ML: todavía no hay envíos facturados de este producto.${
-                      e.esFull ? '' : ' Mercado Envíos cobra lo mismo desde tu bodega que desde Full.'
-                    }`
-              }
-            >
-              {e.esFull ? 'envío Full' : 'envío'}
-              {e.envioBase === 'facturado' ? (e.envioBaseClp != null ? ` (base ${fmtPrecio(e.envioBaseClp)}, promedio)` : ' (facturado)') : e.envioSupuesto ? ' (caja estimada)' : ''}
-            </span>
-            <b>{e.envioClp != null ? `−${fmtPrecio(e.envioClp)}` : 'sin dato'}</b>
-          </li>
-        ) : (
-          // Flex o envío a convenir: el despacho se paga por otro lado y acá
-          // no se tarifica. Decirlo, o el techo se lee como si fuera completo
-          <li className="gan-ojo">
-            <span>envío</span>
-            <b>no incluido (no es Mercado Envíos)</b>
-          </li>
-        )}
-        <li className="gan-queda">
-          <span>te queda</span>
-          <b>{fmtPrecio(e.quedaParaProductoClp)}</b>
-        </li>
-      </ul>
-      <form className="gan-costo" onSubmit={guardar}>
-        <label htmlFor={`costo-${p._id}`}>llegó a</label>
-        <input
-          id={`costo-${p._id}`}
-          type="number"
-          min="0"
-          step="1"
-          placeholder="costo puesto en bodega"
-          value={costo}
-          onChange={(ev) => setCosto(ev.target.value)}
-        />
-        <button type="submit" className="boton-secundario boton-chico" disabled={guardando}>
-          {guardando ? '…' : 'guardar'}
-        </button>
-      </form>
-      {p.costoOrigen === 'cotizacion' ? (
-        <p className="gan-origen">Costo copiado de la cotización del nicho: confírmalo o corrígelo con el real puesto en bodega.</p>
-      ) : null}
-      {g === null ? (
-        <p className="gan-vacio">
-          Escribe en cuánto te llegó puesto en bodega de ML (producto + flete + internación + despacho).
-          Tienes <b>{fmtPrecio(e.quedaParaProductoClp)}</b> de techo: sobre eso, cada venta pierde plata.
-        </p>
-      ) : (
-        <div className={`gan-resultado ${g < 0 ? 'gan-mal' : 'gan-bien'}`}>
-          <span>{g < 0 ? 'pierdes por unidad' : 'ganancia por unidad'}</span>
-          <b>
-            {fmtPrecio(g)}
-            {e.gananciaPct != null ? ` · ${e.gananciaPct}%` : ''}
-          </b>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // EL TÍTULO SIN EL PREFIJO QUE TODOS COMPARTEN.
 //
 // Los títulos de ML son largos y en una cartera repiten la cabeza: "Brochas
@@ -393,114 +224,6 @@ const TONO_URGENCIA = {
   sin_ventas: null,
 }
 
-function Reposicion({ r, p, onGuardarEnCamino }) {
-  const [editando, setEditando] = useState(false)
-  const [unidades, setUnidades] = useState('')
-  const [guardando, setGuardando] = useState(false)
-  if (!r) return null
-  const tono = TONO_URGENCIA[r.urgencia]
-  const texto =
-    r.urgencia === 'quebrado'
-      ? 'Sin stock'
-      : r.urgencia === 'sin_ventas'
-        ? `${fmtNum(r.stock)} en bodega · sin ventas que proyectar`
-        : `Se quiebra en ${r.diasCobertura} días`
-
-  // lo que ya salió hacia Full: cuenta como stock y deja de pedir reponer.
-  // ML no lo expone por API, así que se anota acá y el scan lo descuenta
-  // cuando la bodega lo recibe.
-  async function guardar(ev) {
-    ev.preventDefault()
-    setGuardando(true)
-    try {
-      await onGuardarEnCamino(p, Number(unidades))
-      setEditando(false)
-      setUnidades('')
-    } finally {
-      setGuardando(false)
-    }
-  }
-  async function borrar() {
-    setGuardando(true)
-    try {
-      await onGuardarEnCamino(p, null)
-    } finally {
-      setGuardando(false)
-    }
-  }
-
-  const detalle = [
-    // sin ventas el stock ya va en el texto principal: no repetirlo
-    r.urgencia === 'sin_ventas' ? null : `${fmtNum(r.stock)} en bodega`,
-    r.enCamino ? `${fmtNum(r.enCamino)} en camino` : null,
-    r.velocidadDia > 0 ? `${r.velocidadDia}/día (${r.base})` : null,
-    // un quiebre no es caída de demanda: se descuentan los días sin stock
-    r.diasSinStock30 >= 1 ? `${Math.round(r.diasSinStock30)} día(s) sin stock descontados` : null,
-  ].filter(Boolean)
-
-  return (
-    <div className={`pc-repo${tono ? ` pc-repo-${tono}` : ''}`}>
-      <strong>{texto}</strong>
-      {detalle.length ? <span>{detalle.join(' · ')}</span> : null}
-      {r.aEnviar > 0 ? <b className="pc-repo-accion">enviar {fmtNum(r.aEnviar)}</b> : null}
-      {onGuardarEnCamino ? (
-        <div className="pc-repo-camino" onClick={(ev) => ev.stopPropagation()}>
-          {r.enCamino ? (
-            <button
-              type="button"
-              className="pc-repo-camino-btn"
-              disabled={guardando}
-              onClick={borrar}
-              title="Se descuenta solo cuando la bodega lo recibe; esto lo borra a mano"
-            >
-              {fmtNum(r.enCamino)} en camino ✕
-            </button>
-          ) : editando ? (
-            <form className="pc-repo-camino-form" onSubmit={guardar}>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                autoFocus
-                value={unidades}
-                onChange={(ev) => setUnidades(ev.target.value)}
-                placeholder="unidades"
-              />
-              <button type="submit" disabled={guardando || !(Number(unidades) > 0)}>
-                ok
-              </button>
-              <button type="button" onClick={() => setEditando(false)}>
-                cancelar
-              </button>
-            </form>
-          ) : (
-            <button
-              type="button"
-              className="pc-repo-camino-btn"
-              onClick={() => setEditando(true)}
-              title="Anota lo que ya despachaste a Full: cuenta como stock y deja de pedir reponer"
-            >
-              ya lo envié
-            </button>
-          )}
-        </div>
-      ) : null}
-      {r.retenido > 0 ? (
-        <em className="pc-repo-retenido" title={r.motivosRetenido.map((m) => `${m.motivo}: ${m.unidades}`).join(' · ')}>
-          {fmtNum(r.retenido)} retenida(s) en ML
-        </em>
-      ) : null}
-      {/* el item y la bodega deberían decir lo mismo; cuando no, es dato */}
-      {r.descuadreItem ? (
-        <em className="pc-repo-descuadre" title="ML declara en el item un stock distinto al que tiene en bodega">
-          el item declara {r.descuadreItem > 0 ? '+' : ''}{fmtNum(r.descuadreItem)}
-        </em>
-      ) : null}
-    </div>
-  )
-}
-
-// los tres que se miran para decidir; el resto baja al pliegue
 // SU GAMA DENTRO DEL NICHO (src/services/gama.js). El importador, 21-oct-2026:
 // "la manguera que estamos mostrando es diferente a las demás, calidad,
 // material… el sistema piensa que todo es igual". El sistema compara por
@@ -694,46 +417,6 @@ function SeccionIguales({ p }) {
   )
 }
 
-const PRINCIPALES = new Set(['Ventas 7d', 'Margen 30d', 'ML cobra 30d'])
-
-// CADA COLOR TIENE SU STOCK. El producto se decide junto (precio, costo,
-// nicho), pero ML vende y despacha cada color como publicación aparte: lo que
-// se quiebra, lo que hay que mandar a Full y lo que ya va en camino es de cada
-// uno, y por eso cada color lleva su propia banda de reposición.
-function VariantesFamilia({ variantes, mostrarPrecio, onAbrir, onGuardarEnCamino }) {
-  return (
-    <div className="pc-variantes">
-      {variantes.map((v) => {
-        const mv = metricasDe(v)
-        const nombre = nombreVariante(v)
-        return (
-          <div key={v._id} className="pc-variante">
-            <button type="button" className="pc-variante-foto" onClick={() => onAbrir(v)} aria-label={`Ver series de ${nombre}`}>
-              {v.imagen ? <img src={v.imagen} alt="" loading="lazy" width="40" height="40" /> : <span className="sin-imagen" />}
-            </button>
-            <div className="pc-variante-cuerpo">
-              <div className="pc-variante-head">
-                <b>{nombre}</b>
-                {mostrarPrecio && mv.precio != null ? <span>{fmtPrecio(mv.precio)}</span> : null}
-                <span>
-                  {fmtNum(mv.ventas7 ?? 0)} vend. 7d · {fmtNum(mv.visitas7 ?? 0)} {mv.visitas7 === 1 ? 'visita' : 'visitas'}
-                  {mv.conversion7d != null ? ` · ${mv.conversion7d}% conv.` : ''}
-                  {!v.reposicion && mv.stock != null ? ` · ${fmtNum(mv.stock)} en stock` : ''}
-                  {mv.pausada ? ' · pausada' : ''}
-                </span>
-                <a href={v.url} target="_blank" rel="noreferrer" className="icono-boton" aria-label={`Abrir ${nombre} en Mercado Libre`}>
-                  <ExternalLink aria-hidden="true" />
-                </a>
-              </div>
-              <Reposicion r={v.reposicion} p={v} onGuardarEnCamino={onGuardarEnCamino} />
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 // `familia` ({ nombre, variantes }) cuando el producto tiene varios colores en
 // ML: la tarjeta es del producto, con sus números sumados (`m`), y lo que se
 // decide en ella (precio, costo, nicho) se aplica a todos los colores. `p` es
@@ -758,7 +441,7 @@ function CalidadMl({ calidad }) {
     ? <Etiqueta tono={items.length ? 'atencion' : 'bien'} title="Puntaje de Mercado Libre para los datos del producto (video, características, fotos, título, código universal)">Datos del producto {calidad.puntajeProducto} de 100</Etiqueta>
     : null
   return (
-    <Pendientes titulo={items.length ? 'Lo que pide Mercado Libre' : 'Mercado Libre no pide nada más para esta publicación'} resumen={resumen} items={items}>
+    <Pendientes titulo={items.length ? 'Lo que falta para subir el puntaje' : 'No pide nada más para esta publicación'} resumen={resumen} items={items}>
       {calidad.comerciales.length
         ? `El puntaje total de ML es ${calidad.puntaje ?? '—'} (${calidad.nivel ?? 'sin nivel'}) porque además pide condiciones de venta que cuestan plata y acá no se siguen: ${calidad.comerciales.join(', ')}.`
         : `Puntaje total de ML: ${calidad.puntaje ?? '—'} (${calidad.nivel ?? 'sin nivel'}).`}
@@ -766,8 +449,7 @@ function CalidadMl({ calidad }) {
   )
 }
 
-function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, onGuardarEnCamino, expandida = false, onExpandir, prefijos = null }) {
-  const d = deltas(p.mediciones)
+function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onEliminar, onAbrir, onCablear, onAuditar, onVerAuditoria, onGuardarCosto, onCambiarPrecio, onGuardarEnvio, expandida = false, onExpandir, prefijos = null }) {
   const m = metricas ?? metricasDe(p)
   const a = p.auditoria
   const generando =
@@ -780,82 +462,6 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
   const precioEfectivo = m.precio
   const intervenciones = p.impacto?.intervenciones ?? []
   const midiendo = intervenciones.filter((i) => i.veredicto === 'midiendo').length
-
-  // NUEVE KPIS ERAN OCHO DE MÁS.
-  //
-  // La tarjeta mostraba precio, ventas, conversión, visitas, margen, cargos ML,
-  // stock, reseñas e ingresos — todos del mismo tamaño y del mismo color. El
-  // importador lo dijo así: "hay mucho relleno". Y tenía razón: con nueve
-  // números iguales ninguno resalta, y la pregunta que uno trae a esta pantalla
-  // ("¿tengo que hacer algo con este producto hoy?") no la contesta ninguno.
-  //
-  // Ahora tres arriba —lo que vende, lo que deja, lo que ML se lleva— y el
-  // resto plegado. La reposición va en su propia banda, porque es lo único que
-  // exige acción hoy.
-  const kpis = [
-    {
-      k: 'Precio',
-      v: m.precioHasta != null ? `${fmtPrecio(precioEfectivo)}–${fmtPrecio(m.precioHasta)}` : fmtPrecio(precioEfectivo),
-      extra: promo ? <span className="precio-lista">{fmtPrecio(d?.ultima?.precio)}</span> : null,
-      Icono: Tag,
-      tono: promo ? 'aviso' : null,
-    },
-    {
-      k: 'Ventas 7d',
-      v: ventas7 != null ? fmtNum(ventas7) : '—',
-      Icono: ShoppingCart,
-      tono: ventas7 > 0 ? 'bien' : ventas7 === 0 ? 'mal' : null,
-    },
-    {
-      k: 'Conversión',
-      v: m.conversion7d != null ? `${m.conversion7d}%` : '—',
-      Icono: Percent,
-      tono: m.conversion7d >= 3 ? 'bien' : null,
-    },
-    { k: 'Visitas 7d', v: fmtNum(m.visitas7), Icono: Eye, tono: (m.visitas7 ?? 0) < 10 ? 'mal' : null },
-    {
-      k: 'Margen 30d',
-      v: m.margen30d ? fmtPrecio(m.margen30d.margenClp) : m.ventas30d ? 'falta costo' : '—',
-      Icono: PiggyBank,
-      tono: m.margen30d ? (m.margen30d.margenClp < 0 ? 'mal' : 'bien') : m.ventas30d ? 'aviso' : null,
-      ayuda: m.margen30d
-        ? `Base: ${m.margen30d.base ?? '—'}\ningresos ${fmtPrecio(m.ventas30d?.ingresosClp)}\n− ML ${fmtPrecio(m.margen30d.cargosMlClp ?? m.margen30d.comisionClp)}\n− costo ${fmtPrecio(m.margen30d.costoClp)}`
-        : 'Carga el costo por unidad (clic en la tarjeta) para ver el margen real',
-    },
-    // lo que ML cobra DE VERDAD: comisión + envío + ads, del detalle de facturación
-    {
-      k: 'ML cobra 30d',
-      v: m.cargosMl30d ? fmtPrecio(m.cargosMl30d.totalClp) : '—',
-      Icono: Percent,
-      tono: m.cargosMl30d && m.ventas30d?.ingresosClp
-        ? m.cargosMl30d.totalClp / m.ventas30d.ingresosClp > 0.5
-          ? 'mal'
-          : 'aviso'
-        : null,
-      ayuda: m.cargosMl30d
-        ? [
-            `comisión ${fmtPrecio(m.cargosMl30d.comisionClp)}`,
-            `envío ${fmtPrecio(m.cargosMl30d.envioClp)}`,
-            `publicidad ${fmtPrecio(m.cargosMl30d.adsClp)}`,
-            // bolsillos que antes caían en "otros" y no se veían
-            m.cargosMl30d.colectaClp ? `colecta ${fmtPrecio(m.cargosMl30d.colectaClp)}` : null,
-            m.cargosMl30d.almacenajeClp ? `almacenaje ${fmtPrecio(m.cargosMl30d.almacenajeClp)}` : null,
-            m.cargosMl30d.otrosClp ? `otros ${fmtPrecio(m.cargosMl30d.otrosClp)}` : null,
-            `${m.cargosMl30d.lineas} línea(s) facturadas`,
-          ]
-            .filter(Boolean)
-            .join('\n')
-        : 'Se sincroniza a diario desde el detalle de facturación de ML',
-    },
-    { k: 'Stock', v: fmtNum(m.stock), Icono: Package, tono: m.stock != null && m.stock <= 3 ? 'aviso' : null },
-    {
-      k: 'Reseñas',
-      v: `${fmtNum(m.numReviews)}${m.rating ? ` ★${m.rating}` : ''}`,
-      Icono: Star,
-      tono: m.numReviews ? 'bien' : 'mal',
-    },
-    { k: 'Ingresos 30d', v: m.ventas30d ? fmtPrecio(m.ventas30d.ingresosClp) : '—', Icono: DollarSign },
-  ]
 
   // lo que Mercado Libre pide para esta tarjeta (una publicación, o los colores de la familia)
   const calidad = calidadDeEntrada(familia ? familia.variantes : [p])
@@ -900,155 +506,130 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
     )
   }
 
+  // LA TARJETA ABIERTA, ORDENADA (18-nov-2026). Pedido del importador: «cuando un producto tiene variante es
+  // complicado ver, como también cuando no tiene; falta mejorar completo eso». Adentro había siete bloques, cada uno
+  // con su propio estilo: renglones de texto por color, tres recuadros con el detalle escondido en textos flotantes,
+  // una lista de restas, nueve cifras chicas de publicidad… Ahora es la misma estructura con o sin colores:
+  //   1. cuatro cifras con su explicación a la vista (lo que vendió, lo que deja cada venta, el mes y el stock);
+  //   2. el stock por color en columnas, con el envío a Full anotado en un paso (StockFull.jsx);
+  //   3. todo lo demás en secciones que dicen lo importante en una línea y se abren para el detalle.
+  const e = p.economiaUnidad
+  const filasStock = familia ? familia.variantes.map((v) => ({ p: v, nombre: nombreVariante(v), m: metricasDe(v) })) : [{ p, nombre: null, m }]
+  const stock = resumenStock(filasStock)
+  const plata = resumenPlata(e)
+  const enFull = filasStock.some((f) => f.p.reposicion)
+  const decimal = (n) => String(n).replace('.', ',')
+  const mes = m.margen30d
+    ? { etiqueta: m.margen30d.margenClp < 0 ? 'Perdiste en 30 días' : 'Ganaste en 30 días', valor: fmtPrecio(Math.abs(m.margen30d.margenClp)), tono: m.margen30d.margenClp < 0 ? 'problema' : 'bien',
+        detalle: `vendiste ${fmtPrecio(m.ventas30d?.ingresosClp)} · Mercado Libre ${fmtPrecio(m.margen30d.cargosMlClp ?? m.margen30d.comisionClp)} · costo ${fmtPrecio(m.margen30d.costoClp)}` }
+    : m.ventas30d
+      ? { etiqueta: 'Vendiste en 30 días', valor: fmtPrecio(m.ventas30d.ingresosClp), detalle: 'falta el costo para saber cuánto ganaste' }
+      : { etiqueta: 'En 30 días', valor: '—', detalle: 'sin ventas' }
+  const mejoras = a?.resultado?.quickWins ?? []
+  const resumenMejoras = !p.nichoId ? 'elige el nicho contra el que se compara'
+    : generando ? 'leyendo a los que más venden en el nicho…'
+      : a?.estado === 'ok' ? `${mejoras.length ? `${fmtNum(mejoras.length)} ${mejoras.length === 1 ? 'mejora propuesta' : 'mejoras propuestas'}` : 'revisada'}${mejoras[0] ? ` · primera: ${mejoras[0]}` : ''}`
+        : a?.estado === 'error' ? 'la revisión anterior falló' : 'todavía sin revisar'
+
   return (
     <article className="propio-card pc-abierta">
       <header className="pc-head">
-        <button className="pc-foto" onClick={() => onAbrir(p)} aria-label="Ver series del producto">
+        <button className="pc-foto" onClick={() => onAbrir(p)} aria-label="Ver la historia del producto">
           {p.imagen ? <img src={p.imagen} alt="" loading="lazy" width="64" height="64" /> : <span className="sin-imagen" />}
         </button>
         <div className="pc-ident">
           <h3 onClick={() => onAbrir(p)}>{titulo}</h3>
           <div className="pc-chips">
-            {familia ? <span className="badge badge-neutro">{etiquetaVariantes(familia.variantes)}</span> : null}
-            {p.envioMl?.logistica === 'fulfillment' ? (
-              <span className="chip-full">
-                <Zap aria-hidden="true" />
-                FULL
-              </span>
-            ) : p.envioMl?.logistica ? (
-              <span className="badge badge-neutro">{p.envioMl.flex ? 'Flex' : 'colecta'}</span>
-            ) : null}
-            {familia ? (
-              m.pausada ? <span className="badge badge-neutro">pausada</span> : null
-            ) : p.estadoMl && p.estadoMl !== 'active' ? (
-              <span className="badge badge-neutro">{p.estadoMl === 'paused' ? 'pausada' : p.estadoMl}</span>
-            ) : null}
-            {promo ? <span className="chip-promo">–{Math.round((1 - promo.precio / promo.precioOriginal) * 100)}%</span> : null}
-            <span className="pc-pos">
-              {m.posicionReciente
-                ? `#${m.posicionReciente.posicion} en “${m.posicionReciente.keyword}”`
-                : 'fuera de los listados trackeados'}
-            </span>
+            <Etiqueta tono="destacada">{fmtPrecio(precioEfectivo)}{m.precioHasta != null ? ` a ${fmtPrecio(m.precioHasta)}` : ''}</Etiqueta>
+            {promo ? <Etiqueta tono="atencion">{Math.round((1 - promo.precio / promo.precioOriginal) * 100)}% de descuento, antes {fmtPrecio(promo.precioOriginal)}</Etiqueta> : null}
+            {familia ? <Etiqueta>{etiquetaVariantes(familia.variantes)}</Etiqueta> : null}
+            {p.envioMl?.logistica === 'fulfillment' ? <Etiqueta tono="bien"><Zap size={12} aria-hidden="true" /> Full</Etiqueta> : p.envioMl?.logistica ? <Etiqueta>{p.envioMl.flex ? 'Flex' : 'colecta'}</Etiqueta> : null}
+            {(familia ? m.pausada : p.estadoMl && p.estadoMl !== 'active') ? <Etiqueta tono="atencion">{familia || p.estadoMl === 'paused' ? 'pausada' : p.estadoMl}</Etiqueta> : null}
+            <Etiqueta>{m.numReviews ? `${m.rating ? `★ ${decimal(m.rating)} · ` : ''}${fmtNum(m.numReviews)} ${m.numReviews === 1 ? 'reseña' : 'reseñas'}` : 'sin reseñas'}</Etiqueta>
+            <span className="pc-pos">{m.posicionReciente ? `puesto ${m.posicionReciente.posicion} en “${m.posicionReciente.keyword}”` : 'no aparece en las búsquedas que medimos'}</span>
           </div>
         </div>
         <div className="pc-acciones">
-          <button className="icono-boton" onClick={() => onAbrir(p)} aria-label="Ver series">
+          <button className="icono-boton" onClick={() => onAbrir(p)} aria-label="Ver la historia" title="Ver la historia">
             <LineChart aria-hidden="true" />
           </button>
-          <a href={p.url} target="_blank" rel="noreferrer" className="icono-boton" aria-label="Abrir en Mercado Libre">
+          <a href={p.url} target="_blank" rel="noreferrer" className="icono-boton" aria-label="Abrir en Mercado Libre" title="Abrir en Mercado Libre">
             <ExternalLink aria-hidden="true" />
           </a>
-          <button className="icono-boton icono-peligro" onClick={() => onEliminar(p)} aria-label="Quitar producto">
+          <button className="icono-boton icono-peligro" onClick={() => onEliminar(p)} aria-label="Quitar producto" title="Quitar producto">
             <Trash2 aria-hidden="true" />
           </button>
-          <button className="icono-boton" onClick={() => onExpandir?.(null)} aria-label="Cerrar la tarjeta" aria-expanded>
+          <button className="icono-boton" onClick={() => onExpandir?.(null)} aria-label="Cerrar la tarjeta" title="Cerrar" aria-expanded>
             <X aria-hidden="true" />
           </button>
         </div>
       </header>
 
-      {familia ? (
-        <VariantesFamilia
-          variantes={familia.variantes}
-          mostrarPrecio={m.precioHasta != null}
-          onAbrir={onAbrir}
-          onGuardarEnCamino={onGuardarEnCamino}
-        />
-      ) : (
-        <Reposicion r={p.reposicion} p={p} onGuardarEnCamino={onGuardarEnCamino} />
-      )}
+      <div className="pc-cifras">
+        <Cifras>
+          <Cifra etiqueta="Vendiste en 7 días" valor={ventas7 == null ? '—' : fmtNum(ventas7)} tono={ventas7 > 0 ? 'bien' : ventas7 === 0 ? 'problema' : undefined}
+            detalle={`${fmtNum(m.visitas7 ?? 0)} ${m.visitas7 === 1 ? 'visita' : 'visitas'}${m.conversion7d != null ? ` · compran ${decimal(m.conversion7d)} de cada 100` : ''}`} />
+          <Cifra etiqueta={e?.gananciaClp < 0 ? 'Pierdes en cada venta' : 'Te deja cada venta'} valor={!e ? '—' : e.gananciaClp != null ? fmtPrecio(Math.abs(e.gananciaClp)) : 'falta el costo'}
+            tono={e?.gananciaClp == null ? undefined : e.gananciaClp < 0 ? 'problema' : 'bien'}
+            detalle={!e ? 'sin precio medido' : e.gananciaClp != null ? `a ${fmtPrecio(e.precioClp)}, después de Mercado Libre y del costo` : `quedan ${fmtPrecio(e.quedaParaProductoClp)} para pagar el producto`} />
+          <Cifra etiqueta={mes.etiqueta} valor={mes.valor} tono={mes.tono} detalle={mes.detalle} />
+          <Cifra etiqueta={enFull ? 'En Full' : 'Stock'} valor={stock.valor} tono={stock.tono} detalle={stock.detalle} />
+        </Cifras>
+      </div>
 
-      <div className="pc-kpis" onClick={() => onAbrir(p)}>
-        {kpis.filter((x) => PRINCIPALES.has(x.k)).map(({ k, v, extra, Icono, tono, ayuda }) => (
-          <div key={k} className={`kpi${tono ? ` kpi-${tono}` : ''}`} title={ayuda}>
-            <span className="kpi-k">
-              <Icono aria-hidden="true" />
-              {k}
-            </span>
-            <span className="kpi-v">
-              {v}
-              {extra}
-            </span>
+      <StockFull filas={filasStock} mostrarPrecio={m.precioHasta != null} onAbrir={onAbrir} onGuardarEnvio={onGuardarEnvio} />
+
+      <div className="pc-secciones">
+        <Seccion icono={PiggyBank} titulo="Plata por venta" tono={plata?.tono} resumen={plata?.texto ?? 'sin precio medido'} abiertaPorDefecto={Boolean(e) && e.gananciaClp == null}>
+          <PlataVenta p={p} m={m} aplicaA={familia ? etiquetaVariantes(familia.variantes, { conArticulo: true }) : null} onGuardarCosto={onGuardarCosto} onCambiarPrecio={onCambiarPrecio} />
+        </Seccion>
+
+        {p.planPublicidad ? (
+          <Seccion icono={Megaphone} titulo="Publicidad" resumen={resumenPlan(p.planPublicidad)}>
+            <PlanPublicidad plan={p.planPublicidad} compacto />
+          </Seccion>
+        ) : null}
+
+        {calidad ? (
+          <Seccion icono={ListChecks} titulo="Lo que pide Mercado Libre" tono={pideMl ? 'aviso' : 'neutro'}
+            resumen={`${pideMl ? `falta ${pideMl.replace(/^ML pide /, '')}` : 'no pide nada más'}${calidad.puntajeProducto != null ? ` · datos del producto ${calidad.puntajeProducto} de 100` : ''}`}>
+            <CalidadMl calidad={calidad} />
+          </Seccion>
+        ) : null}
+
+        <Seccion icono={Sparkles} titulo="Mejorar la publicación" resumen={resumenMejoras}>
+          <div className="s-acciones">
+            <label htmlFor={`nicho-${p._id}`}>Se compara con el nicho</label>
+            <select id={`nicho-${p._id}`} className="selector-nicho" value={p.nichoId ?? ''} onChange={(ev) => onCablear(p, ev.target.value || null)}>
+              <option value="">— elegir nicho —</option>
+              {nichos.map((n) => (
+                <option key={n._id} value={n._id}>
+                  {n.keyword}
+                </option>
+              ))}
+            </select>
+            {!p.nichoId ? null : generando ? (
+              <Etiqueta>leyendo a los que más venden…</Etiqueta>
+            ) : a?.estado === 'ok' ? (
+              <button className="boton-secundario boton-chico" onClick={() => onVerAuditoria(p)}>
+                ver la revisión completa{mejoras.length ? ` (${mejoras.length})` : ''}
+              </button>
+            ) : (
+              <button className="boton-secundario boton-chico" title={a?.estado === 'error' ? `la anterior falló: ${a.error}` : 'Opus 5 lee el título, la descripción, la ficha y las fotos de los que más venden en el nicho'} onClick={() => onAuditar(p)}>
+                {a?.estado === 'error' ? 'reintentar la revisión' : 'revisar con Opus 5'}
+              </button>
+            )}
           </div>
-        ))}
-      </div>
+          {!p.nichoId ? <p className="sec-linea">Sin un nicho no hay con quién comparar el título, la ficha y las fotos.</p> : null}
+          {a?.estado === 'ok' && mejoras.length ? (
+            <Pendientes titulo="Lo primero que conviene cambiar" items={mejoras.slice(0, 3).map((q, i) => ({ id: i, Icono: Sparkles, titulo: q }))}>
+              {mejoras.length > 3 ? `Y ${fmtNum(mejoras.length - 3)} más en la revisión completa.` : null}
+            </Pendientes>
+          ) : null}
+        </Seccion>
 
-      <CalidadMl calidad={calidad} />
-
-      {/* el resto no desaparece: baja a un pliegue, que es donde vive lo que se
-          consulta a veces y no se decide todos los días */}
-      <details className="pc-mas">
-        <summary>Más números</summary>
-        <div className="pc-kpis pc-kpis-menor">
-          {kpis.filter((x) => !PRINCIPALES.has(x.k)).map(({ k, v, extra, Icono, tono, ayuda }) => (
-            <div key={k} className={`kpi${tono ? ` kpi-${tono}` : ''}`} title={ayuda}>
-              <span className="kpi-k">
-                <Icono aria-hidden="true" />
-                {k}
-              </span>
-              <span className="kpi-v">
-                {v}
-                {extra}
-              </span>
-            </div>
-          ))}
-        </div>
-      </details>
-
-      <GananciaUnidad
-        p={p}
-        aplicaA={familia ? etiquetaVariantes(familia.variantes, { conArticulo: true }) : null}
-        onGuardarCosto={onGuardarCosto}
-        onCambiarPrecio={onCambiarPrecio}
-      />
-      <PlanPublicidad plan={p.planPublicidad} compacto />
-
-      <div className="pc-optimizador">
-        <span className="propio-optimizacion-marca">
-          <Sparkles aria-hidden="true" />
-          Opus 5
-        </span>
-        <select
-          className="selector-nicho"
-          value={p.nichoId ?? ''}
-          onChange={(e) => onCablear(p, e.target.value || null)}
-          aria-label="Nicho contra el que se optimiza"
-        >
-          <option value="">— elegir nicho —</option>
-          {nichos.map((n) => (
-            <option key={n._id} value={n._id}>
-              {n.keyword}
-            </option>
-          ))}
-        </select>
-        {!p.nichoId ? (
-          <span className="vacio">cablea un nicho para comparar contra los peces gordos</span>
-        ) : generando ? (
-          <span className="badge badge-neutro">leyendo a los ganadores del nicho…</span>
-        ) : a?.estado === 'ok' ? (
-          <>
-            <button className="boton-secundario boton-chico" onClick={() => onVerAuditoria(p)}>
-              ver optimización{a.resultado?.quickWins?.length ? ` (${a.resultado.quickWins.length})` : ''}
-            </button>
-            {a.resultado?.quickWins?.[0] ? (
-              <span className="propio-quickwin" title={a.resultado.quickWins[0]}>
-                1º: {a.resultado.quickWins[0]}
-              </span>
-            ) : null}
-          </>
-        ) : (
-          <button
-            className="boton-secundario boton-chico"
-            title={a?.estado === 'error' ? `la anterior falló: ${a.error}` : 'Opus 5 lee título, descripción, ficha y fotos reales de los peces gordos'}
-            onClick={() => onAuditar(p)}
-          >
-            {a?.estado === 'error' ? 'reintentar optimización' : 'optimizar con Opus 5'}
-          </button>
-        )}
-      </div>
-
-      <SeccionGama p={p} />
-      <SeccionIguales p={p} />
+        <SeccionGama p={p} />
+        <SeccionIguales p={p} />
 
       {promo || p.promoMl?.ofertaPropia || p.promoMl?.campanasDisponibles?.length ? (
         <Seccion
@@ -1082,8 +663,8 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
           titulo="Lupa"
           resumen={
             midiendo
-              ? `${intervenciones.length} cambio(s) · ${midiendo} midiendo`
-              : `${intervenciones.length} cambio(s) medidos`
+              ? `${fmtNum(intervenciones.length)} ${intervenciones.length === 1 ? 'cambio' : 'cambios'} · ${fmtNum(midiendo)} midiéndose`
+              : `${fmtNum(intervenciones.length)} ${intervenciones.length === 1 ? 'cambio medido' : 'cambios medidos'}`
           }
         >
           <ul className="lupa-lista">
@@ -1112,7 +693,7 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
           icono={PackagePlus}
           titulo="Surtido que falta"
           tono="exito"
-          resumen={`${p.surtido.sugeridos.length} formato(s) que venden en “${p.surtido.keyword}” y no tienes`}
+          resumen={`${fmtNum(p.surtido.sugeridos.length)} ${p.surtido.sugeridos.length === 1 ? 'formato que vende' : 'formatos que venden'} en “${p.surtido.keyword}” y no tienes`}
         >
           <div className="surtido-lista">
             {p.surtido.sugeridos.map((s) => (
@@ -1137,6 +718,7 @@ function TarjetaPropio({ p, familia = null, m: metricas = null, nichos, onElimin
           </div>
         </Seccion>
       ) : null}
+      </div>
     </article>
   )
 }
@@ -1569,9 +1151,8 @@ export function MisProductos({ buscarInicial = null }) {
   const [aplicando, setAplicando] = useState(false)
   const [revisandoFicha, setRevisandoFicha] = useState(false)
 
-  const cargar = useCallback(() => {
-    api.listarPropios().then(setDatos).catch((e) => setError(e.message))
-  }, [setDatos])
+  // devuelve la promesa: quien guarda algo espera la lista nueva antes de dar por terminado el guardado
+  const cargar = useCallback(() => api.listarPropios().then(setDatos).catch((e) => setError(e.message)), [setDatos])
 
   useEffect(() => {
     cargar()
@@ -1707,14 +1288,16 @@ export function MisProductos({ buscarInicial = null }) {
 
   // lo que ya salió hacia Full y la bodega todavía no recibió: cuenta como
   // stock para que el panel no pida reponer dos veces lo mismo
-  async function guardarEnCamino(p, unidades) {
+  // `envios`: [{ p, unidades }] — el envío completo de un producto (un valor por color) se guarda de una vez;
+  // unidades null borra lo anotado
+  async function guardarEnvio(envios) {
     setError(null)
     try {
-      await api.ajustarPropio(p._id, { enCamino: unidades == null ? null : { unidades } })
-      cargar()
+      for (const { p, unidades } of envios) await api.ajustarPropio(p._id, { enCamino: unidades == null ? null : { unidades } })
     } catch (err) {
       setError(err.message)
     }
+    await cargar()
   }
 
   // escribe el precio EN Mercado Libre (no es un campo local): se confirma
@@ -1942,7 +1525,7 @@ export function MisProductos({ buscarInicial = null }) {
                 onAuditar={auditar}
                 onVerAuditoria={(x) => setAuditoriaDe(x._id)}
                 onGuardarCosto={guardarCosto}
-                onGuardarEnCamino={guardarEnCamino}
+                onGuardarEnvio={guardarEnvio}
                 onCambiarPrecio={cambiarPrecio}
                 expandida={expandido === e.clave}
                 onExpandir={(abrir) => setExpandido(abrir ? e.clave : null)}

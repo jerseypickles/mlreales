@@ -247,3 +247,50 @@ export function Nota({ children, centrada = false }) {
 export function Acciones({ children }) {
   return <div className="s-acciones">{children}</div>
 }
+
+// Nivel: cuánto hay de algo contra un tope (los días que alcanza el stock contra los que se quieren tener). La
+// barra dice el tamaño de un vistazo; el número y la frase van al lado. `extra` es lo que se suma más claro (lo
+// que viene en camino). `tono` repite lo que ya dice el texto: bien, atencion, problema, destacada, neutra.
+export function Nivel({ fraccion, extra = 0, tono = 'neutra', title }) {
+  const f = Math.min(1, Math.max(0, Number.isFinite(fraccion) ? fraccion : 0))
+  const x = Math.min(1 - f, Math.max(0, Number.isFinite(extra) ? extra : 0))
+  return (
+    <span className="s-nivel" title={title} aria-hidden="true">
+      {f > 0 ? <i className={`s-partes-${tono}`} style={{ width: `${f * 100}%` }} /> : null}
+      {x > 0 ? <i className="s-nivel-extra" style={{ width: `${x * 100}%` }} /> : null}
+    </span>
+  )
+}
+
+// Un dato dentro de una fila o de una tarjeta chica: el número (o la palabra) y, debajo, de dónde sale o qué
+// significa. `children` va entre los dos (una barra, una etiqueta).
+export function Dato({ valor, detalle, tono, children }) {
+  return (
+    <div className="s-dato">
+      {valor != null ? <strong className={tono ? `s-${tono}` : undefined}>{valor}</strong> : null}
+      {children}
+      {detalle ? <small>{detalle}</small> : null}
+    </div>
+  )
+}
+
+// Filas para comparar varias cosas del mismo tipo (los colores de un producto) en columnas alineadas: arriba los
+// nombres de las columnas, una fila por cosa. En pantallas angostas cada fila se vuelve una tarjeta y cada dato
+// lleva el nombre de su columna encima. `tono` marca el borde de la fila; lo que dice lo dice el texto de adentro.
+// columnas: [{ id, titulo, ancho?, ancha? }] · <Fila celdas={{ [id]: contenido }} /> · `ancha`: en angosto ocupa
+// la fila entera y va sin su nombre encima (la columna que dice de qué cosa es la fila)
+export function Filas({ columnas, children }) {
+  return (
+    <div className="s-filas" style={{ '--s-filas-columnas': columnas.map((c) => c.ancho ?? 'minmax(0, 1fr)').join(' ') }} role="table">
+      <div className="s-filas-cabeza" role="row">{columnas.map((c) => <span key={c.id} role="columnheader">{c.titulo}</span>)}</div>
+      {children}
+    </div>
+  )
+}
+export function Fila({ columnas, celdas, tono }) {
+  return (
+    <div className={`s-fila${tono ? ` s-fila-${tono}` : ''}`} role="row">
+      {columnas.map((c) => <div key={c.id} className={`s-fila-celda${c.ancha ? ' s-fila-celda-ancha' : ''}`} role="cell" data-titulo={c.titulo}>{celdas[c.id] ?? null}</div>)}
+    </div>
+  )
+}

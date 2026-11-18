@@ -695,6 +695,8 @@ function reposicionDe(p, v30, v7, { primeraVenta = null, hoy = new Date() } = {}
     // un producto sin stock sigue teniendo velocidad
     diasSinStock30,
     enCaminoDesde: enCamino ? (p.enCamino.fecha ?? null) : null,
+    // lo último que la bodega recibió, visto por el scan (inventarioFull.recepcionEnBodega)
+    ultimaEntrada: (p.entradasFull ?? []).at(-1) ?? null,
     retenido: inv?.noDisponible ?? 0,
     motivosRetenido: inv?.motivos ?? [],
     // el descuadre entre lo que el item declara y lo que hay en bodega

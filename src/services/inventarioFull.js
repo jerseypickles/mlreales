@@ -272,6 +272,9 @@ export function coberturaYReposicion({ stock, velocidadDia, enCamino = 0, objeti
     enCamino: cam,
     velocidadDia: Math.round(v * 100) / 100,
     diasCobertura: v > 0 ? Math.round(efectivo / v) : null,
+    // lo que aguanta SOLO lo que ya está en la bodega: lo que va en camino no
+    // se puede vender hasta que llega, y en pantalla se dicen las dos cosas
+    diasConStock: v > 0 ? Math.round(s / v) : null,
     // sin ventas no hay cobertura que calcular, pero tampoco urgencia
     necesarioParaObjetivo: v > 0 ? Math.ceil(v * objetivoDias) : 0,
     // redondeado: un envío no se despacha con precisión unitaria, y las
@@ -279,6 +282,41 @@ export function coberturaYReposicion({ stock, velocidadDia, enCamino = 0, objeti
     aEnviar: v > 0 ? redondearEnvio(Math.ceil(v * objetivoDias) - efectivo) : 0,
     objetivoDias,
   }
+}
+
+// LO QUE LA BODEGA RECIBE SE VE SOLO (18-nov-2026).
+//
+// Pedido del dueño: «ya hicimos otra colecta de Full pero no está siendo
+// detectado solo; no sé si eso se puede detectar en la API». Medido ese día
+// contra la cuenta: Mercado Libre no entrega los envíos a Full que van en
+// camino (la documentación solo trae el stock de la bodega y sus movimientos, y
+// cualquier ruta de envíos entrantes responde 403). Lo que sí se ve es la
+// llegada: el total de la bodega sube. El libro de movimientos lo diría con más
+// detalle, pero tiene una cuota que se agota sola (ese día respondió 429 al
+// primer pedido), así que la llegada se lee del total, que no falla.
+//
+// Pura. Compara el total de la bodega con el de la lectura anterior:
+//  · lo anotado como «en camino» se descuenta con lo que llegó;
+//  · la entrada queda guardada (`entradas`: [{ dia, unidades }], las últimas
+//    cinco), para decir en pantalla «Full recibió N el día D» sin que nadie lo
+//    anote. Una subida de una sola unidad sin envío anotado no se guarda: casi
+//    siempre es una devolución. Lo que llega el mismo día se suma (un envío
+//    entra en varias recepciones).
+// Las ventas del rato entre dos lecturas achican un poco lo recibido: el error
+// va hacia abajo, que en reposición es el barato.
+export function recepcionEnBodega({ totalPrevio, total, enCamino = null, entradas = [], hoy = new Date() } = {}) {
+  const sinCambio = { recibido: 0, enCamino, entradas: entradas ?? [] }
+  if (!Number.isFinite(totalPrevio) || !Number.isFinite(total) || total <= totalPrevio) return sinCambio
+  const recibido = total - totalPrevio
+  const anotado = Number.isFinite(enCamino?.unidades) && enCamino.unidades > 0
+  const dia = diaChile(hoy)
+  // copia en objetos simples: lo guardado llega como subdocumentos y no se pueden esparcir
+  const previas = (entradas ?? []).map((e) => ({ dia: e.dia, unidades: e.unidades }))
+  let nuevas = previas
+  if (previas.some((e) => e.dia === dia)) nuevas = previas.map((e) => (e.dia === dia ? { dia, unidades: e.unidades + recibido } : e))
+  else if (anotado || recibido >= 2) nuevas = [...previas, { dia, unidades: recibido }].slice(-5)
+  const restante = anotado ? enCamino.unidades - recibido : 0
+  return { recibido, enCamino: anotado ? (restante > 0 ? { ...enCamino, unidades: restante } : null) : enCamino, entradas: nuevas }
 }
 
 // Semáforo, con los cortes puestos donde importan para importación desde China

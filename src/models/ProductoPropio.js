@@ -147,6 +147,9 @@ const productoPropioSchema = new mongoose.Schema({
   // cuando ve subir el total de la bodega. Sin esto el panel pide reponer dos
   // veces lo mismo.
   enCamino: { type: mongoose.Schema.Types.Mixed, default: null },
+  // Lo que la bodega de Full recibió, visto por el scan cuando sube su total
+  // (inventarioFull.recepcionEnBodega): las últimas entradas, una por día.
+  entradasFull: { type: [{ _id: false, dia: String, unidades: Number }], default: [] },
 
   creadoEl: { type: Date, default: Date.now },
 })
