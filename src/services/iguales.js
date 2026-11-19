@@ -143,6 +143,8 @@ export function compararMedida(propia, otra) {
 // medida por la misma plata o menos. Se cuenta; no hay umbrales elegidos a mano.
 // `publicaciones`: [{ sku, titulo, precioUnidad, vendidos, imagen, url, medidas? }] (sin `medidas`, las del título).
 const NOMBRE_TIPO = { dimensiones: 'tamaño', largoM: 'largo', watts: 'watts', piezas: 'piezas', ml: 'contenido', gramos: 'peso', mah: 'batería', leds: 'leds' }
+// la misma medida nombrada con su artículo, para decir quién la trae en el título
+const EN_TITULO = { dimensiones: 'el tamaño', largoM: 'el largo', watts: 'los watts', piezas: 'las piezas', ml: 'el contenido', gramos: 'el peso', mah: 'la batería', leds: 'los leds' }
 const tamano = (v) => (Array.isArray(v) ? v.reduce((a, x) => a * x, 1) : v)
 export function medidaPorLaPlata(medidaPropia, precioUnidadPropio, publicaciones, { ejemplos = 3, maxGrupos = 12 } = {}) {
   const tipo = ORDEN_MEDIDAS.find((k) => medidaPropia?.[k] != null)
@@ -177,7 +179,7 @@ export function medidaPorLaPlata(medidaPropia, precioUnidadPropio, publicaciones
   const menosPorMas = conPrecio ? xs.filter((x) => x.t < miTamano && x.p.precioUnidad >= precioUnidadPropio).length : null
   const nombre = NOMBRE_TIPO[tipo]
   const partes = []
-  if (!xs.length) partes.push(`Ninguna publicación de la búsqueda dice su ${nombre} en el título: no hay con qué comparar ${texto}.`)
+  if (!xs.length) partes.push(`Ninguna publicación de la búsqueda trae ${EN_TITULO[tipo]} en el título: no hay con qué comparar ${texto}.`)
   else {
     if (conPrecio) partes.push(mas.length
       ? `Por ${pesos(precioUnidadPropio)} o menos, ${mas.length === 1 ? '1 publicación ofrece' : `${mas.length} publicaciones ofrecen`} más ${nombre} que ${texto} (hasta ${masPorMenos.mayor}).`
@@ -185,7 +187,7 @@ export function medidaPorLaPlata(medidaPropia, precioUnidadPropio, publicaciones
     partes.push(!iguales.length ? `Con ${texto} no hay ninguna otra.`
       : `Con ${texto} hay ${iguales.length}${conPrecio ? ` y ${misma.masBaratos === 0 ? 'ninguna cobra menos' : misma.masBaratos === iguales.length ? (iguales.length === 1 ? 'cobra menos' : 'todas cobran menos') : `${misma.masBaratos} ${misma.masBaratos === 1 ? 'cobra' : 'cobran'} menos`}` : ''}; la mitad cobra menos de ${pesos(misma.medianaUnidad)} por unidad.`)
   }
-  return { tipo, nombre, texto, conMedida: xs.length, misma, masPorMenos, menosPorMas, grupos, frase: partes.join(' ') }
+  return { tipo, nombre, enTitulo: EN_TITULO[tipo], texto, conMedida: xs.length, misma, masPorMenos, menosPorMas, grupos, frase: partes.join(' ') }
 }
 
 // Pura. Lo que falta revisar, en el orden en que conviene mirarlo: lo que la

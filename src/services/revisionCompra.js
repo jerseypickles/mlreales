@@ -84,8 +84,12 @@ export function revisionDeCompra(v) {
   }
   if (otraMedida) return { ...base, estado: 'otra-medida', frase: `En la medida que escribiste nadie vende este mismo producto, pero ${otraMedida === 1 ? '1 publicación lo vende' : `${otraMedida} publicaciones lo venden`} en otra medida.${falta}` }
   const p = referenciaParecidos(pu, v.candidatos)
-  if (p) return { ...base, estado: 'parecidos', parecidos: p,
-    frase: `Por la foto, nadie vende este mismo producto en la búsqueda. ${p.n === 1 ? `La publicación que más se le parece cobra ${pesos(p.masBaratoUnidad)}` : `Las ${p.n} que más se le parecen cobran entre ${pesos(p.masBaratoUnidad)} y ${pesos(p.masCaroUnidad)}`} por unidad.${falta}` }
+  if (p) {
+    // lo parecido también compite: se dice cuántas de las que más se parecen cobran menos que el precio pensado
+    const baratas = conPrecio && p.masBaratos > 0 ? ` ${p.masBaratos === p.n ? (p.n === 1 ? 'Cobra' : 'Todas cobran') : `${p.masBaratos} ${p.masBaratos === 1 ? 'cobra' : 'cobran'}`} menos que el precio que piensas (${pesos(pu)} por unidad).` : ''
+    return { ...base, estado: 'parecidos', parecidos: p,
+      frase: `Por la foto, nadie vende este mismo producto en la búsqueda. ${p.n === 1 ? `La publicación que más se le parece cobra ${pesos(p.masBaratoUnidad)}` : `Las ${p.n} que más se le parecen cobran entre ${pesos(p.masBaratoUnidad)} y ${pesos(p.masCaroUnidad)}`} por unidad.${baratas}${falta}` }
+  }
   return { ...base, estado: 'nada-parecido', frase: `Por la foto, nada de lo que sale en la búsqueda se parece de cerca a este producto: o es nuevo acá, o no es de esta búsqueda.${falta}` }
 }
 

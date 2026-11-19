@@ -23,7 +23,7 @@ const CASO = {
   'sin-leer': () => ['neutra', 'falta mirar las fotos'],
   'lo-venden': (r) => ['atencion', `${r.mismos.n === 1 ? '1 vende' : `${fmtNum(r.mismos.n)} venden`} este mismo`],
   'otra-medida': () => ['atencion', 'lo venden en otra medida'],
-  parecidos: () => ['bien', 'nadie vende este mismo'],
+  parecidos: (r) => (r.parecidos?.masBaratos > 0 ? ['atencion', 'nadie vende este mismo · hay parecidos más baratos'] : ['bien', 'nadie vende este mismo']),
   'nada-parecido': () => ['neutra', 'no se parece a nada de la búsqueda'],
 }
 const imagenDe = (archivos) => [...(archivos ?? [])].find((x) => String(x.type ?? '').startsWith('image/'))
@@ -129,7 +129,7 @@ export function RevisarProducto({ nichoId, keyword }) {
           <button type="submit" className="boton-primario" disabled={guardando || !foto || descripcion.trim().length < 3}>
             <ScanSearch size={16} aria-hidden="true" /> {guardando ? 'guardando…' : 'Revisar contra la búsqueda'}
           </button>
-          <span>Mirar las fotos de la búsqueda tarda cerca de un minuto y cuesta unos centavos de dólar, que quedan anotados en el gasto del mes.</span>
+          <span>Mirar las fotos de la búsqueda tarda uno o dos minutos y cuesta cerca de 40 centavos de dólar por cada 200 publicaciones, que quedan anotados en el gasto del mes.</span>
         </div>
       </form>
       {error ? <Aviso tono="problema">{error}</Aviso> : null}

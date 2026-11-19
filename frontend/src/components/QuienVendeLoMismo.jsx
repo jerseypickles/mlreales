@@ -43,6 +43,8 @@ const REVISION = {
   'sin-leer': ['neutra', 'Falta mirar las fotos.'], 'lo-venden': ['atencion', 'Ya lo venden.'], 'otra-medida': ['atencion', 'Lo venden en otra medida.'],
   parecidos: ['bien', 'Nadie vende este mismo.'], 'nada-parecido': ['neutra', 'No se parece a nada de la búsqueda.'],
 }
+// nadie vende el mismo, pero lo muy parecido cobra menos que el precio pensado: no es para verde
+const casoRevision = (rev) => (rev.estado === 'parecidos' && rev.parecidos?.masBaratos > 0 ? ['atencion', 'Nadie vende este mismo, pero hay parecidos más baratos.'] : REVISION[rev.estado] ?? ['neutra', null])
 
 const SIN_DATOS = {
   'sin-nicho': 'Este producto no tiene nicho asignado: sin su búsqueda no hay con quién compararlo.',
@@ -100,7 +102,7 @@ function PorLaPlata({ m, fecha }) {
   return (
     <>
       <Subtitulo titulo="Qué da la búsqueda por esa plata">
-        <span>{fmtNum(m.conMedida)} {m.conMedida === 1 ? 'publicación dice' : 'publicaciones dicen'} su {m.nombre} en el título · scan del {fmtFechaCorta(fecha)}</span>
+        <span>{fmtNum(m.conMedida)} {m.conMedida === 1 ? 'publicación trae' : 'publicaciones traen'} {m.enTitulo ?? `su ${m.nombre}`} en el título · scan del {fmtFechaCorta(fecha)}</span>
       </Subtitulo>
       <Aviso tono={m.masPorMenos.n > 0 ? 'atencion' : 'neutra'} Icono={Ruler}>{m.frase}</Aviso>
       <Filas columnas={COLUMNAS_MEDIDA}>
@@ -222,8 +224,8 @@ export function QuienVendeLoMismo({ propioId, leerAlAbrir = false, alCambiar = n
         </Aviso>
       ) : null}
       {rev ? (
-        <Aviso tono={REVISION[rev.estado]?.[0] ?? 'neutra'} Icono={ScanSearch} titulo={mirando ? 'Mirando las fotos…' : REVISION[rev.estado]?.[1]}>
-          {mirando ? `Estoy comparando tu foto con las ${fmtNum(rev.total)} publicaciones de la búsqueda. Tarda cerca de un minuto.` : rev.frase}
+        <Aviso tono={casoRevision(rev)[0]} Icono={ScanSearch} titulo={mirando ? 'Mirando las fotos…' : casoRevision(rev)[1]}>
+          {mirando ? `Estoy comparando tu foto con las ${fmtNum(rev.total)} publicaciones de la búsqueda. Tarda uno o dos minutos.` : rev.frase}
         </Aviso>
       ) : null}
       {rev?.mismos ? (
@@ -330,7 +332,7 @@ export function QuienVendeLoMismo({ propioId, leerAlAbrir = false, alCambiar = n
       <Subtitulo titulo={ningunaIgual && v.fotos.parecidas ? 'Lo más parecido al tuyo, de más a menos' : 'Por revisar'} cuenta={v.candidatos.length}>
         {v.fotos.sinRevisar > 0 ? (
           <button type="button" className="boton-secundario boton-chico" disabled={!!ocupado} onClick={() => correr('fotos', () => api.sugerirIguales(propioId))}>
-            <ScanSearch size={14} aria-hidden="true" /> {mirando ? 'mirando las fotos… tarda cerca de un minuto' : `buscar por foto (${fmtNum(v.fotos.sinRevisar)} sin mirar)`}
+            <ScanSearch size={14} aria-hidden="true" /> {mirando ? 'mirando las fotos… tarda uno o dos minutos' : `buscar por foto (${fmtNum(v.fotos.sinRevisar)} sin mirar)`}
           </button>
         ) : <span>todas las fotos de este scan ya se miraron</span>}
       </Subtitulo>

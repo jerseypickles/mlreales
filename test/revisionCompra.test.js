@@ -35,7 +35,7 @@ test('revisión de compra: qué da la búsqueda por esa plata, en la medida del 
     pub('f', 'Lampara De Mesa 100w', 17000, 25), pub('g', 'Lampara De Mesa Sin Potencia', 5000, 5000),
   ]
   const m = medidaPorLaPlata({ watts: 300 }, 16000, scan)
-  assert.deepEqual([m.tipo, m.texto, m.conMedida], ['watts', '300 w', 6]) // la que no dice su potencia no entra
+  assert.deepEqual([m.tipo, m.enTitulo, m.texto, m.conMedida], ['watts', 'los watts', '300 w', 6]) // la que no dice su potencia no entra
   // con la misma medida hay dos y las dos cobran menos
   assert.deepEqual(m.misma, { n: 2, masBaratos: 2, masBaratoUnidad: 9000, medianaUnidad: 10500 })
   // por la misma plata o menos, dos dan más medida (la de 1000w cuesta más: no cuenta); primero la que más vende
@@ -81,7 +81,7 @@ test('revisión de compra: la lectura dice cuántos venden este mismo producto, 
   r = revisionDeCompra(vista({ candidatos: [cand('a', 'otra-medida', 9000, 0)], fotos: { revisadas: 1, sinRevisar: 0 } }))
   assert.deepEqual([r.estado, r.frase], ['otra-medida', 'En la medida que escribiste nadie vende este mismo producto, pero 1 publicación lo vende en otra medida.'])
   r = revisionDeCompra(vista({ candidatos: [cand('a', 'parecido', 9000, 0, 80), cand('b', 'parecido', 14000, 0, 72), cand('c', 'parecido', 2000, 0, 40)], fotos: { revisadas: 3, sinRevisar: 0 } }))
-  assert.deepEqual([r.estado, r.parecidos.n, r.frase], ['parecidos', 2, 'Por la foto, nadie vende este mismo producto en la búsqueda. Las 2 que más se le parecen cobran entre $9.000 y $14.000 por unidad.'])
+  assert.deepEqual([r.estado, r.parecidos.n, r.frase], ['parecidos', 2, 'Por la foto, nadie vende este mismo producto en la búsqueda. Las 2 que más se le parecen cobran entre $9.000 y $14.000 por unidad. Todas cobran menos que el precio que piensas ($16.000 por unidad).'])
   r = revisionDeCompra(vista({ candidatos: [cand('a', 'distinto', 9000, 0)], fotos: { revisadas: 1, sinRevisar: 0 } }))
   assert.deepEqual([r.estado, r.frase], ['nada-parecido', 'Por la foto, nada de lo que sale en la búsqueda se parece de cerca a este producto: o es nuevo acá, o no es de esta búsqueda.'])
 })
