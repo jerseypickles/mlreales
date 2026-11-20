@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, X, RotateCcw, ScanSearch, Ruler, Clock } from 'lucide-react'
+import { Check, X, RotateCcw, ScanSearch, Ruler, Clock, Trophy } from 'lucide-react'
 import { api } from '../api.js'
 import { Cargando } from './ui.jsx'
 import { Aviso, Cifra, Cifras, Etiqueta, FichaFoto, Fichas, CampoNumero, Subtitulo, Nota, Acciones, ReglaPrecios, Filas, Fila, Dato, Nivel } from './sistema.jsx'
@@ -83,9 +83,17 @@ const senales = (x) => (
     {x.esFull ? <Etiqueta tono="destacada">Full</Etiqueta> : null}
     {x.esTiendaOficial ? <Etiqueta>tienda oficial</Etiqueta> : null}
     {x.vendidos ? <Etiqueta>+{fmtNum(x.vendidos)} vendidos</Etiqueta> : null}
-    {x.posicion ? <Etiqueta>puesto {x.posicion}</Etiqueta> : null}
+    {x.puestoRanking ? <Etiqueta tono="destacada">{ordinal(x.puestoRanking)} más vendido de tu categoría</Etiqueta> : null}
+    {x.posicion ? <Etiqueta>puesto {x.posicion} en la búsqueda</Etiqueta> : null}
   </>
 )
+// los más vendidos de la categoría y marca de la publicación propia: qué se leyó y qué sumó a lo que trae la búsqueda
+const textoRanking = (r, keyword) => {
+  if (!r.leidoEl) return 'Mercado Libre publica los más vendidos de la categoría y marca de tu publicación. Ahí suelen estar los que venden tu mismo producto aunque no salgan en esta búsqueda.'
+  if (!r.vigente) return `La última lectura es del ${fmtFechaCorta(r.leidoEl)} y ya no se usa para comparar: actualízala.`
+  const sumo = r.sumadas > 0 ? `${fmtNum(r.sumadas)} no ${r.sumadas === 1 ? 'sale' : 'salen'} en la búsqueda “${keyword}” y ${r.sumadas === 1 ? 'quedó' : 'quedaron'} abajo, primero las de tu medida` : 'todas salen también en la búsqueda'
+  return `Más vendidos de tu categoría, leídos el ${fmtFechaCorta(r.leidoEl)}: ${fmtNum(r.publicaciones)} publicaciones; ${sumo}.${r.propioPuesto ? ` La tuya va ${ordinal(r.propioPuesto)}.` : ''}`
+}
 // lo que queda por venta a un precio: con el costo cargado es plata limpia; sin él, lo que queda para pagar el producto
 const queda = (e, conCosto) => {
   if (!e) return null
@@ -296,7 +304,7 @@ export function QuienVendeLoMismo({ propioId, leerAlAbrir = false, alCambiar = n
       <PorLaPlata m={v.porLaPlata} fecha={v.fechaScan} />
 
       <Subtitulo titulo={v.propio.medida ? `Venden lo mismo, en tu medida (${v.propio.medida})` : 'Venden lo mismo'} cuenta={v.iguales.length}>
-        <span>precios del scan del {fmtFechaCorta(v.fechaScan)} en “{v.keyword}”</span>
+        <span>precios del scan del {fmtFechaCorta(v.fechaScan)} en “{v.keyword}”{v.ranking?.vigente ? ` y de los más vendidos de tu categoría, leídos el ${fmtFechaCorta(v.ranking.leidoEl)}` : ''}</span>
       </Subtitulo>
       <Fichas>
         <FichaFoto tono="destacada" foto={v.propio.imagen} principal={v.propio.precioUnidad ? fmtPrecio(v.propio.precioUnidad) : 'sin precio'} secundario={`por unidad · ${t.elTuyo}`} titulo={v.propio.titulo}
@@ -336,6 +344,14 @@ export function QuienVendeLoMismo({ propioId, leerAlAbrir = false, alCambiar = n
           </button>
         ) : <span>todas las fotos de este scan ya se miraron</span>}
       </Subtitulo>
+      {v.ranking ? (
+        <Acciones>
+          <button type="button" className="boton-secundario boton-chico" disabled={!!ocupado} onClick={() => correr('ranking', () => api.traerRankingIguales(propioId))}>
+            <Trophy size={14} aria-hidden="true" /> {ocupado === 'ranking' ? 'leyendo los más vendidos… tarda cerca de un minuto' : v.ranking.leidoEl ? 'actualizar los más vendidos de tu categoría' : 'traer los más vendidos de tu categoría'}
+          </button>
+          <span>{textoRanking(v.ranking, v.keyword)}</span>
+        </Acciones>
+      ) : null}
       {lectura ? <Nota>Miré {fmtNum(lectura.revisadas)} fotos: {fmtNum(lectura.parecen)} parecen el mismo producto o uno parecido y quedaron arriba, primero las de tu medida. Tú confirmas.</Nota> : null}
       {error ? <p className="vacio">{error}</p> : null}
       {v.fotos.parecenIgual > 0 || v.fotos.parecenOtraMedida > 0 ? (

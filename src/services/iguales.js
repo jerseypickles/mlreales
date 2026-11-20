@@ -25,6 +25,7 @@ import { Nicho } from '../models/Nicho.js'
 import { Snapshot } from '../models/Snapshot.js'
 import { Producto } from '../models/Producto.js'
 import { precioDePropio, vistaDelNicho } from './gama.js'
+import { rankingDePropio, productoDeRanking } from './rankingPropio.js'
 import { FILTRO_VIGENTES } from '../../frontend/src/lib/catalogoPropios.js'
 
 const finito = Number.isFinite
@@ -193,7 +194,9 @@ export function medidaPorLaPlata(medidaPropia, precioUnidadPropio, publicaciones
 // Pura. Lo que falta revisar, en el orden en que conviene mirarlo: lo que la
 // foto dice que es el mismo (primero en la medida propia, después sin medida a
 // la vista, después en otra medida), lo que solo calza por medida, lo parecido
-// y el resto por su puesto en la búsqueda.
+// y el resto por su puesto en la búsqueda. Dentro de cada grupo van primero las
+// que están entre las más vendidas de la categoría y marca de la publicación
+// propia (rankingPropio.js), por su puesto: es donde ML la pone a competir.
 export function ordenarCandidatos(candidatos) {
   const porMedida = { igual: 0, 'sin-dato': 1, distinta: 2 }
   const rango = (c) => {
@@ -203,7 +206,8 @@ export function ordenarCandidatos(candidatos) {
     if (s === 'distinto') return 7
     return m === 0 ? 3 : 6
   }
-  return [...(candidatos ?? [])].sort((a, b) => rango(a) - rango(b) || (b.sugerencia?.parecido ?? 0) - (a.sugerencia?.parecido ?? 0) || (a.posicion ?? 999) - (b.posicion ?? 999))
+  const lugar = (c) => (finito(c.puestoRanking) ? c.puestoRanking - 1000 : c.posicion ?? 999)
+  return [...(candidatos ?? [])].sort((a, b) => rango(a) - rango(b) || (b.sugerencia?.parecido ?? 0) - (a.sugerencia?.parecido ?? 0) || lugar(a) - lugar(b))
 }
 
 // Pura. Cuando ninguna publicación es el mismo producto, la referencia son las
@@ -311,6 +315,8 @@ const ficha = (p, marca, precioUnidadPropio, medidaPropia = {}) => {
   const comparable = enMiMedida ?? precioUnidad
   return { sku: p.sku, titulo: p.titulo, precio: p.precio ?? null, imagen: p.imagen ?? null, url: p.url ?? null, posicion: p.posicion ?? null,
     vendidos: p.vendidos ?? null, numReviews: p.numReviews ?? null, esFull: p.esFull ?? null, esTiendaOficial: p.esTiendaOficial ?? null, vendedor: p.vendedor ?? null,
+    // su puesto entre los más vendidos de la categoría y marca propias; `soloRanking`: no salió en la búsqueda del nicho
+    puestoRanking: p.puestoRanking ?? null, soloRanking: p.soloRanking === true,
     unidades, precioUnidad, medida: { estado: medida.estado, texto: medida.texto }, precioUnidadEnMiMedida: enMiMedida,
     diferenciaPct: finito(comparable) && finito(precioUnidadPropio) && precioUnidadPropio > 0 ? Math.round(((comparable - precioUnidadPropio) / precioUnidadPropio) * 100) : null,
     sugerencia: marca?.sugerencia ? sugerenciaDeFicha(marca.sugerencia, medida.estado) : null }
@@ -361,8 +367,29 @@ export async function vistaIguales(propio, { conEconomia = true, conHistoria = t
   const clave = claveDePropio(propio)
   const marcas = new Map((await IgualPropio.find({ clave }).lean()).map((m) => [m.sku, m]))
   // nada propio entra como competidor (ni otra publicación propia del mismo nicho)
-  const mios = new Set((await ProductoPropio.find({}).select('sku itemIdMl').lean()).flatMap((x) => [x.sku, x.itemIdMl]).filter(Boolean))
-  const delScan = vista.productos.filter((p) => p?.sku && !mios.has(p.sku) && !(p.itemId && mios.has(p.itemId)))
+  const todosLosMios = await ProductoPropio.find({}).select('sku itemIdMl familiaMl.id').lean()
+  const mios = new Set(todosLosMios.flatMap((x) => [x.sku, x.itemIdMl]).filter(Boolean))
+  const soloScan = vista.productos.filter((p) => p?.sku && !mios.has(p.sku) && !(p.itemId && mios.has(p.itemId)))
+
+  // LOS MÁS VENDIDOS DE SU CATEGORÍA Y MARCA (rankingPropio.js, 20-nov-2026). La búsqueda del nicho no trae todo lo
+  // que compite con la publicación: se suman las del ranking donde ML la pone. La que está en los dos lados queda con
+  // los datos del scan (trae reseñas y Full) y con su puesto del ranking; las propias dicen en qué puesto va la mía.
+  const rk = await rankingDePropio(propio).catch(() => null)
+  const deEstaFamilia = new Set(todosLosMios.filter((x) => claveDePropio(x) === clave).flatMap((x) => [x.sku, x.itemIdMl]).filter(Boolean))
+  const puestoEnScan = new Map(), delRanking = []
+  let propioPuesto = null
+  for (const it of rk?.items ?? []) {
+    if (!it?.id) continue
+    if (mios.has(it.id) || (it.itemId && mios.has(it.itemId))) {
+      if ((deEstaFamilia.has(it.id) || deEstaFamilia.has(it.itemId)) && finito(it.posicion)) propioPuesto = Math.min(propioPuesto ?? Infinity, it.posicion)
+      continue
+    }
+    const mismo = soloScan.find((p) => p.sku === it.id || (it.itemId && (p.itemId === it.itemId || p.sku === it.itemId)) || (p.catalogId && p.catalogId === it.id))
+    if (mismo) puestoEnScan.set(mismo.sku, it.posicion ?? null)
+    else delRanking.push(productoDeRanking(it))
+  }
+  // (copias: las publicaciones del scan vienen de una caché que comparten las demás vistas del nicho)
+  const delScan = [...soloScan.map((p) => (puestoEnScan.has(p.sku) ? { ...p, puestoRanking: puestoEnScan.get(p.sku) } : p)), ...delRanking]
   const enScan = new Map(delScan.map((p) => [p.sku, p]))
 
   const precio = precioDePropio(propio)
@@ -378,6 +405,8 @@ export async function vistaIguales(propio, { conEconomia = true, conHistoria = t
     const prods = new Map((await Producto.find({ sku: { $in: fuera } }).lean()).map((p) => [p.sku, p]))
     const snaps = await Snapshot.aggregate([{ $match: { sku: { $in: fuera } } }, { $sort: { fecha: -1 } }, { $group: { _id: '$sku', s: { $first: '$$ROOT' } } }])
     for (const { _id, s } of snaps) if (prods.has(_id)) ultimos.set(_id, { ...prods.get(_id), precio: s.precio, vendidos: s.vendidos, numReviews: s.numReviews, posicion: null, vistoEl: s.fecha })
+    // un confirmado que venía del ranking y ya no está en la última lectura: lo último que se supo de él ahí
+    for (const sku of fuera) if (!ultimos.has(sku) && rk?.anteriores?.has(sku)) { const it = rk.anteriores.get(sku); ultimos.set(sku, { ...productoDeRanking(it), puestoRanking: null, vistoEl: it.vistoEl }) }
   }
   const confirmados = (relacion, precioDe) => [...marcas.values()].filter((m) => m.relacion === relacion)
     .map((m) => { const p = enScan.get(m.sku) ?? ultimos.get(m.sku); return p ? { ...ficha(p, m, precioUnidadPropio, medidaPropia), enUltimoScan: enScan.has(m.sku), vistoEl: p.vistoEl ?? null } : null })
@@ -398,7 +427,8 @@ export async function vistaIguales(propio, { conEconomia = true, conHistoria = t
       if (serie.at(-1)?.dia === dia) serie[serie.length - 1] = { dia, precio: h.precio }
       else serie.push({ dia, precio: h.precio })
     }
-    for (const x of [...iguales, ...otraMedida]) x.historia = (porSku.get(x.sku) ?? []).slice(-20)
+    // los que solo se conocen por el ranking no tienen snapshots: su historia son las lecturas guardadas del ranking
+    for (const x of [...iguales, ...otraMedida]) x.historia = (porSku.get(x.sku) ?? rk?.historia?.get(x.sku) ?? []).slice(-20)
   }
 
   const vigentes = iguales.filter((x) => x.enUltimoScan)
@@ -414,7 +444,8 @@ export async function vistaIguales(propio, { conEconomia = true, conHistoria = t
   // qué da la búsqueda por esa plata: todo lo que salió en el último scan, con la medida de su título o, si el
   // título no la trae, la que leyó la foto
   const medidasDe = (x) => { const leida = marcas.get(x.sku)?.sugerencia?.medida; return { ...(leida ? medidasDeTitulo(leida) : {}), ...medidasDeTitulo(x.titulo) } }
-  const delUltimoScan = [...iguales.filter((x) => x.enUltimoScan), ...otraMedida.filter((x) => x.enUltimoScan), ...candidatos, ...descartados]
+  // (solo lo de la búsqueda: el ranking de una categoría entera trae otros productos con la misma medida en el título)
+  const delUltimoScan = [...iguales.filter((x) => x.enUltimoScan), ...otraMedida.filter((x) => x.enUltimoScan), ...candidatos, ...descartados].filter((x) => !x.soloRanking)
   const porLaPlata = medidaPorLaPlata(medidaPropia, precioUnidadPropio, delUltimoScan.map((x) => ({ ...x, medidas: medidasDe(x) })))
   const revisadas = [...marcas.values()].filter((m) => m.sugerencia).length
   const sinRevisar = candidatos.filter((c) => !c.sugerencia).length
@@ -428,6 +459,9 @@ export async function vistaIguales(propio, { conEconomia = true, conHistoria = t
     propio: { titulo: propio.titulo, imagen: propio.imagen ?? null, precio, unidades: unidadesPropias, unidadesDelTitulo: !(finito(propio.unidadesPack) && propio.unidadesPack >= 1), precioUnidad: precioUnidadPropio,
       medida: textoMedida(medidaPropia) },
     resumen, economia, iguales, otraMedida, candidatos, descartados, porLaPlata,
+    // los más vendidos de su categoría y marca: cuándo se leyeron, cuántas publicaciones sumaron a lo que trae la
+    // búsqueda y en qué puesto va la propia. null = todavía no se sabe la categoría (o es un producto sin publicar)
+    ranking: rk ? { url: rk.url, leidoEl: rk.leidoEl, vigente: rk.vigente, publicaciones: rk.items.length, sumadas: delRanking.length, tambienEnBusqueda: puestoEnScan.size, propioPuesto } : null,
     fotos: { revisadas, sinRevisar, parecenIgual: parecen('igual'), parecenOtraMedida: parecen('otra-medida'), parecidas: parecen('parecido') },
     // ya se miraron todas las fotos y ninguna es el mismo producto: lo que queda es lo que más se le parece
     ningunaIgual: !iguales.length && !otraMedida.length && revisadas > 0 && sinRevisar === 0 && !parecen('igual') && !parecen('otra-medida'),
@@ -478,7 +512,7 @@ export async function posicionesDePrecio() {
   const claves = new Set(await IgualPropio.distinct('clave'))
   if (!claves.size) return []
   const propios = (await ProductoPropio.find({ estado: 'activo', ...FILTRO_VIGENTES, nichoId: { $ne: null } })
-    .select({ sku: 1, itemIdMl: 1, titulo: 1, imagen: 1, nichoId: 1, familiaMl: 1, promoMl: 1, unidadesPack: 1, mediciones: { $slice: -1 } }).lean())
+    .select({ sku: 1, itemIdMl: 1, titulo: 1, imagen: 1, nichoId: 1, familiaMl: 1, promoMl: 1, unidadesPack: 1, categoriaMl: 1, marcaMl: 1, mediciones: { $slice: -1 } }).lean())
     .filter((p) => claves.has(claveDePropio(p)))
   const vistas = new Map()
   const posicionDe = (p) => {

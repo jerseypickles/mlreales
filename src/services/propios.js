@@ -12,6 +12,7 @@ import { diaChile } from './inventarioFull.js'
 import { dimensionesDeItem } from './envioFull.js'
 import { usaInventarioFull } from './stockPropio.js'
 import { leerCalidadMl, tocaLeerCalidadMl } from './calidadMl.js'
+import { marcaDeItem } from './marcaMl.js'
 
 // { largoCm, anchoCm, altoCm, gramos } → "LxAxH,g", el formato de shipping.dimensions
 const comoTextoDimensiones = (d) => (d ? `${d.largoCm}x${d.anchoCm}x${d.altoCm},${d.gramos}` : null)
@@ -286,6 +287,9 @@ export async function escanearPropios({ soloOficial = false } = {}) {
     if (imagen) propio.imagen = imagen
     if (oficial?.status) propio.estadoMl = oficial.status
     if (oficial?.category_id) propio.categoriaMl = oficial.category_id
+    // la marca, que con la categoría dice en qué ranking de más vendidos compite la publicación (rankingPropio.js)
+    const marca = marcaDeItem(oficial)
+    if (marca && (marca.id !== (propio.marcaMl?.id ?? undefined) || marca.nombre !== propio.marcaMl?.nombre)) propio.marcaMl = marca
     // los colores de un producto son publicaciones aparte: la familia de ML
     // es la que los junta en una sola tarjeta de Mis productos
     if (oficial) propio.familiaMl = await familiaDeItem(oficial, propio.familiaMl, { refrescar: !soloOficial })

@@ -1254,6 +1254,17 @@ async function scansLeyendoMl() {
   return listados + fichas
 }
 
+// La pasada de los rankings de más vendidos leídos de la web: primero los rankings donde compiten las publicaciones
+// propias (pocos pares, una lectura por semana cada uno: rankingPropio.js) y después los que descubren nichos
+// (masVendidosWeb.js). Lo que tardó la primera parte se le descuenta a la segunda, para que la pasada entera no deje
+// esperando al seguimiento de stock (la cola atiende de a uno).
+export async function procesarMasVendidosWeb() {
+  const desde = Date.now()
+  const rankingPropios = await import('../services/rankingPropio.js').then((m) => m.pasadaRankingPropios({ scansActivos: scansLeyendoMl })).catch((err) => ({ error: err.message }))
+  const web = await import('../services/masVendidosWeb.js').then((m) => m.pasadaMasVendidosWeb({ scansActivos: scansLeyendoMl, presupuestoMs: Math.max(60_000, 270_000 - (Date.now() - desde)) }))
+  return { ...web, rankingPropios }
+}
+
 export function iniciarWorkers() {
   // concurrencia 1 + rate limit: cada scan quema créditos de Apify
   const workerScan = new Worker(COLA_SCAN_NICHO, procesarScanNicho, {
@@ -1340,7 +1351,7 @@ export function iniciarWorkers() {
       if (job.name === 'resenias-diarias') return import('../services/reseniasDiarias.js').then((m) => m.pasadaResenias())
       if (job.name === 'panorama-ml') return import('../services/panoramaMl.js').then((m) => m.pasadaPanorama())
       if (job.name === 'tiendas-ganadoras') return import('../services/tiendasGanadoras.js').then((m) => m.pasadaTiendas())
-      if (job.name === 'mas-vendidos-web') return import('../services/masVendidosWeb.js').then((m) => m.pasadaMasVendidosWeb({ scansActivos: scansLeyendoMl }))
+      if (job.name === 'mas-vendidos-web') return procesarMasVendidosWeb()
       if (job.name === 'vigia-mejoras') return import('../services/vigiaMejoras.js').then((m) => m.pasadaVigia())
       // con la demanda actual, una vez al día: el efecto de cada evento comercial y los saltos sin explicar
       if (job.name === 'demanda-ml') return import('../services/demandaActualMl.js').then((m) => m.medirDemandaActual())

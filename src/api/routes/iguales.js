@@ -104,4 +104,19 @@ router.post(
   }),
 )
 
+// trae ahora los más vendidos de la categoría y marca de la publicación (cuesta una página de listado; una vez al día)
+// y devuelve la vista con esas publicaciones sumadas a lo que falta revisar
+router.post(
+  '/:id/ranking',
+  manejar(async (req, res) => {
+    const propio = await propioDe(req, res)
+    if (!propio) return
+    const { traerRankingDe } = await import('../../services/rankingPropio.js')
+    const { vistaDe } = await import('../../services/revisionCompra.js')
+    const lecturaRanking = await traerRankingDe(propio)
+    // se vuelve a leer la publicación: la marca pudo quedar anotada recién
+    res.json({ ...(await vistaDe(await propioDe(req, res))), lecturaRanking })
+  }),
+)
+
 export default router

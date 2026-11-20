@@ -49,6 +49,10 @@ const productoPropioSchema = new mongoose.Schema({
   // categoría ML del item (la trae la API oficial en el scan): permite calcular
   // la comisión exacta para el margen
   categoriaMl: { type: String, default: null },
+  // la marca del item en ML (atributo BRAND): { id, nombre }. Con la categoría dice en qué ranking de más vendidos
+  // compite la publicación (services/rankingPropio.js). Sin anotar todavía = no se ha medido desde que existe el campo;
+  // `id: null` = marca escrita a mano, sin id: su ranking es el de la categoría sin filtrar
+  marcaMl: { type: mongoose.Schema.Types.Mixed, default: undefined },
   // última auditoría de listing vs los ganadores del nicho: {estado:
   // 'generando'|'ok'|'error', generadoEl, competidores, resultado, costoUsd…}
   auditoria: { type: mongoose.Schema.Types.Mixed, default: null },
