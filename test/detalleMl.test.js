@@ -4,6 +4,7 @@ import {
   cuerpoPeticion,
   confiable,
   tieneSustancia,
+  resenasDesdeHtml,
   precioCoherente,
   precioAnteriorReal,
   vendedorDesdeHtml,
@@ -240,6 +241,47 @@ test('cada ficha tiene hasta tres intentos seguidos, y queda contado en cuál sa
   const motivo = Object.fromEntries(r.fallidos.map((f) => [f.url, f.motivo]))
   assert.match(motivo.bloqueada, /520/, 'no llegó: Zyte no la cobra')
   assert.equal(motivo.terca, MOTIVO_NO_ES_FICHA, 'esa sí llegó y se cobra')
+})
+
+// LAS RESEÑAS, CON RESPALDO EN LA PÁGINA (20-nov-2026). La extracción del proveedor dejó de traer las reseñas en
+// fichas de catálogo con pocas opiniones; la página las sigue mostrando en su estado embebido.
+const BLOQUE_RESENAS = '<script>{"components":{"reviews":{"rating":4.5,"amount":22,"layout":"x"}}}</script>'
+const SIN_RESENAS_EN_EXTRACCION = {
+  product: { url: URL, name: 'Aros De Prueba', sku: 'MLC123', price: '10985.0', availability: 'InStock', metadata: { probability: 0 } },
+  browserHtml: BUENA.browserHtml + BLOQUE_RESENAS,
+}
+
+test('resenasDesdeHtml: lee la nota y la cantidad que muestra la página, en sus dos formas', () => {
+  assert.deepEqual(resenasDesdeHtml(BLOQUE_RESENAS), { ratingValue: 4.5, reviewCount: 22 })
+  assert.deepEqual(resenasDesdeHtml('…"rate":4.8,"count":71,"layout":"compact"…'), { ratingValue: 4.8, reviewCount: 71 })
+  // una página sin bloque de reseñas (producto sin opiniones) no inventa nada
+  assert.equal(resenasDesdeHtml('<html>2 opiniones de otros productos</html>'), null)
+  assert.equal(resenasDesdeHtml(''), null)
+  assert.equal(resenasDesdeHtml(undefined), null)
+})
+
+test('si la extracción no trae las reseñas, se toman de la página; si las trae, manda la extracción', () => {
+  const respaldo = aItemDetalle(SIN_RESENAS_EN_EXTRACCION)
+  assert.equal(respaldo.ratingCount, 22)
+  assert.equal(respaldo.reviewCount, 22)
+  assert.equal(respaldo.rating, 4.5)
+  assert.equal(respaldo._resenasDe, 'pagina')
+  // la extracción trae 19 y la página diría 22: no se mezclan, vale la extracción
+  const conLasDos = aItemDetalle({ ...BUENA, browserHtml: BUENA.browserHtml + BLOQUE_RESENAS })
+  assert.equal(conLasDos.ratingCount, 19)
+  assert.equal(conLasDos._resenasDe, 'extraccion')
+  // ni una ni otra: el producto no tiene opiniones a la vista
+  const ninguna = aItemDetalle({ ...SIN_RESENAS_EN_EXTRACCION, browserHtml: BUENA.browserHtml })
+  assert.equal(ninguna.ratingCount, null)
+  assert.equal(ninguna.rating, null)
+  assert.equal(ninguna._resenasDe, null)
+})
+
+test('la tanda dice cuántas fichas trajeron las reseñas por el respaldo de la página', async () => {
+  const respuestas = { a: BUENA, b: SIN_RESENAS_EN_EXTRACCION, c: SIN_RESENAS_EN_EXTRACCION }
+  const r = await detallesDeMl(['a', 'b', 'c'], { apiKey: 'k', pedir: async (url) => respuestas[url] })
+  assert.equal(r.items.length, 3)
+  assert.equal(r.resenasDePagina, 2)
 })
 
 // Los dos días en que ninguna ficha se reconocía (18 al 20-nov-2026), cada una se pidió y se pagó tres veces.

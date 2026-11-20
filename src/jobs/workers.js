@@ -291,6 +291,8 @@ export async function procesarScanDetalle(job) {
   // Las que el proveedor no pudo traer quedan en `caidas` para la segunda vuelta.
   let caidas = []
   let alReintento = 0
+  // fichas cuyo conteo de reseñas salió del respaldo (la página) porque la extracción del proveedor no lo trajo
+  let resenasDePagina = 0
   const inicioDetalle = Date.now()
   async function medirLote(batch, etiqueta, { segunda = false } = {}) {
     let crudos, fuenteDetalle
@@ -303,6 +305,7 @@ export async function procesarScanDetalle(job) {
       })
       // las que no salieron al primer intento sino al reintento inmediato
       alReintento += (r.intentos?.[2] ?? 0) + (r.intentos?.[3] ?? 0)
+      resenasDePagina += r.resenasDePagina ?? 0
       crudos = r.items
       fuenteDetalle = r.fuente
       await registrarGasto(nichoId, costoServido(r), r.fuente)
@@ -536,7 +539,7 @@ export async function procesarScanDetalle(job) {
     // las que el proveedor no trajo: en la primera pasada, cuántas volvieron en la segunda y cuántas quedaron
     caidasProveedor: caidasPrimera, recuperadas, sinLlegar: caidas.length,
     // cuántas fichas buenas salieron recién al reintento inmediato, y cuánto demoró todo el detalle
-    alReintento, minutos: Math.round((Date.now() - inicioDetalle) / 60_000) }
+    alReintento, resenasDePagina, minutos: Math.round((Date.now() - inicioDetalle) / 60_000) }
 }
 
 export async function procesarCalcularMetricas(job) {

@@ -169,6 +169,18 @@ function jsonLd(html) {
   return bloques
 }
 
+// Pura. Las reseñas que MUESTRA la página: nota y cantidad del bloque de reseñas, leídas del estado embebido. No se
+// leen del JSON-LD: su reviewCount cuenta solo las que traen comentario (178 de 276 en una ficha medida el 22-sep).
+// Es el mismo número que entrega la extracción del proveedor y el que siempre guardó el sistema: medido el
+// 20-nov-2026 en 13 fichas con los dos datos, coincidieron las 13.
+export function resenasDesdeHtml(html) {
+  const t = String(html ?? '')
+  const m = t.match(/"reviews":\{"rating":([\d.]+),"amount":(\d+)/) ?? t.match(/"rate":([\d.]+),"count":(\d+),"layout"/)
+  if (!m) return null
+  const ratingValue = Number(m[1]), reviewCount = Number(m[2])
+  return Number.isFinite(reviewCount) ? { ratingValue: Number.isFinite(ratingValue) ? ratingValue : null, reviewCount } : null
+}
+
 export function productoDesdeHtml(html) {
   const t = String(html ?? '')
   const prod = jsonLd(t).find((b) => b['@type'] === 'Product' || (Array.isArray(b['@type']) && b['@type'].includes('Product')))
@@ -188,7 +200,7 @@ export function productoDesdeHtml(html) {
   // LAS RESEÑAS tampoco se leen del JSON-LD: su reviewCount son solo las que
   // traen comentario (178 de 276 en la freidora). Lo que la página muestra, y lo
   // que siempre guardó el sistema, es el `amount` del bloque de reseñas.
-  const visible = t.match(/"reviews":\{"rating":([\d.]+),"amount":(\d+)/) ?? t.match(/"rate":([\d.]+),"count":(\d+),"layout"/)
+  const visible = resenasDesdeHtml(t)
   const disp = String(oferta?.availability ?? '')
   const stock = stockDesdeHtml(t)
   const url = canonica ?? prod?.url ?? null
@@ -209,7 +221,7 @@ export function productoDesdeHtml(html) {
     availability: /InStock/i.test(disp) ? 'InStock' : /OutOfStock|SoldOut/i.test(disp) ? 'OutOfStock'
       : stock?.stock > 0 ? 'InStock' : null,
     brand: prod?.brand ? { name: typeof prod.brand === 'string' ? prod.brand : prod.brand.name ?? null } : null,
-    aggregateRating: visible ? { ratingValue: num(visible[1]), reviewCount: num(visible[2]) }
+    aggregateRating: visible ? { ratingValue: visible.ratingValue, reviewCount: visible.reviewCount }
       : prod?.aggregateRating ? { ratingValue: num(prod.aggregateRating.ratingValue), reviewCount: null } : null,
   }
 }
@@ -290,6 +302,14 @@ export function aItemDetalle(respuesta, { precioListado = null } = {}) {
   const precio = numero(p.price)
   const anterior = precioAnteriorReal(precio, numero(p.regularPrice))
   const coherente = precioCoherente(precio, { precioAnterior: anterior, precioListado })
+  // LAS RESEÑAS, CON RESPALDO EN LA PÁGINA (20-nov-2026). Desde el 18-nov la extracción del proveedor dejó de traer
+  // las reseñas en muchas fichas de catálogo con pocas opiniones, aunque la página las muestra: nichos enteros de
+  // catálogo quedaban «sin reseñas» y su scan fallaba por corto. Las mismas publicaciones tenían su conteo guardado
+  // de la semana anterior, y lo que se lee de la página lo continúa (22 → 22, 15 → 16, 63 → 65). Cuando la
+  // extracción no trae el conteo, se toma el de la página; cuando lo trae, manda la extracción.
+  const deExtraccion = numero(p.aggregateRating?.reviewCount)
+  const dePagina = deExtraccion === null ? resenasDesdeHtml(respuesta?.browserHtml) : null
+  const resenas = deExtraccion ?? dePagina?.reviewCount ?? null
   return {
     url: p.url ?? p.canonicalUrl ?? null,
     sku: p.sku ?? null,
@@ -297,9 +317,9 @@ export function aItemDetalle(respuesta, { precioListado = null } = {}) {
     title: p.name ?? null,
     price: precio,
     originalPrice: anterior,
-    ratingCount: numero(p.aggregateRating?.reviewCount),
-    reviewCount: numero(p.aggregateRating?.reviewCount),
-    rating: numero(p.aggregateRating?.ratingValue),
+    ratingCount: resenas,
+    reviewCount: resenas,
+    rating: numero(p.aggregateRating?.ratingValue) ?? dePagina?.ratingValue ?? null,
     availability: p.availability ?? null,
     // stock visible del vendedor (exacto hasta 50, topado en 51) — ver stockDesdeHtml
     stockQuantity: st?.stock ?? null,
@@ -318,6 +338,8 @@ export function aItemDetalle(respuesta, { precioListado = null } = {}) {
     isFull: null,
     // trazas de calidad: quien puntúe puede decidir si confía
     _probabilidad: numero(p.metadata?.probability),
+    // de dónde salió el conteo de reseñas: 'extraccion', 'pagina' (el respaldo) o null si no hay
+    _resenasDe: deExtraccion !== null ? 'extraccion' : dePagina ? 'pagina' : null,
     // null = no había con qué comparar; false = el precio no cuadra ni con el
     // tachado de la propia ficha ni con lo que vio el listado
     _precioCoherente: coherente,
@@ -428,6 +450,8 @@ export async function detallesDeMl(
   const fallidos = []
   const intentos = {}
   let sospechosos = 0
+  // cuántas fichas traen las reseñas por el respaldo de la página: dice si la extracción del proveedor se recupera
+  let resenasDePagina = 0
   // la cuenta de la tanda: ver conReintento
   const pasada = { buenas: 0, cascarones: 0 }
 
@@ -438,6 +462,7 @@ export async function detallesDeMl(
       const r = await conReintento(url, { geolocation, apiKey }, preciosListado.get(url) ?? null, pedir, pasada)
       if (r.ok) {
         if (r.item._precioCoherente === false) sospechosos++
+        if (r.item._resenasDe === 'pagina') resenasDePagina++
         intentos[r.intentos] = (intentos[r.intentos] ?? 0) + 1
         items.push(r.item)
       } else {
@@ -454,5 +479,5 @@ export async function detallesDeMl(
       `[detalle-ml] ${sospechosos}/${items.length} fichas con precio incoherente`,
     )
   }
-  return { items, fallidos, pedidas: pendientes.length, intentos }
+  return { items, fallidos, pedidas: pendientes.length, intentos, resenasDePagina }
 }

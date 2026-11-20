@@ -66,7 +66,7 @@ export async function buscarDetalle(urls, { domainCode = 'CL', preciosListado } 
   if (!lista.length) return { items: [], costoUsd: 0, fuente: proveedorDetalle(), fallidos: [] }
 
   if (proveedorDetalle() === 'zyte') {
-    const { items, fallidos, pedidas, intentos } = await conCortacircuito('zyte', () =>
+    const { items, fallidos, pedidas, intentos, resenasDePagina } = await conCortacircuito('zyte', () =>
       detallesDeMl(lista, { preciosListado }),
     )
     return {
@@ -74,6 +74,8 @@ export async function buscarDetalle(urls, { domainCode = 'CL', preciosListado } 
       fallidos,
       // en qué intento salió cada ficha buena ({1: n, 2: n, 3: n})
       intentos,
+      // fichas cuyo conteo de reseñas salió de la página y no de la extracción (ver detalleMl.aItemDetalle)
+      resenasDePagina,
       // Zyte factura por request y no expone el costo en la respuesta: se
       // estima por el tramo de navegador y se calibra contra la factura.
       // Se cobra por lo PEDIDO, no por lo que salió bien: los reintentos de
