@@ -52,21 +52,51 @@ export async function paresDePropios() {
 
 // Pura. Qué pares toca leer: los que nunca se leyeron y los que llevan `dias` o más sin leerse, el más atrasado
 // primero. ultima: Map(llave del par → fecha de su última lectura).
-export function paresQueTocan(pares, ultima, { ahora = new Date(), dias = DIAS_ENTRE_LECTURAS } = {}) {
+export function paresQueTocan(pares, ultima, { ahora = new Date(), dias = DIAS_ENTRE_LECTURAS, intentos = new Map() } = {}) {
   const corte = +ahora - dias * DIA
-  return pares.map((par) => ({ par, leido: ultima.get(llave(par)) ? +new Date(ultima.get(llave(par))) : 0 }))
-    .filter((x) => x.leido <= corte).sort((a, b) => a.leido - b.leido).map((x) => x.par)
+  // entre los que tocan, primero el que lleva más tiempo sin que se lo lea NI se lo intente
+  return pares.map((par) => ({ par, leido: ultima.get(llave(par)) ? +new Date(ultima.get(llave(par))) : 0, intentado: +(intentos.get(llave(par)) ?? 0) }))
+    .filter((x) => x.leido <= corte).sort((a, b) => Math.max(a.leido, a.intentado) - Math.max(b.leido, b.intentado)).map((x) => x.par)
 }
 
 // Lee el ranking de un par y guarda la lectura del día. `leer` y `gastos` se inyectan en los tests.
+//
+// NO TODAS LAS CATEGORÍAS TIENEN EL RANKING FILTRADO POR MARCA (20-nov-2026, la primera tarde en producción). En una
+// categoría propia la página filtrada llegó bien pero era la página de error de Mercado Libre, sin ranking, y la de
+// la categoría entera sí lo traía, con los rivales directos. Cuando la filtrada llega sin ranking se lee la de la
+// categoría (`sinFiltro`), y la vez siguiente se va directo a esa: la página vacía también se cobra. Si tampoco la
+// categoría tiene ranking se guarda la lectura vacía, para no pagarla de nuevo en cada pasada.
 export async function leerRankingPropio(par, { ahora = new Date(), leer = leerMasVendidos, gastos = null, hasta = Infinity } = {}) {
-  const items = await leer(rutaDeRanking(par), { hasta })
-  const dia = diaChile(ahora)
-  await RankingPropio.updateOne({ categoriaId: par.categoriaId, marcaId: par.marcaId ?? null, dia }, { $set: { leidoEl: ahora, items } }, { upsert: true })
   const { registrarGasto } = gastos ?? await import('./gastos.js')
+  const filtro = { categoriaId: par.categoriaId, marcaId: par.marcaId ?? null }
+  const anterior = par.marcaId ? await RankingPropio.findOne(filtro).sort({ dia: -1 }).select('sinFiltro').lean() : null
+  let items = null, sinFiltro = !par.marcaId || Boolean(anterior?.sinFiltro)
+  if (!sinFiltro) {
+    try {
+      items = await leer(rutaDeRanking(par), { hasta, cortarSinRanking: true })
+    } catch (err) {
+      if (!err.sinRanking) throw err
+      await registrarGasto(null, config.zyteCostoListadoUsd, 'zyte') // la página llegó (y se cobra), pero sin ranking
+      sinFiltro = true
+    }
+  }
+  if (!items) {
+    try {
+      items = await leer(par.categoriaId, { hasta, cortarSinRanking: true })
+    } catch (err) {
+      if (!err.sinRanking) throw err
+      items = []
+    }
+  }
+  const dia = diaChile(ahora)
+  await RankingPropio.updateOne({ ...filtro, dia }, { $set: { leidoEl: ahora, items, sinFiltro: Boolean(par.marcaId) && sinFiltro } }, { upsert: true })
   await registrarGasto(null, config.zyteCostoListadoUsd, 'zyte')
-  return { ...par, dia, publicaciones: items.length }
+  return { ...par, dia, publicaciones: items.length, ...(par.marcaId && sinFiltro ? { sinFiltro: true } : {}) }
 }
+
+// Lo último que se intentó de cada par, en memoria: una página que no llega corta la pasada (el sitio está ocupado),
+// y sin esto la pasada siguiente partía otra vez por el mismo par: uno que falla siempre dejaba esperando a todos.
+const intentadoEl = new Map()
 
 // La pasada: lee los rankings que tocan, de a pocos. Comparte el sitio con los scans, así que cede igual que el
 // ranking que descubre (masVendidosWeb.js): no lee mientras un scan le pide páginas a Mercado Libre, y si una página
@@ -77,7 +107,7 @@ export async function pasadaRankingPropios({ ahora = new Date(), max = 2, leer =
   if (!config.zyteApiKey && leer === leerMasVendidos) return { omitido: true, motivo: 'sin ZYTE_API_KEY' }
   const pares = await paresDePropios()
   const ultima = new Map((await RankingPropio.aggregate([{ $group: { _id: { c: '$categoriaId', m: '$marcaId' }, el: { $max: '$leidoEl' } } }])).map((x) => [llave({ categoriaId: x._id.c, marcaId: x._id.m }), x.el]))
-  const tocan = paresQueTocan(pares, ultima, { ahora })
+  const tocan = paresQueTocan(pares, ultima, { ahora, intentos: intentadoEl })
   if (!tocan.length) return { pares: pares.length, leidos: 0, pendientes: 0 }
   const { presupuesto } = gastos ?? await import('./gastos.js')
   const { scraping } = await presupuesto()
@@ -88,6 +118,7 @@ export async function pasadaRankingPropios({ ahora = new Date(), max = 2, leer =
   let leidos = 0, sinLlegar = null
   for (const par of tocan.slice(0, max)) {
     if (Date.now() > hasta) break
+    intentadoEl.set(llave(par), +ahora)
     try {
       await leerRankingPropio(par, { ahora, leer, gastos, hasta })
       leidos++
@@ -138,7 +169,9 @@ export async function rankingDePropio(propio, { ahora = new Date() } = {}) {
     if (!historia.has(it.id)) historia.set(it.id, [])
     historia.get(it.id).push({ dia: l.dia, precio: it.precio })
   }
-  return { ...par, url: urlDeRanking(par), leidoEl: ultima?.leidoEl ?? null, vigente, items: vigente ? ultima.items ?? [] : [], anteriores, historia }
+  // la dirección es la de la página que de verdad se leyó: la de la categoría entera cuando la filtrada no existe
+  const url = urlDeRanking(ultima?.sinFiltro ? { categoriaId: par.categoriaId } : par)
+  return { ...par, url, sinFiltro: Boolean(ultima?.sinFiltro), leidoEl: ultima?.leidoEl ?? null, vigente, items: vigente ? ultima.items ?? [] : [], anteriores, historia }
 }
 
 // Pura. Una publicación del ranking con la forma de las del scan de un nicho, para que la vista las trate igual.

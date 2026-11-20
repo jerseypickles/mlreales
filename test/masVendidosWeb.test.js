@@ -66,6 +66,14 @@ test('más vendidos por la web: pide la página con navegador, y ante un rechazo
   const c = await correr([rechazo(429, '60'), bien], { hasta: Date.now() + 5000 })
   assert.match(c.items.message, /429/)
   assert.deepEqual([c.pedidos, c.esperas], [1, []])
+  // una página que llega bien pero sin ranking (la de error de Mercado Libre) se cobra igual: por defecto se reintenta;
+  // quien tiene otra página que leer en su lugar pide cortar al tiro, y el error dice que fue por eso
+  const vacia = { ok: true, status: 200, json: async () => ({ browserHtml: '<html><h2>Tuvimos un problema</h2></html>' }) }
+  const d = await correr([vacia])
+  assert.deepEqual([d.pedidos, d.items.sinRanking, /sin ranking/.test(d.items.message)], [3, true, true])
+  const e = await correr([vacia], { cortarSinRanking: true })
+  assert.deepEqual([e.pedidos, e.items.sinRanking, e.esperas], [1, true, []])
+  assert.equal(b.items.sinRanking, false, 'un bloqueo no es una página sin ranking')
 })
 
 test('más vendidos por la web: toca primero lo que nunca se leyó y después lo que lleva más tiempo sin leerse', () => {

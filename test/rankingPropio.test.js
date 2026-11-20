@@ -2,7 +2,7 @@ import test, { before, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
-import { rutaDeRanking, urlDeRanking, parDePropio, paresDePropios, paresQueTocan, pasadaRankingPropios, traerRankingDe, rankingDePropio, DIAS_ENTRE_LECTURAS, DIAS_VIGENTE } from '../src/services/rankingPropio.js'
+import { rutaDeRanking, urlDeRanking, parDePropio, paresDePropios, paresQueTocan, pasadaRankingPropios, leerRankingPropio, traerRankingDe, rankingDePropio, DIAS_ENTRE_LECTURAS, DIAS_VIGENTE } from '../src/services/rankingPropio.js'
 import { marcaDeItem } from '../src/services/marcaMl.js'
 import { diaChile } from '../src/services/inventarioFull.js'
 import { vistaIguales, marcarIgual, ordenarCandidatos } from '../src/services/iguales.js'
@@ -90,6 +90,48 @@ test('ranking propio: la pasada lee un ranking por par y no lo repite hasta la s
   const falla = async () => { throw new Error('más vendidos: Zyte HTTP 520') }
   r = await pasadaRankingPropios({ ahora: new Date(+AHORA + 30 * DIA), leer: falla, gastos })
   assert.deepEqual([r.leidos, r.pendientes, /520/.test(r.sinLlegar)], [0, 2, true])
+})
+
+test('ranking propio: si la categoría no tiene ranking por marca se lee el de la categoría entera, y la vez siguiente se va directo', async () => {
+  // 20-nov-2026: en una categoría propia la página filtrada por marca llegaba bien pero era la de error de Mercado
+  // Libre; la de la categoría entera traía a los rivales directos
+  const par = { categoriaId: 'MLC100', marcaId: '555' }
+  const pedidos = [], cobros = []
+  const cuenta = { presupuesto: gastos.presupuesto, registrarGasto: async (_n, usd) => { cobros.push(usd) } }
+  const sinRanking = (ruta) => Object.assign(new Error(`más vendidos de ${ruta}: la página llegó sin ranking`), { sinRanking: true })
+  const leer = async (ruta, opciones) => { pedidos.push([ruta, opciones.cortarSinRanking]); if (ruta.includes('BRAND')) throw sinRanking(ruta); return [item('MLC1', 1, 'Pinceles Set 12', 5990)] }
+  let r = await leerRankingPropio(par, { ahora: AHORA, leer, gastos: cuenta })
+  assert.deepEqual([r.publicaciones, r.sinFiltro], [1, true])
+  assert.deepEqual(pedidos, [['MLC100?attribute_id=BRAND&attribute_value_id=555', true], ['MLC100', true]])
+  assert.equal(cobros.length, 2, 'la página vacía también se cobra: se anota')
+  const propio = { categoriaMl: 'MLC100', marcaMl: { id: '555', nombre: 'Genérica' } }
+  const rk = await rankingDePropio(propio, { ahora: AHORA })
+  assert.deepEqual([rk.items.length, rk.sinFiltro, rk.url], [1, true, 'https://www.mercadolibre.cl/mas-vendidos/MLC100'])
+  // a la semana no se vuelve a pagar la página que no existe
+  r = await leerRankingPropio(par, { ahora: new Date(+AHORA + 7 * DIA), leer, gastos: cuenta })
+  assert.deepEqual([pedidos.length, pedidos.at(-1)[0], cobros.length, r.sinFiltro], [3, 'MLC100', 3, true])
+  // si tampoco la categoría tiene ranking, queda anotado vacío: no se paga de nuevo en cada pasada
+  const nada = async (ruta) => { throw sinRanking(ruta) }
+  r = await leerRankingPropio({ categoriaId: 'MLC200', marcaId: '555' }, { ahora: AHORA, leer: nada, gastos: cuenta })
+  assert.deepEqual([r.publicaciones, (await RankingPropio.findOne({ categoriaId: 'MLC200' }).lean()).items.length], [0, 0])
+  // un bloqueo (no llegó ninguna página) no es «sin ranking»: falla y se reintenta en otra pasada
+  await assert.rejects(leerRankingPropio({ categoriaId: 'MLC300', marcaId: '555' }, { ahora: AHORA, leer: async () => { throw new Error('Zyte HTTP 520') }, gastos: cuenta }), /520/)
+  assert.equal(await RankingPropio.countDocuments({ categoriaId: 'MLC300' }), 0)
+})
+
+test('ranking propio: un par que falla no deja esperando a los demás: la pasada siguiente parte por otro', async () => {
+  const propio = (sku, categoriaMl) => ({ sku, itemIdMl: sku, url: `https://x/${sku}`, titulo: `Producto ${sku}`, estado: 'activo', categoriaMl, marcaMl: { id: null, nombre: null } })
+  await ProductoPropio.insertMany([propio('MLC910', 'MLC510'), propio('MLC911', 'MLC511'), propio('MLC912', 'MLC512')])
+  const pedidos = []
+  const leer = async (ruta) => { pedidos.push(ruta); if (ruta === pedidos[0]) throw new Error('Zyte HTTP 520'); return [item('MLC1', 1, 'Lampara', 9990)] }
+  const cuando = new Date(+AHORA + 400 * DIA)
+  let r = await pasadaRankingPropios({ ahora: cuando, leer, gastos })
+  assert.deepEqual([r.leidos, r.pendientes, pedidos.length], [0, 3, 1])
+  r = await pasadaRankingPropios({ ahora: new Date(+cuando + 1800e3), leer, gastos })
+  assert.deepEqual([r.leidos, pedidos.length], [2, 3])
+  assert.ok(!pedidos.slice(1).includes(pedidos[0]), 'el que falló va al final de la fila, no primero otra vez')
+  r = await pasadaRankingPropios({ ahora: new Date(+cuando + 3600e3), leer, gastos })
+  assert.deepEqual([r.leidos, r.pendientes, pedidos.at(-1)], [0, 1, pedidos[0]])
 })
 
 test('ranking propio: a pedido se lee al tiro, se averigua la marca si falta y no se paga dos veces el mismo día', async () => {

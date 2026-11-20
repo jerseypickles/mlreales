@@ -83,8 +83,11 @@ export function parsearMasVendidos(html) {
 // `hasta` (el tiempo que le queda a la pasada). Reintentar al tiro era gastar los intentos en un segundo.
 export const ESPERA_MIN_S = 10
 export const ESPERA_MAX_S = 75
-export async function leerMasVendidos(categoriaId, { apiKey = config.zyteApiKey, pedir = fetch, intentos = 3, hasta = Infinity, esperar = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
-  let ultimo = null
+// `cortarSinRanking`: una página que llega bien pero sin ranking no se vuelve a pedir (cada una se cobra) y el error lo
+// dice (`sinRanking`). Lo usa el ranking de las publicaciones propias: filtrada por marca, hay categorías donde
+// Mercado Libre responde con su página de error, y ahí lo que sirve es leer la categoría entera, no insistir.
+export async function leerMasVendidos(categoriaId, { apiKey = config.zyteApiKey, pedir = fetch, intentos = 3, hasta = Infinity, esperar = (ms) => new Promise((r) => setTimeout(r, ms)), cortarSinRanking = false } = {}) {
+  let ultimo = null, sinRanking = false
   for (let n = 0; n < intentos; n++) {
     const r = await conCupo(() => pedir(ZYTE, { method: 'POST', signal: AbortSignal.timeout(120_000),
       headers: { 'Content-Type': 'application/json', Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}` }, body: JSON.stringify(cuerpoMasVendidos(categoriaId)) }))
@@ -92,8 +95,11 @@ export async function leerMasVendidos(categoriaId, { apiKey = config.zyteApiKey,
       const items = parsearMasVendidos((await r.json())?.browserHtml ?? '')
       if (items.length) return items
       ultimo = 'la página llegó sin ranking'
+      sinRanking = true
+      if (cortarSinRanking) break
     } else {
       ultimo = `Zyte HTTP ${r.status}`
+      sinRanking = false
     }
     if (n === intentos - 1) break
     const pedida = Number(r.headers?.get?.('retry-after'))
@@ -101,7 +107,7 @@ export async function leerMasVendidos(categoriaId, { apiKey = config.zyteApiKey,
     if (Date.now() + ms > hasta) break
     await esperar(ms)
   }
-  throw new Error(`más vendidos de ${categoriaId}: ${ultimo}`)
+  throw Object.assign(new Error(`más vendidos de ${categoriaId}: ${ultimo}`), { sinRanking })
 }
 
 // Pura. Qué categorías toca leer y en qué orden: las que nunca se leyeron (primero las anchas, de la más grande a la

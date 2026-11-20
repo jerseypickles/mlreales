@@ -91,6 +91,7 @@ const senales = (x) => (
 const textoRanking = (r, keyword) => {
   if (!r.leidoEl) return 'Mercado Libre publica los más vendidos de la categoría y marca de tu publicación. Ahí suelen estar los que venden tu mismo producto aunque no salgan en esta búsqueda.'
   if (!r.vigente) return `La última lectura es del ${fmtFechaCorta(r.leidoEl)} y ya no se usa para comparar: actualízala.`
+  if (!r.publicaciones) return `Mercado Libre no publica más vendidos para la categoría de tu publicación (lo miré el ${fmtFechaCorta(r.leidoEl)}).`
   const sumo = r.sumadas > 0 ? `${fmtNum(r.sumadas)} no ${r.sumadas === 1 ? 'sale' : 'salen'} en la búsqueda “${keyword}” y ${r.sumadas === 1 ? 'quedó' : 'quedaron'} abajo, primero las de tu medida` : 'todas salen también en la búsqueda'
   return `Más vendidos de tu categoría, leídos el ${fmtFechaCorta(r.leidoEl)}: ${fmtNum(r.publicaciones)} publicaciones; ${sumo}.${r.propioPuesto ? ` La tuya va ${ordinal(r.propioPuesto)}.` : ''}`
 }

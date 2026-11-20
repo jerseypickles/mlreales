@@ -11,6 +11,8 @@ const rankingPropioSchema = new mongoose.Schema({
   marcaId: { type: String, default: null },
   dia: { type: String, required: true }, // AAAA-MM-DD, día de Chile
   leidoEl: { type: Date, required: true },
+  // la página filtrada por la marca no trajo ranking y se leyó la de la categoría entera
+  sinFiltro: { type: Boolean, default: false },
   // en el orden del ranking: { id, itemId, tipo, posicion, titulo, vendedor, precio, vendidos, tiendaOficial, url, imagen }
   items: { type: [mongoose.Schema.Types.Mixed], default: [] },
 })
