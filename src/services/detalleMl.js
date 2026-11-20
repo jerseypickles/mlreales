@@ -379,18 +379,30 @@ export async function conCupo(fn) {
 // terquedad: es la corrección medida del punto 1 —la misma URL que en paralelo
 // devolvió probability 0 devolvió la ficha completa al pedirla de nuevo.
 // `pedir` es la petición, inyectable para probar sin red.
-async function conReintento(url, opciones, precioListado, pedir = pedirUna) {
+//
+// CUANDO TODA LA PASADA VIENE VACÍA, REINTENTAR ES PAGAR DE MÁS (20-nov-2026). El reintento existe porque el
+// cascarón es cosa de la presión: en una pasada normal unas fichas llegan y otras no, y pedir de nuevo rescata las
+// que no. Pero cada cascarón es un HTTP 200 que se cobra. Los dos días en que ninguna ficha se reconocía, cada una
+// se pidió tres veces y se pagó tres veces. `pasada` lleva la cuenta de la tanda: si ya hay tantas fichas como el
+// tope de concurrencia que agotaron sus intentos como cascarón y todavía no llegó ninguna buena, las siguientes se
+// piden una sola vez. Apenas llega una buena, el reintento vuelve.
+async function conReintento(url, opciones, precioListado, pedir = pedirUna, pasada = null) {
   let ultima = null
   for (let intento = 0; intento <= REINTENTOS; intento++) {
     try {
       const r = await conCupo(() => pedir(url, opciones))
-      if (confiable(r)) return { ok: true, item: aItemDetalle(r, { precioListado }), intentos: intento + 1 }
+      if (confiable(r)) {
+        if (pasada) pasada.buenas++
+        return { ok: true, item: aItemDetalle(r, { precioListado }), intentos: intento + 1 }
+      }
       ultima = r
+      if (pasada && pasada.buenas === 0 && pasada.cascarones >= CONCURRENCIA) break
     } catch (err) {
       ultima = null
       if (intento === REINTENTOS) return { ok: false, url, motivo: err.message }
     }
   }
+  if (ultima && pasada) pasada.cascarones++
   return {
     ok: false,
     url,
@@ -416,12 +428,14 @@ export async function detallesDeMl(
   const fallidos = []
   const intentos = {}
   let sospechosos = 0
+  // la cuenta de la tanda: ver conReintento
+  const pasada = { buenas: 0, cascarones: 0 }
 
   let cursor = 0
   async function obrero() {
     while (cursor < pendientes.length) {
       const url = pendientes[cursor++]
-      const r = await conReintento(url, { geolocation, apiKey }, preciosListado.get(url) ?? null, pedir)
+      const r = await conReintento(url, { geolocation, apiKey }, preciosListado.get(url) ?? null, pedir, pasada)
       if (r.ok) {
         if (r.item._precioCoherente === false) sospechosos++
         intentos[r.intentos] = (intentos[r.intentos] ?? 0) + 1

@@ -242,6 +242,32 @@ test('cada ficha tiene hasta tres intentos seguidos, y queda contado en cuál sa
   assert.equal(motivo.terca, MOTIVO_NO_ES_FICHA, 'esa sí llegó y se cobra')
 })
 
+// Los dos días en que ninguna ficha se reconocía (18 al 20-nov-2026), cada una se pidió y se pagó tres veces.
+test('si toda la tanda viene vacía, después de las primeras se pide una sola vez: no se paga el triple por nada', async () => {
+  const lista = Array.from({ length: 12 }, (_, i) => `u${i}`)
+  const { pedir, llamadas } = pedirCon(Object.fromEntries(lista.map((u) => [u, ['cascaron']])))
+  const r = await detallesDeMl(lista, { apiKey: 'k', pedir })
+  const total = [...llamadas.values()].reduce((a, n) => a + n, 0)
+  assert.equal(r.items.length, 0)
+  assert.equal(r.fallidos.length, 12)
+  assert.ok(r.fallidos.every((f) => f.motivo === MOTIVO_NO_ES_FICHA))
+  // las cuatro primeras agotan sus tres intentos (12 pedidos); las ocho que siguen, uno cada una
+  assert.equal(total, 20, `se pidieron ${total}; con el reintento a ciegas eran 36`)
+  assert.deepEqual(lista.slice(0, 4).map((u) => llamadas.get(u)), [3, 3, 3, 3])
+  assert.ok(lista.slice(4).every((u) => llamadas.get(u) === 1))
+})
+
+test('apenas llega una ficha buena, el reintento vuelve a rescatar las que salen vacías', async () => {
+  const lista = Array.from({ length: 12 }, (_, i) => `u${i}`)
+  // las cuatro primeras, cascarón siempre; la quinta llega bien; las demás salen al segundo intento
+  const plan = Object.fromEntries(lista.map((u, i) => [u, i < 4 ? ['cascaron'] : i === 4 ? ['ficha'] : ['cascaron', 'ficha']]))
+  const { pedir, llamadas } = pedirCon(plan)
+  const r = await detallesDeMl(lista, { apiKey: 'k', pedir })
+  assert.equal(r.items.length, 8, 'la buena y las siete rescatadas')
+  assert.equal(r.fallidos.length, 4)
+  assert.ok(lista.slice(5).every((u) => llamadas.get(u) === 2), 'las de después de la buena tuvieron su segundo intento')
+})
+
 test('el tope de 4 fichas a la vez es de todo el proceso: dos scans juntos no suman 8', async () => {
   let enVuelo = 0, maximo = 0, total = 0
   const pedir = async () => {

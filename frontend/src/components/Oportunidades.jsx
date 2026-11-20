@@ -12,6 +12,7 @@ import { tituloTrae } from '../lib/tituloTrae.js'
 import { PlanPublicidad } from './PlanPublicidad.jsx'
 import { RevisarProducto } from './RevisarProducto.jsx'
 import { SenalesNicho, EtiquetaVeredicto } from './SenalesNicho.jsx'
+import { AvisosDeMedicion } from './SaludMedicion.jsx'
 import { HistogramaPrecios } from './graficos.jsx'
 import { momentoDeCompra, compararPorMomento } from '../lib/momentoCompra.js'
 
@@ -1830,6 +1831,7 @@ export function Oportunidades({ onAbrirNicho, alCambiarNichos }) {
       <EncabezadoPagina titulo="Oportunidades" bajada={<>Qué conviene traer, ordenado por puntaje y urgencia. Elige uno para ver el detalle; <kbd>↑</kbd> <kbd>↓</kbd> para recorrer y <kbd>Esc</kbd> para cerrar.</>}>
         {datos?.refrescando ? <Etiqueta title="Se muestra la última mesa guardada mientras se vuelve a armar con los cambios recientes">actualizando…</Etiqueta> : null}
       </EncabezadoPagina>
+      <AvisosDeMedicion alDia={datos?.calculadoEl ?? null} />
       {aviso ? <p className="error-bloque">{aviso}</p> : null}
 
       <div className="opx-barra">

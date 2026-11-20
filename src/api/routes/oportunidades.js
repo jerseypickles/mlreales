@@ -21,6 +21,16 @@ router.get(
   }),
 )
 
+// ¿Se está midiendo? Los scans seguidos sin reseñas y las pasadas de stock en blanco (services/saludMedicion.js).
+// La pantalla lo pide aparte de la mesa: la mesa se sirve guardada y este aviso tiene que ser de ahora.
+router.get(
+  '/salud-medicion',
+  manejar(async (_req, res) => {
+    const { saludMedicion } = await import('../../services/saludMedicion.js')
+    res.json(await saludMedicion())
+  }),
+)
+
 // Avanza varios nichos de etapa de una vez
 router.post(
   '/avanzar',
