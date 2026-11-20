@@ -107,3 +107,47 @@ test('keywordReal: adopta la forma que la gente TECLEA, no la comprimida', async
   assert.equal(r.keyword, 'rizador de pelo', 'gana la forma real del autosuggest')
   assert.equal(r.exacta, true)
 })
+
+// El buscador de pega: responde como el autocompletado real, que es por prefijo, guarda las frases sin preposiciones
+// (a una consulta con «de» o «para» no le devuelve nada) y entrega solo las primeras de cada prefijo, de la más
+// buscada a la menos: por eso una frase larga no aparece al preguntar por su primera palabra. Anota lo preguntado.
+function buscadorDePega(t, frases, { tope = 3 } = {}) {
+  const preguntas = []
+  const real = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    const q = new URL(url).searchParams.get('q')
+    preguntas.push(q)
+    return { ok: true, status: 200, json: async () => ({ suggested_queries: frases.filter((f) => f.startsWith(q)).slice(0, tope).map((f) => ({ q: f })) }) }
+  }
+  t.after(() => {
+    globalThis.fetch = real
+  })
+  return preguntas
+}
+
+test('keywordReal: pregunta sin preposiciones y encuentra la frase completa de la idea', async (t) => {
+  // 20-nov-2026: preguntando con la frase literal no respondía nada hasta llegar a la primera palabra sola, y de sus
+  // sugerencias ganaba la idea recortada (una máquina portátil quedó midiendo todas las máquinas).
+  const preguntas = buscadorDePega(t, ['taladro', 'taladro inalambrico', 'taladro percutor', 'taladro atornillador', 'taladro percutor inalambrico'])
+  const r = await keywordReal('taladro percutor inalámbrico', { pausaMs: 0 })
+  assert.equal(r.keyword, 'taladro percutor inalambrico')
+  assert.equal(r.exacta, true)
+
+  const conPreposiciones = await keywordReal('regadera de jardín para niños', { pausaMs: 0 })
+  assert.equal(conPreposiciones, null, 'nadie escribe nada parecido: no hay frase real')
+  assert.ok(preguntas.every((q) => !/\b(de|para|con)\b/.test(q)), `ninguna consulta lleva preposiciones: ${preguntas.join(' | ')}`)
+})
+
+test('keywordReal: una idea con preposiciones se queda con su frase completa, no con la recortada', async (t) => {
+  buscadorDePega(t, ['lampara', 'lampara escritorio', 'lampara pie', 'lampara solar', 'lampara escritorio led'])
+  const r = await keywordReal('lámpara de escritorio led', { pausaMs: 0 })
+  assert.equal(r.keyword, 'lampara escritorio led', 'antes quedaba en «lampara escritorio»: perdía la característica')
+  assert.equal(r.exacta, true)
+})
+
+test('keywordReal: si la frase completa no existe, sigue valiendo la más parecida de dos palabras o más', async (t) => {
+  buscadorDePega(t, ['pinceles', 'pinceles acuarela', 'pinceles maquillaje'])
+  const r = await keywordReal('pinceles de acuarela profesionales', { pausaMs: 0 })
+  assert.equal(r.keyword, 'pinceles acuarela')
+  assert.equal(r.exacta, false)
+})

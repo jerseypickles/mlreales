@@ -135,10 +135,19 @@ const esperar = (ms) => new Promise((resolver) => setTimeout(resolver, ms))
 // ráfagas). Devuelve null SOLO si todas las consultas respondieron y nadie
 // busca nada parecido; si hubo consultas bloqueadas y no se encontró match,
 // lanza error para que el llamador no descarte una keyword por un falso negativo.
+//
+// SE PREGUNTA SIN PREPOSICIONES (20-nov-2026). El autocompletado es por prefijo y guarda las frases sin «de» ni
+// «para»: a una idea escrita con ellas no le responde nada, y a la misma idea sin ellas le devuelve la frase exacta.
+// Como se preguntaba con la frase literal, la primera consulta que respondía era la de la primera palabra sola, y
+// entre sus sugerencias ganaba una versión recortada de la idea: una pesa de baño quedó midiendo todas las pesas, una
+// máquina portátil todas las máquinas, un cargador de auto todos los cargadores. Medido ese día con las frases que el
+// radar había cambiado al abrir un nicho: en todas las que perdieron una palabra, la frase completa sin preposiciones
+// existía tal cual en el buscador.
 export async function keywordReal(candidata, { domainCode = 'CL', pausaMs = 1100 } = {}) {
   const normalizada = normalizarTexto(candidata)
   const claves = palabrasClave(normalizada)
-  const palabras = normalizada.split(' ')
+  const sinPreposiciones = sinStopwords(normalizada).split(' ').filter(Boolean)
+  const palabras = sinPreposiciones.length ? sinPreposiciones : normalizada.split(' ')
   const vistas = new Set()
   let respuestas = 0
   let fallidas = 0
