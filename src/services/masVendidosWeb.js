@@ -127,13 +127,19 @@ export async function categoriasParaDescubrir({ minItems = config.masVendidosWeb
   return [...raices, ...hijas].sort((a, b) => (b.totalItems ?? 0) - (a.totalItems ?? 0))
 }
 
-// Una pasada: lee hasta `max` rankings que estén vencidos y los guarda. Corre cada hora y es oportunista: comparte
-// el sitio con los scans de fichas, así que lee cuando Mercado Libre está libre y, si una categoría no llega (con
-// sus esperas y reintentos), corta ahí y sigue en la próxima pasada. Se detiene sola con el presupuesto del mes, con
-// su propio tope mensual y con lo que le toca por día (el tope del mes repartido en 30), para que las lecturas se
-// repartan en el mes y no se acaben la primera quincena.
-// `leer` y `gastos` son inyectables para probar sin red.
-export async function pasadaMasVendidosWeb({ ahora = new Date(), max = config.masVendidosWebPorPasada, apiKey = config.zyteApiKey, leer = leerMasVendidos, presupuestoMs = 270_000, gastos = null } = {}) {
+// Una pasada: lee hasta `max` rankings que estén vencidos y los guarda. Es oportunista: comparte el sitio con los
+// scans, y si una categoría no llega (con sus esperas y reintentos), corta ahí y sigue en la próxima pasada. Se
+// detiene sola con el presupuesto del mes, con su propio tope mensual y con lo que le toca por día (el tope del mes
+// repartido en 30), para que las lecturas se repartan en el mes y no se acaben la primera quincena.
+//
+// SOLO LEE CUANDO NINGÚN SCAN ESTÁ PIDIÉNDOLE PÁGINAS A MERCADO LIBRE (20-nov-2026). Medido esa noche: el mismo
+// pedido, solo, salió en tres de cinco intentos; dentro del proceso, compartiendo el sitio con los scans de fichas
+// (cuatro pedidos a la vez), dos pasadas seguidas con sus tres intentos y sus esperas no leyeron nada. Es lo mismo
+// que ya se sabía de las fichas: con más pedidos a la vez, Mercado Libre bloquea más. `scansActivos` (lo pasa el
+// worker; acá no se toca Redis) dice cuántos scans corren: con alguno, la pasada se salta. Los scans parten a las :00
+// y a las :30 y de madrugada casi no hay, así que el cron pasa justo antes de cada tanda.
+// `leer`, `gastos` y `scansActivos` son inyectables para probar sin red.
+export async function pasadaMasVendidosWeb({ ahora = new Date(), max = config.masVendidosWebPorPasada, apiKey = config.zyteApiKey, leer = leerMasVendidos, presupuestoMs = 270_000, gastos = null, scansActivos = null } = {}) {
   if (!config.masVendidosWebActivo) return { omitido: true, motivo: 'apagado (MAS_VENDIDOS_WEB_ACTIVO)' }
   if (!apiKey) return { omitido: true, motivo: 'sin ZYTE_API_KEY' }
   const { presupuesto, registrarGasto } = gastos ?? await import('./gastos.js')
@@ -153,6 +159,9 @@ export async function pasadaMasVendidosWeb({ ahora = new Date(), max = config.ma
   if (gastado >= config.masVendidosWebUsdMes) return { omitido: true, motivo: `tope del mes (US$ ${gastado.toFixed(2)} de ${config.masVendidosWebUsdMes})` }
   const porDia = Math.ceil(config.masVendidosWebUsdMes / config.zyteCostoListadoUsd / 30)
   if (deHoy >= porDia) return { omitido: true, motivo: `ya leyó lo de hoy (${deHoy} de ${porDia})` }
+  // si no se puede saber (Redis no respondió), se intenta igual: lo que no llega no se cobra
+  const corriendo = scansActivos ? await Promise.resolve().then(scansActivos).catch(() => 0) : 0
+  if (corriendo > 0) return { omitido: true, motivo: `hay ${corriendo} ${corriendo === 1 ? 'scan' : 'scans'} leyendo Mercado Libre: el ranking lee cuando queda libre` }
   const { categoriasDelTablero } = await import('./rankingMasVendidos.js')
   const tablero = await categoriasDelTablero().catch(() => new Map())
   const anchas = await categoriasParaDescubrir()
@@ -172,7 +181,7 @@ export async function pasadaMasVendidosWeb({ ahora = new Date(), max = config.ma
       await registrarGasto(null, config.zyteCostoListadoUsd, 'zyte')
       leidas++
     } catch (err) {
-      // el sitio está ocupado o bloqueando: insistir ahora es gastar la pasada; la próxima es en una hora
+      // el sitio está ocupado o bloqueando: insistir ahora es gastar la pasada; se sigue en la próxima
       sinLlegar = err.message
       console.warn(`[mas-vendidos-web] ${err.message}`)
       break

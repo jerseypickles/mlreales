@@ -178,7 +178,10 @@ router.get(
     const resumen = (j) => ({ id: j.id, nombre: j.name, creado: j.timestamp ? new Date(j.timestamp).toISOString() : null,
       inicio: j.processedOn ? new Date(j.processedOn).toISOString() : null, fin: j.finishedOn ? new Date(j.finishedOn).toISOString() : null,
       minutos: j.processedOn ? Math.round(((j.finishedOn ?? Date.now()) - j.processedOn) / 6000) / 10 : null,
-      error: j.failedReason ? String(j.failedReason).slice(0, 200) : undefined })
+      error: j.failedReason ? String(j.failedReason).slice(0, 200) : undefined,
+      // lo que devolvió el trabajo (el radar dice cuántas ideas pasaron la prueba; el ranking, cuántas páginas leyó):
+      // es la forma de verificar un resultado sin entrar a los logs
+      resultado: j.returnvalue != null ? JSON.stringify(j.returnvalue).slice(0, 500) : undefined })
     const salida = {}
     for (const [nombre, cola] of Object.entries(colas)) {
       if (nombre === 'connection' || (soloUna && nombre !== soloUna)) continue

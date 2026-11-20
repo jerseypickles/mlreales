@@ -123,6 +123,16 @@ test('más vendidos por la web: la pasada guarda el ranking, respeta su tope y l
   const corte = await pasadaMasVendidosWeb({ ahora: new Date('2026-11-26T09:00:00Z'), max: 5, apiKey: 'x', leer: ocupado, gastos })
   assert.deepEqual([corte.leidas, corte.pendientes], [0, 2])
   assert.match(corte.sinLlegar, /429/)
+  // con un scan leyendo Mercado Libre la pasada se salta sin pedir nada; sin scans (o si no se pudo saber), lee
+  let pedidos = 0
+  const contando = async (id) => { pedidos++; return lector(semana2)(id) }
+  const conScans = await pasadaMasVendidosWeb({ ahora: new Date('2026-11-26T09:00:00Z'), max: 5, apiKey: 'x', leer: contando, gastos, scansActivos: async () => 2 })
+  assert.equal(conScans.omitido, true)
+  assert.match(conScans.motivo, /2 scans leyendo Mercado Libre/)
+  assert.equal(pedidos, 0, 'no se pide ninguna página mientras corren los scans')
+  const sinSaber = await pasadaMasVendidosWeb({ ahora: new Date('2026-11-26T09:00:00Z'), max: 1, apiKey: 'x', leer: contando, gastos, scansActivos: async () => { throw new Error('Redis no responde') } })
+  assert.equal(sinSaber.leidas, 1, 'si no se puede saber, se intenta igual')
+  await RankingMasVendidos.deleteMany({ dia: '2026-11-26' })
   // lo que le toca por día: el tope del mes repartido en 30, para que no se acabe la primera quincena
   const { config: cfg } = await import('../src/config/env.js')
   const mensual = cfg.masVendidosWebUsdMes

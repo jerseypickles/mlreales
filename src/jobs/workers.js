@@ -1243,6 +1243,14 @@ async function procesarEstrategaSemanal() {
   return { generadoEl: doc.generadoEl, modelo: doc.modelo, costoUsd: doc.costoUsd, acciones: doc.informe.acciones?.length ?? 0 }
 }
 
+// Cuántos scans le están pidiendo páginas a Mercado Libre ahora (listados y fichas). Lo usa el lector del ranking
+// web, que solo lee cuando no hay ninguno: con más pedidos a la vez, Mercado Libre bloquea más.
+async function scansLeyendoMl() {
+  const colas = obtenerColas()
+  const [listados, fichas] = await Promise.all([colas.scanNicho.getActiveCount(), colas.scanDetalle.getActiveCount()])
+  return listados + fichas
+}
+
 export function iniciarWorkers() {
   // concurrencia 1 + rate limit: cada scan quema créditos de Apify
   const workerScan = new Worker(COLA_SCAN_NICHO, procesarScanNicho, {
@@ -1329,7 +1337,7 @@ export function iniciarWorkers() {
       if (job.name === 'resenias-diarias') return import('../services/reseniasDiarias.js').then((m) => m.pasadaResenias())
       if (job.name === 'panorama-ml') return import('../services/panoramaMl.js').then((m) => m.pasadaPanorama())
       if (job.name === 'tiendas-ganadoras') return import('../services/tiendasGanadoras.js').then((m) => m.pasadaTiendas())
-      if (job.name === 'mas-vendidos-web') return import('../services/masVendidosWeb.js').then((m) => m.pasadaMasVendidosWeb())
+      if (job.name === 'mas-vendidos-web') return import('../services/masVendidosWeb.js').then((m) => m.pasadaMasVendidosWeb({ scansActivos: scansLeyendoMl }))
       if (job.name === 'vigia-mejoras') return import('../services/vigiaMejoras.js').then((m) => m.pasadaVigia())
       // con la demanda actual, una vez al día: el efecto de cada evento comercial y los saltos sin explicar
       if (job.name === 'demanda-ml') return import('../services/demandaActualMl.js').then((m) => m.medirDemandaActual())
