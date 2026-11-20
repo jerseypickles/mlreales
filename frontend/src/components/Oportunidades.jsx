@@ -263,6 +263,23 @@ const ORDEN_TONO = { mal: 0, aviso: 1, bien: 2, info: 3 }
 // mide 1.600 y vendía 22 u en 30 días—, llevan esta alerta y él decide.
 const VARA_BUSQUEDAS = 5000
 // La venta en ML dicha en palabras: la cifra contada, de dónde sale y su escala.
+// De dónde sale la demanda del puntaje (19-nov-2026, tablero.js): de lo que se vende en Mercado Libre o, mientras
+// no se pueda medir, de la búsqueda de Google. El importador preguntó por un nicho con mucha búsqueda y casi nada
+// vendido en ML que estaba entre los primeros: ahora el puntaje lo dice en palabras y muestra cuánto daba antes.
+function textoPuntaje(o) {
+  const p = o.puntajeCon
+  if (!p) return null
+  const dia = (n) => String(n).replace('.', ',')
+  if (p.fuente === 'venta-ml') {
+    return `mide la demanda con lo que se vende en ML (${dia(p.reseniasDia)} reseñas nuevas al día)`
+      + (p.motivo === 'temporada-baja' ? ', medido en temporada baja: por eso pesa menos' : '')
+      + (Number.isFinite(o.scoreGoogle) && o.scoreGoogle !== o.score ? ` · con la búsqueda de Google daba ${o.scoreGoogle}` : '')
+  }
+  if (p.motivo === 'fuera-de-temporada') return 'usa la búsqueda de Google: se midió fuera de su temporada y la venta de hoy no dice cuánto vende en su época'
+  if (p.motivo === 'sin-venta-medida') return `usa la búsqueda de Google: falta medir su venta en ML (lleva ${p.scans} de 2 mediciones)`
+  return 'usa la búsqueda de Google'
+}
+
 function textoMl(ml) {
   return `gana ${String(ml.resenasDia).replace('.', ',')} reseñas nuevas al día (mediana de ${ml.scans} ${ml.scans === 1 ? 'scan' : 'scans'} en 45 días): vende más que el ${ml.percentil}% de tus nichos, y un nicho en ese puesto suele tener ~${fmtNum(ml.equivalente)} búsquedas al mes en Google.`
 }
@@ -651,7 +668,7 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onEtapa, tendencia }) {
             {o.scansConDemanda}/{o.scansConDemanda + o.faltanScans}<small>scans</small>
           </span>
         ) : Number.isFinite(o.score) ? (
-          <span title={`Score ${o.score} de 100${o.dispersion != null ? ` · promedio de la serie de scans (se movió ${o.dispersion} puntos entre el más alto y el más bajo)` : ''}${o.costoAds?.ajusteScore ? ` · ${o.costoAds.ajusteScore > 0 ? '+' : ''}${o.costoAds.ajusteScore} por el costo de publicidad aprendido (~${fmtPrecio(o.costoAds.cac)} por venta en vez de $1.717 fijos)` : ''}${o.ajusteRanking ? ` · ${o.ajusteRanking > 0 ? '+' : ''}${o.ajusteRanking} por su tendencia en el ranking de más vendidos` : ''}${o.scoreSinAjuste != null ? ` · sin ajustes: ${o.scoreSinAjuste}` : ''}`}>
+          <span title={`Score ${o.score} de 100${o.dispersion != null ? ` · promedio de la serie de scans (se movió ${o.dispersion} puntos entre el más alto y el más bajo)` : ''}${o.costoAds?.ajusteScore ? ` · ${o.costoAds.ajusteScore > 0 ? '+' : ''}${o.costoAds.ajusteScore} por el costo de publicidad aprendido (~${fmtPrecio(o.costoAds.cac)} por venta en vez de $1.717 fijos)` : ''}${o.ajusteRanking ? ` · ${o.ajusteRanking > 0 ? '+' : ''}${o.ajusteRanking} por su tendencia en el ranking de más vendidos` : ''}${o.scoreSinAjuste != null ? ` · sin ajustes: ${o.scoreSinAjuste}` : ''}${textoPuntaje(o) ? ` · ${textoPuntaje(o)}` : ''}`}>
             <ScoreRing valor={o.score} size={46} grosor={4.5} />
           </span>
         ) : <em className="opt-nada">—</em>}
@@ -1265,6 +1282,7 @@ function ResumenNicho({ o, tendencia }) {
             </span>
           ) : null}
         </Hecho>
+        <Hecho etiqueta="puntaje">{textoPuntaje(o)}</Hecho>
         {Number.isFinite(c?.variacionInteranualPct) ? (
           <Hecho etiqueta="Google 12 meses">
             <span title={`Búsquedas de los últimos 12 meses contra los 12 anteriores: cada estación aparece una vez en cada lado, así que no la mueve la temporada.${Number.isFinite(c.variacionRelativaPct) ? ` Todo el mercado hizo ${c.variacionMercadoPct > 0 ? '+' : ''}${c.variacionMercadoPct}%; contra el mercado queda ${c.variacionRelativaPct > 0 ? '+' : ''}${c.variacionRelativaPct}%.` : ''}`}>

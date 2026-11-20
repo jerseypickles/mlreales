@@ -110,13 +110,13 @@ function Tarjeta({ g }) {
   )
 }
 
-// EL PUNTAJE ALTERNO, EN SOMBRA: el mismo puntaje de la mesa, pero con la
-// demanda tomada sobre todo de la venta medida en Mercado Libre. No cambia nada
-// de lo que se ve en Oportunidades: acá se compara contra las ventas reales.
+// EL PUNTAJE CON LA VENTA MEDIDA EN ML: el mismo puntaje, pero con la demanda tomada sobre todo de lo que se vende
+// en Mercado Libre. Nació en sombra; desde el 19-nov-2026 es el de la mesa de Oportunidades (lo aprobó el
+// importador). Acá se sigue comparando contra las ventas reales, al lado del que usaba la búsqueda de Google.
 const ESTADO_PUNTAJE = {
   'pocos-casos': 'Todavía pocos productos medidos: no hay ganador',
-  'gana-alterno': 'El alterno ordena mejor lo que vendiste',
-  'gana-actual': 'El puntaje actual ordena mejor lo que vendiste',
+  'gana-alterno': 'Con la venta en ML ordena mejor lo que vendiste',
+  'gana-actual': 'Con la búsqueda de Google ordenaba mejor lo que vendiste',
   empate: 'Los dos ordenan parecido',
 }
 
@@ -143,20 +143,20 @@ function PuntajeAlterno({ p }) {
   return (
     <section className="apr-seccion acr">
       <div className="apr-seccion-cabeza">
-        <h3>Puntaje alterno, en prueba</h3>
-        <p>El mismo puntaje de Oportunidades con un solo cambio: la demanda sale sobre todo de la venta medida en Mercado Libre y no de las búsquedas de Google. No toca la mesa; se compara contra lo que vendes para decidir después con datos.</p>
+        <h3>Puntaje con la venta medida en ML</h3>
+        <p>Desde el 19-nov la mesa de Oportunidades mide la demanda sobre todo con lo que se vende en Mercado Libre y no con las búsquedas de Google. Acá se siguen comparando los dos puntajes contra lo que vendes, para saber si el cambio acierta.</p>
       </div>
       <div className="acr-resumen">
         <div className="acr-dato"><span>Contra tus ventas</span><strong>{v.casos}<small> de {v.minimoCasos} productos</small></strong><small>{ESTADO_PUNTAJE[v.estado]}</small></div>
-        <div className="acr-dato"><span>Orden del puntaje actual</span><strong>{decimal(v.ordenActual, 2)}</strong><small>1 = ordena perfecto lo que vendiste</small></div>
-        <div className="acr-dato"><span>Orden del alterno</span><strong>{decimal(v.ordenAlterno, 2)}</strong><small>misma medida, mismos productos</small></div>
-        <div className="acr-dato"><span>Separa más los nichos</span><strong>{m.rangoAlterno[0]}–{m.rangoAlterno[1]}</strong><small>el actual va de {m.rangoActual[0]} a {m.rangoActual[1]} · {m.nichos} nichos</small></div>
+        <div className="acr-dato"><span>Orden con la búsqueda de Google</span><strong>{decimal(v.ordenActual, 2)}</strong><small>1 = ordena perfecto lo que vendiste</small></div>
+        <div className="acr-dato"><span>Orden con la venta en ML</span><strong>{decimal(v.ordenAlterno, 2)}</strong><small>misma medida, mismos productos</small></div>
+        <div className="acr-dato"><span>Separa más los nichos</span><strong>{m.rangoAlterno[0]}–{m.rangoAlterno[1]}</strong><small>con Google iba de {m.rangoActual[0]} a {m.rangoActual[1]} · {m.nichos} nichos</small></div>
       </div>
       <div className="acr-movs">
-        <div><h4>Subirían por puntaje</h4><ul>{m.suben.map((x) => <Movimiento key={x.keyword} m={x} sube />)}</ul></div>
-        <div><h4>Bajarían por puntaje</h4><ul>{m.bajan.map((x) => <Movimiento key={x.keyword} m={x} />)}</ul></div>
+        <div><h4>Suben con la venta en ML</h4><ul>{m.suben.map((x) => <Movimiento key={x.keyword} m={x} sube />)}</ul></div>
+        <div><h4>Bajan con la venta en ML</h4><ul>{m.bajan.map((x) => <Movimiento key={x.keyword} m={x} />)}</ul></div>
       </div>
-      <p className="apr-leyenda"><span className="acr-leyenda acr-esperado" /> puntaje actual <span className="acr-leyenda acr-real" /> alterno · {m.sinVentaMedida} nichos quedan fuera porque aún no tienen venta medida.</p>
+      <p className="apr-leyenda"><span className="acr-leyenda acr-esperado" /> con la búsqueda de Google <span className="acr-leyenda acr-real" /> con la venta en ML · {m.sinVentaMedida} nichos quedan fuera porque aún no tienen venta medida.</p>
     </section>
   )
 }

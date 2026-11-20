@@ -132,8 +132,9 @@ export async function resenasPorNicho({ ahora = new Date(), dias = DIAS_VENTANA 
 }
 
 // Al leer la mesa: a cada oportunidad, su venta en ML en la escala de Google.
-export async function aplicarDemandaMlVsGoogle(oportunidades, { ahora = new Date() } = {}) {
-  const resenas = await resenasPorNicho({ ahora })
+// `resenas`: las medianas ya leídas (la mesa las usa antes, para el puntaje), para no consultar dos veces.
+export async function aplicarDemandaMlVsGoogle(oportunidades, { ahora = new Date(), resenas = null } = {}) {
+  resenas ??= await resenasPorNicho({ ahora })
   const filas = oportunidades.map((o) => {
     const r = resenas.get(String(o.nichoId))
     return { id: String(o.nichoId), google: o.curvaAnual?.busquedasMes ?? null, resenasDia: r?.mediana ?? null, scans: r?.scans ?? 0, factor: factorTemporada(o.curvaAnual?.curva, r?.meses) }

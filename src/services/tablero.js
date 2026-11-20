@@ -216,7 +216,9 @@ export async function tableroOportunidades({ todos = false } = {}) {
           },
           { $sort: { fecha: -1 } },
           { $limit: 8 },
-          { $project: { _id: 0, s: '$scoreOportunidad' } },
+          // `c` y `k`: los componentes y el descuento por búsqueda de cada reporte, para recalcular el nivel con la
+          // venta medida en ML (ml/puntajeSombra.js)
+          { $project: { _id: 0, s: '$scoreOportunidad', c: '$metricas.oportunidad.componentes', k: '$metricas.oportunidad.confianzaBusqueda' } },
         ],
         as: 'serieScore',
       },
@@ -521,6 +523,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
       confianza: analisis.confianza ?? null,
       veredictoDeSerie: analisis.esGraduacion === true || undefined,
       ...nivelScore(n.serieScore, ultimo?.scoreOportunidad ?? docAnalisis.scoreOportunidad ?? null),
+      _serieScore: n.serieScore ?? null,
       fechaScan: ultimo?.fecha ?? null,
       mediana: ultimo?.metricas?.precio?.mediana ?? null,
       precios: preciosDe(ultimo?.metricas?.precio),
@@ -659,6 +662,30 @@ export async function tableroOportunidades({ todos = false } = {}) {
     })
   }
 
+  // LA DEMANDA DEL PUNTAJE SE MIDE EN MERCADO LIBRE (19-nov-2026, aprobado por el importador). El puntaje guardado
+  // en cada scan mide la demanda con la búsqueda de Google, y un nicho muy buscado que casi no se compra en ML
+  // quedaba entre los primeros. Acá el nivel se recalcula con la venta medida del nicho (reseñas nuevas por día,
+  // mediana de los scans de 45 días), nivelada por la temporada en que se midió (ml/puntajeSombra.js). Donde todavía
+  // no hay venta medida, o se midió fuera de temporada, queda el de Google y se dice. `scoreGoogle` conserva el
+  // anterior. Va antes de los demás ajustes, que se suman sobre este nivel.
+  let resenasMl = null
+  try {
+    const { nivelConVentaMl } = await import('./ml/puntajeSombra.js')
+    const { resenasPorNicho, factorTemporada } = await import('./demandaMlVsGoogle.js')
+    resenasMl = await resenasPorNicho({})
+    for (const o of oportunidades) {
+      const r = resenasMl.get(String(o.nichoId))
+      const { score, scoreUltimo, dispersion, ...como } = nivelConVentaMl(o._serieScore, { reseniasDia: r?.mediana ?? null, scans: r?.scans ?? 0, factorTemporada: factorTemporada(o.curvaAnual?.curva, r?.meses) })
+      o.puntajeCon = como
+      if (como.fuente !== 'venta-ml' || !Number.isFinite(o.score)) continue
+      o.scoreGoogle = o.score
+      Object.assign(o, { score, scoreUltimo, dispersion, _nivelMl: score })
+    }
+  } catch (err) {
+    console.warn(`[tablero] puntaje con la venta medida en ML no aplicado: ${err.message}`)
+  }
+  for (const o of oportunidades) delete o._serieScore
+
   // LO QUE CUESTA UNA VENTA POR PUBLICIDAD EN CADA NICHO (ml/costoAdsNicho.js).
   // El score guardado en cada scan cobra el CAC fijo de agosto ($1.717); acá se
   // corrige con el costo medido en la cuenta y, cuando el modelo valida, con el
@@ -695,6 +722,13 @@ export async function tableroOportunidades({ todos = false } = {}) {
       o.scoreSinAjuste ??= o.score
       o.score = Math.max(0, Math.min(100, o.score + ajuste))
     }
+  }
+
+  // el puntaje que habría quedado con la búsqueda de Google lleva los mismos ajustes que el de hoy, para poder
+  // compararlos lado a lado
+  for (const o of oportunidades) {
+    if (Number.isFinite(o._nivelMl) && Number.isFinite(o.scoreGoogle)) o.scoreGoogle = Math.max(0, Math.min(100, o.scoreGoogle + (o.score - o._nivelMl)))
+    delete o._nivelMl
   }
 
   oportunidades.sort(
@@ -772,7 +806,7 @@ export async function tableroOportunidades({ todos = false } = {}) {
   // no pasan la vara de búsqueda pero se compran dentro de ML sin googlearlos
   try {
     const { aplicarDemandaMlVsGoogle } = await import('./demandaMlVsGoogle.js')
-    await aplicarDemandaMlVsGoogle(oportunidades)
+    await aplicarDemandaMlVsGoogle(oportunidades, { resenas: resenasMl })
   } catch (err) {
     console.warn(`[tablero] venta en ML vs Google no calculada: ${err.message}`)
   }

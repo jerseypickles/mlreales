@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { demandaMedida, puntajeAlterno, compararPuntajes, cambiosEnLaMesa, ordenConEmpates, MIN_CASOS_PUNTAJE } from '../src/services/ml/puntajeSombra.js'
+import { demandaMedida, puntajeAlterno, compararPuntajes, cambiosEnLaMesa, ordenConEmpates, MIN_CASOS_PUNTAJE, representatividad, nivelConVentaMl, PESO_DEMANDA_ML } from '../src/services/ml/puntajeSombra.js'
 
 const base = { demanda: 80, constancia: 70, entrada: 60, economia: 90, competencia: 50 }
 
@@ -45,4 +45,43 @@ test('puntaje alterno: los empates no dependen del orden de llegada', () => {
   assert.equal(ordenConEmpates([1, 1, 1], [1, 2, 3]), null, 'sin variación no hay orden que medir')
   const m = cambiosEnLaMesa([{ keyword: 'a', actual: 70, alterno: 70 }, { keyword: 'b', actual: 70, alterno: 70 }, { keyword: 'c', actual: 60, alterno: 60 }])
   assert.equal(m.suben.length + m.bajan.length, 0, 'dos nichos empatados no se mueven de lugar')
+})
+
+test('puntaje de la mesa: la venta de hoy pesa según la temporada en que se midió', () => {
+  // meses que pesan 0,8 del año promedio o más: entera; la mitad o menos: nada; entre medio, en línea
+  assert.deepEqual([1.4, 1, 0.8, 0.65, 0.5, 0.3, null].map((f) => Math.round(representatividad(f) * 100) / 100), [1, 1, 1, 0.5, 0, 0, 1])
+  // con menos peso de la venta medida, el puntaje se acerca al que da la búsqueda
+  const lleno = puntajeAlterno({ componentes: base, reseniasDia: 0 })
+  const medio = puntajeAlterno({ componentes: base, reseniasDia: 0, peso: PESO_DEMANDA_ML / 2 })
+  const nada = puntajeAlterno({ componentes: base, reseniasDia: 0, peso: 0 })
+  assert.ok(lleno < medio && medio < nada, `${lleno} < ${medio} < ${nada}`)
+})
+
+test('puntaje de la mesa: el nivel usa la venta medida en ML y dice de dónde sale cuando no puede', () => {
+  const serie = [{ s: 80, c: base, k: 1 }, { s: 78, c: { ...base, entrada: 50 }, k: 1 }, { s: 84, c: { ...base, entrada: 80 } }]
+  // mucha búsqueda y nada vendido: baja; mucha venta: sube sobre el que no vende
+  const flojo = nivelConVentaMl(serie, { reseniasDia: 0, scans: 3, factorTemporada: 1 })
+  const fuerte = nivelConVentaMl(serie, { reseniasDia: 60, scans: 3, factorTemporada: 1 })
+  assert.deepEqual([flojo.fuente, flojo.motivo, flojo.pesoMl, flojo.scans], ['venta-ml', null, PESO_DEMANDA_ML, 3])
+  assert.ok(flojo.score < 80 && fuerte.score > flojo.score + 15, `${flojo.score} y ${fuerte.score}`)
+  // el nivel es el promedio de la serie recalculada; el último y cuánto vibra salen de la misma serie
+  const uno = (c) => puntajeAlterno({ componentes: c, reseniasDia: 0 })
+  assert.equal(flojo.score, Math.round((uno(serie[0].c) + uno(serie[1].c) + uno(serie[2].c)) / 3))
+  assert.deepEqual([flojo.scoreUltimo, flojo.dispersion], [uno(serie[0].c), uno(serie[2].c) - uno(serie[1].c)])
+  // medido en temporada baja, la venta pesa menos y el puntaje baja menos; fuera de temporada no entra
+  const baja = nivelConVentaMl(serie, { reseniasDia: 0, scans: 3, factorTemporada: 0.65 })
+  assert.deepEqual([baja.fuente, baja.motivo, baja.pesoMl, baja.factorTemporada], ['venta-ml', 'temporada-baja', 0.35, 0.65])
+  assert.equal(nivelConVentaMl(serie, { reseniasDia: 0, scans: 3, factorTemporada: 0.93 }).motivo, null) // un mes apenas bajo el promedio es un mes normal
+  assert.ok(baja.score > flojo.score)
+  const fuera = nivelConVentaMl(serie, { reseniasDia: 0, scans: 3, factorTemporada: 0.4 })
+  assert.deepEqual([fuera.fuente, fuera.motivo, fuera.score ?? null], ['busqueda-google', 'fuera-de-temporada', null])
+  // lo medido se lleva al nivel de un mes promedio: en plena temporada (el doble del año) vale la mitad
+  const enTemporada = nivelConVentaMl(serie, { reseniasDia: 20, scans: 3, factorTemporada: 2 })
+  assert.deepEqual([enTemporada.reseniasDia, enTemporada.reseniasNiveladas, enTemporada.score], [20, 10, nivelConVentaMl(serie, { reseniasDia: 10, scans: 3, factorTemporada: 1 }).score])
+  assert.equal(nivelConVentaMl(serie, { reseniasDia: 20, scans: 3, factorTemporada: 5 }).reseniasNiveladas, 10) // nunca más del doble
+  assert.equal(baja.reseniasNiveladas, 0)
+  // una sola medición, ninguna, o una serie sin componentes: sigue el puntaje de la búsqueda
+  assert.deepEqual([nivelConVentaMl(serie, { reseniasDia: 5, scans: 1 }).motivo, nivelConVentaMl(serie, {}).motivo, nivelConVentaMl([{ s: 70 }], { reseniasDia: 5, scans: 3 }).motivo, nivelConVentaMl(null, { reseniasDia: 5, scans: 3 }).motivo],
+    ['sin-venta-medida', 'sin-venta-medida', 'sin-componentes', 'sin-componentes'])
+  assert.equal(nivelConVentaMl(serie, { reseniasDia: 5.04, scans: 1 }).reseniasDia, 5) // el número medido viaja igual, para mostrarlo
 })
