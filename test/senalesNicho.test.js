@@ -132,7 +132,7 @@ test('lo medido viaja al analista tal como está en la mesa, y si el nicho no es
   const { lecturaMedidaDeNicho } = await import('../src/services/senalesNicho.js')
   const fila = { nichoId: 'n1', demanda: { nivel: 'casi-nula', frase: 'Casi no se vende.', tendencia: null, firme: true },
     veredictoMedido: { veredicto: 'no_entrar', porQue: 'Casi no se vende en Mercado Libre.', pasos: [{ id: 'demanda', pregunta: '¿Hay demanda?', estado: 'problema', frase: 'Casi no se vende.' }] } }
-  const leer = async ({ todos }) => { assert.equal(todos, true, 'también los nichos que no están en la vista por defecto'); return { oportunidades: [fila, { nichoId: 'n2' }] } }
+  const leer = async ({ todos }) => { assert.equal(todos, undefined, 'la misma mesa que mira el importador, que ya está guardada'); return { oportunidades: [fila, { nichoId: 'n2' }] } }
   const m = await lecturaMedidaDeNicho('n1', { leer })
   assert.deepEqual([m.veredicto, m.demanda.nivel, m.preguntas[0].respuesta], ['no_entrar', 'casi-nula', 'problema'])
   assert.match(m.regla, /venta medida en Mercado Libre/)

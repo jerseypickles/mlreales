@@ -224,11 +224,12 @@ export async function aplicarSenales(oportunidades, { resenas = null, anchas = u
 }
 
 // LO MEDIDO, PARA EL ANALISTA. La lectura de demanda y el veredicto por lo medido de un nicho, tal como están en
-// la mesa guardada (los tercios son contra los demás nichos, así que no se pueden calcular para uno solo). null si
-// el nicho todavía no está en la mesa. `leer` es la mesa guardada, inyectable para probar.
+// la mesa guardada (los tercios son contra los demás nichos, así que no se pueden calcular para uno solo). Se lee
+// la misma mesa que mira el importador, que ya está guardada y caliente: pedir la de «todos» obligaría a armar
+// otra en cada análisis. null si el nicho no está en esa mesa. `leer` es inyectable para probar.
 export async function lecturaMedidaDeNicho(nichoId, { leer = null } = {}) {
   leer ??= (await import('./tableroCache.js')).leerTablero
-  const { oportunidades } = await leer({ todos: true })
+  const { oportunidades } = await leer({})
   const o = (oportunidades ?? []).find((x) => String(x.nichoId) === String(nichoId))
   if (!o?.demanda || !o.veredictoMedido) return null
   return {
