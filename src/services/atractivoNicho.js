@@ -27,6 +27,10 @@ export const VOLUMEN_MINIMO = 200
 // repartir y, sin historia propia, la entrada depende de publicidad. Aplica a
 // lo que el radar propone, no a VOLUMEN_MINIMO (que sigue decidiendo cuándo
 // buscar variantes) ni a los nichos que ya existen: esos llevan una alerta.
+// DESDE EL 20-NOV-2026 YA NO ES LA PUERTA DEL RADAR: la entrada la decide la prueba en Mercado Libre
+// (services/pruebaMl.js), porque estas búsquedas casi no ordenan lo que después se vende ahí. El número sigue
+// sirviendo para buscar la frase que la gente escribe cuando la idea mide poco (`variantesBajo`) y para el
+// seguimiento de stock.
 export const RADAR_BUSQUEDAS_MINIMAS = 5000
 // Desde aquí Google basta: medido el 4-oct sobre 116 nichos, sobre 15.000
 // búsquedas el 90% está en la cima del autocompletado de ML. Entre 5.000 y

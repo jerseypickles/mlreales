@@ -175,6 +175,22 @@ export function Pendientes({ titulo, resumen, items, children }) {
   )
 }
 
+// Preguntas con su respuesta: una decisión partida en las preguntas que la arman, cada una con lo que salió (una
+// etiqueta de dos o tres palabras) y la frase que lo explica. El tono repite lo que dice la etiqueta.
+// items: [{ id, pregunta, respuesta, tono, frase }] · tonos: bien, atencion, problema, neutra
+export function Preguntas({ items }) {
+  return (
+    <ul className="s-preguntas">
+      {items.map(({ id, pregunta, respuesta, tono = 'neutra', frase }) => (
+        <li key={id} className={`s-pregunta s-pregunta-${tono}`}>
+          <span className="s-pregunta-cabeza"><strong>{pregunta}</strong><Etiqueta tono={tono}>{respuesta}</Etiqueta></span>
+          {frase ? <span className="s-pregunta-frase">{frase}</span> : null}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 // Título de un bloque dentro de una tarjeta o sección, con su cuenta y, a la derecha, una acción o una nota.
 export function Subtitulo({ titulo, cuenta, children }) {
   return (

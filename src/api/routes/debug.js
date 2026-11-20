@@ -437,4 +437,64 @@ router.get(
   }),
 )
 
+// LA PUERTA DE ENTRADA DEL RADAR, A MANO (20-nov-2026): la misma prueba que hace el radar antes de abrir un nicho
+// (services/pruebaMl.js), para una búsqueda cualquiera. Pide una página de resultados (cuesta lo que una página de
+// listado y queda anotado) y dice cuánto llevan vendido las primeras 50 publicaciones, la vara del día y si pasa.
+// No crea nada.
+router.get(
+  '/prueba-ml',
+  autorizado,
+  manejar(async (req, res) => {
+    const keyword = String(req.query.q ?? '').trim().toLowerCase()
+    if (keyword.length < 2) return res.status(400).json({ error: 'falta la búsqueda: ?q=…' })
+    const { varaPruebaMl, probarEnMl, decidirPrueba, lugarEntre } = await import('../../services/pruebaMl.js')
+    const { registrarGasto } = await import('../../services/gastos.js')
+    const vara = await varaPruebaMl()
+    const prueba = await probarEnMl(keyword)
+    await registrarGasto(null, prueba.costoUsd, 'zyte')
+    const decision = decidirPrueba(prueba, vara.vara != null ? vara : null)
+    res.json({ keyword, ...prueba, vara: vara.vara, nichosMedidos: vara.nichos, fraccion: vara.fraccion, masQueDeCada100: lugarEntre(prueba.vendidos, vara.valores), ...decision })
+  }),
+)
+
+// El ranking de más vendidos leído de la página web (services/masVendidosWeb.js): cuánto se ha leído este mes, qué
+// falta y las últimas lecturas. POST encola una pasada ahora (la misma del cron, con sus topes).
+router.get(
+  '/mas-vendidos-web',
+  autorizado,
+  manejar(async (_req, res) => {
+    const { RankingMasVendidos, FichaMasVendido } = await import('../../models/RankingMasVendidos.js')
+    const { CategoriaMl } = await import('../../models/CategoriaMl.js')
+    const { categoriasParaDescubrir, categoriasQueTocan } = await import('../../services/masVendidosWeb.js')
+    const { categoriasDelTablero } = await import('../../services/rankingMasVendidos.js')
+    const { diaChile } = await import('../../services/inventarioFull.js')
+    const dia = diaChile(new Date())
+    const [delMes, ultimas, anchas, tablero, ultimaPorCategoria] = await Promise.all([
+      RankingMasVendidos.countDocuments({ fuente: 'web', dia: { $gte: `${dia.slice(0, 7)}-01` } }),
+      RankingMasVendidos.find({ fuente: 'web' }).sort({ capturadoEl: -1 }).limit(6).lean(),
+      categoriasParaDescubrir(), categoriasDelTablero().catch(() => new Map()),
+      RankingMasVendidos.aggregate([{ $match: { fuente: 'web' } }, { $group: { _id: '$categoriaId', dia: { $max: '$dia' } } }]),
+    ])
+    const ultima = new Map(ultimaPorCategoria.map((x) => [x._id, x.dia]))
+    const tocan = categoriasQueTocan({ anchas, delTablero: [...tablero.keys()], ultima, dia, dias: config.masVendidosWebDias })
+    const rutas = new Map((await CategoriaMl.find({ id: { $in: ultimas.map((u) => u.categoriaId) } }).select('id ruta nombre').lean()).map((c) => [c.id, c.ruta ?? c.nombre]))
+    const fichas = new Map((await FichaMasVendido.find({ id: { $in: ultimas.flatMap((u) => u.items.slice(0, 3).map((i) => i.id)) } }).select('id titulo').lean()).map((f) => [f.id, f.titulo]))
+    res.json({
+      activo: config.masVendidosWebActivo, cron: config.masVendidosWebCron, porPasada: config.masVendidosWebPorPasada,
+      leidasEsteMes: delMes, gastoEstimadoUsd: Math.round(delMes * config.zyteCostoListadoUsd * 100) / 100, topeUsdMes: config.masVendidosWebUsdMes,
+      categorias: { anchas: anchas.length, delTablero: tablero.size, leidasAlgunaVez: ultima.size, porLeer: tocan.length },
+      ultimas: ultimas.map((u) => ({ categoria: rutas.get(u.categoriaId) ?? u.categoriaId, dia: u.dia, primeros: u.items.slice(0, 3).map((i) => ({ puesto: i.posicion, titulo: fichas.get(i.id) ?? null, vendidos: i.vendidos ?? null })) })),
+    })
+  }),
+)
+router.post(
+  '/mas-vendidos-web',
+  autorizado,
+  manejar(async (_req, res) => {
+    const { obtenerColas } = await import('../../jobs/queues.js')
+    const job = await obtenerColas().tendencias.add('mas-vendidos-web', {}, { jobId: `mas-vendidos-web-manual-${Math.floor(Date.now() / 300000)}` })
+    res.status(202).json({ jobId: job.id })
+  }),
+)
+
 export default router

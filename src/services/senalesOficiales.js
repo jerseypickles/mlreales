@@ -46,6 +46,19 @@ export function normalizarTendencias(raw) {
   return salida
 }
 
+// Pura. LOS TRES GRUPOS DE /trends (20-nov-2026). Según la documentación oficial, los 50 términos de la semana vienen
+// en tres listas seguidas: los 10 primeros son las búsquedas que más crecieron en INGRESOS, los 20 siguientes las más
+// buscadas y los 20 últimos las que subieron en búsquedas contra dos semanas atrás. `normalizarTendencias` las aplana
+// y quita repetidos, con lo que el corte entre grupos se pierde; acá se conservan por posición. Con una lista que no
+// trae los 50 no se puede saber dónde corta cada grupo: null.
+export const TAMANO_TENDENCIAS = 50
+export function gruposDeTendencias(raw) {
+  const claves = (raw ?? []).map((f) => String(f?.keyword ?? '').trim().toLowerCase())
+  if (claves.length !== TAMANO_TENDENCIAS) return null
+  const limpio = (xs) => [...new Set(xs.filter(Boolean))]
+  return { crecen: limpio(claves.slice(0, 10)), buscadas: limpio(claves.slice(10, 30)), suben: limpio(claves.slice(30, 50)) }
+}
+
 // Pura. Cuántos de los más vendidos de ML aparecen en el top que medimos.
 //
 // Es un control de calidad del scrapeo, no un score: si ML dice que los diez

@@ -1,7 +1,7 @@
 import { CategoriaMl, TendenciaCategoria, PasadaPanorama } from '../models/CategoriaMl.js'
 import { RankingMasVendidos } from '../models/RankingMasVendidos.js'
 import { meliGet } from './meli.js'
-import { normalizarDestacados, normalizarTendencias } from './senalesOficiales.js'
+import { normalizarDestacados, normalizarTendencias, gruposDeTendencias } from './senalesOficiales.js'
 import { categoriasDelTablero, resolverFichas, movimientosDeRanking } from './rankingMasVendidos.js'
 import { diaChile } from './inventarioFull.js'
 import { temporadaDe } from './calendarioTemporadas.js'
@@ -172,7 +172,10 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, pres
   // MISMA TRABA, PEOR: las 40 más grandes daban 404 "Not found public trends"
   // en todas las pasadas (40 errores de 40, todo el 1 y 2-oct) y se volvían a
   // pedir cada hora: 6 capturas en dos días. Ahora el 404 queda anotado.
-  const candidatas = pedibles(hojas, 'sinTendenciasHasta', ahora).filter((h) => !conTendencia.has(h.id))
+  // primero las categorías ANCHAS (raíces y su primer nivel): que una búsqueda esté entre las primeras de una
+  // categoría grande dice algo; en una hoja chica casi cualquiera lo está. Son pocas y van antes que las hojas.
+  const anchas = await categoriasAnchas().catch(() => [])
+  const candidatas = pedibles([...anchas, ...hojas], 'sinTendenciasHasta', ahora).filter((h) => !conTendencia.has(h.id))
   const candidatasTendencia = candidatas.length
   for (const { id } of candidatas.slice(0, TENDENCIAS_POR_PASADA)) {
     if (Date.now() - inicio > finTendencias) break
@@ -185,7 +188,7 @@ export async function pasadaPanorama({ ahora = new Date(), porPasada = 220, pres
       await CategoriaMl.updateOne({ id }, { $set: { sinTendenciasHasta: new Date(+ahora + SIN_TENDENCIAS_DIAS * DIA) } })
       sinTendencias++
     }
-    if (terminos.length) { await TendenciaCategoria.updateOne({ categoriaId: id, dia }, { $setOnInsert: { categoriaId: id, dia, terminos, capturadoEl: ahora } }, { upsert: true }); tendencias++ }
+    if (terminos.length) { await TendenciaCategoria.updateOne({ categoriaId: id, dia }, { $setOnInsert: { categoriaId: id, dia, terminos, grupos: gruposDeTendencias(r.datos), capturadoEl: ahora } }, { upsert: true }); tendencias++ }
     await esperar(PAUSA_MS)
   }
   const presupuestoRanking = presupuestoMs
@@ -271,6 +274,105 @@ export async function busquedasQueSuben({ max = 30 } = {}) {
     }
   }
   return salida.sort((a, b) => b.totalItems - a.totalItems).slice(0, max)
+}
+
+// Raíces que no son para un importador (inmuebles, servicios, vehículos completos, alimentos, libros, música y
+// películas, antigüedades, entradas y el cajón de «otras»): no se miran sus tendencias ni su ranking.
+const RAIZ_FUERA = /^(inmuebles|servicios|autos, motos|alimentos|libros|m[uú]sica y pel|antig[uü]edades|entradas|otras categor)/i
+export const raizUtil = (nombre) => !RAIZ_FUERA.test(String(nombre ?? '').trim())
+
+// Las categorías anchas: las raíces útiles del árbol y sus hijas que no son hojas (las hojas ya van por su lado).
+export async function categoriasAnchas() {
+  const raices = (await CategoriaMl.find({ padreId: null, hoja: { $ne: null } }).select('id nombre sinTendenciasHasta totalItems').lean()).filter((r) => raizUtil(r.nombre))
+  const hijas = await CategoriaMl.find({ padreId: { $in: raices.map((r) => r.id) }, hoja: { $ne: true } }).select('id sinTendenciasHasta totalItems').sort({ totalItems: -1 }).lean()
+  return [...raices, ...hijas]
+}
+
+// LO QUE CRECE EN VENTAS SEMANA TRAS SEMANA (20-nov-2026). De cada lista de /trends, el primer grupo son las diez
+// búsquedas que más crecieron en ingresos. Una semana sola es un salto (una oferta, una fecha); la que se repite es
+// venta que viene subiendo. Medido ese día al auditar las fuentes del radar: los nichos que salieron de señales de
+// venta real (el ranking de más vendidos, las tiendas que reponen) son los que después vendieron, y de estas listas
+// el radar recibía solo los términos nuevos de la semana, sin saber de qué grupo eran.
+//
+// Pura. capturas: [{ categoriaId, dia, terminos, grupos }] de las últimas semanas; categorias: Map(id → { ruta,
+// totalItems }). Devuelve las búsquedas que estuvieron entre las que más crecen en ingresos en `minSemanas` capturas
+// o más de una misma categoría, de la categoría más ancha a la más angosta. Las capturas anteriores a los grupos
+// sirven igual: sus diez primeros términos son ese grupo (quitar repetidos no mueve el principio de la lista).
+export const SEMANAS_SOSTENIDA = 2
+// hasta qué nivel del árbol una categoría es «ancha»: las raíces y su primer nivel
+export const NIVEL_ANCHO = 2
+export function sostenidasDe(capturas, categorias, { minSemanas = SEMANAS_SOSTENIDA, porCategoria = 2 } = {}) {
+  const nivel = (c) => String(c?.ruta ?? '').split(' > ').filter(Boolean).length || 9
+  const porTermino = new Map()
+  const porCat = new Map()
+  for (const c of capturas ?? []) (porCat.get(c.categoriaId) ?? porCat.set(c.categoriaId, []).get(c.categoriaId)).push(c)
+  for (const [categoriaId, serie] of porCat) {
+    const cuenta = new Map()
+    for (const c of serie) for (const t of new Set(c.grupos?.crecen ?? (c.terminos ?? []).slice(0, 10))) cuenta.set(t, (cuenta.get(t) ?? 0) + 1)
+    const cat = categorias.get(categoriaId)
+    // de cada categoría, las que más semanas llevan: una sola categoría no llena la lista
+    const suyas = [...cuenta].filter(([, semanas]) => semanas >= minSemanas).sort((a, b) => b[1] - a[1]).slice(0, porCategoria)
+    for (const [termino, semanas] of suyas) {
+      const fila = { termino, categoriaId, categoria: cat?.ruta ?? categoriaId, semanas, de: serie.length, nivel: nivel(cat), totalItems: cat?.totalItems ?? 0 }
+      const previa = porTermino.get(termino)
+      // la misma búsqueda en varias categorías: queda la más ancha (y, a igual nivel, la más grande)
+      if (!previa || fila.nivel < previa.nivel || (fila.nivel === previa.nivel && fila.totalItems > previa.totalItems)) porTermino.set(termino, fila)
+    }
+  }
+  return [...porTermino.values()].sort((a, b) => a.nivel - b.nivel || b.semanas - a.semanas || b.totalItems - a.totalItems)
+}
+
+// Lo que lee el radar: las sostenidas de las últimas `semanas` semanas en categorías anchas (raíces y su primer
+// nivel) o grandes, con qué clase de señal es cada una. Son muchas más de las que caben en una corrida: cada día
+// se muestra un tramo distinto (rota por día), así el radar no propone siempre sobre los mismos pasillos.
+export const ITEMS_CATEGORIA_GRANDE = 20000
+export async function tendenciasSostenidas({ ahora = new Date(), semanas = 4, max = 30 } = {}) {
+  const desde = diaChile(+ahora - semanas * 7 * DIA)
+  const capturas = await TendenciaCategoria.find({ dia: { $gte: desde } }).select('categoriaId dia terminos grupos').lean()
+  if (!capturas.length) return []
+  const categorias = new Map((await CategoriaMl.find({ id: { $in: [...new Set(capturas.map((c) => c.categoriaId))] } }).select('id ruta totalItems').lean()).map((c) => [c.id, c]))
+  const todas = sostenidasDe(capturas, categorias).filter((x) => x.nivel <= NIVEL_ANCHO || x.totalItems >= ITEMS_CATEGORIA_GRANDE)
+  if (!todas.length) return []
+  // se piden de más: el radar todavía saca licencias, temporadas que ya no se alcanzan y lo que ya es un nicho
+  const tramo = max * 4
+  const paso = (Math.floor(+ahora / DIA) * tramo) % todas.length
+  return [...todas.slice(paso), ...todas.slice(0, paso)].slice(0, tramo)
+    .map((x) => ({ ...x, ...clasificarBusqueda(x.termino, temporadaDe(`${x.termino} ${String(x.categoria).split(' > ').at(-1)}`)) }))
+}
+
+// LO QUE SE BUSCA EN LAS CATEGORÍAS ANCHAS (20-nov-2026): la segunda señal de cada nicho. Estar en las tendencias de
+// una categoría hoja no dice nada (cada búsqueda es top en su categoría chica); estar en las de una raíz o de su
+// primer nivel sí. Pura. Devuelve, de la última captura de cada categoría ancha, cada término con su grupo y en
+// cuántas de las capturas de la ventana aparece. Las capturas sin grupos (anteriores al 20-nov) solo permiten
+// separar las diez primeras.
+export function terminosDeAnchas(capturas, categorias) {
+  const nivel = (c) => String(c?.ruta ?? '').split(' > ').filter(Boolean).length
+  const porCategoria = new Map()
+  for (const c of capturas ?? []) {
+    const cat = categorias.get(c.categoriaId)
+    if (!cat || nivel(cat) < 1 || nivel(cat) > NIVEL_ANCHO) continue
+    ;(porCategoria.get(c.categoriaId) ?? porCategoria.set(c.categoriaId, []).get(c.categoriaId)).push(c)
+  }
+  const salida = []
+  for (const [categoriaId, serie] of porCategoria) {
+    serie.sort((a, b) => String(a.dia).localeCompare(String(b.dia)))
+    const ultima = serie.at(-1)
+    const grupoDe = (t, i) => (ultima.grupos
+      ? (ultima.grupos.crecen?.includes(t) ? 'crecen' : ultima.grupos.buscadas?.includes(t) ? 'buscadas' : 'suben')
+      : i < 10 ? 'crecen' : 'en-la-lista')
+    const todos = ultima.grupos ? [...new Set([...(ultima.grupos.crecen ?? []), ...(ultima.grupos.buscadas ?? []), ...(ultima.grupos.suben ?? [])])] : (ultima.terminos ?? [])
+    todos.forEach((termino, i) => salida.push({ termino, categoria: categorias.get(categoriaId).ruta, grupo: grupoDe(termino, i), dia: ultima.dia,
+      semanas: serie.filter((c) => (c.terminos ?? []).includes(termino) || Object.values(c.grupos ?? {}).some((g) => g?.includes?.(termino))).length, de: serie.length }))
+  }
+  return salida
+}
+
+export async function tendenciasAnchas({ ahora = new Date(), semanas = 4 } = {}) {
+  const desde = diaChile(+ahora - semanas * 7 * DIA)
+  const anchas = await CategoriaMl.find({ $or: [{ padreId: null }, { padreId: { $in: (await CategoriaMl.find({ padreId: null }).select('id').lean()).map((r) => r.id) } }] }).select('id ruta').lean()
+  const categorias = new Map(anchas.map((c) => [c.id, c]))
+  const capturas = await TendenciaCategoria.find({ categoriaId: { $in: anchas.map((c) => c.id) }, dia: { $gte: desde } }).select('categoriaId dia terminos grupos').lean()
+  return { categorias: new Set(capturas.map((c) => c.categoriaId)).size, terminos: terminosDeAnchas(capturas, categorias) }
 }
 
 // BARRIDO DEL VOCABULARIO DE TEMPORADA (8-oct-2026). Toma la última captura de

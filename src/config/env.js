@@ -68,6 +68,20 @@ export const config = {
   // % del EXW máximo que se muestra al proveedor como precio objetivo (ancla)
   exwObjetivoPct: Number(process.env.EXW_OBJETIVO_PCT) || 80,
   // radar autónomo: descubre nichos por temporada/tendencia y los escanea solo
+  // El ranking de más vendidos leído de la página pública (services/masVendidosWeb.js). Cada lectura cuesta lo que
+  // una página de listado: va en pasadas chicas, con una lectura por categoría cada tantos días y un tope propio al mes.
+  masVendidosWebActivo: process.env.MAS_VENDIDOS_WEB_ACTIVO !== 'false',
+  masVendidosWebCron: process.env.MAS_VENDIDOS_WEB_CRON || '20 0-6 * * *', // siete pasadas de noche, antes del radar
+  masVendidosWebPorPasada: Number(process.env.MAS_VENDIDOS_WEB_POR_PASADA) || 3,
+  masVendidosWebDias: Number(process.env.MAS_VENDIDOS_WEB_DIAS) || 7,
+  masVendidosWebUsdMes: Number(process.env.MAS_VENDIDOS_WEB_USD_MES) || 5,
+  masVendidosWebMinItems: Number(process.env.MAS_VENDIDOS_WEB_MIN_ITEMS) || 20000,
+  // La puerta de entrada del radar (services/pruebaMl.js): una página de la búsqueda en ML por cada idea, y no se
+  // abre lo que queda bajo la fracción más floja de los nichos que ya se miden (el 15%: ver por qué en ese
+  // archivo). `RADAR_PRUEBA_ML=false` la apaga.
+  radarPruebaMl: process.env.RADAR_PRUEBA_ML !== 'false',
+  radarPruebaFraccion: Number(process.env.RADAR_PRUEBA_FRACCION) || 0.15,
+  radarPruebaMax: Number(process.env.RADAR_PRUEBA_MAX) || 12,
   radarActivo: process.env.RADAR_ACTIVO !== 'false',
   radarCron: process.env.RADAR_CRON || '0 8 * * *', // diario 08:00 Chile
   radarMaxNichos: Number(process.env.RADAR_MAX_NICHOS) || 5,

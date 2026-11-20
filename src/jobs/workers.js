@@ -785,10 +785,12 @@ export async function procesarRadar() {
   // el radar explora categorías nuevas en vez de profundizar el embudo
   const saturadas = palabrasSaturadas(todos.filter((n) => n.estado === 'activo').map((n) => n.keyword))
 
-  const creados = []
+  // PRIMERO LOS FILTROS QUE NO CUESTAN (vertical saturada, búsqueda real, repetidos, paraguas) sobre todas las
+  // ideas; después la prueba en Mercado Libre de las que quedan, y recién ahí se reparte el cupo. Antes el cupo se
+  // llenaba en el orden de las búsquedas de Google.
+  const candidatos = []
   let sinValidar = 0
   for (const s of sugerencias) {
-    if (creados.length >= cupo) break
     const ideada = String(s.keyword ?? '').trim().toLowerCase()
     if (ideada.length < 2) continue
     const saturada = [...palabrasClave(ideada)].find((p) => saturadas.has(p))
@@ -797,9 +799,6 @@ export async function procesarRadar() {
       continue
     }
 
-    // la keyword ideada se canoniza a lo que la gente escribe de verdad
-    // (autocompletado de ML); si nadie busca nada parecido, el nicho mediría
-    // un listado que ningún comprador ve
     let keyword
     try {
       const real = await keywordReal(ideada)
@@ -810,10 +809,6 @@ export async function procesarRadar() {
       keyword = real.keyword
       if (keyword !== ideada) console.log(`[radar] "${ideada}" → búsqueda real "${keyword}"`)
     } catch (err) {
-      // ANTES se creaba el nicho con la keyword inventada: de ahí salieron
-      // "cascada solar jardin fuente", "lampara solar jardin estaca" y compañía,
-      // que pagaron scans y análisis para medir un listado que nadie ve. Sin
-      // validación no se crea: el radar vuelve a proponerla mañana.
       console.error(`[radar] "${ideada}" NO se crea: el autocompletado no pudo validarla (${err.message})`)
       sinValidar++
       continue
@@ -823,21 +818,8 @@ export async function procesarRadar() {
       console.log(`[radar] "${keyword}" descartada: vertical saturada ("${saturadaReal}" ya domina el tablero)`)
       continue
     }
-    if (existentes.has(keyword)) continue
+    if (existentes.has(keyword) || candidatos.some((c) => c.keyword === keyword)) continue
 
-    // FAMILIA DISFRAZADA DE PRODUCTO. Una palabra suelta que ya encabeza un
-    // nicho del tablero no es un nicho nuevo: es el paraguas del que ya está.
-    // El radar creó "pistola" teniendo "pistola de juguete" —y el scan la
-    // mandó a Pistolas y Escopetas + Armas de Aire Comprimido, otro mercado y
-    // con regulación propia—, igual que antes había creado "organizador de
-    // cocina" (6 productos distintos, dominante 25%).
-    //
-    // Se prohibió por prompt y el radar volvió a hacerlo 4 horas después, así
-    // que va en código: un instructivo pide, un filtro garantiza.
-    //
-    // El filtro es angosto a propósito: solo pega cuando la keyword es UNA
-    // palabra Y ya existe un nicho que empieza con ella. "cosmetiquero" y
-    // "secaplatos" son de una palabra y son productos concretos — esos pasan.
     const palabras = keyword.split(' ').filter(Boolean)
     if (palabras.length === 1) {
       const paraguas = [...existentes].find((k) => k !== keyword && k.startsWith(`${keyword} `))
@@ -846,7 +828,40 @@ export async function procesarRadar() {
         continue
       }
     }
+    candidatos.push({ s, ideada, keyword, fuente: s.fuente ?? null, prueba: null })
+  }
 
+  // LA PUERTA DE ENTRADA: ¿SE VENDE EN MERCADO LIBRE? (services/pruebaMl.js). Una página de la búsqueda por idea.
+  // Lo que queda bajo la vara no se abre; lo que no se pudo medir tampoco (vuelve a proponerse otro día): un nicho
+  // abierto a ciegas son semanas de scans.
+  const { varaPruebaMl, probarEnMl, decidirPrueba, ordenarPorPrueba, lugarEntre } = await import('../services/pruebaMl.js')
+  const bajoLaVara = []
+  let sinMedir = 0, vara = null, elegidos = candidatos
+  if (config.radarPruebaMl && candidatos.length) {
+    vara = await varaPruebaMl().catch((err) => { console.warn(`[radar] vara de la prueba en ML no calculada: ${err.message}`); return null })
+    const pasan = []
+    for (const c of candidatos.slice(0, config.radarPruebaMax)) {
+      try {
+        c.prueba = await probarEnMl(c.keyword)
+        await registrarGasto(null, c.prueba.costoUsd, 'zyte')
+      } catch (err) {
+        console.warn(`[radar] "${c.keyword}" sin prueba en ML: ${err.message}`)
+      }
+      const d = decidirPrueba(c.prueba, vara?.vara != null ? vara : null)
+      if (d.pasa) pasan.push(c)
+      else if (d.motivo === 'sin-medir') sinMedir++
+      else {
+        bajoLaVara.push({ keyword: c.keyword, vendidos: c.prueba.vendidos, vara: vara.vara })
+        console.log(`[radar] "${c.keyword}" no se abre: las primeras ${c.prueba.publicaciones} publicaciones llevan +${c.prueba.vendidos} vendidos y la vara es +${vara.vara}`)
+      }
+    }
+    const flojas = await import('../services/ml/fuentesRadar.js').then((m) => m.fuentesFlojas()).catch(() => new Set())
+    elegidos = ordenarPorPrueba(pasan, flojas)
+  }
+
+  const creados = []
+  for (const { s, ideada, keyword, prueba } of elegidos) {
+    if (creados.length >= cupo) break
     const nicho = await Nicho.create({
       keyword,
       origen: 'radar',
@@ -858,9 +873,16 @@ export async function procesarRadar() {
         estacionalidad: s.estacionalidad,
         ventanaImportacion: s.ventanaImportacion,
         riesgo: s.riesgo,
-        // de qué señal salió: el aprendizaje mide qué fuentes descubren bien
+        // la fuente que quedó comprobada contra los datos (ml/fuentesRadar.js); lo que declaró el modelo va aparte
         fuente: s.fuente ?? null,
+        fuenteVerificada: s.fuenteVerificada ?? null,
+        fuenteDeclarada: s.fuenteDeclarada ?? null,
         evidencia: s.evidencia || null,
+        // lo que se vio al abrirlo: la prueba en ML, la vara de ese día y, como dato, las búsquedas de Google
+        pruebaMl: prueba
+          ? { vendidos: prueba.vendidos, conCartel: prueba.conCartel, publicaciones: prueba.publicaciones, vara: vara?.vara ?? null, lugar: lugarEntre(prueba.vendidos, vara?.valores), medidoEl: new Date() }
+          : null,
+        googleMes: s.atractivo?.volumen ?? null,
         keywordIdeada: keyword !== ideada ? ideada : undefined,
         descubiertoEl: new Date(),
       },
@@ -873,7 +895,8 @@ export async function procesarRadar() {
   if (sinValidar) {
     console.warn(`[radar] ${sinValidar} keyword(s) quedaron sin crear porque el autocompletado no respondió`)
   }
-  return { sugeridos: sugerencias.length, creados: creados.length, keywords: creados, sinValidar }
+  return { sugeridos: sugerencias.length, candidatos: candidatos.length, creados: creados.length, keywords: creados, sinValidar,
+    pruebaMl: config.radarPruebaMl ? { vara: vara?.vara ?? null, nichosMedidos: vara?.nichos ?? 0, bajoLaVara, sinMedir } : null }
 }
 
 // Programador: encola scans de nichos activos cuyo último scan ya venció
@@ -1306,6 +1329,7 @@ export function iniciarWorkers() {
       if (job.name === 'resenias-diarias') return import('../services/reseniasDiarias.js').then((m) => m.pasadaResenias())
       if (job.name === 'panorama-ml') return import('../services/panoramaMl.js').then((m) => m.pasadaPanorama())
       if (job.name === 'tiendas-ganadoras') return import('../services/tiendasGanadoras.js').then((m) => m.pasadaTiendas())
+      if (job.name === 'mas-vendidos-web') return import('../services/masVendidosWeb.js').then((m) => m.pasadaMasVendidosWeb())
       if (job.name === 'vigia-mejoras') return import('../services/vigiaMejoras.js').then((m) => m.pasadaVigia())
       // con la demanda actual, una vez al día: el efecto de cada evento comercial y los saltos sin explicar
       if (job.name === 'demanda-ml') return import('../services/demandaActualMl.js').then((m) => m.medirDemandaActual())

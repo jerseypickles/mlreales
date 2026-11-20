@@ -131,6 +131,17 @@ export async function registrarProgramados() {
     { pattern: process.env.TIENDAS_CRON || '5 10 * * *', tz: 'America/Santiago' },
     { name: 'tiendas-ganadoras', data: {} },
   )
+  // el ranking de más vendidos leído de la página pública (services/masVendidosWeb.js): pasadas chicas de noche,
+  // antes del radar de las 08:00, con su propio tope de gasto al mes
+  if (config.masVendidosWebActivo) {
+    await colas.tendencias.upsertJobScheduler(
+      'mas-vendidos-web',
+      { pattern: config.masVendidosWebCron, tz: 'America/Santiago' },
+      { name: 'mas-vendidos-web', data: {} },
+    )
+  } else {
+    await colas.tendencias.removeJobScheduler('mas-vendidos-web').catch(() => {})
+  }
   // ¿se vende hoy en ML? ranking de la semana + baja de stock, por nicho
   // (services/demandaActualMl.js). Después del ranking diario y del stock
   await colas.tendencias.upsertJobScheduler(

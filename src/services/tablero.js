@@ -684,7 +684,9 @@ export async function tableroOportunidades({ todos = false } = {}) {
   } catch (err) {
     console.warn(`[tablero] puntaje con la venta medida en ML no aplicado: ${err.message}`)
   }
-  for (const o of oportunidades) delete o._serieScore
+  // los componentes del último scan (demanda, constancia, entrada, economía, competencia) quedan en la fila: el
+  // veredicto por lo medido lee de ahí qué tan difícil es entrar y si una venta deja plata (senalesNicho.js)
+  for (const o of oportunidades) { o.componentes = o._serieScore?.[0]?.c ?? null; delete o._serieScore }
 
   // LO QUE CUESTA UNA VENTA POR PUBLICIDAD EN CADA NICHO (ml/costoAdsNicho.js).
   // El score guardado en cada scan cobra el CAC fijo de agosto ($1.717); acá se
@@ -809,6 +811,17 @@ export async function tableroOportunidades({ todos = false } = {}) {
     await aplicarDemandaMlVsGoogle(oportunidades, { resenas: resenasMl })
   } catch (err) {
     console.warn(`[tablero] venta en ML vs Google no calculada: ${err.message}`)
+  }
+  // LAS TRES SEÑALES JUNTAS Y EL VEREDICTO POR LO MEDIDO (senalesNicho.js): Google, la búsqueda en ML y la venta en
+  // ML dichas igual (cuánto, hacia dónde va y qué tan firme es el dato), la lectura de demanda que sale de las
+  // tres y un veredicto con reglas a la vista. El veredicto del analista sigue en `veredicto`: la pantalla muestra
+  // el medido y deja el otro al lado cuando no coinciden.
+  try {
+    const { aplicarSenales } = await import('./senalesNicho.js')
+    if (!resenasMl) resenasMl = await import('./demandaMlVsGoogle.js').then((m) => m.resenasPorNicho({}))
+    await aplicarSenales(oportunidades, { resenas: resenasMl })
+  } catch (err) {
+    console.warn(`[tablero] señales de demanda no calculadas: ${err.message}`)
   }
   return oportunidades
 }

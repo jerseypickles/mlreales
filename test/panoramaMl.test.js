@@ -86,3 +86,38 @@ test('vocabulario de temporada: casos reales del barrido del 8-oct (falsos posit
   assert.equal(id('estuches escolares para ninas Estuches de Lápices'), 'vuelta-a-clases')
   assert.equal(id('lonchera con divisiones Loncheras Escolares'), 'vuelta-a-clases')
 })
+
+test('tendencias de ML: los 50 términos son tres listas seguidas, y sin los 50 no se adivina el corte', async () => {
+  const { gruposDeTendencias } = await import('../src/services/senalesOficiales.js')
+  const lista = Array.from({ length: 50 }, (_, i) => ({ keyword: i === 35 ? 'Termino 3' : `Termino ${i}` }))
+  const g = gruposDeTendencias(lista)
+  assert.equal(g.crecen.length, 10)
+  assert.deepEqual(g.crecen.slice(0, 2), ['termino 0', 'termino 1'])
+  assert.equal(g.buscadas.length, 20)
+  assert.equal(g.buscadas[0], 'termino 10')
+  assert.ok(g.suben.includes('termino 3'), 'un término repetido en otro grupo se conserva en el suyo')
+  assert.equal(gruposDeTendencias(lista.slice(0, 30)), null)
+  assert.equal(gruposDeTendencias(null), null)
+})
+
+test('tendencias de ML: lo que crece en ventas varias semanas, de la categoría más ancha a la más angosta', async () => {
+  const { sostenidasDe } = await import('../src/services/panoramaMl.js')
+  const categorias = new Map([
+    ['ANCHA', { ruta: 'Herramientas', totalItems: 900000 }],
+    ['HOJA', { ruta: 'Herramientas > Jardín > Riego > Regaderas', totalItems: 4000 }],
+  ])
+  const capturas = [
+    // capturas nuevas: traen los grupos
+    { categoriaId: 'ANCHA', dia: '2026-11-01', terminos: [], grupos: { crecen: ['nivel laser', 'taladro'], buscadas: ['regadera'], suben: [] } },
+    { categoriaId: 'ANCHA', dia: '2026-11-08', terminos: [], grupos: { crecen: ['nivel laser'], buscadas: ['taladro'], suben: [] } },
+    // capturas antiguas, sin grupos: valen sus diez primeros términos
+    { categoriaId: 'HOJA', dia: '2026-11-01', terminos: ['regadera jardin', 'nivel laser', ...Array.from({ length: 9 }, (_, i) => `x${i}`), 'aspersor riego'] },
+    { categoriaId: 'HOJA', dia: '2026-11-08', terminos: ['regadera jardin', 'nivel laser', ...Array.from({ length: 9 }, (_, i) => `y${i}`), 'aspersor riego'] },
+    { categoriaId: 'HOJA', dia: '2026-11-15', terminos: ['regadera jardin', ...Array.from({ length: 12 }, (_, i) => `z${i}`)] },
+  ]
+  const r = sostenidasDe(capturas, categorias)
+  assert.deepEqual(r.map((x) => x.termino), ['nivel laser', 'regadera jardin'], 'una semana sola (taladro) no cuenta; lo que va en el puesto 12 (aspersor riego) tampoco')
+  assert.deepEqual([r[0].categoria, r[0].semanas, r[0].de], ['Herramientas', 2, 2], 'la misma búsqueda en dos categorías queda con la más ancha')
+  assert.deepEqual([r[1].semanas, r[1].de], [3, 3])
+  assert.deepEqual(sostenidasDe(capturas, categorias, { minSemanas: 3 }).map((x) => x.termino), ['regadera jardin'])
+})

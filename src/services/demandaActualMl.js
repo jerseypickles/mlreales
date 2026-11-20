@@ -149,7 +149,8 @@ export async function medirDemandaActual({ ahora = new Date() } = {}) {
       if (!i?.id) continue
       indiceTodo.set(i.id, [...(indiceTodo.get(i.id) ?? []), { dia: r.dia, posicion: i.posicion }])
       if (pareja.has(r.categoriaId)) indice.set(i.id, [...(indice.get(i.id) ?? []), { dia: r.dia, posicion: i.posicion }])
-      if (r.dia >= desde && (!ranking.has(i.id) || i.posicion < ranking.get(i.id))) ranking.set(i.id, i.posicion)
+      // las lecturas de la página web traen además el id de la publicación: un producto del scan calza por cualquiera
+      for (const id of new Set([i.id, i.itemId].filter(Boolean))) if (r.dia >= desde && (!ranking.has(id) || i.posicion < ranking.get(id))) ranking.set(id, i.posicion)
     }
   }
   const dias = Array.from({ length: DIAS_TENDENCIA }, (_, k) => diaChile(+ahora - (DIAS_TENDENCIA - k) * DIA))

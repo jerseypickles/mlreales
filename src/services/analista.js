@@ -201,6 +201,7 @@ Reglas:
   · nivel "nulo": no se busca ni la keyword ni nada parecido. Veredicto no_entrar, y el motivo es exactamente ese —no hay demanda que capturar— sin importar lo que muestren las reseñas del top.
   Si el campo no viene, todavía no se midió: no lo uses ni a favor ni en contra.
 - LECTURA HONESTA DEL TOP50 (crítico): reviews:null significa SIN MEDIR — el detalle con reseñas solo cubre las primeras ~30 posiciones y algunas páginas de catálogo no entregan conteo — JAMÁS lo leas como "cero ventas" ni lo uses contra un producto o segmento; reviews:0 sí es un cero real medido. resenasNuevasDia ausente = aún no hay segunda medición para calcular velocidad, no "no vende"; y es RESEÑAS por día, no ventas — no lo multipliques por nada ni lo llames ventas. El top50 es la PRIMERA PLANA de universo.totalResultadosBusqueda resultados: la demanda que calcules es un PISO del listado, no el mercado completo — al comparar segmentos, compara solo entre lo medido.
+- LO MEDIDO MANDA (campo loMedido, cuando viene). Es la lectura de demanda y el veredicto que el sistema saca con reglas sobre lo que mide: la venta en Mercado Libre contra los demás nichos, qué tan difícil es entrar y lo que deja una venta. El importador ve ESE veredicto como el principal y el tuyo al lado. No lo contradigas sin un dato concreto: si loMedido dice que casi no se vende, tu veredicto es no_entrar; si dice entrar o entrar con condiciones, tu trabajo no es volver a decidir si hay demanda sino explicar el nicho, decir QUÉ producto traer y en qué tiene que ser distinto de lo que ya venden los demás, y poner las condiciones. Si crees que lo medido está mal (la búsqueda mezcla otros productos, la keyword no es la del producto), dilo en el resumen con el dato que lo muestra.
 - serieDemanda es LA PELÍCULA del nicho (una fila por scan con demanda). Si viene esVeredictoDeGraduacion=true, este análisis cierra la maduración: tu veredicto debe basarse en la SOSTENIBILIDAD de la serie — demanda estable o creciente a lo largo de los scans respalda entrar; una serie que se desinfla convierte cualquier buen día en espejismo, dilo explícito en el resumen citando las cifras de la serie. OJO CON LA FUENTE: cada fila trae 'fuente' ('api' = canasta de todo el listado, 'ficha' = solo el top). El 29-sep-2026 ML cerró la API de reseñas para publicaciones ajenas y la serie pasó de 'api' a 'ficha': ese cambio baja ventasDia por canasta, NO por demanda. Compara solo filas de la misma fuente; entre fuentes distintas usa ventasDiaFicha, que existe en ambas.
 - CANASTA DE LA SERIE (crítico para leer tendencia): canastaComparables es cuántas publicaciones se midieron en AMBOS scans de ese punto. Dos puntos con canastas muy distintas (ej: 4 vs 24) NO son comparables entre sí — el cambio de ventasDia refleja composición del top, no demanda; un punto con canasta chica (<10) es evidencia débil, jamás lo cites como tendencia. saltosCatalogoFiltrados marca conteos de catálogo que saltaron de nivel (consolidación de ML, no ventas) y fueron excluidos del delta: si un punto los tiene, su ventasDia previo a esa fecha pudo estar inflado.
 - PISO DE DETECCIÓN (metricas.demanda.pisoDeteccionVentasDia): la medición por reseñas tiene resolución — 1 reseña en la ventana equivale a ese número de ventas/día. Un ventasDia de 0 significa "demanda BAJO el piso de detección de esa ventana", JAMÁS "cero ventas": un nicho vendiendo 20/día con piso 27 medirá 0 la mitad de los días por puro azar. Nunca cites un 0 puntual como muerte del nicho; mira la serie completa y el piso de cada punto.
@@ -510,6 +511,16 @@ export async function analizarNicho(nicho) {
           }
         : undefined,
     top50: resumirProductosParaLLM(vista.productos),
+  }
+
+  // LO MEDIDO MANDA (20-nov-2026, senalesNicho.js): la lectura de demanda y el veredicto que salen de reglas sobre lo
+  // medido. El importador ve ese veredicto como el principal; el analista lo recibe para explicar el nicho y
+  // proponer el producto sin contradecirlo. Si el nicho todavía no está en la mesa, no viaja.
+  try {
+    const { lecturaMedidaDeNicho } = await import('./senalesNicho.js')
+    entrada.loMedido = (await lecturaMedidaDeNicho(nicho._id)) ?? undefined
+  } catch (err) {
+    console.warn(`[analista] lo medido no leído: ${err.message}`)
   }
 
   const { datos: analisis, costoUsd, modelo } = await pedirJSON({

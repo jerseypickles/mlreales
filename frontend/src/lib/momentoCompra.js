@@ -74,8 +74,11 @@ export function momentoDeCompra(o, hoy = new Date()) {
 }
 
 // Pura. Orden de la lista mezclada: puntaje + bono, y a igualdad, más búsquedas.
+// Desde el 20-nov-2026, lo que el veredicto por lo medido deja en «no entrar» (se vende poco en Mercado Libre, o la
+// venta no deja plata) va al final de su grupo: el puntaje solo no alcanzaba a bajarlo cuando el resto se veía bien.
+const noEntrar = (o) => Number(o?.veredictoMedido?.veredicto === 'no_entrar')
 export function compararPorMomento(a, b, hoy = new Date()) {
   const pa = (a.score ?? 0) + momentoDeCompra(a, hoy).bono
   const pb = (b.score ?? 0) + momentoDeCompra(b, hoy).bono
-  return pb - pa || (b.curvaAnual?.busquedasMes ?? 0) - (a.curvaAnual?.busquedasMes ?? 0)
+  return noEntrar(a) - noEntrar(b) || pb - pa || (b.curvaAnual?.busquedasMes ?? 0) - (a.curvaAnual?.busquedasMes ?? 0)
 }

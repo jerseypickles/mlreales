@@ -123,12 +123,24 @@ export function equivalenciaGoogle(filas, { vara = RADAR_BUSQUEDAS_MINIMAS, minS
 
 // La mediana de reseñas nuevas por día de cada nicho en la ventana. Los saltos
 // que el juez del ruido descartó ya vienen en null (el crudo queda aparte).
-export async function resenasPorNicho({ ahora = new Date(), dias = DIAS_VENTANA } = {}) {
+// `serie`: las mediciones de los últimos `diasSerie` días en orden, para leer hacia dónde va la venta
+// (senalesNicho.js). La mediana, los scans y los meses siguen saliendo de la ventana de `dias`.
+export const DIAS_SERIE = 90
+export async function resenasPorNicho({ ahora = new Date(), dias = DIAS_VENTANA, diasSerie = DIAS_SERIE } = {}) {
+  const desde = new Date(+ahora - dias * DIA)
   const filas = await Reporte.aggregate([
-    { $match: { fecha: { $gte: new Date(+ahora - dias * DIA) }, 'metricas.demanda.resenasNuevasPorDia': { $ne: null } } },
+    { $match: { fecha: { $gte: new Date(+ahora - Math.max(dias, diasSerie) * DIA) }, 'metricas.demanda.resenasNuevasPorDia': { $ne: null } } },
+    { $sort: { fecha: 1 } },
     { $group: { _id: '$nichoId', valores: { $push: '$metricas.demanda.resenasNuevasPorDia' }, fechas: { $push: '$fecha' } } },
   ])
-  return new Map(filas.map((f) => [String(f._id), { mediana: mediana(f.valores), scans: f.valores.length, meses: [...new Set(f.fechas.map((d) => new Date(d).getMonth()))] }]))
+  const salida = new Map()
+  for (const f of filas) {
+    const recientes = f.valores.filter((_, i) => new Date(f.fechas[i]) >= desde)
+    if (!recientes.length) continue
+    salida.set(String(f._id), { mediana: mediana(recientes), scans: recientes.length, serie: f.valores,
+      meses: [...new Set(f.fechas.filter((d) => new Date(d) >= desde).map((d) => new Date(d).getMonth()))] })
+  }
+  return salida
 }
 
 // Al leer la mesa: a cada oportunidad, su venta en ML en la escala de Google.

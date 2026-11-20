@@ -8714,3 +8714,20 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .s-revisar-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; align-items: start; padding: 16px; border: 1px solid var(--borde); border-radius: 14px; background: var(--superficie); }
 .s-revisar-pie { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 12px; line-height: 1.4; color: var(--tinta-3); }
 .s-revisar-pie button { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Preguntas con su respuesta (sistema.jsx, Preguntas) y el bloque de las tres señales de un nicho (SenalesNicho.jsx) */
+.s-preguntas { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.s-pregunta { display: grid; gap: 4px; padding: 12px; border-radius: 10px; border: 1px solid var(--borde); border-left-width: 4px; background: var(--superficie); }
+.s-pregunta-bien { border-left-color: var(--exito-tinta); }
+.s-pregunta-atencion { border-left-color: var(--avisa-tinta); }
+.s-pregunta-problema { border-left-color: var(--peligro); }
+.s-pregunta-cabeza { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.s-pregunta-cabeza strong { font-size: 14px; font-weight: 600; color: var(--tinta); }
+.s-pregunta-frase { font-size: 13px; line-height: 1.5; color: var(--tinta-2); }
+.s-senales { display: grid; gap: 16px; min-width: 0; margin: 0 0 20px; }
+.s-senales > * { min-width: 0; margin-top: 0; margin-bottom: 0; }
+.s-senales-lectura { margin: 0; font-size: 16px; line-height: 1.5; color: var(--tinta); }
+.s-senales .s-cifras { margin: 0; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.s-senales .s-cifra-extra { align-items: center; }
+.s-senales .s-nivel { max-width: none; flex-basis: 100%; }
+.s-senales .s-etiqueta { white-space: normal; text-align: left; line-height: 1.4; border-radius: 10px; }

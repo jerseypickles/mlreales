@@ -31,6 +31,9 @@ const tendenciaSchema = new mongoose.Schema({
   categoriaId: { type: String, required: true },
   dia: { type: String, required: true },
   terminos: { type: [String], default: [] },
+  // los tres grupos de la lista por posición (senalesOficiales.gruposDeTendencias): las que más crecen en ingresos,
+  // las más buscadas y las que suben en búsquedas. null en las capturas anteriores al 20-nov-2026 o incompletas.
+  grupos: { type: { _id: false, crecen: [String], buscadas: [String], suben: [String] }, default: null },
   capturadoEl: { type: Date, required: true },
 }, { versionKey: false })
 tendenciaSchema.index({ categoriaId: 1, dia: 1 }, { unique: true })

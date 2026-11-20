@@ -36,6 +36,21 @@ export function palabrasClave(texto) {
   )
 }
 
+// Pura. ¿Dos textos hablan de la misma búsqueda? (una idea del radar contra un título del ranking, la keyword de un
+// nicho contra un término de las tendencias). Se comparan sin signos, por palabras con raíz: o son la misma frase, o
+// la más corta tiene dos palabras o más y está entera dentro de la otra. Una sola palabra en común no alcanza
+// («soporte» calzaría con cualquier soporte).
+export function palabrasSinSignos(texto) {
+  return palabrasClave(String(texto ?? '').replace(/[^\p{L}\p{N}]+/gu, ' '))
+}
+export function mismaBusqueda(a, b) {
+  const x = palabrasSinSignos(a), y = palabrasSinSignos(b)
+  if (!x.size || !y.size) return false
+  const [chico, grande] = x.size <= y.size ? [x, y] : [y, x]
+  if (chico.size < 2 && x.size !== y.size) return false
+  return [...chico].every((p) => grande.has(p))
+}
+
 // La misma frase sin stopwords y EN ORDEN (sin pasar por la raíz): el
 // autocompletado indexa "arbol navidad", nunca "arbol de navidad" — comparar
 // contra la forma literal devolvía "nadie la busca" para keywords que son #1

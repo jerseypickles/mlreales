@@ -13,10 +13,14 @@ const schema = new mongoose.Schema({
   dia: { type: String, required: true }, // AAAA-MM-DD, día de Chile
   // nichos del tablero cuya categoría dominante es ésta, al capturar
   nichos: { type: [String], default: [] },
+  // itemId y vendidos solo vienen en las lecturas de la página web (masVendidosWeb.js): la API entregaba el id y el
+  // puesto. `vendidos` es el piso del cartel «+N vendidos» (lo acumulado del producto, no lo de la semana).
   items: {
-    type: [{ _id: false, id: String, tipo: String, posicion: Number }],
+    type: [{ _id: false, id: String, tipo: String, posicion: Number, itemId: String, vendidos: Number }],
     default: [],
   },
+  // null = la API oficial (cerrada por ML el 14-oct-2026); 'web' = la página pública de «Más vendidos»
+  fuente: { type: String, default: null },
   capturadoEl: { type: Date, required: true },
 }, { versionKey: false })
 schema.index({ categoriaId: 1, dia: 1 }, { unique: true })
@@ -32,7 +36,10 @@ const fichaSchema = new mongoose.Schema({
   imagen: { type: String, default: null },
   precio: { type: Number, default: null },
   url: { type: String, default: null },
-  // de dónde salió la ficha: 'scan' (ya lo medíamos), 'catalogo' (API de productos)
+  vendedor: { type: String, default: null },
+  tiendaOficial: { type: Boolean, default: null },
+  vendidos: { type: Number, default: null },
+  // de dónde salió la ficha: 'scan' (ya lo medíamos), 'catalogo' (API de productos), 'web' (la página del ranking)
   fuente: { type: String, default: null },
   resueltoEl: { type: Date, default: null },
   intentos: { type: Number, default: 0 },

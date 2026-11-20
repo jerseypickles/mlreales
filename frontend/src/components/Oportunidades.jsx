@@ -11,6 +11,7 @@ import { calzaConBusqueda } from '../lib/calzaConBusqueda.js'
 import { tituloTrae } from '../lib/tituloTrae.js'
 import { PlanPublicidad } from './PlanPublicidad.jsx'
 import { RevisarProducto } from './RevisarProducto.jsx'
+import { SenalesNicho, EtiquetaVeredicto } from './SenalesNicho.jsx'
 import { HistogramaPrecios } from './graficos.jsx'
 import { momentoDeCompra, compararPorMomento } from '../lib/momentoCompra.js'
 
@@ -257,11 +258,6 @@ function MarcaCotizando({ o, onEtapa }) {
 // abrir la tarjeta (el tramo bueno, una medición más amplia).
 const ORDEN_TONO = { mal: 0, aviso: 1, bien: 2, info: 3 }
 
-// LA VARA DE BÚSQUEDA (2-oct-2026, decisión del importador): el radar ya no
-// propone nichos nuevos bajo 5.000 búsquedas al mes. Los que ya existen no se
-// borran —Google subestima lo que se compra dentro de ML: la pistola de juguete
-// mide 1.600 y vendía 22 u en 30 días—, llevan esta alerta y él decide.
-const VARA_BUSQUEDAS = 5000
 // La venta en ML dicha en palabras: la cifra contada, de dónde sale y su escala.
 // De dónde sale la demanda del puntaje (19-nov-2026, tablero.js): de lo que se vende en Mercado Libre o, mientras
 // no se pueda medir, de la búsqueda de Google. El importador preguntó por un nicho con mucha búsqueda y casi nada
@@ -333,19 +329,13 @@ function avisosDe(o, tendencia) {
   // lo que despega. "Estable" es el caso normal y no informa.
   const salud = chipSalud(c)
   if (salud) a.push({ id: 'salud', Icono: salud.clase === 'bien' ? ArrowUpRight : ArrowDownRight, tono: salud.clase === 'bien' ? 'bien' : salud.clase, corto: `Google: ${salud.texto}`, ayuda: salud.ayuda })
-  // la vara por los dos lados (17-oct): lo que se vende en ML, en la escala de
-  // Google (services/demandaMlVsGoogle.js); con un solo scan no se afirma nada
-  const ml = o.demandaMlVsGoogle?.firme ? o.demandaMlVsGoogle : null
-  if (Number.isFinite(c?.busquedasMes) && c.busquedasMes < VARA_BUSQUEDAS && ml?.lectura === 'pasa-por-ml') {
-    a.push({ id: 'vara', Icono: TrendingUp, tono: 'bien', corto: `Pasa la vara por ML: vende como ~${fmtNum(ml.equivalente)} búsquedas/mes`,
-      ayuda: `En Google tiene ${fmtNum(c.busquedasMes)} búsquedas al mes, bajo tu vara de ${fmtNum(VARA_BUSQUEDAS)}. En ML ${textoMl(ml)} Se compra dentro de ML sin googlearlo.` })
-  } else if (Number.isFinite(c?.busquedasMes) && c.busquedasMes < VARA_BUSQUEDAS) {
-    a.push({ id: 'vara', Icono: Search, tono: 'aviso', corto: `Bajo la vara: ${fmtNum(c.busquedasMes)} búsquedas/mes (mínimo ${fmtNum(VARA_BUSQUEDAS)})`,
-      ayuda: `Tu vara para nichos nuevos es ${fmtNum(VARA_BUSQUEDAS)} búsquedas al mes en Google Chile: bajo eso el mercado es chico para repartir y entrar sin historia depende de publicidad. Tampoco la pasa por lo que vende en ML${ml ? ` (~${fmtNum(ml.equivalente)})` : o.demandaMlVsGoogle?.equivalente != null ? ' (con un solo scan todavía no se sabe)' : ''}: mira "En ML" en las cifras.` })
-  } else if (ml?.lectura === 'flojo-en-ml') {
-    a.push({ id: 'flojo-ml', Icono: TrendingDown, tono: 'aviso', corto: `Mucho Google, poca venta en ML (~${fmtNum(ml.equivalente)} búsquedas)`,
-      ayuda: `Se busca en Google (${fmtNum(c.busquedasMes)} al mes), pero en ML ${textoMl(ml)} Google mide intención de investigar: puede terminar comprándose en otra parte.${ml.factorTemporada != null && ml.factorTemporada < 0.75 ? ` Ojo: según Google este período pesa ${String(ml.factorTemporada).replace('.', ',')} de su promedio del año; parte de la poca venta es temporada.` : ''}` })
-  }
+  // LA LECTURA DE DEMANDA (20-nov-2026, services/senalesNicho.js): la vara de 5.000 búsquedas de Google dejó de
+  // decidir. Lo que avisa ahora es cuando la venta en Mercado Libre y Google dicen cosas distintas, o cuando se
+  // vende poco; el detalle de las tres señales va en el resumen del nicho.
+  const dem = o.demanda
+  if (dem?.nivel === 'casi-nula') a.push({ id: 'demanda', Icono: TrendingDown, tono: 'mal', corto: dem.caso === 'se-busca-no-se-vende' ? 'Se busca en Google, pero en Mercado Libre casi no se vende' : 'Casi no se vende en Mercado Libre', ayuda: dem.frase })
+  else if (dem?.caso === 'se-busca-vende-poco') a.push({ id: 'demanda', Icono: TrendingDown, tono: 'aviso', corto: 'Se busca mucho en Google, pero está entre los nichos que menos venden en Mercado Libre', ayuda: dem.frase })
+  else if (dem?.caso === 'vende-sin-google') a.push({ id: 'demanda', Icono: TrendingUp, tono: 'bien', corto: 'Se vende mucho en Mercado Libre aunque en Google se busca poco', ayuda: dem.frase })
   // ¿se vende HOY en ML? (services/demandaActualMl.js) Solo nichos abiertos
   // desde la regla del 4-oct y con 2 semanas para mostrarlo
   if (o.sinDemandaActual) {
@@ -660,7 +650,7 @@ function TarjetaNicho({ o, rank, abierta, onAlternar, onEtapa, tendencia }) {
           <span>{o.midiendo ? `faltan ${o.faltanScans} ${o.faltanScans === 1 ? 'scan' : 'scans'} para el veredicto` : m.motivo}</span>
         </span>
         <AvisosIconos lista={avisos} />
-        <span className="opt-chips"><ChipGama g={o.gamaObjetivo} /><EtiquetasTramite o={o} /></span>
+        <span className="opt-chips">{o.midiendo ? null : <EtiquetaVeredicto o={o} />}<ChipGama g={o.gamaObjetivo} /><EtiquetasTramite o={o} /></span>
       </span>
       <span className="opt-score">
         {o.midiendo ? (
@@ -1156,8 +1146,8 @@ function etapaGuardada() {
 
 const FILTROS = [
   ['nuevos', 'Nuevos esta semana', (o) => esNuevo(o.creadoEl)],
-  ['vara', `Sobre ${fmtNum(VARA_BUSQUEDAS)} búsquedas`, (o) => (o.curvaAnual?.busquedasMes ?? 0) >= VARA_BUSQUEDAS],
-  ['pasa-ml', 'Pasa la vara por ML', (o) => o.demandaMlVsGoogle?.firme && o.demandaMlVsGoogle.lectura === 'pasa-por-ml'],
+  ['entrar-medido', 'Lo medido dice entrar', (o) => o.veredictoMedido?.veredicto === 'entrar'],
+  ['demanda-fuerte', 'Demanda fuerte', (o) => o.demanda?.nivel === 'fuerte'],
   ['buscados', 'Búsqueda alta', (o) => o.nivelBusqueda?.nivel === 'alto'],
   ['confirmados', 'Confirmados', (o) => o.confirmacion === 'confirmado'],
   ['cotizados', 'Con costo', (o) => Boolean(o.cotizacion)],
@@ -1205,7 +1195,7 @@ function PanelNicho({ o, rank, mismaCompraQue, porKeyword, onAbrir, onRecargar, 
           <h3>{o.keyword}</h3>
           <p className={`opp-momento m-${m.clase}`}><b>{capital(m.etiqueta)}</b>{m.motivo ? <span>{m.motivo}</span> : null}</p>
           <div className="opp-sellos">
-            {o.veredicto && !o.midiendo ? <span className={`op-pildora veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span> : null}
+            {o.midiendo ? null : o.veredictoMedido ? <EtiquetaVeredicto o={o} /> : o.veredicto ? <span className={`op-pildora veredicto-${o.veredicto}`}>{o.veredicto.replace(/_/g, ' ')}</span> : null}
             {o.confirmacion && !o.midiendo ? (
               <span className="opp-sello" title={o.confirmacion === 'confirmado' ? `Demanda sostenida en ${o.scansConDemanda} scans` : `Solo ${o.scansConDemanda} scan(s) con demanda`}>
                 {o.confirmacion === 'confirmado' ? `✓ confirmado · ${o.scansConDemanda} scans` : `preliminar · ${o.scansConDemanda} scans`}
@@ -1267,6 +1257,7 @@ function ResumenNicho({ o, tendencia }) {
   const c = o.curvaAnual
   return (
     <div className="opp-resumen">
+      <SenalesNicho o={o} />
       <AvisosLista lista={avisosDe(o, tendencia)} />
       {/* CADA CIFRA CON SU HORIZONTE (8-oct-2026). El importador: "tú tienes data
           de 12 meses y a la mano ML con 7 días". La compra se paga hoy y se vende

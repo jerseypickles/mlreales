@@ -34,3 +34,15 @@ test('el calendario manda: Navidad que ya no llega no se pide, y si es "Navidad 
   const planoNavidad = { score: 80, curvaAnual: { clasificacion: 'todo-el-año', periodos: { picos: [{ meses: [12], texto: 'dic', multiplicador: 1.8, porque: { id: 'navidad' }, calendario: { estado: 'ya-no-llega' } }] } } }
   assert.equal(momentoDeCompra(planoNavidad, hoy).etiqueta, 'todo el año', 'un pico que no se alcanza no se prepara')
 })
+
+test('mesa: lo que el veredicto por lo medido deja en «no entrar» va al final, aunque tenga más puntaje', () => {
+  const hoy = new Date('2026-11-20T12:00:00Z')
+  const plano = { curvaAnual: { clasificacion: 'plano', busquedasMes: 1000 } }
+  const filas = [
+    { ...plano, keyword: 'no', score: 90, veredictoMedido: { veredicto: 'no_entrar' } },
+    { ...plano, keyword: 'si', score: 60, veredictoMedido: { veredicto: 'entrar' } },
+    { ...plano, keyword: 'condiciones', score: 70, veredictoMedido: { veredicto: 'entrar_con_condiciones' } },
+    { ...plano, keyword: 'sin-veredicto', score: 65 },
+  ]
+  assert.deepEqual([...filas].sort((a, b) => compararPorMomento(a, b, hoy)).map((o) => o.keyword), ['condiciones', 'sin-veredicto', 'si', 'no'])
+})

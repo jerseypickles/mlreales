@@ -148,8 +148,14 @@ export async function rankingsConMovimiento({ ahora = new Date(), dias = 7, nich
 // Con el panorama (panoramaMl.js) son las categorías de TODO Mercado Libre, no
 // solo las del tablero: cada entrada lleva la ruta de su categoría, y van primero
 // las que entraron al top 10.
+// Desde el 20-nov-2026 el ranking se lee de la página web (masVendidosWeb.js), una vez por categoría cada una a
+// tres semanas y no a diario: la ventana tiene que alcanzar dos lecturas, y cada movimiento se informa solo la
+// semana siguiente a la lectura que lo mostró, para no repetirle al radar lo mismo hasta la próxima.
+export const VENTANA_ENTRADAS_DIAS = 30
+export const ENTRADAS_VIGENTES_DIAS = 8
 export async function entradasAlTop({ ahora = new Date(), max = 40 } = {}) {
-  const cats = await rankingsConMovimiento({ ahora, ventanaDias: 9 })
+  const vigente = diaChile(+ahora - ENTRADAS_VIGENTES_DIAS * DIA)
+  const cats = (await rankingsConMovimiento({ ahora, ventanaDias: VENTANA_ENTRADAS_DIAS })).filter((c) => c.dia >= vigente)
   const { CategoriaMl } = await import('../models/CategoriaMl.js')
   const rutas = new Map((await CategoriaMl.find({ id: { $in: cats.map((c) => c.categoriaId) } }).select('id ruta').lean()).map((c) => [c.id, c.ruta]))
   return cats.flatMap((c) => c.items.filter((i) => c.comparadoCon && i.titulo && (i.nuevo || i.subio >= 5))

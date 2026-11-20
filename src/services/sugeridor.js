@@ -31,7 +31,7 @@ export function esDeLicencia(keyword) {
   return FRANQUICIAS.test(String(keyword ?? '').normalize('NFC'))
 }
 
-export const FUENTES_RADAR = ['ranking-ml', 'busqueda-que-sube', 'producto-que-despega', 'tienda-ganadora', 'autocompletado', 'temporada', 'categoria-hermana', 'pasillo-probado', 'intuicion']
+export const FUENTES_RADAR = ['ranking-ml', 'tendencia-sostenida', 'busqueda-que-sube', 'producto-que-despega', 'tienda-ganadora', 'autocompletado', 'temporada', 'categoria-hermana', 'pasillo-probado', 'intuicion']
 
 const SCHEMA_SUGERENCIAS = {
   type: 'object',
@@ -51,7 +51,7 @@ const SCHEMA_SUGERENCIAS = {
           fuente: {
             type: 'string',
             enum: FUENTES_RADAR,
-            description: 'La señal PRINCIPAL que te llevó a proponerlo. Sé honesto: si no sale de ningún bloque de datos que recibiste, es "intuicion".',
+            description: 'La señal PRINCIPAL que te llevó a proponerlo. Sé honesto: si no sale de ningún bloque de datos que recibiste, es "intuicion". El sistema la comprueba contra el bloque: si la evidencia no está ahí, queda anotada como intuicion.',
           },
           evidencia: { type: 'string', description: 'El dato puntual de esa señal, copiado del bloque: el producto del ranking, la búsqueda que subió, el vendedor, etc. Máximo 1 línea. Vacío si es intuicion.' },
           keyword: { type: 'string', description: 'Keyword tal como se buscaría en mercadolibre.cl, en minúsculas' },
@@ -89,7 +89,7 @@ Propones keywords de búsqueda para nichos que valga la pena INVESTIGAR con dato
 - El lead time es ELIMINATORIO Y YA VIENE CALCULADO. En cada pasada te paso el CALENDARIO DE IMPORTACIÓN con la fecha exacta de hoy: qué temporadas se alcanzan pagando ahora, cuáles ya no, y cuáles todavía no toca. NO saques tú la cuenta de los días ni de los meses — la regla vieja ("2,5 meses") dejaba pasar Navidad en septiembre, cuando el contenedor entra a mitad de noviembre o en diciembre y la temporada se acaba el 24. Un estacional SOLO puede pertenecer a una temporada que el calendario marque A TIEMPO o JUSTO. Las que dicen YA NO SE ALCANZAN o TODAVÍA NO TOCA están prohibidas, por buena que parezca la idea. Los nichos todo_el_año no tienen esta restricción.
 - Productos importables: livianos o de volumen razonable, ticket hasta $60.000 CLP; el piso lo fijan los CRITERIOS DEL IMPORTADOR, y la ECONOMÍA POR PRECIO de lo aprendido muestra con ventas reales por qué (comisión y publicidad son % del precio, el envío es fijo, y en $19.990-$24.990 salta). LA CERTIFICACIÓN NO RESTA (decisión del importador, 4-oct-2026: "aun así sea producto que necesite SEREMI o ISP, iremos a lo grande"): SEC (eléctricos 220V), ISP (cosméticos, uso sanitario) y SEREMI de Salud son costo y plazo conocidos, no un freno. Propón una COMBINACIÓN —nichos con trámite y sin trámite mezclados—, siempre de ALTA búsqueda: un nicho grande con trámite vale más que uno chico sin trámite, porque el trámite filtra competencia. Deja el trámite explícito en el campo riesgo. Evita solo alimentos.
 - Tendencias de producto que ya se ven en otros mercados y llegan a Chile con rezago.
-- VOLUMEN: el importador quiere productos con impresiones, no productos muertos. Vara: 5.000 búsquedas al mes en Google Chile como mínimo; entre 5.000 y 15.000 además tiene que estar en la cima del autocompletado de Mercado Libre. Propón productos de mercado masivo, con la frase como la escribe la gente (familia de producto, no la variante larga): lo que no pase se descarta solo antes de abrirse.
+- VOLUMEN: el importador quiere productos con impresiones, no productos muertos. Lo decide Mercado Libre, no Google: antes de abrir cada nicho el sistema mira la primera página de esa búsqueda en Mercado Libre y lo que llevan vendido sus publicaciones; si queda entre lo más flojo de lo que ya se mide, no se abre. Propón productos que YA SE VENDEN en Mercado Libre, con la frase como la escribe la gente (familia de producto, no la variante larga). Google se sigue midiendo para ver el interés y la temporada; lo que casi nadie busca se descarta solo.
 - La MARCA DOMINANTE NO VETA un nicho. Lo dice el criterio del importador y está probado: entró a brochas con 63% de Full y marcas arriba, y vende 35 u/semana ganando por precio ($2.690 contra una mediana de $7.364). La publicidad compra la posición que no se gana orgánicamente, y no todo Chile compra por logo — mucha gente busca lo económico que funcione. Lo que sí importa es que el producto se pueda diferenciar con ficha y fotos propias, y que el ticket aguante el CAC. Belleza y cuidado personal genéricos valen: ya vendió cosmético genérico y sabe tramitar el ISP.
 
 APRENDE DEL HISTORIAL del importador (te lo paso con resultados):
@@ -205,6 +205,17 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   // solo lo que todavía sirve: una búsqueda de temporada que ya no se alcanza
   // sube porque la estación la empuja, no porque sea oportunidad (8-oct-2026)
   const suben = (await import('./panoramaMl.js').then((m) => m.busquedasQueSuben()).catch(() => [])).filter((b) => b.tipo !== 'estacional-tarde')
+  // LO QUE CRECE EN VENTAS VARIAS SEMANAS SEGUIDAS (20-nov-2026): de las mismas listas de tendencias, el grupo de
+  // las que más crecen en ingresos, cuando la búsqueda se repite ahí semana tras semana. Fuera las que ya son un
+  // nicho, las de licencia y las de una temporada que ya no se alcanza.
+  const yaSonNicho = (historial.existentes ?? []).map((k) => palabrasClave(k))
+  const sostenidas = (await import('./panoramaMl.js').then((m) => m.tendenciasSostenidas()).catch(() => []))
+    .filter((b) => b.tipo !== 'estacional-tarde' && !esDeLicencia(b.termino))
+    .filter((b) => { const p = palabrasClave(b.termino); return !yaSonNicho.some((k) => k.size && [...k].every((w) => p.has(w))) })
+    .slice(0, 30)
+  // los primeros de cada ranking de más vendidos leído esta semana (masVendidosWeb.js): sirve desde la primera
+  // lectura, cuando todavía no hay con qué comparar para saber qué entró o subió
+  const masVendidos = await import('./masVendidosWeb.js').then((m) => m.masVendidosParaRadar()).catch(() => [])
   // publicaciones que llegaron hace poco a nichos que ya miramos y despegan:
   // otro importador trajo algo que el mercado está aceptando
   const despegan = await import('./nuevosQueDespegan.js').then((m) => m.productosNuevosQueDespegan({ max: 12 })).catch(() => [])
@@ -246,8 +257,18 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
           .map((e) => `- #${e.posicion} ${e.nuevo ? 'NUEVO en el top 20' : `subió ${e.subio} puestos`}: "${e.titulo}"${e.categoria ? ` — categoría ${e.categoria}` : ''}${e.nichos?.length ? ` (ya cubierta por: ${e.nichos.slice(0, 3).join(', ')})` : ' (pasillo SIN nichos en el tablero)'}`)
           .join('\n')}`
       : '',
+    masVendidos.length
+      ? `LOS MÁS VENDIDOS DE MERCADO LIBRE CHILE, por categoría (leídos esta semana de la página oficial de más vendidos; «vendidos» es lo acumulado de ese producto). Muestran qué pasillos y qué tipos de producto mueven venta de verdad. No propongas la marca ni el producto de consumo masivo: propón el producto genérico de ese pasillo que un importador puede traer con su propia ficha, con la keyword que un comprador escribiría:\n${masVendidos
+          .map((m) => `- ${m.categoria} #${m.posicion}: "${m.titulo}"${m.precio ? ` ($${m.precio})` : ''}${m.vendidos ? `, +${m.vendidos} vendidos` : ''}`)
+          .join('\n')}`
+      : '',
+    sostenidas.length
+      ? `BÚSQUEDAS QUE VIENEN CRECIENDO EN VENTAS VARIAS SEMANAS SEGUIDAS en Mercado Libre Chile (lista oficial de tendencias de ML: las diez búsquedas que más crecieron en ingresos de su categoría, y que se repiten ahí semana tras semana; no es un salto de un día). Van de la categoría más ancha a la más angosta. Es de la evidencia más fuerte que recibes, junto con el ranking:\n${sostenidas
+          .map((x) => `- "${x.termino}" — ${x.semanas} de ${x.de} semanas — ${x.categoria}`)
+          .join('\n')}`
+      : '',
     historialFuentes.length
-      ? `TU PROPIO HISTORIAL POR FUENTE (medido por el sistema con los veredictos de los nichos que propusiste): de qué señales salieron nichos buenos. Dale más peso a las fuentes que rinden y sé más exigente con las que no:\n${historialFuentes.join('\n')}`
+      ? `TU PROPIO HISTORIAL POR FUENTE (medido por el sistema con lo que después VENDIÓ en Mercado Libre cada nicho que propusiste, no con opiniones): de qué señales salieron nichos que venden. Dale más peso a las fuentes que rinden y sé más exigente con las que no:\n${historialFuentes.join('\n')}`
       : '',
     lanzamientos.length
       ? `LO QUE PUBLICARON ESTA SEMANA LOS VENDEDORES QUE GANAN (vendedores chicos que el sistema vio vender y reponer stock: importadores a los que les va bien). Un producto nuevo en su tienda es una apuesta de alguien que ya sabe vender; propón la keyword si abre un nicho que el tablero no cubre:\n${lanzamientos.map((x) => `- "${x.titulo}" (${x.vendedor ?? 'vendedor'}, $${x.precio ?? '?'})`).join('\n')}`
@@ -311,42 +332,48 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
     }
   }
 
+  // GOOGLE YA NO ES LA VARA DE TAMAÑO (20-nov-2026, con el ok del importador a la propuesta completa). Desde el
+  // 2-oct un nicho nuevo necesitaba 5.000 búsquedas al mes en Google, y entre 5.000 y 15.000 además la cima del
+  // autocompletado de ML («Google manda, ML confirma», 4-oct). Medido con la venta posterior de los nichos: esas
+  // búsquedas casi no ordenan lo que después se vende en Mercado Libre, y lo que sí lo ordena es lo que llevan
+  // vendido las primeras publicaciones de la búsqueda. Esa prueba la hace el radar antes de abrir cada nicho
+  // (services/pruebaMl.js). Acá Google queda como dato: el interés, la temporada y la frase que la gente escribe.
+  // Solo se descarta lo que casi nadie busca (VOLUMEN_MINIMO), porque sin curva el nicho no tiene temporada.
   try {
-    const { medirAtractivo, RADAR_BUSQUEDAS_MINIMAS, RADAR_BUSQUEDAS_DIRECTO } = await import('./atractivoNicho.js')
+    const { medirAtractivo, RADAR_BUSQUEDAS_MINIMAS } = await import('./atractivoNicho.js')
     const sugerencias = datos?.sugerencias ?? []
     const medidas = await medirAtractivo(sugerencias.map((s) => s.keyword), { variantesBajo: RADAR_BUSQUEDAS_MINIMAS })
     const porKeyword = new Map(medidas.map((m) => [m.keyword, m]))
-    const alcanza = (m) => m.suficiente && (m.volumen ?? 0) >= RADAR_BUSQUEDAS_MINIMAS
     datos.sugerencias = sugerencias
       .map((s) => ({ ...s, atractivo: porKeyword.get(s.keyword) ?? null }))
-      .filter((s) => !s.atractivo || alcanza(s.atractivo))
+      .filter((s) => !s.atractivo || s.atractivo.suficiente)
       .sort((a, b) => (b.atractivo?.volumen ?? 0) * (b.atractivo?.crecimiento === 'crece' ? 1.35 : 1)
         - (a.atractivo?.volumen ?? 0) * (a.atractivo?.crecimiento === 'crece' ? 1.35 : 1))
     datos.descartadasPorVolumen = medidas
-      .filter((m) => !alcanza(m))
+      .filter((m) => !m.suficiente)
       .map((m) => ({ keyword: m.keyword, volumen: m.volumen }))
-    // GOOGLE MANDA, ML CONFIRMA (decisión del importador, 4-oct-2026: "lo que
-    // me importa es traer producto que tendrá impresiones, no productos
-    // muertos"). Google es la medida pareja entre nichos; sobre 15.000 basta.
-    // Entre 5.000 y 15.000 el producto tiene que estar en la cima del
-    // autocompletado de ML (top 3 de su prefijo): la gente lo escribe en el
-    // buscador donde se muestran los anuncios. Si la medición falla, no se
-    // bloquea: mejor abrir y confirmar con el scan que perder un nicho.
-    const { medirNivelBusqueda } = await import('./nivelBusqueda.js')
-    const confirmadas = []
-    for (const s of datos.sugerencias) {
-      const v = s.atractivo?.volumen
-      if (!Number.isFinite(v) || v >= RADAR_BUSQUEDAS_DIRECTO) { confirmadas.push(s); continue }
-      const nb = await medirNivelBusqueda(s.atractivo?.sugerenciaKeyword ?? s.keyword).catch(() => null)
-      s.autocompletadoMl = nb ? { nivel: nb.nivel, posicion: nb.posicion ?? null } : null
-      if (!nb || (['alto', 'medio'].includes(nb.nivel) && (nb.posicion ?? 99) <= 3)) confirmadas.push(s)
-      else (datos.descartadasPorMl ??= []).push({ keyword: s.keyword, volumen: v, nivel: nb.nivel, posicion: nb.posicion ?? null })
-    }
-    datos.sugerencias = confirmadas
-    if (datos.descartadasPorMl?.length) console.log(`[sugeridor] sin cima en el autocompletado de ML: ${datos.descartadasPorMl.map((d) => `${d.keyword} (${d.volumen}/mes, ${d.nivel} #${d.posicion ?? '-'})`).join(', ')}`)
   } catch (err) {
     // sin medición el radar sigue proponiendo como antes: mejor a ciegas que detenido
     console.warn(`[sugeridor] atractivo no medido: ${err.message}`)
+  }
+  // LA FUENTE LA ANOTA EL CÓDIGO (ml/fuentesRadar.js): cada idea se contrasta con lo que de verdad venía en los
+  // bloques de datos. Lo que el modelo declaró queda guardado aparte.
+  try {
+    const { verificarFuente } = await import('./ml/fuentesRadar.js')
+    const bloques = {
+      'ranking-ml': [...entradas.map((e) => e.titulo), ...masVendidos.map((m) => m.titulo)],
+      'tienda-ganadora': lanzamientos.map((x) => x.titulo),
+      'producto-que-despega': despegan.map((x) => x.titulo ?? x.sku),
+      'tendencia-sostenida': sostenidas.map((x) => x.termino),
+      'busqueda-que-sube': suben.map((x) => x.termino),
+      autocompletado: (tendencias ?? []).map((l) => /"([^"]+)"/.exec(l)?.[1] ?? l),
+    }
+    for (const s of datos?.sugerencias ?? []) {
+      const v = verificarFuente(s, Object.fromEntries(Object.entries(bloques).map(([k, xs]) => [k, xs.filter(Boolean)])))
+      Object.assign(s, { fuente: v.fuente, fuenteVerificada: v.verificada, fuenteDeclarada: v.declarada, evidencia: v.evidencia ?? s.evidencia })
+    }
+  } catch (err) {
+    console.warn(`[sugeridor] fuente no verificada: ${err.message}`)
   }
   // Predicciones congeladas para evaluar fuera de muestra. En esta primera
   // versión el ML está en sombra: sus valores no reordenan las sugerencias.
