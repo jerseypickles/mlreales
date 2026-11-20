@@ -103,11 +103,20 @@ export async function sugerenciasReales(query, { domainCode = 'CL', limit = 6 } 
 
 // Parecido entre la keyword ideada y una búsqueda real: Jaccard sobre raíces
 // de palabras significativas. Pura para poder testearla sin red.
+//
+// UNA SOLA PALABRA NO REEMPLAZA A UNA IDEA DE VARIAS (20-nov-2026). Una idea de dos palabras («conjunto de
+// lencería») empataba justo en el umbral con la sugerencia que conserva una sola («conjunto»): la mitad de las
+// palabras en común. El radar abrió así un nicho con una palabra suelta, que en el buscador mezcla productos que no
+// tienen nada que ver. Antes lo frenaba, de rebote, la vara de búsquedas en Google; con la puerta puesta en lo que se
+// vende en Mercado Libre, una palabra genérica siempre pasa (su primera página vende de todo). Quitarle a la idea
+// una característica («organizador de maquillaje acrílico» → «organizador de maquillaje») sigue valiendo; dejarla en
+// una palabra, no.
 export function elegirMejorSugerencia(candidata, sugerencias) {
   const objetivo = palabrasClave(candidata)
   let mejor = null
   for (const s of sugerencias) {
     const palabras = palabrasClave(s)
+    if (objetivo.size > 1 && palabras.size < 2) continue
     const interseccion = [...objetivo].filter((p) => palabras.has(p)).length
     const union = new Set([...objetivo, ...palabras]).size
     const puntaje = union ? interseccion / union : 0

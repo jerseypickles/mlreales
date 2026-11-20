@@ -37,6 +37,26 @@ test('elegirMejorSugerencia: intención distinta queda bajo el umbral', () => {
   assert.ok(mejor.puntaje < UMBRAL_PARECIDO)
 })
 
+// El radar abrió un nicho con una palabra suelta: la idea era de dos palabras y la sugerencia de una sola empataba
+// justo en el umbral (20-nov-2026). Una palabra genérica mezcla en el buscador productos que no tienen nada que ver.
+test('elegirMejorSugerencia: una sola palabra no reemplaza a una idea de varias', () => {
+  // con la frase completa entre las sugerencias, gana la que conserva las dos palabras
+  const completa = elegirMejorSugerencia('set de pinceles', ['set', 'set de pinceles profesionales', 'set de brochas'])
+  assert.equal(completa.keyword, 'set de pinceles profesionales')
+  assert.ok(completa.puntaje >= UMBRAL_PARECIDO)
+  // si lo único parecido es la palabra suelta, no hay búsqueda real que valga: queda bajo el umbral o sin candidata
+  const suelta = elegirMejorSugerencia('set de pinceles', ['set', 'set de destornilladores'])
+  assert.notEqual(suelta?.keyword, 'set')
+  assert.ok(!suelta || suelta.puntaje < UMBRAL_PARECIDO)
+  assert.equal(elegirMejorSugerencia('set de pinceles', ['set']), null)
+  // quitarle una característica a una idea de tres palabras sigue valiendo
+  const sinAtributo = elegirMejorSugerencia('lampara de escritorio led', ['lampara de escritorio', 'lampara'])
+  assert.equal(sinAtributo.keyword, 'lampara de escritorio')
+  assert.ok(sinAtributo.puntaje >= UMBRAL_PARECIDO)
+  // y una idea de una sola palabra puede quedarse con la búsqueda de una palabra
+  assert.equal(elegirMejorSugerencia('taladro', ['taladro', 'taladro inalambrico']).keyword, 'taladro')
+})
+
 test('elegirMejorSugerencia: stopwords y plurales no restan puntaje', () => {
   const mejor = elegirMejorSugerencia('freidora de aire', ['freidora aire', 'freidora sin aceite'])
   assert.equal(mejor.keyword, 'freidora aire')
