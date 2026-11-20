@@ -131,8 +131,8 @@ export async function registrarProgramados() {
     { pattern: process.env.TIENDAS_CRON || '5 10 * * *', tz: 'America/Santiago' },
     { name: 'tiendas-ganadoras', data: {} },
   )
-  // el ranking de más vendidos leído de la página pública (services/masVendidosWeb.js): pasadas chicas de noche,
-  // antes del radar de las 08:00, con su propio tope de gasto al mes
+  // el ranking de más vendidos leído de la página pública (services/masVendidosWeb.js): pasadas chicas cada hora
+  // (lee cuando Mercado Libre está libre de los scans de fichas), con su propio tope de gasto al mes y por día
   if (config.masVendidosWebActivo) {
     await colas.tendencias.upsertJobScheduler(
       'mas-vendidos-web',

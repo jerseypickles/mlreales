@@ -73,18 +73,33 @@ export function parsearMasVendidos(html) {
   return items.sort((a, b) => a.posicion - b.posicion)
 }
 
-// Una página del ranking. Zyte responde 520 cuando ML bloquea el intento (no se cobra): se reintenta una vez. Cada
-// pedido pasa por el cupo del proceso (detalleMl.conCupo): es el mismo sitio que las fichas, y pedirle de más a la vez
-// es lo que gatilla los bloqueos.
-export async function leerMasVendidos(categoriaId, { apiKey = config.zyteApiKey, pedir = fetch, intentos = 2 } = {}) {
+// Una página del ranking. Cada pedido pasa por el cupo del proceso (detalleMl.conCupo): es el mismo sitio que las
+// fichas. Zyte rechaza de dos formas, y ninguna se cobra (medido el 20-nov-2026, la primera noche en producción: la
+// pasada terminó en tres segundos sin leer nada):
+//   · 429 al instante («over-domain-limit»): van muchos pedidos seguidos al mismo sitio, porque los scans de fichas
+//     le piden a Mercado Libre todo el rato;
+//   · 520 después de medio minuto: Mercado Libre bloqueó ese intento.
+// En los dos casos Zyte dice cuánto esperar (cabecera Retry-After): se espera eso y se reintenta, sin pasarse de
+// `hasta` (el tiempo que le queda a la pasada). Reintentar al tiro era gastar los intentos en un segundo.
+export const ESPERA_MIN_S = 10
+export const ESPERA_MAX_S = 75
+export async function leerMasVendidos(categoriaId, { apiKey = config.zyteApiKey, pedir = fetch, intentos = 3, hasta = Infinity, esperar = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
   let ultimo = null
   for (let n = 0; n < intentos; n++) {
     const r = await conCupo(() => pedir(ZYTE, { method: 'POST', signal: AbortSignal.timeout(120_000),
       headers: { 'Content-Type': 'application/json', Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}` }, body: JSON.stringify(cuerpoMasVendidos(categoriaId)) }))
-    if (!r.ok) { ultimo = `Zyte HTTP ${r.status}`; continue }
-    const items = parsearMasVendidos((await r.json())?.browserHtml ?? '')
-    if (items.length) return items
-    ultimo = 'la página llegó sin ranking'
+    if (r.ok) {
+      const items = parsearMasVendidos((await r.json())?.browserHtml ?? '')
+      if (items.length) return items
+      ultimo = 'la página llegó sin ranking'
+    } else {
+      ultimo = `Zyte HTTP ${r.status}`
+    }
+    if (n === intentos - 1) break
+    const pedida = Number(r.headers?.get?.('retry-after'))
+    const ms = Math.min(ESPERA_MAX_S, Math.max(ESPERA_MIN_S, Number.isFinite(pedida) && pedida > 0 ? pedida : 30)) * 1000
+    if (Date.now() + ms > hasta) break
+    await esperar(ms)
   }
   throw new Error(`más vendidos de ${categoriaId}: ${ultimo}`)
 }
@@ -112,10 +127,13 @@ export async function categoriasParaDescubrir({ minItems = config.masVendidosWeb
   return [...raices, ...hijas].sort((a, b) => (b.totalItems ?? 0) - (a.totalItems ?? 0))
 }
 
-// Una pasada: lee hasta `max` rankings que estén vencidos y los guarda. Se detiene sola con el presupuesto del mes,
-// con su propio tope y después de tres páginas seguidas que no llegan (ML bloqueando: se sigue en la próxima).
+// Una pasada: lee hasta `max` rankings que estén vencidos y los guarda. Corre cada hora y es oportunista: comparte
+// el sitio con los scans de fichas, así que lee cuando Mercado Libre está libre y, si una categoría no llega (con
+// sus esperas y reintentos), corta ahí y sigue en la próxima pasada. Se detiene sola con el presupuesto del mes, con
+// su propio tope mensual y con lo que le toca por día (el tope del mes repartido en 30), para que las lecturas se
+// repartan en el mes y no se acaben la primera quincena.
 // `leer` y `gastos` son inyectables para probar sin red.
-export async function pasadaMasVendidosWeb({ ahora = new Date(), max = config.masVendidosWebPorPasada, apiKey = config.zyteApiKey, leer = leerMasVendidos, presupuestoMs = 240_000, gastos = null } = {}) {
+export async function pasadaMasVendidosWeb({ ahora = new Date(), max = config.masVendidosWebPorPasada, apiKey = config.zyteApiKey, leer = leerMasVendidos, presupuestoMs = 270_000, gastos = null } = {}) {
   if (!config.masVendidosWebActivo) return { omitido: true, motivo: 'apagado (MAS_VENDIDOS_WEB_ACTIVO)' }
   if (!apiKey) return { omitido: true, motivo: 'sin ZYTE_API_KEY' }
   const { presupuesto, registrarGasto } = gastos ?? await import('./gastos.js')
@@ -127,35 +145,41 @@ export async function pasadaMasVendidosWeb({ ahora = new Date(), max = config.ma
     return { omitido: true, motivo: `el mes va en US$ ${gastadoUsd.toFixed(2)} de ${config.presupuestoUsdMes}: el ranking espera para no quitarle presupuesto a los scans` }
   }
   const dia = diaChile(ahora)
-  const delMes = await RankingMasVendidos.countDocuments({ fuente: 'web', dia: { $gte: `${dia.slice(0, 7)}-01` } })
+  const [delMes, deHoy] = await Promise.all([
+    RankingMasVendidos.countDocuments({ fuente: 'web', dia: { $gte: `${dia.slice(0, 7)}-01` } }),
+    RankingMasVendidos.countDocuments({ fuente: 'web', dia }),
+  ])
   const gastado = delMes * config.zyteCostoListadoUsd
   if (gastado >= config.masVendidosWebUsdMes) return { omitido: true, motivo: `tope del mes (US$ ${gastado.toFixed(2)} de ${config.masVendidosWebUsdMes})` }
+  const porDia = Math.ceil(config.masVendidosWebUsdMes / config.zyteCostoListadoUsd / 30)
+  if (deHoy >= porDia) return { omitido: true, motivo: `ya leyó lo de hoy (${deHoy} de ${porDia})` }
   const { categoriasDelTablero } = await import('./rankingMasVendidos.js')
   const tablero = await categoriasDelTablero().catch(() => new Map())
   const anchas = await categoriasParaDescubrir()
   const ultima = new Map((await RankingMasVendidos.aggregate([{ $match: { fuente: 'web' } }, { $group: { _id: '$categoriaId', dia: { $max: '$dia' } } }])).map((x) => [x._id, x.dia]))
   const tocan = categoriasQueTocan({ anchas, delTablero: [...tablero.keys()], ultima, dia, dias: config.masVendidosWebDias })
-  const inicio = Date.now()
-  let leidas = 0, fallas = 0, seguidas = 0
-  for (const { id } of tocan.slice(0, max)) {
+  const hasta = Date.now() + presupuestoMs
+  let leidas = 0, sinLlegar = null
+  for (const { id } of tocan.slice(0, Math.min(max, porDia - deHoy))) {
     // la cola de tendencias atiende de a uno: una pasada larga deja esperando al seguimiento de stock y al panorama
-    if (Date.now() - inicio > presupuestoMs) break
+    if (Date.now() > hasta) break
     try {
-      const items = await leer(id, { apiKey })
+      const items = await leer(id, { apiKey, hasta })
       await RankingMasVendidos.updateOne({ categoriaId: id, dia }, { $set: { categoriaId: id, dia, nichos: tablero.get(id) ?? [], fuente: 'web', capturadoEl: ahora,
         items: items.map((i) => ({ id: i.id, tipo: i.tipo, posicion: i.posicion, itemId: i.itemId, vendidos: i.vendidos })) } }, { upsert: true })
       await FichaMasVendido.bulkWrite(items.map((i) => ({ updateOne: { filter: { id: i.id }, upsert: true,
         update: { $set: { tipo: i.tipo, titulo: i.titulo, imagen: i.imagen, precio: i.precio, url: i.url, vendedor: i.vendedor, tiendaOficial: i.tiendaOficial, vendidos: i.vendidos, resueltoEl: ahora }, $setOnInsert: { fuente: 'web' } } } })), { ordered: false })
       await registrarGasto(null, config.zyteCostoListadoUsd, 'zyte')
-      leidas++; seguidas = 0
+      leidas++
     } catch (err) {
-      fallas++; seguidas++
+      // el sitio está ocupado o bloqueando: insistir ahora es gastar la pasada; la próxima es en una hora
+      sinLlegar = err.message
       console.warn(`[mas-vendidos-web] ${err.message}`)
-      if (seguidas >= 3) break
+      break
     }
   }
-  console.log(`[mas-vendidos-web] ${dia}: ${leidas} rankings leídos, ${fallas} sin llegar, ${Math.max(0, tocan.length - leidas)} por leer`)
-  return { dia, leidas, fallas, pendientes: Math.max(0, tocan.length - leidas), gastoMesUsd: Math.round((gastado + leidas * config.zyteCostoListadoUsd) * 100) / 100 }
+  console.log(`[mas-vendidos-web] ${dia}: ${leidas} rankings leídos${sinLlegar ? ' · una categoría no llegó (se sigue en la próxima pasada)' : ''} · hoy ${deHoy + leidas} de ${porDia} · ${Math.max(0, tocan.length - leidas)} por leer`)
+  return { dia, leidas, sinLlegar, hoy: deHoy + leidas, porDia, pendientes: Math.max(0, tocan.length - leidas), gastoMesUsd: Math.round((gastado + leidas * config.zyteCostoListadoUsd) * 100) / 100 }
 }
 
 // LO QUE LEE EL RADAR CUANDO TODAVÍA NO HAY MOVIMIENTO QUE COMPARAR: los primeros de cada ranking leído esta semana

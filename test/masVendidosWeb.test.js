@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import mongoose from 'mongoose'
 import { MongoMemoryServer } from 'mongodb-memory-server'
-import { parsearMasVendidos, categoriasQueTocan, cuerpoMasVendidos, leerMasVendidos, pasadaMasVendidosWeb, masVendidosParaRadar } from '../src/services/masVendidosWeb.js'
+import { parsearMasVendidos, categoriasQueTocan, cuerpoMasVendidos, leerMasVendidos, pasadaMasVendidosWeb, masVendidosParaRadar, ESPERA_MIN_S, ESPERA_MAX_S } from '../src/services/masVendidosWeb.js'
 import { entradasAlTop } from '../src/services/rankingMasVendidos.js'
 import { raizUtil } from '../src/services/panoramaMl.js'
 import { RankingMasVendidos, FichaMasVendido } from '../src/models/RankingMasVendidos.js'
@@ -39,16 +39,33 @@ test('más vendidos por la web: lee puesto, título, precio, vendedor y lo vendi
   assert.deepEqual(parsearMasVendidos('<html>Un momento…</html>'), [], 'la página de espera no trae ranking')
 })
 
-test('más vendidos por la web: pide la página con navegador y reintenta cuando Mercado Libre bloquea', async () => {
+test('más vendidos por la web: pide la página con navegador, y ante un rechazo espera lo que dice Zyte antes de reintentar', async () => {
   assert.equal(cuerpoMasVendidos('MLC1').url, 'https://www.mercadolibre.cl/mas-vendidos/MLC1')
   assert.equal(cuerpoMasVendidos('MLC1').browserHtml, true, 'por HTTP llega una página de espera')
   const html = pagina([tarjeta({ id: 'MLC2', puesto: 1, titulo: 'Lámpara', precio: 1000, vendidos: 100 })])
-  let pedidos = 0
-  const pedir = async () => (++pedidos === 1 ? { ok: false, status: 520 } : { ok: true, json: async () => ({ browserHtml: html }) })
-  const items = await leerMasVendidos('MLC1', { apiKey: 'x', pedir })
-  assert.equal(pedidos, 2)
-  assert.equal(items.length, 1)
-  await assert.rejects(() => leerMasVendidos('MLC1', { apiKey: 'x', pedir: async () => ({ ok: false, status: 520 }) }), /520/)
+  const rechazo = (status, retry) => ({ ok: false, status, headers: { get: (h) => (h === 'retry-after' ? retry : null) } })
+  const bien = { ok: true, status: 200, json: async () => ({ browserHtml: html }) }
+  const correr = async (respuestas, opciones = {}) => {
+    const esperas = []
+    let n = 0
+    const pedir = async () => respuestas[Math.min(n++, respuestas.length - 1)]
+    const items = await leerMasVendidos('MLC1', { apiKey: 'x', pedir, esperar: async (ms) => { esperas.push(ms) }, ...opciones }).catch((e) => e)
+    return { items, esperas, pedidos: n }
+  }
+  // 429: muchos pedidos seguidos al mismo sitio. Se espera lo que pide Zyte y el segundo intento llega
+  const a = await correr([rechazo(429, '60'), bien])
+  assert.deepEqual([a.items.length, a.pedidos, a.esperas], [1, 2, [60000]])
+  // sin cabecera se espera medio minuto; una espera pedida muy larga o muy corta se acota
+  assert.deepEqual((await correr([rechazo(520, null), bien])).esperas, [30000])
+  assert.deepEqual((await correr([rechazo(520, '600'), rechazo(429, '1'), bien])).esperas, [ESPERA_MAX_S * 1000, ESPERA_MIN_S * 1000])
+  // si no llega en los intentos, falla diciendo por qué, y no espera después del último
+  const b = await correr([rechazo(520, '60')])
+  assert.match(b.items.message, /520/)
+  assert.deepEqual([b.pedidos, b.esperas.length], [3, 2])
+  // no espera más allá del tiempo que le queda a la pasada
+  const c = await correr([rechazo(429, '60'), bien], { hasta: Date.now() + 5000 })
+  assert.match(c.items.message, /429/)
+  assert.deepEqual([c.pedidos, c.esperas], [1, []])
 })
 
 test('más vendidos por la web: toca primero lo que nunca se leyó y después lo que lleva más tiempo sin leerse', () => {
@@ -100,6 +117,23 @@ test('más vendidos por la web: la pasada guarda el ranking, respeta su tope y l
   assert.deepEqual(entradas.map((e) => [e.titulo, e.nuevo, e.posicion, e.categoria]), [['Nivel Láser Autonivelante', true, 1, 'Herramientas']])
   // pasada la semana de vigencia el mismo movimiento ya no se repite
   assert.deepEqual(await entradasAlTop({ ahora: new Date('2026-11-28T09:00:00Z') }), [])
+
+  // si una categoría no llega (el sitio está ocupado o bloqueando), la pasada corta ahí y sigue en la próxima
+  const ocupado = async () => { throw new Error('más vendidos de R1: Zyte HTTP 429') }
+  const corte = await pasadaMasVendidosWeb({ ahora: new Date('2026-11-26T09:00:00Z'), max: 5, apiKey: 'x', leer: ocupado, gastos })
+  assert.deepEqual([corte.leidas, corte.pendientes], [0, 2])
+  assert.match(corte.sinLlegar, /429/)
+  // lo que le toca por día: el tope del mes repartido en 30, para que no se acabe la primera quincena
+  const { config: cfg } = await import('../src/config/env.js')
+  const mensual = cfg.masVendidosWebUsdMes
+  cfg.masVendidosWebUsdMes = cfg.zyteCostoListadoUsd * 30 // una lectura al día
+  try {
+    const uno = await pasadaMasVendidosWeb({ ahora: new Date('2026-11-26T09:00:00Z'), max: 5, apiKey: 'x', leer: lector(semana2), gastos })
+    assert.deepEqual([uno.leidas, uno.porDia], [1, 1])
+    const otra = await pasadaMasVendidosWeb({ ahora: new Date('2026-11-26T15:00:00Z'), max: 5, apiKey: 'x', leer: lector(semana2), gastos })
+    assert.equal(otra.omitido, true)
+    assert.match(otra.motivo, /ya leyó lo de hoy/)
+  } finally { cfg.masVendidosWebUsdMes = mensual }
 
   // el tope del mes: con lo ya leído por sobre el tope, la pasada no gasta
   const { config } = await import('../src/config/env.js')

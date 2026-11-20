@@ -69,10 +69,11 @@ export const config = {
   exwObjetivoPct: Number(process.env.EXW_OBJETIVO_PCT) || 80,
   // radar autónomo: descubre nichos por temporada/tendencia y los escanea solo
   // El ranking de más vendidos leído de la página pública (services/masVendidosWeb.js). Cada lectura cuesta lo que
-  // una página de listado: va en pasadas chicas, con una lectura por categoría cada tantos días y un tope propio al mes.
+  // una página de listado: va en pasadas chicas cada hora, con una lectura por categoría cada tantos días, un tope
+  // propio al mes y lo que le toca por día (ese tope repartido en 30).
   masVendidosWebActivo: process.env.MAS_VENDIDOS_WEB_ACTIVO !== 'false',
-  masVendidosWebCron: process.env.MAS_VENDIDOS_WEB_CRON || '20 0-6 * * *', // siete pasadas de noche, antes del radar
-  masVendidosWebPorPasada: Number(process.env.MAS_VENDIDOS_WEB_POR_PASADA) || 3,
+  masVendidosWebCron: process.env.MAS_VENDIDOS_WEB_CRON || '20 * * * *', // cada hora: lee cuando Mercado Libre está libre
+  masVendidosWebPorPasada: Number(process.env.MAS_VENDIDOS_WEB_POR_PASADA) || 2,
   masVendidosWebDias: Number(process.env.MAS_VENDIDOS_WEB_DIAS) || 7,
   masVendidosWebUsdMes: Number(process.env.MAS_VENDIDOS_WEB_USD_MES) || 5,
   masVendidosWebMinItems: Number(process.env.MAS_VENDIDOS_WEB_MIN_ITEMS) || 20000,
