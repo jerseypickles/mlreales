@@ -214,10 +214,30 @@ export function productoDesdeHtml(html) {
   }
 }
 
-// Pura. ¿La extracción reconoció una ficha, o devolvió el cascarón?
+// Pura. ¿La respuesta trae una ficha, o el cascarón?
+//
+// LA FICHA SE RECONOCE POR LO QUE TRAE, NO SOLO POR EL INDICADOR DEL PROVEEDOR (20-nov-2026).
+// Hasta ese día la regla era una sola: `probability` de Zyte sobre el mínimo. El 18-nov a mediodía Zyte empezó a
+// devolver `probability: 0` en fichas COMPLETAS de Mercado Libre (medido con siete fichas reales: título, precio
+// igual al del listado, reseñas, vendedor y el HTML entero, todas con el indicador en cero). Como la regla las
+// descartaba todas, durante dos días ningún scan midió reseñas, el seguimiento de stock no leyó nada y cada ficha se
+// pidió y se pagó tres veces para botarla. Nadie lo vio porque nada fallaba con error: los jobs terminaban «cortos».
+// El cascarón medido el 29-ago trae solo nombre, sku y descripción; una ficha de verdad trae además precio, reseñas
+// o disponibilidad. Eso es lo que se mira cuando el indicador no acompaña.
 export function confiable(respuesta) {
-  const p = respuesta?.product?.metadata?.probability
-  return Number.isFinite(p) && p >= PROBABILIDAD_MINIMA
+  const p = respuesta?.product
+  if (!p) return false
+  const prob = p.metadata?.probability
+  if (Number.isFinite(prob) && prob >= PROBABILIDAD_MINIMA) return true
+  return tieneSustancia(p)
+}
+
+// Pura. ¿El producto trae algo más que el cascarón? Nombre y, además, precio, reseñas o disponibilidad.
+export function tieneSustancia(producto) {
+  if (!producto || !String(producto.name ?? '').trim()) return false
+  const precio = numero(producto.price)
+  const resenas = numero(producto.aggregateRating?.reviewCount)
+  return (precio !== null && precio > 0) || resenas !== null || Boolean(producto.availability)
 }
 
 // Pura. Las dos comprobaciones del punto 3, sin LLM de por medio.

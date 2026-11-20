@@ -383,7 +383,15 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
   const costoUsd = costoPedido * (1 - caidas.size / pendientes.length)
   await registrarGasto(null, costoUsd, 'zyte')
   const cadaUna = costoUsd / (pendientes.length - caidas.size)
-  let leidas = 0, bajas = 0
+  // SI DE VARIAS NO SE LEYÓ NINGUNA, EL FALLO ES DEL LECTOR Y NO DE CADA PUBLICACIÓN (20-nov-2026). El 18-nov Zyte
+  // empezó a entregar las fichas completas con su indicador de confianza en cero y la regla de `detalleMl.confiable`
+  // las botó todas: las pasadas «funcionaban», cobraban, y le anotaban un fallo a cada publicación. Dos días así
+  // dejaron a decenas a un fallo de darse de baja por «la ficha dejó de responder». Es el mismo daño del 19-sep por
+  // otro camino (allá el proveedor no respondía; acá respondía y no se reconocía). Una publicación solo acumula
+  // fallos, y solo se da de baja, en una pasada donde otra ficha sí se leyó: esa es la prueba de que el lector anda.
+  const llegadas = pendientes.filter((p) => !caidas.has(p.urlLectura ?? p.url))
+  const lectorAnda = llegadas.length < 2 || llegadas.some((p) => Number.isFinite(fichaDe(p, items)?.stockQuantity))
+  let leidas = 0, bajas = 0, sinReconocer = 0
   for (const p of pendientes) {
     if (caidas.has(p.urlLectura ?? p.url)) {
       await SeguimientoStock.updateOne({ _id: p._id }, { $set: { proximaLecturaEl: new Date(+ahora + 2 * HORA) } })
@@ -396,6 +404,12 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
       // cómo saber si era el emparejamiento o una ficha sin stock a la vista.
       const motivoFallo = it ? 'ficha sin stock a la vista' : items.length ? 'ninguna ficha devuelta calza con la publicación' : 'el proveedor no devolvió fichas'
       await LecturaStock.create({ sku: p.sku, fecha: ahora, ok: false, costoUsd: cadaUna, motivoFallo })
+      if (!lectorAnda) {
+        // no cuenta contra la publicación; se vuelve a leer mañana, para no pagar cada dos horas por lo mismo
+        sinReconocer++
+        await SeguimientoStock.updateOne({ _id: p._id }, { $set: { proximaLecturaEl: new Date(+ahora + 24 * HORA) } })
+        continue
+      }
       const fallos = (p.fallosSeguidos ?? 0) + 1
       await SeguimientoStock.updateOne({ _id: p._id }, { $set: { fallosSeguidos: fallos, proximaLecturaEl: new Date(+ahora + 24 * HORA),
         ...(fallos >= 3 && !p.esPropio ? { activo: false, motivoBaja: 'la ficha dejó de responder' } : {}) } })
@@ -427,7 +441,8 @@ export async function leerPendientes({ ahora = new Date(), leer = buscarDetalle 
     if (baja || rota) bajas++
     leidas++
   }
-  return { leidas, pedidas: pendientes.length, bajas, costoUsd, gasto: await gastoDelMes({ ahora }) }
+  if (sinReconocer) console.warn(`[seguimiento-stock] ${sinReconocer} fichas llegaron y ninguna se pudo leer: el fallo es del lector, no se le anota a las publicaciones`)
+  return { leidas, pedidas: pendientes.length, bajas, costoUsd, ...(sinReconocer ? { sinReconocer } : {}), gasto: await gastoDelMes({ ahora }) }
 }
 
 // Pura. La serie de lecturas de una publicación → lo que vendió como mínimo.

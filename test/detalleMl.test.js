@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   cuerpoPeticion,
   confiable,
+  tieneSustancia,
   precioCoherente,
   precioAnteriorReal,
   vendedorDesdeHtml,
@@ -75,11 +76,63 @@ test('el vendedor sale del evento melidata, no de un LLM', () => {
   assert.equal(vendedorDesdeHtml(undefined), null)
 })
 
-test('un HTTP 200 con probability 0 no es un dato: es el cascarón', () => {
+test('un HTTP 200 con probability 0 y la ficha vacía no es un dato: es el cascarón', () => {
   assert.equal(confiable(DEGRADADA), false)
   assert.equal(confiable(BUENA), true)
-  // sin metadata tampoco se confía, en vez de asumir que vino bien
+  // sin metadata y sin nada más que el nombre tampoco se confía, en vez de asumir que vino bien
   assert.equal(confiable({ product: { name: 'x' } }), false)
+  assert.equal(confiable({}), false)
+  assert.equal(confiable(null), false)
+})
+
+// La forma REAL de las fichas desde el 18-nov-2026 a mediodía (medida el 20-nov con siete fichas del scan del día):
+// producto completo, HTML entero y `probability: 0`. Con la regla vieja se botaban todas: dos días sin medir
+// reseñas, con cada ficha pedida y pagada tres veces.
+const COMPLETA_SIN_INDICADOR = {
+  product: {
+    url: URL,
+    name: 'Maquina Depiladora Laser Recargable Profesional Skin 36w Ipl',
+    sku: 'MLCU3691501033',
+    price: '49990.0',
+    currency: 'CLP',
+    availability: 'InStock',
+    brand: { name: 'Skin' },
+    description: '...',
+    aggregateRating: { ratingValue: 4.8, reviewCount: 389 },
+    metadata: { probability: 0, dateDownloaded: '2026-11-20T07:15:22Z' },
+  },
+  browserHtml: BUENA.browserHtml,
+}
+
+test('la ficha se reconoce por lo que trae: completa y con probability 0 es una ficha', () => {
+  assert.equal(confiable(COMPLETA_SIN_INDICADOR), true)
+  const i = aItemDetalle(COMPLETA_SIN_INDICADOR, { precioListado: 49_990 })
+  assert.equal(i.price, 49_990)
+  assert.equal(i.ratingCount, 389)
+  assert.equal(i._precioCoherente, true)
+  // el indicador se sigue guardando como traza, aunque ya no decida solo
+  assert.equal(i._probabilidad, 0)
+})
+
+test('tieneSustancia: nombre y algo más que el cascarón (precio, reseñas o disponibilidad)', () => {
+  assert.equal(tieneSustancia(DEGRADADA.product), false, 'nombre, sku y descripción es el cascarón')
+  assert.equal(tieneSustancia({ name: 'Lámpara', price: '9990' }), true)
+  assert.equal(tieneSustancia({ name: 'Lámpara', aggregateRating: { reviewCount: 0 } }), true, 'cero reseñas es un dato leído')
+  assert.equal(tieneSustancia({ name: 'Lámpara', availability: 'OutOfStock' }), true, 'agotada sigue siendo una ficha')
+  assert.equal(tieneSustancia({ name: 'Lámpara', price: '0' }), false)
+  assert.equal(tieneSustancia({ name: 'Lámpara', price: null, aggregateRating: { ratingValue: 4.5, reviewCount: null } }), false)
+  assert.equal(tieneSustancia({ name: '  ', price: '9990' }), false, 'sin nombre no hay ficha')
+  assert.equal(tieneSustancia({ price: '9990' }), false)
+  assert.equal(tieneSustancia(null), false)
+})
+
+test('si el pedido devuelve fichas completas con probability 0, el scan las recibe al primer intento', async () => {
+  let pedidos = 0
+  const r = await detallesDeMl([URL], { apiKey: 'k', pedir: async () => { pedidos++; return COMPLETA_SIN_INDICADOR } })
+  assert.equal(r.items.length, 1)
+  assert.equal(r.fallidos.length, 0)
+  assert.equal(pedidos, 1, 'no se paga tres veces por una ficha que llegó bien')
+  assert.deepEqual(r.intentos, { 1: 1 })
 })
 
 test('la ficha buena entrega precio, reseñas y el bloque del vendedor', () => {
