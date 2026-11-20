@@ -1276,6 +1276,35 @@ export async function juzgarRuidoDemanda({ nicho, metricas, fechaScan, fechaRefe
   return j
 }
 
+// CONTRA QUÉ SCAN SE COMPARA EL DE `fechaActual`. El más reciente con ≥ ventanaMinDias de distancia (resolución del
+// piso de detección); si la serie es muy nueva, el inmediatamente anterior.
+//
+// LA REFERENCIA TIENE QUE HABER LEÍDO RESEÑAS (20-nov-2026). La regla miraba solo la fecha. La demanda de un scan es
+// lo que subieron las reseñas de las mismas publicaciones contra el de referencia: si ese no leyó ninguna, no hay
+// pares y el scan nuevo sale sin venta medida aunque haya leído todo bien. Tras los dos días en que las fichas no se
+// reconocieron, varios nichos quedaron con un scan así, y a su scan siguiente le tocaba compararse justo con él: por
+// una falla perdían dos mediciones seguidas (al ritmo de un nicho ya graduado, más de un mes sin dato). Ahora la
+// referencia es el scan más reciente, a esa distancia, que leyó reseñas de al menos las publicaciones que un scan
+// necesita para puntuar (umbrales.minItemsDemanda: la misma vara con que el scan se da por bueno). La ventana queda
+// más larga y la tasa sigue siendo por día. Si ninguno cumple, vale la regla de antes.
+export async function scanDeReferencia(keyword, fechaActual) {
+  const corteVentana = new Date(
+    new Date(fechaActual).getTime() - scoring.depuracionDelta.ventanaMinDias * 86_400_000,
+  )
+  const [conResenas] = await Snapshot.aggregate([
+    { $match: { keyword, fecha: { $lte: corteVentana }, numReviews: { $ne: null } } },
+    { $group: { _id: '$fecha', publicaciones: { $sum: 1 } } },
+    { $match: { publicaciones: { $gte: scoring.umbrales.minItemsDemanda } } },
+    { $sort: { _id: -1 } },
+    { $limit: 1 },
+  ])
+  if (conResenas) return { fecha: conResenas._id }
+  return (
+    (await Snapshot.findOne({ keyword, fecha: { $lte: corteVentana } }).sort({ fecha: -1 }).select('fecha').lean()) ??
+    (await Snapshot.findOne({ keyword, fecha: { $lt: fechaActual } }).sort({ fecha: -1 }).select('fecha').lean())
+  )
+}
+
 export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   const ultimoSnap = await Snapshot.findOne({ keyword: nicho.keyword }).sort({ fecha: -1 }).lean()
   if (!ultimoSnap) return null
@@ -1284,19 +1313,7 @@ export async function generarReporteNicho(nicho, { topN = 50 } = {}) {
   const productos = await Producto.find({ sku: { $in: snapshots.map((s) => s.sku) } }).lean()
   const productosPorSku = new Map(productos.map((p) => [p.sku, p]))
 
-  // scan de referencia para el delta: el más reciente con ≥ ventanaMinDias de
-  // distancia (resolución del piso de detección); si la serie es muy nueva,
-  // cae al inmediatamente anterior
-  const corteVentana = new Date(
-    new Date(ultimoSnap.fecha).getTime() - scoring.depuracionDelta.ventanaMinDias * 86_400_000,
-  )
-  const snapPrevio =
-    (await Snapshot.findOne({ keyword: nicho.keyword, fecha: { $lte: corteVentana } })
-      .sort({ fecha: -1 })
-      .lean()) ??
-    (await Snapshot.findOne({ keyword: nicho.keyword, fecha: { $lt: ultimoSnap.fecha } })
-      .sort({ fecha: -1 })
-      .lean())
+  const snapPrevio = await scanDeReferencia(nicho.keyword, ultimoSnap.fecha)
   let snapshotsPrevios = snapPrevio
     ? await Snapshot.find({ keyword: nicho.keyword, fecha: snapPrevio.fecha }).lean()
     : null
