@@ -346,14 +346,14 @@ export function MasVendidosMl() {
     <>
       <section className="apr-seccion">
         <div className="apr-seccion-cabeza"><h3>Ranking oficial de más vendidos</h3>
-          <p>Los 20 más vendidos de cada categoría, según Mercado Libre y gratis por su API. Se guarda todos los días a las 07:40; con dos días guardados se ve quién entró al top y quién sube.</p></div>
+          <p>Los 20 más vendidos de cada categoría, leídos de la página de más vendidos de Mercado Libre (por su API lo cerró en octubre). Cada categoría se vuelve a leer cada una a tres semanas; con dos lecturas se ve quién entró al top y quién sube.</p></div>
         <div className="apr-fuentes">
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><TrendingUp size={17} aria-hidden="true" /></span><h3>Categorías seguidas</h3></div>
-            <p className="apr-cifra">{fmtNum(cats.length)}</p><p className="apr-fuente-detalle">la categoría dominante de cada nicho activo y las de tus productos</p></article>
+            <p className="apr-cifra">{fmtNum(cats.length)}</p><p className="apr-fuente-detalle">las categorías grandes de Mercado Libre, la de cada nicho activo y las de tus productos</p></article>
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><CheckCircle2 size={17} aria-hidden="true" /></span><h3>Productos en los rankings</h3></div>
             <p className="apr-cifra">{fmtNum(items.length)}</p><p className="apr-fuente-detalle">{fmtNum(items.filter((i) => i.titulo).length)} con nombre y foto · {fmtNum(items.filter((i) => i.enNuestroScan).length)} ya estaban en tus scans</p></article>
           <article className="apr-fuente"><div className="apr-cabeza"><span className="apr-icono"><CircleDashed size={17} aria-hidden="true" /></span><h3>Entraron o subieron</h3></div>
-            <p className="apr-cifra">{fmtNum(d.entradas?.length ?? 0)}</p><p className="apr-fuente-detalle">{d.entradas?.length ? 'esto es lo que recibe el radar como evidencia' : 'aparece desde el segundo día guardado'}</p></article>
+            <p className="apr-cifra">{fmtNum(d.entradas?.length ?? 0)}</p><p className="apr-fuente-detalle">{d.entradas?.length ? 'esto es lo que recibe el radar como evidencia' : 'aparece desde la segunda lectura de una categoría'}</p></article>
         </div>
       </section>
       {d.entradas?.length ? <section className="apr-seccion"><div className="apr-seccion-cabeza"><h3>Lo que se movió esta semana</h3></div>
@@ -363,9 +363,9 @@ export function MasVendidosMl() {
         {cats.map((c) => (
           <div key={c.categoriaId} className="st-nicho">
             <button type="button" className="st-nicho-cab" aria-expanded={abierta === c.categoriaId} onClick={() => setAbierta(abierta === c.categoriaId ? null : c.categoriaId)}>
-              <strong>{c.nichos?.length ? c.nichos.slice(0, 3).join(' · ') : c.categoriaId}</strong>
+              <strong>{c.nichos?.length ? c.nichos.slice(0, 3).join(' · ') : (c.categoriaNombre ?? c.categoriaId)}</strong>
               <span className="apr-chip">{c.items.length} productos</span>
-              <span className="apr-chip">{c.comparadoCon ? `comparado con el ${c.comparadoCon.slice(8)}/${c.comparadoCon.slice(5, 7)}` : `día ${c.diasGuardados} guardado`}</span>
+              <span className="apr-chip">{c.comparadoCon ? `comparado con el ${c.comparadoCon.slice(8)}/${c.comparadoCon.slice(5, 7)}` : `${c.diasGuardados} ${c.diasGuardados === 1 ? 'lectura' : 'lecturas'}`}</span>
               {c.items.filter((i) => i.nuevo).length ? <span className="apr-chip apr-chip-bien">{c.items.filter((i) => i.nuevo).length} nuevos en el top</span> : null}
             </button>
             {abierta === c.categoriaId ? <ol className="mv-lista st-mv">{c.items.map((i) => (
@@ -373,7 +373,7 @@ export function MasVendidosMl() {
                 {i.imagen ? <Miniatura src={i.imagen} lado={40} /> : <span className="mv-sinfoto" aria-hidden="true" />}
                 <span className="mv-titulo">{i.url ? <a href={i.url} target="_blank" rel="noreferrer">{i.titulo ?? 'ver en Mercado Libre'}</a> : (i.titulo ?? i.id)}{i.precio ? <small>{fmtPrecio(i.precio)}</small> : null}</span>
                 <span className="mv-chips">{i.nuevo ? <em className="mv-chip mv-nuevo">entró al top</em> : null}{i.subio >= 2 ? <em className="mv-chip mv-sube">▲ {i.subio}</em> : null}{i.subio <= -2 ? <em className="mv-chip mv-baja">▼ {Math.abs(i.subio)}</em> : null}
-                  {i.enNuestroScan ? <em className="mv-chip">en tu scan</em> : null}<em className="mv-chip" title="Días de los guardados en que estuvo en el top 20">{i.diasEnElTop}/{i.diasGuardados} d</em></span></li>))}</ol> : null}
+                  {i.enNuestroScan ? <em className="mv-chip">en tu scan</em> : null}<em className="mv-chip" title="En cuántas de las lecturas guardadas estuvo en el top 20">{i.diasEnElTop} de {i.diasGuardados}</em></span></li>))}</ol> : null}
           </div>
         ))}
       </section>
