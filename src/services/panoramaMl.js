@@ -301,7 +301,7 @@ export async function categoriasAnchas() {
 export const SEMANAS_SOSTENIDA = 2
 // hasta qué nivel del árbol una categoría es «ancha»: las raíces y su primer nivel
 export const NIVEL_ANCHO = 2
-export function sostenidasDe(capturas, categorias, { minSemanas = SEMANAS_SOSTENIDA, porCategoria = 2 } = {}) {
+export function sostenidasDe(capturas, categorias, { minSemanas = SEMANAS_SOSTENIDA, porCategoria = 1 } = {}) {
   const nivel = (c) => String(c?.ruta ?? '').split(' > ').filter(Boolean).length || 9
   const porTermino = new Map()
   const porCat = new Map()
@@ -310,7 +310,8 @@ export function sostenidasDe(capturas, categorias, { minSemanas = SEMANAS_SOSTEN
     const cuenta = new Map()
     for (const c of serie) for (const t of new Set(c.grupos?.crecen ?? (c.terminos ?? []).slice(0, 10))) cuenta.set(t, (cuenta.get(t) ?? 0) + 1)
     const cat = categorias.get(categoriaId)
-    // de cada categoría, las que más semanas llevan: una sola categoría no llena la lista
+    // de cada categoría, la que más semanas lleva (a igual tiempo, la que va primero en la lista): medido con las
+    // capturas reales, la segunda de una categoría suele ser la misma búsqueda dicha de otra forma
     const suyas = [...cuenta].filter(([, semanas]) => semanas >= minSemanas).sort((a, b) => b[1] - a[1]).slice(0, porCategoria)
     for (const [termino, semanas] of suyas) {
       const fila = { termino, categoriaId, categoria: cat?.ruta ?? categoriaId, semanas, de: serie.length, nivel: nivel(cat), totalItems: cat?.totalItems ?? 0 }
@@ -331,12 +332,16 @@ export async function tendenciasSostenidas({ ahora = new Date(), semanas = 4, ma
   const capturas = await TendenciaCategoria.find({ dia: { $gte: desde } }).select('categoriaId dia terminos grupos').lean()
   if (!capturas.length) return []
   const categorias = new Map((await CategoriaMl.find({ id: { $in: [...new Set(capturas.map((c) => c.categoriaId))] } }).select('id ruta totalItems').lean()).map((c) => [c.id, c]))
-  const todas = sostenidasDe(capturas, categorias).filter((x) => x.nivel <= NIVEL_ANCHO || x.totalItems >= ITEMS_CATEGORIA_GRANDE)
-  if (!todas.length) return []
+  // fuera las raíces que no son para un importador (libros, música y películas, alimentos…)
+  const todas = sostenidasDe(capturas, categorias).filter((x) => raizUtil(String(x.categoria).split(' > ')[0]))
   // se piden de más: el radar todavía saca licencias, temporadas que ya no se alcanzan y lo que ya es un nicho
   const tramo = max * 4
-  const paso = (Math.floor(+ahora / DIA) * tramo) % todas.length
-  return [...todas.slice(paso), ...todas.slice(0, paso)].slice(0, tramo)
+  const dia = Math.floor(+ahora / DIA)
+  const girar = (xs, cuantas) => { if (!xs.length) return []; const paso = (dia * cuantas) % xs.length; return [...xs.slice(paso), ...xs.slice(0, paso)].slice(0, cuantas) }
+  // primero las de categorías anchas (lo que más dice) y el resto del tramo con las de categorías grandes
+  const anchas = girar(todas.filter((x) => x.nivel <= NIVEL_ANCHO), tramo)
+  const grandes = girar(todas.filter((x) => x.nivel > NIVEL_ANCHO && x.totalItems >= ITEMS_CATEGORIA_GRANDE), tramo - anchas.length)
+  return [...anchas, ...grandes]
     .map((x) => ({ ...x, ...clasificarBusqueda(x.termino, temporadaDe(`${x.termino} ${String(x.categoria).split(' > ').at(-1)}`)) }))
 }
 

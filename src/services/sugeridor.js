@@ -31,6 +31,20 @@ export function esDeLicencia(keyword) {
   return FRANQUICIAS.test(String(keyword ?? '').normalize('NFC'))
 }
 
+// Pura. ¿La búsqueda trae un código de modelo? («carburador … 226r», «… ms310», «ps5»). Es el repuesto o el producto
+// de una marca puntual, no una familia que se pueda traer con ficha propia: las tendencias de ML vienen llenas de
+// esas (medido el 20-nov-2026 al mirar lo que llegaría al radar). Una medida no es un modelo: «20v», «200w», «30m»,
+// «128gb» o «x2» se quedan.
+const UNIDAD = /^\d+(?:[.,]\d+)?(?:v|w|kw|m|mt|mts|cm|mm|l|lt|lts|ml|cc|kg|g|gr|gb|tb|mb|mah|ah|a|hz|hp|k|x|p|d|in|oz|lb|lbs|un|pcs|pzs|pz|btu)$/
+export function tieneCodigoDeModelo(termino) {
+  return String(termino ?? '').toLowerCase().split(/[^a-z0-9áéíóúñ]+/).some((p) => {
+    if (!/[a-z]/.test(p) || !/\d/.test(p) || UNIDAD.test(p)) return false
+    // letras y después números («ms310», «ps5», «s24»), pero no una letra con un número («x2», «a4»)
+    if (/^[a-z]+\d+[a-z]*$/.test(p)) return p.replace(/\d.*$/, '').length >= 2 || p.replace(/^[a-z]+/, '').replace(/[a-z]+$/, '').length >= 2
+    return true
+  })
+}
+
 export const FUENTES_RADAR = ['ranking-ml', 'tendencia-sostenida', 'busqueda-que-sube', 'producto-que-despega', 'tienda-ganadora', 'autocompletado', 'temporada', 'categoria-hermana', 'pasillo-probado', 'intuicion']
 
 const SCHEMA_SUGERENCIAS = {
@@ -210,7 +224,7 @@ export async function sugerirNichos({ contexto, tendencias } = {}) {
   // nicho, las de licencia y las de una temporada que ya no se alcanza.
   const yaSonNicho = (historial.existentes ?? []).map((k) => palabrasClave(k))
   const sostenidas = (await import('./panoramaMl.js').then((m) => m.tendenciasSostenidas()).catch(() => []))
-    .filter((b) => b.tipo !== 'estacional-tarde' && !esDeLicencia(b.termino))
+    .filter((b) => b.tipo !== 'estacional-tarde' && !esDeLicencia(b.termino) && !tieneCodigoDeModelo(b.termino))
     .filter((b) => { const p = palabrasClave(b.termino); return !yaSonNicho.some((k) => k.size && [...k].every((w) => p.has(w))) })
     .slice(0, 30)
   // los primeros de cada ranking de más vendidos leído esta semana (masVendidosWeb.js): sirve desde la primera
