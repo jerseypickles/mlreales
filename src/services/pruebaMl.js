@@ -7,7 +7,7 @@
 //
 // Ese dato sale de UNA página de resultados. Antes de abrir un nicho el radar la pide, suma el cartel «+N vendidos»
 // de las primeras 50 publicaciones que no son anuncio y lo compara con lo mismo de los nichos que ya se miden: lo
-// que queda entre los más flojos no se abre. La vara no es un número elegido a mano: sale de los nichos activos
+// que queda entre los más flojos no se abre. La vara no es un número elegido a mano: sale de los nichos medidos
 // cada vez, y con pocos nichos medidos no se aplica. Google sigue midiéndose, como dato de interés y de temporada.
 //
 // CUÁNTO CORTAR. Se probó el tercio más flojo y era demasiado: dejaba fuera dos nichos donde hoy hay ventas propias
@@ -18,7 +18,6 @@
 // Ojo con lo que el cartel dice: es lo vendido en toda la vida de la publicación, en baldes. Ordena búsquedas entre
 // sí; no es la venta de la semana ni cuenta unidades.
 import { Reporte } from '../models/Reporte.js'
-import { Nicho } from '../models/Nicho.js'
 import { parsearNumero } from './normalizador.js'
 import { config } from '../config/env.js'
 
@@ -65,11 +64,13 @@ export function ordenarPorPrueba(candidatos, flojas = new Set()) {
     Number(flojas.has(a.fuente)) - Number(flojas.has(b.fuente)) || (b.prueba?.vendidos ?? 0) - (a.prueba?.vendidos ?? 0))
 }
 
-// Lo vendido en la primera página de cada nicho activo, según su último scan (ya viene calculado en el scorecard).
-export async function ventaDePrimeraPagina({ ahora = new Date(), dias = 60 } = {}) {
-  const activos = await Nicho.find({ estado: 'activo' }).select('_id').lean()
+// Lo vendido en la primera página de cada nicho medido en el último año, según su último scan (ya viene calculado
+// en el scorecard). Entran los activos Y los pausados, a propósito: si la vara saliera solo de los activos, cada vez
+// que se limpia la mesa (se pausan los nichos flojos) subiría sola y el radar se pondría más exigente sin que nadie
+// lo decidiera. Medido el 20-nov-2026: sacar dos docenas de nichos flojos la subía cerca de un tercio.
+export async function ventaDePrimeraPagina({ ahora = new Date(), dias = 365 } = {}) {
   const filas = await Reporte.aggregate([
-    { $match: { nichoId: { $in: activos.map((n) => n._id) }, fecha: { $gte: new Date(+ahora - dias * DIA) }, 'metricas.vendidosHistoricos.itemsDelScan': { $gte: 30 } } },
+    { $match: { fecha: { $gte: new Date(+ahora - dias * DIA) }, 'metricas.vendidosHistoricos.itemsDelScan': { $gte: 30 } } },
     { $project: { nichoId: 1, fecha: 1, v: '$metricas.vendidosHistoricos.pisoUnidades' } },
     { $sort: { fecha: -1 } },
     { $group: { _id: '$nichoId', v: { $first: '$v' } } },
