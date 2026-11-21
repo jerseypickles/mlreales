@@ -17,6 +17,7 @@
   --acento-borde: #b6ccf4;
   --exito: #16a34a;
   --exito-tenue: #e4f5ea;
+  --exito-borde: #a9dcbb;
   --exito-tinta: #15803d;
   --avisa-tenue: #fdf0dd;
   --avisa-tinta: #b45309;
@@ -52,6 +53,7 @@
     --acento-borde: #31518f;
     --exito: #34c56b;
     --exito-tenue: #10291b;
+    --exito-borde: #23603c;
     --exito-tinta: #6fd598;
     --avisa-tenue: #33230e;
     --avisa-tinta: #e8a45e;
@@ -8559,6 +8561,8 @@ a.op-plan-sello:hover { text-decoration: underline; }
 .s-fichas { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 .s-ficha { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--borde); border-radius: 10px; background: var(--superficie); }
 .s-ficha-destacada { border-color: var(--acento-borde); background: var(--acento-tenue); }
+/* la ficha que coincide con lo propio (por la foto parece el mismo producto): borde y franja verdes, fondo normal */
+.s-ficha-bien { border-color: var(--exito-borde); box-shadow: inset 4px 0 0 var(--exito); }
 .s-ficha-cabeza { display: flex; gap: 12px; min-width: 0; }
 .s-ficha-foto { flex: none; display: block; width: 96px; height: 96px; border: 1px solid var(--borde); border-radius: 8px; overflow: hidden; background: var(--superficie); }
 .s-ficha-foto img { display: block; width: 100%; height: 100%; object-fit: contain; }

@@ -50,7 +50,8 @@ const SIN_DATOS = {
   'sin-nicho': 'Este producto no tiene nicho asignado: sin su búsqueda no hay con quién compararlo.',
   'sin-scan': 'El nicho todavía no tiene un scan con publicaciones.',
 }
-const PRIMERAS = 12
+// cuántas fichas se muestran antes del botón «ver las otras» (pedido del dueño, 21-nov-2026: «6 está bien, no tanto»)
+const PRIMERAS = 6
 const ESCALON = { mediana: 'Para quedar en la mitad', 'tres-mas-baratos': 'Para quedar entre los 3 más baratos', 'mas-barato': 'Para igualar al más barato' }
 const ESCALON_CORTO = { mediana: 'en la mitad', 'tres-mas-baratos': 'entre los 3 más baratos', 'mas-barato': 'igualando al más barato' }
 const ordinal = (n) => `${fmtNum(n)}.º`
@@ -80,13 +81,25 @@ const etiquetaMedida = (m) =>
         : <Etiqueta>{m.texto}</Etiqueta>
 const senales = (x) => (
   <>
-    {x.esFull ? <Etiqueta tono="destacada">Full</Etiqueta> : null}
+    {x.esFull ? <Etiqueta>Full</Etiqueta> : null}
     {x.esTiendaOficial ? <Etiqueta>tienda oficial</Etiqueta> : null}
     {x.vendidos ? <Etiqueta>+{fmtNum(x.vendidos)} vendidos</Etiqueta> : null}
-    {x.puestoRanking ? <Etiqueta tono="destacada">{ordinal(x.puestoRanking)} más vendido de tu categoría</Etiqueta> : null}
+    {x.puestoRanking ? <Etiqueta><Trophy size={12} aria-hidden="true" /> {ordinal(x.puestoRanking)} más vendido de tu categoría</Etiqueta> : null}
     {x.posicion ? <Etiqueta>puesto {x.posicion} en la búsqueda</Etiqueta> : null}
   </>
 )
+// EL COLOR DICE CUÁNTO SE PARECE (pedido del dueño, 21-nov-2026: «todo azul se ve raro, ¿cuál es el más parecido a
+// nuestro producto?»). Antes «parece el mismo», «muy parecido», Full y el botón sugerido iban todos en azul. Ahora:
+// verde = por la foto parece el mismo producto (y la ficha entera lleva borde verde); azul = el mismo en otra medida
+// o muy parecido; gris = lo demás. El puntaje va escrito, y la más parecida de todas lo dice con palabras.
+const parecidoDe = (c) => (c.sugerencia && c.sugerencia.relacion !== 'distinto' && Number.isFinite(c.sugerencia.parecido) ? c.sugerencia.parecido : null)
+const etiquetaFoto = (s) => {
+  if (!s || s.relacion === 'distinto') return null
+  const puntaje = Number.isFinite(s.parecido) ? ` · ${s.parecido} de 100` : ''
+  if (s.relacion === 'igual') return <Etiqueta tono="bien">por la foto parece el mismo{puntaje}</Etiqueta>
+  if (s.relacion === 'otra-medida') return <Etiqueta tono="destacada">por la foto es el mismo en otra medida{puntaje}</Etiqueta>
+  return <Etiqueta tono={s.parecido >= 70 ? 'destacada' : 'neutra'}>por la foto, {s.enPalabras ?? 'parecido al tuyo'}{puntaje}</Etiqueta>
+}
 // los más vendidos de la categoría y marca de la publicación propia: qué se leyó y qué sumó a lo que trae la búsqueda
 const textoRanking = (r, keyword) => {
   if (!r.leidoEl) return 'Mercado Libre publica los más vendidos de la categoría y marca de tu publicación. Ahí suelen estar los que venden tu mismo producto aunque no salgan en esta búsqueda.'
@@ -197,6 +210,10 @@ export function QuienVendeLoMismo({ propioId, leerAlAbrir = false, alCambiar = n
   // a la vista, las primeras: vienen ordenadas con lo que parece el mismo en la medida propia arriba. En un nicho parejo
   // pueden ser decenas; el resto queda detrás del botón y los grupos se confirman de una vez
   const visibles = todas ? v.candidatos : v.candidatos.slice(0, PRIMERAS)
+  // la que más se parece por la foto (o las que empatan arriba): se dice en la ficha
+  const puntajes = v.candidatos.map(parecidoDe).filter((n) => n != null)
+  const mejorPuntaje = puntajes.length ? Math.max(...puntajes) : null
+  const empatadas = puntajes.filter((n) => n === mejorPuntaje).length
   const enLote = (relacion) => correr(`lote-${relacion}`, () => api.marcarIgual(propioId, { lote: relacion }))
   const mirando = ocupado === 'fotos'
   // ya se miraron las fotos y ninguna es el mismo producto: lo que queda es mostrar lo que más se le parece
@@ -372,21 +389,22 @@ export function QuienVendeLoMismo({ propioId, leerAlAbrir = false, alCambiar = n
       ) : null}
       <Fichas>
         {visibles.map((c) => {
-          // lo que se propone: «otra medida» si la foto o el título dicen que el tamaño es distinto
-          const otra = c.sugerencia?.relacion === 'otra-medida' || c.medida?.estado === 'distinta'
+          // el botón lleno es solo el de lo que la foto propone: si la foto no dice que es el mismo producto, ninguno
+          const propone = c.sugerencia?.relacion === 'igual' || c.sugerencia?.relacion === 'otra-medida' ? c.sugerencia.relacion : null
+          const esLaMejor = mejorPuntaje != null && parecidoDe(c) === mejorPuntaje
           return (
-            <FichaFoto key={c.sku} foto={c.imagen} enlace={c.url} titulo={c.titulo} principal={fmtPrecio(c.precio)} secundario={c.unidades > 1 ? `${fmtPrecio(c.precioUnidad)} por unidad` : null}
+            <FichaFoto key={c.sku} tono={propone === 'igual' ? 'bien' : undefined} foto={c.imagen} enlace={c.url} titulo={c.titulo} principal={fmtPrecio(c.precio)} secundario={c.unidades > 1 ? `${fmtPrecio(c.precioUnidad)} por unidad` : null}
               detalle={c.sugerencia?.motivo ?? null}
               etiquetas={<>
-                {c.sugerencia?.relacion === 'igual' ? <Etiqueta tono="destacada">por la foto parece el mismo</Etiqueta> : c.sugerencia?.relacion === 'otra-medida' ? <Etiqueta tono="destacada">por la foto es el mismo en otra medida</Etiqueta>
-                  : c.sugerencia?.relacion === 'parecido' ? <Etiqueta tono={c.sugerencia.parecido >= 70 ? 'destacada' : 'neutra'}>por la foto, {c.sugerencia.enPalabras ?? 'parecido al tuyo'}</Etiqueta> : null}
+                {esLaMejor ? <Etiqueta tono={propone === 'igual' ? 'bien' : 'destacada'}>{empatadas === 1 ? 'el más parecido al tuyo' : 'entre los más parecidos al tuyo'}</Etiqueta> : null}
+                {etiquetaFoto(c.sugerencia)}
                 {etiquetaMedida(c.medida)}{senales(c)}
               </>}>
               <CampoNumero antes="trae" valor={unidades[c.sku] ?? c.unidades} deshabilitado={!!ocupado} onCambiar={(n) => setUnidades((u) => ({ ...u, [c.sku]: n }))} />
-              <button type="button" className={`${otra ? 'boton-secundario' : 'boton-primario'} boton-chico`} disabled={!!ocupado} onClick={() => marcar(c, 'igual')}>
+              <button type="button" className={`${propone === 'igual' ? 'boton-primario' : 'boton-secundario'} boton-chico`} disabled={!!ocupado} onClick={() => marcar(c, 'igual')}>
                 <Check size={14} aria-hidden="true" /> es el mismo
               </button>
-              <button type="button" className={`${otra ? 'boton-primario' : 'boton-secundario'} boton-chico`} disabled={!!ocupado} onClick={() => marcar(c, 'otra-medida')}>
+              <button type="button" className={`${propone === 'otra-medida' ? 'boton-primario' : 'boton-secundario'} boton-chico`} disabled={!!ocupado} onClick={() => marcar(c, 'otra-medida')}>
                 <Ruler size={14} aria-hidden="true" /> el mismo, otra medida
               </button>
               <button type="button" className="boton-secundario boton-chico" disabled={!!ocupado} onClick={() => marcar(c, 'distinto')}>
