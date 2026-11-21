@@ -209,8 +209,9 @@ export function Fichas({ children }) {
 // Ficha con foto: una publicación para mirarla y decidir algo. La foto manda —el producto se reconoce por ella—;
 // al lado van el dato principal (y uno secundario), el título y una línea de detalle. Abajo, a todo el ancho de la
 // ficha, las etiquetas, su serie en el tiempo (`grafico`) y las acciones (`children`): al lado de la foto se apilaban
-// de a una por línea y la ficha quedaba el doble de alta. `tono` 'destacada' marca la propia y 'bien' la que coincide
-// con ella (borde y franja verdes); las demás van sin tono, para que el color diga algo.
+// de a una por línea y la ficha quedaba el doble de alta. `tono` 'destacada' marca la propia, 'bien' la que coincide
+// con ella (borde y franja verdes) y 'cerca' la que más se le parece cuando ninguna coincide (borde y franja azules);
+// las demás van sin tono, para que el color diga algo.
 export function FichaFoto({ foto, enlace, titulo, principal, secundario, detalle, etiquetas, grafico, tono, children }) {
   const imagen = foto ? <img src={foto} alt="" loading="lazy" width="96" height="96" /> : null
   return (

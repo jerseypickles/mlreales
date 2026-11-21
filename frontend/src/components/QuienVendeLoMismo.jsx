@@ -88,17 +88,22 @@ const senales = (x) => (
     {x.posicion ? <Etiqueta>puesto {x.posicion} en la búsqueda</Etiqueta> : null}
   </>
 )
-// EL COLOR DICE CUÁNTO SE PARECE (pedido del dueño, 21-nov-2026: «todo azul se ve raro, ¿cuál es el más parecido a
-// nuestro producto?»). Antes «parece el mismo», «muy parecido», Full y el botón sugerido iban todos en azul. Ahora:
-// verde = por la foto parece el mismo producto (y la ficha entera lleva borde verde); azul = el mismo en otra medida
-// o muy parecido; gris = lo demás. El puntaje va escrito, y la más parecida de todas lo dice con palabras.
+// EL COLOR DICE QUÉ MIRAR PRIMERO (pedido del dueño, 21-nov-2026: «todo azul se ve raro, ¿cuál es el más parecido a
+// nuestro producto?»). Antes «parece el mismo», «muy parecido», Full y el botón sugerido iban todos en azul. La
+// primera corrección pintó de verde lo que parece el mismo y dejó en azul lo muy parecido: donde nadie vende el
+// mismo, las seis fichas volvían a verse iguales («¿y estos no cambió?»). Ahora el color es de pocas fichas:
+//   verde = por la foto parece el mismo producto (ficha con borde y franja verdes);
+//   azul  = la más parecida de la lista (o las que empatan arriba) cuando no es la misma;
+//   naranjo = es otra medida; gris = todo lo demás, con sus palabras y su puntaje escrito.
+// Bajo 50 de 100 («se parece poco») no se destaca ninguna: no hay una «más parecida» que valga mirar.
+const DESTACA_DESDE = 50
 const parecidoDe = (c) => (c.sugerencia && c.sugerencia.relacion !== 'distinto' && Number.isFinite(c.sugerencia.parecido) ? c.sugerencia.parecido : null)
-const etiquetaFoto = (s) => {
+const etiquetaFoto = (s, esLaMejor) => {
   if (!s || s.relacion === 'distinto') return null
   const puntaje = Number.isFinite(s.parecido) ? ` · ${s.parecido} de 100` : ''
   if (s.relacion === 'igual') return <Etiqueta tono="bien">por la foto parece el mismo{puntaje}</Etiqueta>
-  if (s.relacion === 'otra-medida') return <Etiqueta tono="destacada">por la foto es el mismo en otra medida{puntaje}</Etiqueta>
-  return <Etiqueta tono={s.parecido >= 70 ? 'destacada' : 'neutra'}>por la foto, {s.enPalabras ?? 'parecido al tuyo'}{puntaje}</Etiqueta>
+  if (s.relacion === 'otra-medida') return <Etiqueta tono="atencion">por la foto es el mismo en otra medida{puntaje}</Etiqueta>
+  return <Etiqueta tono={esLaMejor ? 'destacada' : 'neutra'}>por la foto, {s.enPalabras ?? 'parecido al tuyo'}{puntaje}</Etiqueta>
 }
 // los más vendidos de la categoría y marca de la publicación propia: qué se leyó y qué sumó a lo que trae la búsqueda
 const textoRanking = (r, keyword) => {
@@ -212,8 +217,12 @@ export function QuienVendeLoMismo({ propioId, leerAlAbrir = false, alCambiar = n
   const visibles = todas ? v.candidatos : v.candidatos.slice(0, PRIMERAS)
   // la que más se parece por la foto (o las que empatan arriba): se dice en la ficha
   const puntajes = v.candidatos.map(parecidoDe).filter((n) => n != null)
-  const mejorPuntaje = puntajes.length ? Math.max(...puntajes) : null
+  const tope = puntajes.length ? Math.max(...puntajes) : null
+  const mejorPuntaje = tope != null && tope >= DESTACA_DESDE ? tope : null
   const empatadas = puntajes.filter((n) => n === mejorPuntaje).length
+  // si todas las que parecen el mismo empatan arriba, decir «entre las más parecidas» en cada una no agrega nada
+  const mismas = v.candidatos.filter((c) => c.sugerencia?.relacion === 'igual')
+  const mismasEmpatan = mismas.length > 1 && mismas.every((c) => parecidoDe(c) === mejorPuntaje)
   const enLote = (relacion) => correr(`lote-${relacion}`, () => api.marcarIgual(propioId, { lote: relacion }))
   const mirando = ocupado === 'fotos'
   // ya se miraron las fotos y ninguna es el mismo producto: lo que queda es mostrar lo que más se le parece
@@ -370,6 +379,12 @@ export function QuienVendeLoMismo({ propioId, leerAlAbrir = false, alCambiar = n
           <span>{textoRanking(v.ranking, v.keyword)}</span>
         </Acciones>
       ) : null}
+      {v.fotos.revisadas > 0 && v.candidatos.length ? (
+        <Nota>
+          {mismas.length ? 'En verde, lo que por la foto parece tu mismo producto.' : mejorPuntaje != null ? 'Por la foto ninguna parece tu mismo producto. En azul, lo más parecido al tuyo.' : 'Por la foto ninguna se parece de verdad a tu producto.'}
+          {' '}El número dice cuánto se parece, de 0 a 100. Tú confirmas.
+        </Nota>
+      ) : null}
       {lectura ? <Nota>Miré {fmtNum(lectura.revisadas)} fotos: {fmtNum(lectura.parecen)} parecen el mismo producto o uno parecido y quedaron arriba, primero las de tu medida. Tú confirmas.</Nota> : null}
       {error ? <p className="vacio">{error}</p> : null}
       {v.fotos.parecenIgual > 0 || v.fotos.parecenOtraMedida > 0 ? (
@@ -393,11 +408,11 @@ export function QuienVendeLoMismo({ propioId, leerAlAbrir = false, alCambiar = n
           const propone = c.sugerencia?.relacion === 'igual' || c.sugerencia?.relacion === 'otra-medida' ? c.sugerencia.relacion : null
           const esLaMejor = mejorPuntaje != null && parecidoDe(c) === mejorPuntaje
           return (
-            <FichaFoto key={c.sku} tono={propone === 'igual' ? 'bien' : undefined} foto={c.imagen} enlace={c.url} titulo={c.titulo} principal={fmtPrecio(c.precio)} secundario={c.unidades > 1 ? `${fmtPrecio(c.precioUnidad)} por unidad` : null}
+            <FichaFoto key={c.sku} tono={propone === 'igual' ? 'bien' : esLaMejor ? 'cerca' : undefined} foto={c.imagen} enlace={c.url} titulo={c.titulo} principal={fmtPrecio(c.precio)} secundario={c.unidades > 1 ? `${fmtPrecio(c.precioUnidad)} por unidad` : null}
               detalle={c.sugerencia?.motivo ?? null}
               etiquetas={<>
-                {esLaMejor ? <Etiqueta tono={propone === 'igual' ? 'bien' : 'destacada'}>{empatadas === 1 ? 'el más parecido al tuyo' : 'entre los más parecidos al tuyo'}</Etiqueta> : null}
-                {etiquetaFoto(c.sugerencia)}
+                {esLaMejor && !(propone === 'igual' && mismasEmpatan) ? <Etiqueta tono={propone === 'igual' ? 'bien' : 'destacada'}>{empatadas === 1 ? 'el más parecido al tuyo' : 'entre los más parecidos al tuyo'}</Etiqueta> : null}
+                {etiquetaFoto(c.sugerencia, esLaMejor)}
                 {etiquetaMedida(c.medida)}{senales(c)}
               </>}>
               <CampoNumero antes="trae" valor={unidades[c.sku] ?? c.unidades} deshabilitado={!!ocupado} onCambiar={(n) => setUnidades((u) => ({ ...u, [c.sku]: n }))} />
